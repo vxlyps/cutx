@@ -61,4 +61,4 @@ Nero, rosso, cromo. Direzione **CROMO**: nero puro, bianco sporco `#E8E6E1`, ros
 Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuffie nel jack frontale (= cuffia), MiniFuse 1 alle casse (= live), un monitor piccolo per me (controllo), proiettore come secondo schermo. Arturia MiniFuse 1 (la sua uscita cuffie copia le casse: NON è il preascolto), PO-33 K.O., Akai APC mini mk2, Ableton Live per gli stem.
 
 ## Stato
-- Architettura approvata (strada A). Fase attuale: **fase 0 in costruzione.**
+- Architettura approvata (strada A). **Fase 0 costruita, in attesa di verifica di Valerio.** Verificato da Claude: avvio da clone pulito, stem WAV dalla valigetta, blocco e crash della cuffia senza effetti sul live. AIFF non decodificabile da Chromium (solo WAV). Da verificare: test di 10 minuti con MiniFuse + jack, anello col cavo.
