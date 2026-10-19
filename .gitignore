@@ -1,0 +1,42 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.env
+.env.*
+
+# Build / Electron
+dist/
+out/
+build/
+release/
+*.dmg
+*.app
+.vite/
+.cache/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Audio e video: mai nel repo, tranne in esempi/
+*.wav
+*.aif
+*.aiff
+*.mp3
+*.flac
+*.mp4
+*.mov
+!esempi/**/*.wav
+!esempi/**/*.aif
+!esempi/**/*.aiff
+!esempi/**/*.mp3
+!esempi/**/*.flac
+!esempi/**/*.mp4
+!esempi/**/*.mov
