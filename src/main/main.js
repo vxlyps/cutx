@@ -10,6 +10,14 @@ const DIST = path.resolve(QUI, '../../dist');
 const PRELOAD = path.join(QUI, 'preload.cjs');
 const ORIGINE = 'daneel://app';
 const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
+const ICONA = path.resolve(QUI, '../../risorse/icona.png');
+
+// Una sola DANEEL alla volta: due motori live sulla stessa scheda sarebbero un disastro.
+if (!app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => {
+  if (controllo?.isMinimized()) controllo.restore();
+  controllo?.focus();
+});
 
 // daneel:// deve essere un contesto sicuro: setSinkId, Web MIDI e getUserMedia funzionano solo lì.
 protocol.registerSchemesAsPrivileged([
@@ -135,6 +143,7 @@ ipcMain.on('log', async (_e, nome, riga) => {
 });
 
 app.whenReady().then(async () => {
+  app.dock?.setIcon(ICONA);
   valigetta.carica();
   protocol.handle('daneel', serviFile);
   const nostro = (url) => url?.startsWith(ORIGINE);

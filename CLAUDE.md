@@ -55,6 +55,8 @@ Tre zone: **Libreria** (sample di codice con nome, colore, BPM), **Cuffia** (edi
 - Fase 5: `.dmg` solo arm64, **senza firma Apple**, costruito da GitHub Actions (runner macOS) e pubblicato nelle Release per chi lo scarica.
 
 ## Grafica
+- Logo: `risorse/icona.svg` (R. Daneel in cromo, occhio destro rosso = live), PNG in `risorse/icona.png`, usato come icona del Dock e del lanciatore.
+- Lanciatore: `strumenti/DANEEL.command` (copia sulla Scrivania, doppio clic). Una sola istanza dell'app alla volta.
 Nero, rosso, cromo. Direzione **CROMO**: nero puro, bianco sporco `#E8E6E1`, rosso solo sul live, grotesk condensato enorme per i titoli, monospace pulito per il codice, logo in cromo, etichette libreria tipo targhetta industriale. Niente gradienti, niente animazioni decorative. Fasi 0-1: minimale nero + rosso; grafica vera in fase 3.
 
 ## Hardware
