@@ -13,7 +13,8 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Modalità test: stesso click su entrambe le uscite, con misuratore di sfasamento
 - [ ] Dopo 10 minuti lo sfasamento resta stabile e sotto soglia
 - [ ] Uno stem dalla valigetta suona
-- [ ] L'app parte da zero su un Mac pulito
+- [ ] Se il motore cuffia si blocca o crasha, il live continua senza accorgersene (e la cuffia riparte)
+- [ ] L'app parte da zero su un Mac pulito (Apple Silicon)
 
 ## Fase 1 · Il CDJ
 - [ ] Libreria letta dalla valigetta, griglia di pezzi colorati (nome, colore, BPM)
@@ -26,7 +27,8 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] 20 minuti di fila solo da tastiera, senza mouse e senza buchi
 
 ## Fase 2 · Le mie canzoni
-- [ ] Gli stem esportati da Ableton nella valigetta diventano suoni e pezzi pronti
+- [ ] Gli stem esportati da Ableton (WAV) nella valigetta diventano suoni e pezzi pronti
+- [ ] Suoni base (bd, sd, hh…) nella valigetta; licenza di ogni banca controllata prima di farne un pacco pubblico
 - [ ] Sample di codice: beat jungle che spezzetta uno stem
 - [ ] Sample di codice: loop pronto
 - [ ] Sample di codice: una canzone da mandare live un pezzo alla volta
@@ -46,9 +48,10 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Suono con il controller e il PO resta a tempo per tutta la sessione
 
 ## Fase 5 · App installabile
-- [ ] `.dmg` costruito da GitHub Actions su runner macOS e pubblicato nelle Release
+- [ ] `.dmg` solo arm64, senza firma Apple, costruito da GitHub Actions su runner macOS e pubblicato nelle Release
 - [ ] Primo avvio guidato: valigetta, uscite, test
-- [ ] Installo DANEEL sul Mac di un amico, attacco l'SSD e suono senza Terminale
+- [ ] Istruzioni nel README per aprire un'app non firmata (Impostazioni → Privacy → Apri comunque)
+- [ ] Scarico il .dmg dalle Release su un Mac Apple Silicon, attacco l'SSD e suono senza Terminale
 
 **→ Serata in officina.**
 
