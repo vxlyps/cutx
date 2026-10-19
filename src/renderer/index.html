@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' data:; media-src 'self'"
+    />
+    <title>DANEEL</title>
+    <link rel="stylesheet" href="./stile.css" />
+  </head>
+  <body>
+    <header>
+      <h1>DANEEL</h1>
+      <span id="valigetta-nome" class="tenue">nessuna valigetta</span>
+      <button id="valigetta-scegli">Scegli valigetta</button>
+      <span class="spazio"></span>
+      <span id="stato-cuffia" class="spia">CUFFIA</span>
+      <span id="stato-live" class="spia">LIVE</span>
+    </header>
+
+    <main>
+      <section id="editor"></section>
+
+      <aside>
+        <div class="blocco">
+          <h2>Uscite</h2>
+          <label>Live <select id="uscita-live"></select></label>
+          <label>Cuffia <select id="uscita-cuffia"></select></label>
+          <label>Offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
+          <p id="errore-uscite" class="errore"></p>
+        </div>
+
+        <div class="blocco">
+          <h2>Suona su</h2>
+          <div class="scelta">
+            <button id="dest-live" class="attivo">Live</button>
+            <button id="dest-cuffia">Cuffia</button>
+          </div>
+          <p class="tenue">Ctrl+Invio suona · Ctrl+. ferma</p>
+        </div>
+
+        <div class="blocco">
+          <h2>Test sfasamento</h2>
+          <div class="scelta">
+            <button id="test-avvia">Avvia test</button>
+            <button id="test-ferma">Ferma</button>
+          </div>
+          <table id="misure">
+            <tr><th></th><th>ultimo</th><th>media</th><th>min</th><th>max</th><th>deriva</th></tr>
+            <tr id="riga-stima"><td>stima</td></tr>
+            <tr id="riga-vero"><td>anello</td></tr>
+          </table>
+          <p id="verdetto" class="verdetto"></p>
+          <p id="durata" class="tenue"></p>
+
+          <label>Ingresso anello <select id="ingresso-anello"></select></label>
+          <div class="scelta">
+            <button id="anello-attiva">Ascolta ingresso</button>
+            <button id="anello-riferimento">Salva riferimento</button>
+          </div>
+          <p id="anello-stato" class="tenue"></p>
+
+          <h3>Robustezza</h3>
+          <div class="scelta">
+            <button id="cuffia-blocca">Blocca cuffia 5 s</button>
+            <button id="cuffia-crasha">Crasha cuffia</button>
+          </div>
+          <p id="cuffia-dettagli" class="tenue"></p>
+          <p id="percorso-log" class="tenue"></p>
+        </div>
+
+        <div class="blocco">
+          <h2>Suoni nella valigetta</h2>
+          <p id="suoni" class="tenue"></p>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

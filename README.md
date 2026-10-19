@@ -10,6 +10,15 @@ DANEEL è basato su [Strudel](https://strudel.cc) ([codice sorgente](https://cod
 
 DANEEL is built on [Strudel](https://strudel.cc) ([source code](https://codeberg.org/uzu/strudel)), the live coding project by Felix Roos and the Strudel community. It uses the official Strudel npm packages, unmodified. DANEEL is **not** an official Strudel project and is not affiliated with its authors: all credit for the music engine goes to them.
 
+## Provare / Try it
+
+Serve un Mac Apple Silicon e Node.js. / Requires an Apple Silicon Mac and Node.js.
+
+```sh
+npm install
+npm start
+```
+
 ## Licenza / License
 
 [AGPL-3.0-or-later](LICENSE), come Strudel / like Strudel.
