@@ -11,7 +11,8 @@
     "build": "vite build",
     "start": "vite build && electron .",
     "prova": "vite build && electron . --prova",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "schermate": "vite build && electron . --schermate=schermate"
   },
   "dependencies": {
     "@strudel/codemirror": "1.3.0",

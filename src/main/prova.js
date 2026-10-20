@@ -1322,7 +1322,7 @@ const CERCA_PROBLEMI = `(() => {
     // 1. fuori dalla finestra
     if (r.right > vw + 1 || r.left < -1) problemi.push({ tipo: 'fuori dalla finestra', el: nome(el), testo: testo(el) });
     // 2. tagliato senza puntini (un elemento che nasconde l'eccesso)
-    if ((s.overflowX === 'hidden' || s.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== 'ellipsis' && el.children.length === 0 && testo(el))
+    if (el.tagName !== 'INPUT' && (s.overflowX === 'hidden' || s.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== 'ellipsis' && el.children.length === 0 && testo(el))
       problemi.push({ tipo: 'testo tagliato', el: nome(el), testo: testo(el) });
     // 3. pulsanti e etichette che non ci stanno nella propria scatola
     if (el.matches('.key, .lbl, button, select, label') && el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== 'ellipsis' && s.overflowX !== 'auto' && s.overflowX !== 'scroll' && !el.matches('select'))

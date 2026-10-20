@@ -1906,3 +1906,123 @@ input[type='checkbox'] {
   line-height: 1.55;
   color: var(--secondario);
 }
+
+/* --- impaginazione: a 1280 px di larghezza (e meno) niente esce, si sovrappone o si taglia male --- */
+
+/* le tab del browser: poco padding, e "?" per l'help */
+.schede {
+  gap: 4px;
+  padding: 12px 10px;
+}
+
+.schede .key {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.schede .key[data-scheda='help'] {
+  flex: 0 0 34px;
+}
+
+/* intestazioni: le etichette cedono con i puntini, i pulsanti non escono */
+.testa > .lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.testa .key {
+  flex-shrink: 0;
+}
+
+#modo-brano i {
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* le card: i tasti vanno a capo invece di uscire; nel LIVE il nome cede con i puntini e i tasti restano */
+.card:not(.livello) .card-testa {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.livello .card-testa .nome {
+  flex: 0 1 auto;
+  flex-shrink: 1;
+  min-width: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.livello .card-testa .volume {
+  width: 56px;
+}
+
+@media (max-width: 1360px) {
+  .barra {
+    gap: 10px;
+    padding: 0 10px;
+  }
+
+  .marchio {
+    gap: 6px;
+  }
+
+  .wordmark {
+    height: 30px;
+  }
+
+  .gatto-posto {
+    width: 34px;
+  }
+
+  .insegna {
+    font-size: 12px;
+    padding: 4px 6px;
+    letter-spacing: 0.03em;
+  }
+
+  .barra .key {
+    padding: 0 8px;
+    gap: 5px;
+  }
+
+  #stash {
+    max-width: 150px;
+  }
+
+  #stash-nome {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #stash-dove,
+  #apri-impostazioni i {
+    display: none;
+  }
+
+  .tempo {
+    gap: 10px;
+  }
+
+  .cue .testa > .lbl {
+    display: none;
+  }
+
+  .browser {
+    width: 280px;
+  }
+}
+
+/* nel passo 3 le righe stanno allineate: il tipo (audio/codice/stem) ha sempre la stessa larghezza */
+.sezione-riga > .lbl:not(.numero-sezione) {
+  min-width: 56px;
+  text-align: right;
+}

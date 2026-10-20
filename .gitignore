@@ -44,3 +44,4 @@ release/
 # Progetti Ableton veri: mai nel repo (i test usano .als piccoli in test/)
 *.als
 !test/**/*.als
+schermate/
