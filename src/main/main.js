@@ -9,7 +9,6 @@ import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
 import * as log from './log.js';
-import { prova, foto, schermate } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(QUI, '../../dist');
@@ -519,8 +518,9 @@ app.whenReady().then(async () => {
   creaMotore('cuffia');
   creaControllo();
   if (preferenze.leggi().uscita?.aperta) creaUscita();
-  if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') }).then((ok) => app.exit(ok ? 0 : 1));
-  if (FOTO) foto({ finestre, file: FOTO }).then(() => app.exit(0));
-  if (SCHERMATE) schermate({ finestre, cartella: path.resolve(SCHERMATE) }).then((n) => app.exit(n ? 1 : 0));
+  // le prove stanno a parte e non entrano nel pacchetto: si caricano solo se le chiedi
+  if (PROVA) import('./prova.js').then((m) => m.prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') })).then((ok) => app.exit(ok ? 0 : 1));
+  if (FOTO) import('./prova.js').then((m) => m.foto({ finestre, file: FOTO })).then(() => app.exit(0));
+  if (SCHERMATE) import('./prova.js').then((m) => m.schermate({ finestre, cartella: path.resolve(SCHERMATE) })).then((n) => app.exit(n ? 1 : 0));
   if (CHIUSURA) provaChiusura(CHIUSURA);
 });

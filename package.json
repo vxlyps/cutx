@@ -13,9 +13,13 @@
     "prova": "vite build && electron . --prova",
     "test": "node --test test/*.test.js",
     "schermate": "vite build && electron . --schermate=schermate",
-    "test:app": "vite build && node --test test/app/*.test.js"
+    "test:app": "vite build && node --test test/app/*.test.js",
+    "pacchetto": "vite build && electron-builder --mac dmg --arm64"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.2"
+  },
+  "devDependencies": {
     "@strudel/codemirror": "1.3.0",
     "@strudel/core": "1.2.6",
     "@strudel/draw": "1.2.6",
@@ -23,10 +27,46 @@
     "@strudel/tonal": "1.2.6",
     "@strudel/transpiler": "1.2.6",
     "@strudel/webaudio": "1.3.0",
-    "fast-xml-parser": "^5.11.2"
-  },
-  "devDependencies": {
     "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
     "vite": "^6.4.4"
+  },
+  "build": {
+    "appId": "com.vxlyps.cutx",
+    "productName": "CUTX",
+    "copyright": "AGPL-3.0-or-later",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "package.json",
+      "dist/**",
+      "src/main/**",
+      "!src/main/prova.js",
+      "src/ableton/**",
+      "src/renderer/brano.js",
+      "risorse/icona/cutx.png",
+      "risorse/icona/LICENSE"
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "risorse/icona/cutx.icns",
+      "category": "public.app-category.music",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "CUTX ${version}",
+      "artifactName": "CUTX-${version}-arm64.${ext}"
+    }
   }
 }
