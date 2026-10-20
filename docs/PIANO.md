@@ -51,7 +51,7 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Suono una mia canzone smontata e rimontata dal vivo
 
 ## Fase 3 · Proiezione
-- [ ] Seconda finestra a schermo intero sul proiettore: codice live grande, riga che suona in verde, Hydra sotto
+- [ ] La finestra di uscita (dalla fase 1) diventa il proiettore: riga che suona in verde, Hydra sotto
 - [ ] Video dello stash come sorgenti Hydra, distorti a tempo
 - [ ] Hydra ascolta: i video reagiscono al volume reale della cassa e dei bassi, letto dal motore live
 - [ ] Conteggio a frasi anche sul proiettore

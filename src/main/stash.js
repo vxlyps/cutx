@@ -3,6 +3,7 @@ import { app } from 'electron';
 import path from 'node:path';
 import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import * as brano from '../renderer/brano.js';
 
 export const FORMATO = 1;
 const CARTELLE = ['suoni', 'libreria', 'video', 'estensioni'];
@@ -89,3 +90,52 @@ async function mappaSuoni() {
 }
 
 const nomeSuono = (s) => s.toLowerCase().trim().replace(/\s+/g, '_');
+
+// --- libreria: i brani .cutx in libreria/ ---
+
+const ESTENSIONE = '.cutx';
+
+function fileBrano(nome) {
+  const radiceLibreria = path.join(percorso, 'libreria');
+  const file = path.resolve(radiceLibreria, path.basename(nome));
+  return file.startsWith(radiceLibreria + path.sep) && file.endsWith(ESTENSIONE) ? file : null;
+}
+
+export async function elencoLibreria() {
+  if (!radice()) return [];
+  const cartella = path.join(percorso, 'libreria');
+  let nomi;
+  try {
+    nomi = (await readdir(cartella)).filter((n) => n.endsWith(ESTENSIONE) && !n.startsWith('.'));
+  } catch {
+    return [];
+  }
+  const brani = [];
+  for (const file of nomi) {
+    try {
+      const b = brano.leggi(await readFile(path.join(cartella, file), 'utf8'));
+      const t = brano.testa(b);
+      brani.push({ file, nome: t.brano || path.basename(file, ESTENSIONE), bpm: t.bpm, data: t.data, sezioni: b.sezioni.length });
+    } catch {
+      // un file illeggibile non blocca la libreria
+    }
+  }
+  return brani.sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+export async function leggiBrano(nome) {
+  const file = radice() && fileBrano(nome);
+  if (!file) throw new Error('brano fuori dalla libreria');
+  return readFile(file, 'utf8');
+}
+
+// Scrive un brano. Senza sovrascrivi, un file che esiste già non si tocca.
+export async function scriviBrano(nome, testo, { sovrascrivi = false } = {}) {
+  if (!radice()) throw new Error('nessuno stash');
+  const file = fileBrano(nome);
+  if (!file) throw new Error('nome non valido');
+  if (!sovrascrivi && existsSync(file)) return { esiste: true, file: path.basename(file) };
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, testo);
+  return { file: path.basename(file) };
+}
