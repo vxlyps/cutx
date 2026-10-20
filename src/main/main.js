@@ -6,6 +6,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
 import * as preferenze from './preferenze.js';
+import { trovaProgetti } from '../ableton/scansione.js';
 import { prova, foto } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
@@ -277,6 +278,24 @@ ipcMain.handle('preferenze:salva', async (_e, modifiche) => {
   for (const f of Object.values(finestre)) if (f && !f.isDestroyed()) f.webContents.send('preferenze-cambiate', nuove);
   return nuove;
 });
+// --- Ableton: le cartelle dei progetti (solo lette) ---
+async function salvaPreferenze(modifiche) {
+  const nuove = await preferenze.salva(modifiche);
+  for (const f of Object.values(finestre)) if (f && !f.isDestroyed()) f.webContents.send('preferenze-cambiate', nuove);
+  return nuove;
+}
+ipcMain.handle('ableton:aggiungi-cartella', async () => {
+  const r = await dialog.showOpenDialog(finestre.controllo, {
+    title: 'Dove tieni i progetti Ableton?',
+    message: 'Scegli una cartella con dei progetti .als, o la cartella che li contiene tutti. CUTX li legge soltanto.',
+    properties: ['openDirectory'],
+  });
+  if (r.canceled || !r.filePaths[0]) return preferenze.leggi();
+  const attuali = preferenze.leggi().cartelleAbleton ?? [];
+  return salvaPreferenze({ cartelleAbleton: [...new Set([...attuali, r.filePaths[0]])] });
+});
+ipcMain.handle('ableton:progetti', () => trovaProgetti(preferenze.leggi().cartelleAbleton ?? []));
+
 ipcMain.handle('stash:scegli', async () => {
   const r = await dialog.showOpenDialog(finestre.controllo, {
     title: 'Scegli lo stash',

@@ -15,6 +15,7 @@ export const PREDEFINITE = {
   insegna: true,
   hydra: true,
   logoSopraHydra: true,
+  cartelleAbleton: [], // dove tengo i progetti Ableton (solo letti)
   scorciatoie: {}, // solo quelle cambiate: id → combinazione (vedi scorciatoie.js)
   uscita: { aperta: false, bordi: null, schermoIntero: false },
 };

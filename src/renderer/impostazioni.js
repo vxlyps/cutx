@@ -45,6 +45,7 @@ export class Impostazioni {
     for (const b of document.querySelectorAll('#imp-nav [data-sez]')) b.onclick = () => this.vai(b.dataset.sez);
     $('scorciatoie-ripristina').onclick = () => this.dati.salvaPreferenze({ scorciatoie: {} });
     $('imp-cambia-stash').onclick = () => this.dati.scegliStash();
+    $('imp-ableton-aggiungi').onclick = () => window.cutx.aggiungiCartellaAbleton();
     window.addEventListener('keydown', (e) => this.tasto(e), true);
 
     // l'editor del paracadute: ⌘↵ lo prova in cuffia, si salva da solo in stash.json
@@ -97,6 +98,7 @@ export class Impostazioni {
     gruppo('imp-proiezione', it.impostazioni.proiezione);
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
     this.disegnaScorciatoie();
+    this.disegnaAbleton();
     const config = this.dati.config();
     $('imp-stash-nome').textContent = config.nome ?? 'nessuno stash';
     $('imp-stash-percorso').textContent = this.dati.percorsoStash() ?? 'scegli una cartella: diventa lo stash del set';
@@ -108,6 +110,27 @@ export class Impostazioni {
         this.editorParacadute.codice = voluto;
         this.caricando = false;
       }
+    }
+  }
+
+  // --- ableton: le cartelle dei progetti ---
+
+  async disegnaAbleton() {
+    const cartelle = this.dati.preferenze().cartelleAbleton ?? [];
+    const progetti = cartelle.length ? await window.cutx.progettiAbleton() : [];
+    const gruppo = $('imp-ableton');
+    gruppo.replaceChildren();
+    if (!cartelle.length) gruppo.append(crea('p', 'secondario', 'nessuna cartella: aggiungine una'));
+    for (const c of cartelle) {
+      const quanti = progetti.filter((p) => p.percorso.startsWith(c + '/')).length;
+      const riga = crea('div', 'imp-riga');
+      const t = crea('div', 'imp-testo');
+      t.append(crea('span', '', c.split('/').pop() || c), crea('span', 'imp-nota', `${c} · ${quanti} ${quanti === 1 ? 'progetto' : 'progetti'}`));
+      const togli = crea('button', 'key', 'togli');
+      togli.onclick = () => this.dati.salvaPreferenze({ cartelleAbleton: cartelle.filter((x) => x !== c) });
+      riga.dataset.cartella = c;
+      riga.append(t, togli);
+      gruppo.append(riga);
     }
   }
 

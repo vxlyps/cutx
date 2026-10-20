@@ -2,7 +2,7 @@
 // poi blocca e crasha interfaccia e cuffia, una cosa alla volta. Per ogni fase conta i click
 // che la sentinella del live ha sentito davvero in uscita: le casse non devono perderne uno.
 import path from 'node:path';
-import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import * as stash from './stash.js';
 import { leggiAls, leggiAlsFile } from '../ableton/leggi.js';
 import { converti } from '../ableton/converti.js';
@@ -968,6 +968,29 @@ async function provaAbleton({ finestre, scrivi }) {
       return e;
     })()`);
     controlla(`${nome}: ogni sezione si valuta con Strudel (${codici.length})`, sbagliate.length === 0, sbagliate.slice(0, 3).join(' | '));
+  }
+
+  // le cartelle dei progetti, nelle impostazioni
+  const radice = await mkdtemp(path.join(os.tmpdir(), 'cutx-prova-als-'));
+  const prima = (await js('window.cutx.preferenze()')).cartelleAbleton ?? [];
+  try {
+    await mkdir(path.join(radice, 'Uno Project', 'Backup'), { recursive: true });
+    await writeFile(path.join(radice, 'Uno Project', 'uno.als'), progettoFinto());
+    await writeFile(path.join(radice, 'Uno Project', 'Backup', 'uno [vecchio].als'), progettoFinto());
+    await writeFile(path.join(radice, 'Uno Project', 'due.als'), progettoFinto());
+    await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [${JSON.stringify(radice)}] })`);
+    await js(`document.getElementById('impostazioni').hidden = false; document.querySelector('#imp-nav [data-sez="ableton"]').click()`);
+    await aspetta(1);
+    const riga = await js(`document.querySelector('#imp-ableton .imp-riga')?.textContent ?? ''`);
+    controlla('le impostazioni elencano la cartella e i suoi progetti (senza Backup)', riga.includes('2 progetti'), riga);
+    const elenco = await js('window.cutx.progettiAbleton()');
+    controlla('la scansione dà nome, cartella e data', elenco.length === 2 && elenco.every((p) => p.nome && p.cartella && p.modificato), JSON.stringify(elenco.map((p) => p.nome)));
+    await js(`document.querySelector('#imp-ableton .imp-riga button').click()`);
+    await aspetta(0.6);
+    controlla('"togli" toglie la cartella dalle preferenze', ((await js('window.cutx.preferenze()')).cartelleAbleton ?? []).length === 0);
+  } finally {
+    await js(`window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} }); document.getElementById('impostazioni').hidden = true`);
+    await rm(radice, { recursive: true, force: true });
   }
   return ok;
 }
