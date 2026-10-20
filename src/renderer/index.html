@@ -10,79 +10,155 @@
     <link rel="stylesheet" href="./stile.css" />
   </head>
   <body>
-    <header>
-      <h1>CUTX</h1>
-      <span id="stash-nome" class="tenue">nessuno stash</span>
-      <button id="stash-scegli">Scegli stash</button>
-      <span class="spazio"></span>
-      <span id="stato-cuffia" class="spia">CUFFIA</span>
-      <span id="stato-live" class="spia">LIVE</span>
+    <header class="barra">
+      <div class="marchio">
+        <div class="gatto-posto"><img id="gatto" class="gatto" alt="" /></div>
+        <img id="wordmark" class="wordmark" alt="CUTX" />
+        <div id="insegna" class="insegna led" style="visibility: hidden">TECNOLOGIA CANAGLIA</div>
+      </div>
+      <button id="stash" class="key" title="Scegli lo stash">
+        <span class="lbl">stash</span><span id="stash-nome">nessuno</span><i id="stash-dove"></i>
+      </button>
+      <div class="spazio"></div>
+      <div class="tempo">
+        <div class="valore"><span id="bpm" class="numero">–</span><span class="lbl">bpm</span></div>
+        <div id="battute" class="battute" aria-label="Battuta">
+          <div></div>
+          <div></div>
+          <div></div>
+          <div></div>
+        </div>
+        <div class="valore"><span class="lbl">ciclo</span><span id="ciclo" class="numero">–</span></div>
+      </div>
+      <div class="spazio"></div>
+      <button id="cuffia-onoff" class="key on" title="Cuffia on / off · ⌘K">cuffia <i>on</i></button>
+      <button class="key" disabled title="Arriva in fase 3">hydra <i>off</i></button>
+      <button class="key" disabled title="Arriva in fase 3">proiettore <i>off</i></button>
+      <button id="apri-impostazioni" class="key" aria-label="Impostazioni" title="Impostazioni · ⌘,">⚙ <i>⌘,</i></button>
     </header>
 
-    <main>
-      <section id="centro">
-        <div id="editor"></div>
-        <p id="errore-codice" class="errore"></p>
+    <main class="postazione">
+      <aside class="browser">
+        <nav class="schede" aria-label="Pannello">
+          <button class="key on" data-scheda="suoni">suoni</button>
+          <button class="key" data-scheda="libreria">libreria</button>
+          <button class="key" data-scheda="help">help?</button>
+        </nav>
+        <div class="cerca">
+          <input id="cerca" type="text" placeholder="cerca nello stash" aria-label="Cerca nello stash" spellcheck="false" />
+        </div>
+        <div id="elenco" class="elenco"></div>
+      </aside>
+
+      <section class="colonna cue" aria-label="CUE">
+        <div class="testa">
+          <span class="titolo">CUE</span>
+          <span class="lbl">in cuffia</span>
+          <div class="spazio"></div>
+          <button class="key" disabled title="Arriva al passo 4">brano <i>–</i></button>
+          <button class="key on">libero</button>
+        </div>
+        <div class="corpo">
+          <article id="card-libero" class="card">
+            <div class="card-testa">
+              <span class="nome">libero</span>
+              <span id="libero-stato" class="lbl">pronta</span>
+              <div class="spazio"></div>
+              <button id="manda-cuffia" class="key">cuffia <i>⌘↵</i></button>
+              <button id="manda-live" class="key">go live <i>⇧⌘↵</i></button>
+            </div>
+            <div id="editor" class="editor"></div>
+            <p id="errore-codice" class="errore"></p>
+          </article>
+        </div>
+        <div class="piede">
+          <span class="lbl">entra tra</span>
+          <button class="key on" disabled title="Entrata a tempo: arriva al passo 5">1</button>
+          <button class="key" disabled title="Arriva al passo 5">2</button>
+          <button class="key" disabled title="Arriva al passo 5">4</button>
+          <button class="key" disabled title="Arriva al passo 5">8</button>
+          <span class="lbl">cicli</span>
+          <div class="spazio"></div>
+          <button id="go-live" class="key acid grande">GO LIVE <i>⇧⌘↵</i></button>
+        </div>
       </section>
 
-      <aside>
-        <div class="blocco">
-          <h2>Uscite</h2>
-          <label>Live <select id="uscita-live"></select></label>
-          <label>Cuffia <select id="uscita-cuffia"></select></label>
-          <label>Offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
-          <p id="errore-uscite" class="errore"></p>
+      <section id="colonna-live" class="colonna live" aria-label="LIVE">
+        <div class="testa">
+          <span class="titolo">LIVE</span>
+          <span class="lbl">casse + proiettore</span>
         </div>
-
-        <div class="blocco">
-          <h2>Suona su</h2>
-          <div class="scelta">
-            <button id="dest-live" class="attivo">Live</button>
-            <button id="dest-cuffia">Cuffia</button>
+        <div id="livelli" class="corpo"></div>
+        <div class="piede">
+          <span id="piede-ciclo" class="lbl">ciclo –</span>
+          <div id="quarti" class="quarti" aria-label="Quarto">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
           </div>
-          <p class="tenue">Ctrl+Invio suona · Ctrl+. ferma</p>
+          <span id="conteggio" class="lbl">0 live</span>
         </div>
-
-        <div class="blocco">
-          <h2>Test sfasamento</h2>
-          <div class="scelta">
-            <button id="test-avvia">Avvia test</button>
-            <button id="test-ferma">Ferma</button>
-          </div>
-          <table id="misure">
-            <tr><th></th><th>ultimo</th><th>media</th><th>min</th><th>max</th><th>deriva</th></tr>
-            <tr id="riga-stima"><td>stima</td></tr>
-            <tr id="riga-vero"><td>anello</td></tr>
-          </table>
-          <p id="verdetto" class="verdetto"></p>
-          <p id="durata" class="tenue"></p>
-
-          <label>Ingresso anello <select id="ingresso-anello"></select></label>
-          <div class="scelta">
-            <button id="anello-attiva">Ascolta ingresso</button>
-            <button id="anello-riferimento">Salva riferimento</button>
-          </div>
-          <p id="anello-stato" class="tenue"></p>
-
-          <h3>Robustezza</h3>
-          <div class="scelta">
-            <button id="cuffia-blocca">Blocca cuffia 5 s</button>
-            <button id="cuffia-crasha">Crasha cuffia</button>
-          </div>
-          <div class="scelta">
-            <button id="ui-blocca">Blocca interfaccia 5 s</button>
-            <button id="ui-crasha">Crasha interfaccia</button>
-          </div>
-          <p id="motori-dettagli" class="tenue a-capo"></p>
-          <p id="percorso-log" class="tenue"></p>
-        </div>
-
-        <div class="blocco">
-          <h2>Suoni nello stash</h2>
-          <p id="suoni" class="tenue"></p>
-        </div>
-      </aside>
+      </section>
     </main>
+
+    <!-- Provvisorio: al passo 9 diventano le impostazioni vere (sezione audio). -->
+    <div id="impostazioni" class="impostazioni" hidden>
+      <div class="pannello">
+        <div class="testa">
+          <span class="titolo">IMPOSTAZIONI</span>
+          <span class="lbl">audio e test</span>
+          <div class="spazio"></div>
+          <button id="chiudi-impostazioni" class="key">chiudi <i>esc</i></button>
+        </div>
+        <div class="sezioni">
+          <section class="blocco">
+            <h2 class="lbl">uscite</h2>
+            <label>live <select id="uscita-live"></select></label>
+            <label>cuffia <select id="uscita-cuffia"></select></label>
+            <label>offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
+            <p id="errore-uscite" class="errore"></p>
+            <h2 class="lbl">suoni nello stash</h2>
+            <p id="suoni" class="secondario"></p>
+          </section>
+
+          <section class="blocco">
+            <h2 class="lbl">test sfasamento</h2>
+            <div class="fila">
+              <button id="test-avvia" class="key">avvia test</button>
+              <button id="test-ferma" class="key">ferma</button>
+            </div>
+            <table id="misure">
+              <tr><th></th><th>ultimo</th><th>media</th><th>min</th><th>max</th><th>deriva</th></tr>
+              <tr id="riga-stima"><td>stima</td></tr>
+              <tr id="riga-vero"><td>anello</td></tr>
+            </table>
+            <p id="verdetto" class="verdetto"></p>
+            <p id="durata" class="secondario"></p>
+            <label>ingresso anello <select id="ingresso-anello"></select></label>
+            <div class="fila">
+              <button id="anello-attiva" class="key">ascolta ingresso</button>
+              <button id="anello-riferimento" class="key">salva riferimento</button>
+            </div>
+            <p id="anello-stato" class="secondario"></p>
+          </section>
+
+          <section class="blocco">
+            <h2 class="lbl">robustezza</h2>
+            <div class="fila">
+              <button id="cuffia-blocca" class="key">blocca cuffia 5 s</button>
+              <button id="cuffia-crasha" class="key">crasha cuffia</button>
+            </div>
+            <div class="fila">
+              <button id="ui-blocca" class="key">blocca interfaccia 5 s</button>
+              <button id="ui-crasha" class="key">crasha interfaccia</button>
+            </div>
+            <p id="motori-dettagli" class="secondario a-capo"></p>
+            <p id="percorso-log" class="secondario"></p>
+          </section>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="./app.js"></script>
   </body>

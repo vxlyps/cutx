@@ -66,6 +66,9 @@ Postazione a tre colonne: **browser** a sinistra (suoni, libreria, help), **CUE*
 - Wordmark CUTX: file in `design/risorse/logo/`, nell'interfaccia `cutx_bianco`.
 - Icona: gatto seduto su fondo `#050604`, in `risorse/icona/` (`cutx.svg`, `cutx.png` per il Dock, `cutx.icns`).
 - Logo, font, gatti e design dell'interfaccia sono fuori dall'AGPL: `design/LICENSE`, `risorse/icona/LICENSE`.
+- Postazione (passo 3): `index.html` + `stile.css` con i colori di DESIGN.md come variabili CSS. Fragment Mono in `src/renderer/public/font/` (con `OFL.txt`); Canaglia Stencil, logo e gatti presi direttamente da `design/risorse/` (Vite li include nella build), mai copiati in `src/`. Gatto e insegna in `gatto.js`; l'insegna tiene il suo posto anche spenta, così la barra non salta.
+- Provvisori fino al passo 9: le impostazioni (⌘,) sono un pannello sopra la postazione con uscite, test di sfasamento e robustezza della fase 0. Tasti di passi futuri (brano, entra tra, hydra, proiettore) ci sono ma disattivati, con il passo nel suggerimento.
+- `electron . --foto=file.png`: foto della postazione (e `file-impostazioni.png`), per confrontarla con le tavole.
 - Lanciatore: `strumenti/CUTX.command` (copia sulla Scrivania, doppio clic). Una sola istanza dell'app alla volta.
 
 ## Hardware
@@ -74,5 +77,6 @@ Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuff
 ## Stato
 - Fase 0 chiusa. AIFF non decodificabile da Chromium (solo WAV).
 - Fase 1, passo 1 (rinomina, stash, icona, migrazione dei dati): fatto e verificato da Valerio.
-- Fase 1, passo 2 (motore live separato e test di robustezza): fatto. `npm run prova` superata: in tutte le fasi 0 click persi dal live, scarto max 0,16 ms, cuffia di nuovo a tempo dopo il crash (sfasamento stimato < 0,02 ms). Rinuncia temporanea: niente note evidenziate nell'editor fino al passo 6. Da verificare a orecchio da Valerio insieme al passo 3.
-- **Passo 3 in corso: struttura della postazione e base grafica.** Valerio ha dato via libera a lavorare in autonomia fino alla fine del passo 3.
+- Fase 1, passo 2 (motore live separato e test di robustezza): fatto. `npm run prova` superata: in tutte le fasi 0 click persi dal live, scarto max 0,16 ms, cuffia di nuovo a tempo dopo il crash (sfasamento stimato < 0,02 ms). Rinuncia temporanea: niente note evidenziate nell'editor fino al passo 6.
+- Fase 1, passo 3 (struttura della postazione e base grafica): fatto. Tre colonne, barra con gatto animato, wordmark, insegna, stash, BPM, battute e ciclo dal live; CUE in modalità libero con cuffia ⌘↵ e go live ⇧⌘↵; LIVE con un livello solo; scorciatoie ⌘. ⌘K ⌘, ⇧⌘⌫ esc. `npm run prova` superata anche con le scorciatoie premute davvero.
+- **Passi 2 e 3 in attesa della verifica di Valerio** (orecchie e occhi). Poi: **passo 4, formato brano, CUE con mappa e sezioni, modalità libero** (vedi `docs/FASE-1.md`).

@@ -46,6 +46,7 @@ let offsetMs = 0;
 let eco = false; // per il misuratore: dico quando ho suonato ogni evento
 let mappaLive = null; // cuffia: l'ultima mappa ricevuta, in tempo assoluto
 let codiceLive = ''; // cuffia: il codice live, per il futuro mix cuffia/live
+let udibile = true;
 let mix = 0; // cuffia: 0 = solo la prova; il mix col live arriva in fase 4 (fader dell'APC)
 
 // --- valutazione: il repl di Strudel compila e basta, a tempo suona il riproduttore ---
@@ -88,8 +89,11 @@ function ferma() {
 function pubblicaMappa() {
   if (!LIVE || !rip.mappa || orologio.aggiorna() === null) return;
   // Si riparte da adesso, così il conto in tempo assoluto resta fresco.
+  // Anche all'interfaccia, per BPM, battute e ciclo: in tempo assoluto, cioè quando si sente.
   const t0 = ac.currentTime;
-  manda('cuffia', { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps });
+  const mappa = { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps };
+  manda('cuffia', mappa);
+  manda('controllo', mappa);
 }
 
 function cambiaCps(cps) {
@@ -164,6 +168,7 @@ function stato() {
     cps: rip.mappa?.cps ?? null,
     ciclo: rip.mappa ? rip.ciclo(ac.currentTime) : null,
     sentinella: sentinella.riepilogo(),
+    udibile,
     mix,
   };
 }
@@ -206,6 +211,10 @@ async function ricevi(da, m) {
     case 'mix':
       mix = m.valore;
       return;
+    case 'udibile': // cuffia on/off: il motore continua a girare, si spegne solo l'uscita
+      getSuperdoughAudioController().output.destinationGain.gain.value = m.on ? 1 : 0;
+      udibile = m.on;
+      return;
   }
 }
 
@@ -214,11 +223,9 @@ window.addEventListener('message', (e) => {
   if (!con || !e.ports[0]) return;
   porte[con] = e.ports[0];
   porte[con].onmessage = ({ data }) => ricevi(con, data);
-  // Una cuffia appena (ri)nata riceve subito il tempo e il codice live.
-  if (LIVE && con === 'cuffia') {
-    pubblicaMappa();
-    manda('cuffia', { tipo: 'codice-live', codice });
-  }
+  // Chi arriva riceve subito il tempo; una cuffia appena (ri)nata anche il codice live.
+  if (LIVE) pubblicaMappa();
+  if (LIVE && con === 'cuffia') manda('cuffia', { tipo: 'codice-live', codice });
 });
 window.cutx.suStashCambiato(configura);
 

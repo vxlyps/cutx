@@ -1,15 +1,16 @@
-// Finestra di controllo: editor, stash, uscite, test di sfasamento e di robustezza.
+// La postazione: browser a sinistra, CUE al centro (cuffia), LIVE a destra (casse).
 // Qui non suona niente: il codice va ai motori live e cuffia, ognuno nel suo processo.
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { creaEditor } from './editor.js';
 import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
 import { Misuratore } from './sfasamento.js';
+import { avviaGatto } from './gatto.js';
+import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
 
 const $ = (id) => document.getElementById(id);
 
-const CODICE_INIZIALE = `// CUTX
-// Ctrl+Invio suona, Ctrl+. ferma.
+const CODICE_INIZIALE = `// CUTX · ⌘↵ in cuffia, ⇧⌘↵ go live, ⌘. ferma tutto
 // I suoni dello stash: s("nome_cartella")
 setcpm(120/4)
 note("c2 [eb2 g2] c3 <bb1 f2>").s("sawtooth").lpf(800).decay(.2).sustain(0)
@@ -21,50 +22,91 @@ setcpm(120/4)
 s("sine*4").freq(1000).attack(0).decay(.02).sustain(0).gain(.8)
 `;
 
+// I suoni di sintesi di Strudel, sempre disponibili.
+const SYNTH = ['sine', 'square', 'sawtooth', 'triangle', 'supersaw'];
+
 const live = new Motore('live');
 const cuffia = new Motore('cuffia');
 const misuratore = new Misuratore();
 
-let destinazione = 'live';
 let inTest = false;
-let codicePrimaDelTest = CODICE_INIZIALE;
 let codiceCuffia = ''; // per ridarlo alla cuffia se rinasce
+let cuffiaUdibile = true;
+let mappa = null; // la mappa del tempo del live, in tempo assoluto
 let config = { uscite: {}, offsetCuffiaMs: 0 };
+let suoni = {};
 let haStash = false;
 let ripreso = false; // ho già preso lo stato dai motori? (dopo un crash dell'interfaccia stanno ancora suonando)
 
-const editor = creaEditor({ root: $('editor'), codice: CODICE_INIZIALE, suValuta: suona, suFerma: ferma });
+const editor = creaEditor({ root: $('editor'), codice: CODICE_INIZIALE, suValuta: provaInCuffia, suFerma: fermaTutto });
+
+// --- i gesti ---
 
 async function manda(motore, codice) {
   if (motore === cuffia) codiceCuffia = codice;
   const errore = await motore.valuta(codice);
   $('errore-codice').textContent = errore ? `${motore.ruolo}: ${errore}` : '';
+  return errore;
 }
 
-function suona() {
-  if (inTest) return;
-  manda(destinazione === 'live' ? live : cuffia, editor.codice);
+function provaInCuffia() {
+  if (!inTest) manda(cuffia, editor.codice);
 }
 
-function ferma() {
+function goLive() {
+  if (!inTest) manda(live, editor.codice);
+}
+
+function fermaLive() {
+  if (!inTest) live.manda({ tipo: 'ferma' });
+}
+
+function fermaTutto() {
   if (inTest) return fermaTest();
   codiceCuffia = '';
   live.manda({ tipo: 'ferma' });
   cuffia.manda({ tipo: 'ferma' });
 }
 
-function aggiornaSpie() {
-  $('stato-live').classList.toggle('accesa', live.viva && !!live.stato.codice);
-  $('stato-cuffia').classList.toggle('accesa', cuffia.viva);
-  $('dest-live').classList.toggle('attivo', destinazione === 'live');
-  $('dest-cuffia').classList.toggle('attivo', destinazione === 'cuffia');
+function cuffiaOnOff(on = !cuffiaUdibile) {
+  cuffiaUdibile = on;
+  cuffia.manda({ tipo: 'udibile', on });
 }
 
-function scegliDestinazione(dest) {
-  if (inTest) return;
-  destinazione = dest;
-  aggiornaSpie();
+function impostazioni(aperte = $('impostazioni').hidden) {
+  $('impostazioni').hidden = !aperte;
+  if (aperte) aggiornaElenchi();
 }
+
+// Le scorciatoie valgono anche dentro l'editor: le prendo prima di lui.
+const SCORCIATOIE = [
+  { tasto: 'Enter', shift: false, fa: provaInCuffia },
+  { tasto: 'Enter', shift: true, fa: goLive },
+  { tasto: 'Backspace', shift: true, fa: fermaLive },
+  { tasto: '.', fa: fermaTutto },
+  { tasto: 'k', fa: () => cuffiaOnOff() },
+  { tasto: ',', fa: () => impostazioni() },
+];
+
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key === 'Escape') {
+      if (!$('impostazioni').hidden) impostazioni(false);
+      else document.activeElement?.blur();
+      return;
+    }
+    if (!e.metaKey || e.ctrlKey || e.altKey) return;
+    const s = SCORCIATOIE.find(
+      (s) => s.tasto === (e.key.length === 1 ? e.key.toLowerCase() : e.key) && (s.shift === undefined || s.shift === e.shiftKey),
+    );
+    if (!s) return;
+    e.preventDefault();
+    e.stopPropagation();
+    s.fa();
+  },
+  true,
+);
 
 // --- stash: lo leggono anche i motori, da soli ---
 
@@ -75,23 +117,76 @@ async function salva(modifiche) {
 
 async function apriStash(stato) {
   haStash = !!stato.config;
+  suoni = {};
   if (!stato.percorso) {
-    $('stash-nome').textContent = 'nessuno stash';
+    $('stash-nome').textContent = 'nessuno';
+    $('stash-dove').textContent = 'scegli';
   } else if (stato.mancante) {
-    $('stash-nome').textContent = `stash non trovato: ${stato.percorso} (attacca il disco o scegline un altro)`;
+    $('stash-nome').textContent = 'manca';
+    $('stash-dove').textContent = 'attacca il disco';
   } else {
     config = { uscite: {}, offsetCuffiaMs: 0, ...stato.config };
-    $('stash-nome').textContent = `${config.nome} · ${stato.percorso}`;
-    const nomi = Object.keys(stato.suoni).filter((k) => k !== '_base');
-    $('suoni').textContent = nomi.length
-      ? nomi.map((n) => `${n} (${stato.suoni[n].length})`).join(' · ')
-      : 'nessun suono: metti dei WAV in suoni/<nome>/';
+    suoni = stato.suoni;
+    $('stash-nome').textContent = config.nome;
+    $('stash-dove').textContent = stato.percorso.startsWith('/Volumes/') ? 'ssd' : 'mac';
   }
+  $('stash').title = stato.percorso ?? 'Scegli lo stash';
+  const nomi = Object.keys(suoni).filter((k) => k !== '_base');
+  $('suoni').textContent = nomi.length
+    ? nomi.map((n) => `${n} (${suoni[n].length})`).join(' · ')
+    : 'nessun suono: metti dei WAV in suoni/<nome>/';
   $('offset-cuffia').value = config.offsetCuffiaMs ?? 0;
+  mostraBrowser();
   await aggiornaElenchi();
 }
 
-// --- uscite ---
+// --- browser (il contenuto vero arriva al passo 7) ---
+
+let scheda = 'suoni';
+
+function voce(nome, nota) {
+  const riga = document.createElement('div');
+  riga.className = 'voce';
+  const a = document.createElement('span');
+  a.textContent = nome;
+  const b = document.createElement('span');
+  b.className = 'lbl';
+  b.textContent = nota;
+  riga.append(a, b);
+  return riga;
+}
+
+function gruppo(nome) {
+  const g = document.createElement('div');
+  g.className = 'lbl gruppo';
+  g.textContent = nome;
+  return g;
+}
+
+function mostraBrowser() {
+  const elenco = $('elenco');
+  elenco.replaceChildren();
+  $('cerca').closest('.cerca').hidden = scheda !== 'suoni';
+  if (scheda !== 'suoni') {
+    const p = document.createElement('p');
+    p.className = 'secondario';
+    p.textContent = scheda === 'libreria' ? 'brani e pezzi dello stash: arriva al passo 7' : 'la guida di Strudel: arriva al passo 7';
+    return elenco.append(p);
+  }
+  const filtro = $('cerca').value.trim().toLowerCase();
+  const passa = (n) => !filtro || n.toLowerCase().includes(filtro);
+  const nomi = Object.keys(suoni).filter((k) => k !== '_base' && passa(k)).sort();
+  elenco.append(gruppo('stash'));
+  if (nomi.length) for (const n of nomi) elenco.append(voce(n, String(suoni[n].length)));
+  else elenco.append(voce(haStash ? 'nessun suono' : 'nessuno stash', ''));
+  const synth = SYNTH.filter(passa);
+  if (synth.length) {
+    elenco.append(gruppo('synth'));
+    for (const n of synth) elenco.append(voce(n, ''));
+  }
+}
+
+// --- uscite (provvisorie, nelle impostazioni) ---
 
 async function riempiSelect(select, dispositivi, scelto, vuota = 'predefinita di macOS') {
   select.replaceChildren(new Option(vuota, ''));
@@ -115,13 +210,11 @@ function erroriUscite() {
   return errori.join(' ');
 }
 
-// --- test ---
+// --- test (provvisorio, nelle impostazioni) ---
 
 function avviaTest(codice = CODICE_TEST) {
   if (inTest) return;
   inTest = true;
-  codicePrimaDelTest = editor.codice;
-  editor.codice = codice;
   misuratore.avvia();
   for (const m of [live, cuffia]) m.manda({ tipo: 'eco', attivo: true });
   manda(live, codice);
@@ -138,7 +231,6 @@ function fermaTest() {
     m.manda({ tipo: 'ferma' });
   }
   codiceCuffia = '';
-  editor.codice = codicePrimaDelTest;
 }
 
 // All'avvio chiedo ai motori cosa suonano: dopo un crash dell'interfaccia non si sono fermati.
@@ -146,12 +238,14 @@ function riprendi() {
   if (ripreso || !live.viva || !cuffia.viva) return;
   ripreso = true;
   codiceCuffia = cuffia.stato.codice ?? '';
+  cuffiaUdibile = cuffia.stato.udibile ?? true;
   if (live.stato.eco) {
     inTest = true;
     misuratore.avvia();
     misuratore.scriviLog('interfaccia ripartita, test in corso');
+  } else if (codiceCuffia) {
+    editor.codice = codiceCuffia;
   }
-  if (live.stato.codice) editor.codice = live.stato.codice;
 }
 
 // Per provare la regola d'oro: questa finestra si pianta e i motori vanno avanti.
@@ -159,6 +253,8 @@ function bloccaInterfaccia(ms) {
   const fine = performance.now() + ms;
   while (performance.now() < fine);
 }
+
+// --- disegno ---
 
 const f = (x) => (x === null || x === undefined ? '–' : x.toFixed(2));
 
@@ -178,9 +274,7 @@ function descriviMotore(m) {
   );
 }
 
-function mostra() {
-  riprendi();
-  aggiornaSpie();
+function mostraImpostazioni() {
   $('errore-uscite').textContent = erroriUscite();
   rigaMisure('riga-stima', misuratore.stima.riepilogo());
   rigaMisure('riga-vero', misuratore.vero() ?? misuratore.anello.riepilogo());
@@ -195,12 +289,85 @@ function mostra() {
   $('motori-dettagli').textContent = `${descriviMotore(live)}\n${descriviMotore(cuffia)}`;
 }
 
+// Il LIVE: per ora un livello solo, quello che suona. La pila vera arriva al passo 6.
+let livelloMostrato;
+function mostraLive() {
+  const codice = live.viva ? (live.stato.codice ?? '') : null;
+  const suona = !!codice;
+  document.body.classList.toggle('live-suona', suona);
+  $('conteggio').textContent = live.viva ? `${suona ? 1 : 0} live` : 'live fermo';
+  if (codice === livelloMostrato) return;
+  livelloMostrato = codice;
+  const livelli = $('livelli');
+  livelli.replaceChildren();
+  if (!suona) {
+    const vuoto = document.createElement('div');
+    vuoto.className = 'vuoto';
+    vuoto.textContent = live.viva ? 'niente live · scrivi nel CUE e premi go live ⇧⌘↵' : 'motore live fermo';
+    return livelli.append(vuoto);
+  }
+  const card = document.createElement('article');
+  card.className = 'card livello';
+  card.innerHTML =
+    '<div class="card-testa"><span class="nome">● libero</span><span class="lbl">cue</span><div class="spazio"></div>' +
+    '<button class="key piccolo" aria-label="Togli" title="Togli · ⇧⌘⌫">×</button></div><pre class="codice"></pre>';
+  card.querySelector('pre').textContent = codice.replace(/\s+$/, '');
+  card.querySelector('button').onclick = fermaLive;
+  livelli.append(card);
+}
+
+function mostraCue() {
+  const inCuffia = cuffia.viva && !!cuffia.stato.codice && !inTest;
+  $('card-libero').classList.toggle('in-cuffia', inCuffia);
+  $('manda-cuffia').classList.toggle('on', inCuffia);
+  const stato = $('libero-stato');
+  stato.textContent = inTest ? 'test sfasamento in corso' : inCuffia ? '◖◗ lo stai sentendo' : 'pronta';
+  stato.style.color = inCuffia ? 'var(--testo)' : '';
+  const b = $('cuffia-onoff');
+  b.classList.toggle('on', cuffia.viva && cuffiaUdibile);
+  b.querySelector('i').textContent = !cuffia.viva ? '–' : cuffiaUdibile ? 'on' : 'off';
+}
+
+function mostra() {
+  riprendi();
+  mostraLive();
+  mostraCue();
+  if (!$('impostazioni').hidden) mostraImpostazioni();
+}
+
+// Tempo: BPM, battute e ciclo seguono il live, nell'istante in cui si sente.
+const battute = [...$('battute').children];
+const quarti = [...$('quarti').children];
+function mostraTempo() {
+  requestAnimationFrame(mostraTempo);
+  if (!mappa || !live.viva) {
+    $('bpm').textContent = '–';
+    $('ciclo').textContent = '–';
+    $('piede-ciclo').textContent = 'ciclo –';
+    return;
+  }
+  const epoca = performance.timeOrigin + performance.now();
+  const ciclo = mappa.ciclo0 + ((epoca - mappa.epoca0) / 1000) * mappa.cps;
+  const intero = Math.floor(ciclo);
+  const quarto = Math.floor((ciclo - intero) * 4);
+  $('bpm').textContent = Math.round(mappa.cps * 240 * 10) / 10;
+  $('ciclo').textContent = intero;
+  $('piede-ciclo').textContent = `ciclo ${intero}`;
+  for (const fila of [battute, quarti]) {
+    fila.forEach((d, i) => {
+      d.classList.toggle('passata', i < quarto);
+      d.classList.toggle('ora', i === quarto);
+    });
+  }
+}
+
 // --- collegamenti ---
 
 for (const m of [live, cuffia]) {
   m.suStato = (viva) => inTest && misuratore.scriviLog(`${m.ruolo} ${viva ? 'vivo' : 'fermo'}`);
   m.suMessaggio = (msg) => {
-    if (msg.tipo === 'eco') misuratore.eco(msg.ciclo, msg.ruolo, msg.epoca);
+    if (msg.tipo === 'mappa') mappa = msg;
+    else if (msg.tipo === 'eco') misuratore.eco(msg.ciclo, msg.ruolo, msg.epoca);
     else if (msg.tipo === 'anello') misuratore.misuraAnello(msg.ms);
     else if (msg.tipo === 'anello-stato') $('anello-stato').textContent = msg.attivo ? 'in ascolto' : `errore: ${msg.errore}`;
   };
@@ -209,12 +376,29 @@ for (const m of [live, cuffia]) {
 cuffia.suCollegato = () => {
   if (!ripreso) return;
   if (inTest) cuffia.manda({ tipo: 'eco', attivo: true });
+  if (!cuffiaUdibile) cuffia.manda({ tipo: 'udibile', on: false });
   if (codiceCuffia) manda(cuffia, codiceCuffia);
 };
 
-$('stash-scegli').onclick = async () => apriStash(await window.cutx.scegliStash());
-$('dest-live').onclick = () => scegliDestinazione('live');
-$('dest-cuffia').onclick = () => scegliDestinazione('cuffia');
+$('wordmark').src = wordmark;
+const posaGatto = avviaGatto($('gatto'), $('insegna'));
+
+$('stash').onclick = async () => apriStash(await window.cutx.scegliStash());
+$('cuffia-onoff').onclick = () => cuffiaOnOff();
+$('apri-impostazioni').onclick = () => impostazioni(true);
+$('chiudi-impostazioni').onclick = () => impostazioni(false);
+$('manda-cuffia').onclick = provaInCuffia;
+$('manda-live').onclick = goLive;
+$('go-live').onclick = goLive;
+$('cerca').oninput = mostraBrowser;
+for (const b of document.querySelectorAll('[data-scheda]')) {
+  b.onclick = () => {
+    scheda = b.dataset.scheda;
+    for (const x of document.querySelectorAll('[data-scheda]')) x.classList.toggle('on', x === b);
+    mostraBrowser();
+  };
+}
+
 $('uscita-live').onchange = (e) => salva({ uscite: { ...config.uscite, live: e.target.value } });
 $('uscita-cuffia').onchange = (e) => salva({ uscite: { ...config.uscite, cuffia: e.target.value } });
 $('offset-cuffia').onchange = (e) => salva({ offsetCuffiaMs: Number(e.target.value) || 0 });
@@ -229,14 +413,18 @@ $('ui-blocca').onclick = () => bloccaInterfaccia(5000);
 $('ui-crasha').onclick = () => window.cutx.crasha('controllo');
 navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
-// Per la prova automatica di robustezza (npm run prova).
+// Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   avviaTest,
   bloccaInterfaccia,
-  valuta: (ruolo, codice) => (ruolo === 'live' ? live : cuffia).valuta(codice),
+  valuta: (ruolo, codice) => manda(ruolo === 'live' ? live : cuffia, codice),
+  scriviCue: (codice) => (editor.codice = codice),
+  posaGatto: (nome) => posaGatto(nome),
   misure: () => ({ stima: misuratore.stima.riepilogo(), live: live.stato, cuffia: cuffia.stato }),
 };
 
-setInterval(mostra, 250);
+setInterval(mostra, 100);
+mostra();
+mostraTempo();
 $('percorso-log').textContent = `log: ${await window.cutx.percorsoLog()}`;
 await apriStash(await window.cutx.stash());

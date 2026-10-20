@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
-import { prova } from './prova.js';
+import { prova, foto } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(QUI, '../../dist');
@@ -14,6 +14,7 @@ const ORIGINE = 'cutx://app';
 const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
 const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 const PROVA = process.argv.includes('--prova'); // prova automatica di robustezza
+const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
 
 // Una sola CUTX alla volta: due motori live sulla stessa scheda sarebbero un disastro.
 if (!app.requestSingleInstanceLock()) app.exit(0);
@@ -112,8 +113,10 @@ function seguiCaricamento(nome, finestra) {
 
 function creaControllo() {
   const finestra = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1440,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 640,
     backgroundColor: '#000000',
     title: 'CUTX',
     webPreferences,
@@ -208,4 +211,5 @@ app.whenReady().then(async () => {
   creaMotore('cuffia');
   creaControllo();
   if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG() }).then((ok) => app.exit(ok ? 0 : 1));
+  if (FOTO) foto({ finestre, file: FOTO }).then(() => app.exit(0));
 });
