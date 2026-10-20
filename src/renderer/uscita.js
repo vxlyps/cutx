@@ -181,7 +181,7 @@ window.addEventListener('keydown', (e) => {
 
 $('wordmark').src = wordmark;
 avviaGatto();
-avviaInsegna($('insegna'));
+globalThis.cutxInsegna = avviaInsegna($('insegna'));
 function applica(p) {
   preferenze = p;
   document.body.classList.toggle('senza-gatto', p.gatto === false);

@@ -36,7 +36,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -158,6 +158,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('browser')) ok = (await sicura('browser', provaBrowser)) && ok;
   if (parti.includes('impostazioni')) ok = (await sicura('impostazioni', provaImpostazioni)) && ok;
   if (parti.includes('ableton')) ok = (await sicura('ableton', provaAbleton)) && ok;
+  if (parti.includes('neon')) ok = (await sicura('neon', provaNeon)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -1438,4 +1439,62 @@ export async function schermate({ finestre, cartella }) {
   console.log(`[schermate] ${riepilogo.length} schermate, ${totale} problemi`);
   await writeFile(path.join(cartella, 'problemi.json'), JSON.stringify(riepilogo, null, 2));
   return totale;
+}
+
+// --- prova del neon: acceso, ronzio, flicker, una lettera che si spegne; uguale nella postazione e sull'uscita ---
+
+async function provaNeon({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  // quello che si può misurare in una finestra: com'è la scritta, e cosa succede quando si forza un flicker o una lettera
+  const misura = (finestra, forzaFlicker, forzaLettera) => chiedi(finestra, `(async () => {
+    const el = document.getElementById('insegna');
+    const s = getComputedStyle(el);
+    const registro = { sfarfalla: 0, lettere: 0 };
+    const o = new MutationObserver((m) => {
+      for (const x of m) {
+        if (x.target === el && el.classList.contains('sfarfalla')) registro.sfarfalla++;
+        if (x.target.classList?.contains('l') && x.target.classList.contains('spenta')) registro.lettere++;
+      }
+    });
+    o.observe(el, { attributes: true, subtree: true, attributeFilter: ['class'] });
+    await (${forzaFlicker})();
+    await (${forzaLettera})();
+    o.disconnect();
+    return {
+      colore: s.color, ombra: s.textShadow, animazione: s.animationName, lettere: el.querySelectorAll('.l').length,
+      testo: el.textContent, registro,
+    };
+  })()`);
+  const luminosita = (colore) => {
+    const [r, g, b] = colore.match(/[\d.]+/g).map(Number);
+    return (r + g + b) / 3;
+  };
+  const verifiche = async (nome, finestra, flicker, lettera) => {
+    const m = await misura(finestra, flicker, lettera);
+    controlla(`${nome}: il neon è acceso (non spento), col glow verde`, luminosita(m.colore) > 90 && m.ombra !== 'none' && m.ombra.includes('159, 194, 58'), `${m.colore} · ${m.ombra}`);
+    controlla(`${nome}: c'è il ronzio continuo (animazione lenta)`, m.animazione.includes('ronzio'), m.animazione);
+    controlla(`${nome}: ogni lettera è a sé, e il testo è intero`, m.lettere === 18 && m.testo === 'TECNOLOGIA CANAGLIA', `${m.lettere} · ${m.testo}`);
+    controlla(`${nome}: un flicker ha da 2 a 4 sfarfallii rapidi`, m.registro.sfarfalla >= 2 && m.registro.sfarfalla <= 4, JSON.stringify(m.registro));
+    controlla(`${nome}: una sola lettera si spegne per un attimo`, m.registro.lettere === 1, JSON.stringify(m.registro));
+    const dopo = await chiedi(finestra, `(() => { const el = document.getElementById('insegna'); return !el.classList.contains('sfarfalla') && !el.querySelector('.l.spenta'); })()`);
+    controlla(`${nome}: poi torna acceso, intero`, dopo === true);
+  };
+  await verifiche('postazione', finestre.controllo, 'cutxProva.accendiInsegna', 'cutxProva.spegniLettera');
+  // sul proiettore (la finestra di uscita): stesso comportamento
+  await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  if (finestre.uscita) {
+    await verifiche('uscita', finestre.uscita, 'cutxInsegna.sfarfalla', 'cutxInsegna.spegniLettera');
+    await js('window.cutx.uscitaOnOff()');
+  } else controlla('la finestra di uscita si apre', false);
+  // i tempi: tra un flicker e l'altro 8–20 s, una lettera ogni 5–14 s (sono costanti del modulo)
+  const sorgente = await readFile(new URL('../renderer/insegna.js', import.meta.url), 'utf8');
+  controlla('i tempi sono quelli chiesti: flicker ogni 8–20 s', /FLICKER_MIN_MS = 8_000/.test(sorgente) && /FLICKER_MAX_MS = 20_000/.test(sorgente));
+  return ok;
 }

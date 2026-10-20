@@ -1,0 +1,53 @@
+/* Il neon TECNOLOGIA CANAGLIA: sempre acceso, a media intensità, con il glow verde.
+   Colori e misure vengono dalla pagina: --neon-glow (il bagliore), --neon-px (un pixel, scalato sul proiettore). */
+.insegna {
+  --neon-spento: #2c370e;
+  --neon-acceso: #86a634; /* il verde marcio a media intensità */
+  color: var(--neon-acceso);
+  text-shadow: 0 0 calc(var(--neon-px, 1px) * 3) rgba(159, 194, 58, 0.55), 0 0 calc(var(--neon-px, 1px) * 10) rgba(159, 194, 58, 0.3);
+  border-color: #2d3a14;
+  box-shadow: 0 0 calc(var(--neon-px, 1px) * 8) rgba(159, 194, 58, 0.12), inset 0 0 calc(var(--neon-px, 1px) * 8) rgba(159, 194, 58, 0.06);
+  /* il ronzio: due oscillazioni lente e di periodo diverso, così non si ripete mai uguale */
+  animation: ronzio 3.7s ease-in-out infinite alternate, ronzio-lento 5.3s ease-in-out infinite alternate;
+}
+
+@keyframes ronzio {
+  from {
+    opacity: 0.93;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ronzio-lento {
+  from {
+    filter: brightness(0.96);
+  }
+  to {
+    filter: brightness(1.06);
+  }
+}
+
+/* il flicker: per un attimo la scritta quasi si spegne */
+.insegna.sfarfalla {
+  color: var(--neon-spento);
+  text-shadow: none;
+  box-shadow: none;
+}
+
+/* una lettera sola che si spegne */
+.insegna .l {
+  transition: none;
+}
+
+.insegna .l.spenta {
+  color: var(--neon-spento);
+  text-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insegna {
+    animation: none;
+  }
+}

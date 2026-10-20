@@ -214,37 +214,12 @@ body {
   font-family: var(--stencil);
   font-size: 16px;
   letter-spacing: 0.06em;
-  color: #2c370e; /* neon spento */
   padding: 6px 10px;
   border: 1px solid #1f2614;
   border-radius: 3px;
   white-space: nowrap;
 }
 
-.insegna.accesa {
-  color: var(--marcio);
-  text-shadow: var(--bagliore-testo);
-  animation: neon 0.9s steps(1, end);
-}
-
-/* il tremolio di un neon che si accende */
-@keyframes neon {
-  0%,
-  14%,
-  30%,
-  38% {
-    color: #2c370e;
-    text-shadow: none;
-  }
-  8%,
-  22%,
-  34%,
-  46%,
-  100% {
-    color: var(--marcio);
-    text-shadow: var(--bagliore-testo);
-  }
-}
 
 #stash .lbl {
   margin-right: -2px;

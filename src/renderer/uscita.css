@@ -160,7 +160,7 @@ body {
   font-family: 'Canaglia Stencil', 'Fragment Mono', monospace;
   font-size: calc(30 * var(--u));
   letter-spacing: 0.06em;
-  color: #2c370e;
+  --neon-px: calc(1.6 * var(--u));
   padding: calc(10 * var(--u)) calc(16 * var(--u));
   border: 1px solid #1f2614;
   border-radius: 3px;
@@ -173,29 +173,6 @@ body {
   background-size: 4px 4px;
 }
 
-.insegna.accesa {
-  color: var(--marcio);
-  text-shadow: var(--bagliore);
-  animation: neon 0.9s steps(1, end);
-}
-
-@keyframes neon {
-  0%,
-  14%,
-  30%,
-  38% {
-    color: #2c370e;
-    text-shadow: none;
-  }
-  8%,
-  22%,
-  34%,
-  46%,
-  100% {
-    color: var(--marcio);
-    text-shadow: var(--bagliore);
-  }
-}
 
 .gatto-posto {
   grid-column: 1;

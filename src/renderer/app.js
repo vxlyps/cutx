@@ -672,7 +672,7 @@ $('imp-wordmark').src = wordmark;
 const posaGatto = avviaGatto($('gatto'));
 avviaGatto($('imp-gatto'), { animato: false });
 pulsanteParacadute();
-const accendiInsegna = avviaInsegna($('insegna'));
+const insegna = avviaInsegna($('insegna'));
 
 $('stash').onclick = async () => apriStash(await window.cutx.scegliStash());
 $('cuffia-onoff').onclick = () => cuffiaOnOff();
@@ -717,7 +717,8 @@ globalThis.cutxProva = {
   scriviCue: (codice) => (cue.libero.codice = codice),
   cue,
   posaGatto: (nome) => posaGatto(nome),
-  accendiInsegna: () => accendiInsegna(),
+  accendiInsegna: () => insegna.sfarfalla(),
+  spegniLettera: () => insegna.spegniLettera(),
   libreria: () => libreria,
   suoniStash: () => suoni,
   browser,
