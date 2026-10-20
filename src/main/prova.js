@@ -1587,12 +1587,14 @@ async function provaNeon({ finestre, scrivi }) {
     const dopo = await chiedi(finestra, `(() => { const el = document.getElementById('insegna'); return !el.classList.contains('sfarfalla') && !el.querySelector('.l.spenta'); })()`);
     controlla(`${nome}: poi torna acceso, intero`, dopo === true);
   };
+  await js('cutxProva.fermaInsegna()'); // i flicker e le lettere a caso si fermano: si misura solo quello che si forza
   await verifiche('postazione', finestre.controllo, 'cutxProva.accendiInsegna', 'cutxProva.spegniLettera');
   // sul proiettore (la finestra di uscita): stesso comportamento
   await js('window.cutx.uscitaOnOff()');
   for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
   await aspetta(1.5);
   if (finestre.uscita) {
+    await chiedi(finestre.uscita, 'cutxInsegna.ferma()');
     await verifiche('uscita', finestre.uscita, 'cutxInsegna.sfarfalla', 'cutxInsegna.spegniLettera');
     await js('window.cutx.uscitaOnOff()');
   } else controlla('la finestra di uscita si apre', false);

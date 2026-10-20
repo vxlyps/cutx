@@ -454,6 +454,7 @@ function stato() {
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     eco,
     uscita: uscitaStato,
+    pronto: !!rip.mappa, // ha finito di caricarsi: da qui accetta livelli e cambi di tempo
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
     eventi: rip.eventi,

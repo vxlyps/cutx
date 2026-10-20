@@ -614,8 +614,11 @@ async function ripristinaLive() {
   ripristinando = true; // intanto lo stato (vuoto) del motore nuovo non deve sostituire l'istantanea
   try {
     // aspetto il primo stato del motore nuovo (non quello vecchio): se è già pieno non è rinato, non c'è niente da rimettere
-    for (let i = 0; i < 50 && !(live.ultimoPong > live.collegatoDa); i++) await new Promise((r) => setTimeout(r, 100));
-    if (!(live.ultimoPong > live.collegatoDa) || (live.stato.livelli ?? []).some((l) => l.a === null)) return;
+    // (un motore che rinasce risponde ai ping molto prima di aver finito di caricare Strudel e i suoni: i livelli e il tempo si
+    // possono rimettere solo quando dice `pronto`, altrimenti si perdono o arrivano dopo i 5 secondi di attesa)
+    const nuovoEPronto = () => live.ultimoPong > live.collegatoDa && live.stato.pronto === true;
+    for (let i = 0; i < 400 && !nuovoEPronto(); i++) await new Promise((r) => setTimeout(r, 100));
+    if (!nuovoEPronto() || (live.stato.livelli ?? []).some((l) => l.a === null)) return;
     window.cutx.logEvento('avviso', 'live', `riavviato: rimetto ${snap.livelli.length} livelli a ${snap.bpm} bpm`);
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
     for (const l of snap.livelli) {
@@ -834,9 +837,13 @@ live.suCollegato = () => {
   if (ripreso) ripristinaLive();
 };
 // Una cuffia rinata riparte da vuota: le ridò il suo codice.
-cuffia.suCollegato = () => {
+cuffia.suCollegato = async () => {
   if (!ripreso) return;
   window.cutx.logEvento('avviso', 'cuffia', 'ricollegata (riavviata): le ridò il suo codice');
+  // aspetto che abbia finito di caricarsi: risponde ai ping molto prima di poter valutare il codice (5 s di attesa non bastano sempre)
+  const nuova = cuffia.collegatoDa;
+  for (let i = 0; i < 400 && !(cuffia.ultimoPong > nuova && cuffia.stato.pronto === true); i++) await new Promise((r) => setTimeout(r, 100));
+  if (cuffia.collegatoDa !== nuova) return; // nel frattempo è rinata di nuovo: ci pensa la prossima
   if (inTest) cuffia.manda({ tipo: 'eco', attivo: true });
   if (!cuffiaUdibile) cuffia.manda({ tipo: 'udibile', on: false });
   if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
@@ -897,6 +904,7 @@ globalThis.cutxProva = {
   posaGatto: (nome) => posaGatto(nome),
   accendiInsegna: () => insegna.sfarfalla(),
   spegniLettera: () => insegna.spegniLettera(),
+  fermaInsegna: () => insegna.ferma(),
   libreria: () => libreria,
   suoniStash: () => suoni,
   browser,

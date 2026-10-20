@@ -47,13 +47,16 @@ export function avviaInsegna(el) {
     l.classList.remove('spenta');
   }
 
+  let fermo = false;
   const ogni = (min, max, fa) => {
-    const giro = () => setTimeout(async () => (await fa(), giro()), aCaso(min, max));
+    const giro = () => setTimeout(async () => !fermo && (await fa(), giro()), aCaso(min, max));
     giro();
   };
   if (!riposo) {
     ogni(FLICKER_MIN_MS, FLICKER_MAX_MS, sfarfalla);
     ogni(LETTERA_MIN_MS, LETTERA_MAX_MS, spegniLettera);
   }
-  return { sfarfalla, spegniLettera };
+  // per le prove: niente flicker e lettere a caso, così si misura solo quello che si chiede
+  const ferma = () => (fermo = true);
+  return { sfarfalla, spegniLettera, ferma };
 }
