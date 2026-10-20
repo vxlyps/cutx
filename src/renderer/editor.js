@@ -1,11 +1,29 @@
 // Editor Strudel (codemirror), solo per scrivere: il codice lo suonano i motori.
 // Le sezioni si vedono anche qui: etichetta col nome a inizio blocco e fascia sul margine sinistro.
 import { codemirrorSettings, initEditor } from '@strudel/codemirror';
-import { RangeSetBuilder, StateEffect } from '@codemirror/state';
-import { Decoration, ViewPlugin } from '@codemirror/view';
+import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { Decoration, EditorView, ViewPlugin } from '@codemirror/view';
 import { eSezione, leggiRigaSezione } from './brano.js';
 
 const ridisegna = StateEffect.define();
+
+// Le note che suonano in cuffia, in bianco: intervalli [da, a) del documento.
+const segnaNote = StateEffect.define();
+const noteInCuffia = StateField.define({
+  create: () => Decoration.none,
+  update(note, tr) {
+    note = note.map(tr.changes);
+    for (const e of tr.effects) {
+      if (!e.is(segnaNote)) continue;
+      note = Decoration.set(
+        e.value.map(([a, b]) => Decoration.mark({ class: 'cm-nota-cuffia' }).range(a, b)),
+        true,
+      );
+    }
+    return note;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 const TESTA_BRANO = /^\/\/ @(brano|bpm|data|suoni)\b/;
 
 // statoSezione(nome) → 'live' | 'cuffia' | '' per il colore della fascia.
@@ -60,7 +78,8 @@ export function creaEditor({ root, codice, suValuta, suFerma, suCambio, suFuoco,
     onEvaluate: () => (suValuta?.(), true),
     onStop: () => (suFerma?.(), true),
   });
-  vista.dispatch({ effects: StateEffect.appendConfig.of(fasceSezioni(statoSezione)) });
+  vista.dispatch({ effects: StateEffect.appendConfig.of([fasceSezioni(statoSezione), noteInCuffia]) });
+  let noteSegnate = '';
   vista.contentDOM.addEventListener('focus', () => suFuoco?.());
   return {
     vista,
@@ -88,8 +107,18 @@ export function creaEditor({ root, codice, suValuta, suFerma, suCambio, suFuoco,
     ridisegnaSezioni() {
       vista.dispatch({ effects: ridisegna.of(null) });
     },
+    // Evidenzia le note che suonano in cuffia (vuoto = nessuna).
+    evidenzia(intervalli) {
+      const lungo = vista.state.doc.length;
+      const validi = intervalli.filter(([a, b]) => a >= 0 && a < b && b <= lungo);
+      const chiave = validi.map((x) => x.join('-')).join(',');
+      if (chiave === noteSegnate) return;
+      noteSegnate = chiave;
+      vista.dispatch({ effects: segnaNote.of(validi) });
+    },
     focus: () => vista.focus(),
-    haFuoco: () => vista.hasFocus,
+    // dove sta il cursore della pagina, anche se la finestra non è quella attiva
+    haFuoco: () => vista.dom.contains(document.activeElement),
     distruggi: () => vista.destroy(),
   };
 }

@@ -6,6 +6,7 @@ import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
 import { analizza } from './analisi.js';
+import { attivi } from './evidenzia.js';
 import gattoInPiedi from '../../design/risorse/gatti/gatto_in_piedi_logo_marcio.svg';
 import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
@@ -80,7 +81,24 @@ function provaInCuffia() {
   if (inTest) return;
   const p = cue.pezzo();
   if (p.errore) return cue.avviso(p.errore);
+  dovaCuffia = p.dove ? { ...p.dove, inizio: p.inizio } : null;
   return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza });
+}
+
+// Le note che suonano in cuffia, in bianco nel CUE: solo finché quelle righe non sono cambiate.
+let dovaCuffia = null; // { editor, base, inizio }: dove sta nel CUE il codice mandato in cuffia
+function evidenziaCuffia(ciclo) {
+  const codice = cuffia.viva && !inTest ? pezzoCuffia?.codice : null;
+  const d = dovaCuffia;
+  const intervalli = [];
+  if (codice && d) {
+    const corpo = codice.slice(d.inizio);
+    if (d.editor.codice.slice(d.base, d.base + corpo.length) === corpo) {
+      const scarto = d.base - d.inizio;
+      for (const [a, b] of attivi(codice, ciclo)) if (a >= d.inizio) intervalli.push([a + scarto, b + scarto]);
+    }
+  }
+  for (const e of cue.editors()) e.evidenzia(e === d?.editor ? intervalli : []);
 }
 
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
@@ -236,7 +254,7 @@ window.addEventListener(
     if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
       e.preventDefault();
       const l = pila.attivi()[Number(e.code.slice(5)) - 1];
-      if (l) live.manda({ tipo: 'livello', livello: l.id, muto: !l.muto });
+      if (l) live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });
       return;
     }
     if (!scrivendo && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -571,6 +589,7 @@ function disegnaTempo() {
   const set = mappa.inizioSet && epoca > mappa.inizioSet ? durata(epoca - mappa.inizioSet) : null;
   $('tempo-set').textContent = set ?? '–:–';
   $('tempo-live').textContent = set ?? '';
+  evidenziaCuffia(ciclo);
   const conti = pila.disegna(mappa, epoca);
   if (conti) {
     document.body.classList.toggle('live-suona', conti.suonano > 0);

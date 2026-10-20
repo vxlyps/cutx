@@ -124,7 +124,7 @@ Scorciatoie predefinite:
 | go live | ⇧⌘↵ |
 | entra tra 1 · 2 · 4 · 8 cicli | 1 · 2 · 4 · 8 (fuori dall'editor) |
 | togli livello a fine ciclo | ⇧⌘⌫ |
-| muto livello | ⌃1–9 |
+| muto livello | ⌥1–9 (⌃1–5 su questo Mac sono di Mission Control, "Passa alla scrivania") |
 | ferma tutto | ⌘. |
 | cuffia on / off | ⌘K |
 | passa da CUE a LIVE | tab (fuori dall'editor) |

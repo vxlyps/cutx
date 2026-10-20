@@ -357,7 +357,7 @@ async function ricevi(da, m) {
       const l = livelli.find((x) => x.id === m.livello);
       if (!l) return;
       if (m.volume !== undefined) l.volume = Math.max(0, Math.min(1.5, Number(m.volume)));
-      if (m.muto !== undefined) l.muto = !!m.muto;
+      if (m.muto !== undefined) l.muto = m.muto === 'inverti' ? !l.muto : !!m.muto; // inverti: lo stato vero è qui
       return aggiornaLivelli();
     }
     case 'ferma':

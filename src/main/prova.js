@@ -30,7 +30,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -148,6 +148,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   const sicura = (nome, fn) => fn({ finestre, scrivi }).catch((e) => (scrivi(`FALLITO ${nome}: ${e.stack ?? e}`), false));
   if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
   if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
+  if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -197,6 +198,16 @@ export async function foto({ finestre, file: fotoFile }) {
   console.log(`[foto] ${fotoFile.replace(/\.png$/, '-brano.png')}`);
   await js(`cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`);
   await rm(path.join(cartella, file), { force: true });
+
+  // La finestra di uscita, con quello che suona adesso
+  await finestre.controllo.webContents.executeJavaScript('window.cutx.uscitaOnOff()');
+  await aspetta(3);
+  if (finestre.uscita) {
+    const f = fotoFile.replace(/\.png$/, '-uscita.png');
+    await writeFile(f, (await finestre.uscita.webContents.capturePage()).toPNG());
+    console.log(`[foto] ${f}`);
+    await finestre.controllo.webContents.executeJavaScript('window.cutx.uscitaOnOff()');
+  }
 
   // E le impostazioni, aperte con ⌘,
   const wc = finestre.controllo.webContents;
@@ -420,7 +431,11 @@ async function provaEntrata({ finestre, scrivi }) {
   const uscente = await livello(r2.livello);
   if (uscente?.a == null) scrivi(`  livelli: ${JSON.stringify((await live())?.livelli?.map((l) => [l.id, l.nome, l.da, l.a]))} · r2 ${r2.livello}`);
   controlla('togli: esce al prossimo confine', uscente?.a === Math.ceil(c5) || uscente?.a === Math.ceil(c5) + 1, JSON.stringify([c5, uscente?.a]));
-  const inUscita = await js(`!!document.querySelector('#livelli .livello.in-uscita')`);
+  let inUscita = false;
+  for (let i = 0; i < 8 && !inUscita; i++) {
+    inUscita = await js(`!!document.querySelector('#livelli .livello.in-uscita')`);
+    if (!inUscita) await aspetta(0.2);
+  }
   controlla('mentre esce, il livello si vede in uscita', inUscita);
   const fineUscita = uscente?.a ?? 0;
   await finoAlCiclo(fineUscita + 0.5);
@@ -443,5 +458,185 @@ async function provaEntrata({ finestre, scrivi }) {
   await premi('.', 'meta');
   await js(`cutxProva.valuta('live', 'setcpm(120/4)')`);
   await premi('.', 'meta');
+  return ok;
+}
+
+// --- prova dei livelli: volume, muto, note, griglia, modifica sul posto, jam, paracadute,
+// salva il live, finestra di uscita ---
+
+async function provaLivelli({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const attivi = async () => ((await live())?.livelli ?? []).filter((l) => l.a === null);
+  const ciclo = async () => (await live())?.ciclo ?? -Infinity;
+  const wc = () => finestre.controllo.webContents;
+  const premi = async (tasto, ...modificatori) => {
+    wc().sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    wc().sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(0.3);
+  };
+  // aspetta che fn() sia vero, al massimo s secondi
+  const finche = async (fn, s = 6) => {
+    for (let i = 0; i < s * 5; i++) {
+      const r = await fn();
+      if (r) return r;
+      await aspetta(0.2);
+    }
+    return null;
+  };
+  const goLive = async (codice) => {
+    await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue(${JSON.stringify(codice)}); cutxProva.scegliEntraTra(1)`);
+    return wc().executeJavaScript('cutxProva.goLive()');
+  };
+  const rispondi = async (valore) => {
+    await aspetta(0.4);
+    await js(`(() => { const i = document.querySelector('.dialogo input'); i.value = ${JSON.stringify(valore)}; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    await aspetta(1);
+  };
+
+  await premi('.', 'meta');
+  await js(`cutxProva.valuta('live', 'setcpm(120/4)')`);
+  await premi('.', 'meta');
+
+  const KICK = '// @sezione kick\ns("sine*4").freq(60).gain(.0001)';
+  const MEL = '// @sezione melodia\nnote("c3 e3 g3 b3").s("triangle").gain(.0001)';
+  const r1 = await goLive(KICK);
+  const r2 = await goLive(MEL);
+  await finche(async () => (await ciclo()) > Math.max(r1.da, r2.da) + 0.3, 8);
+
+  // volume e muto
+  await js(`cutxProva.pila.azioni.volume(${r1.livello}, 0.5)`);
+  await aspetta(0.4);
+  controlla('volume di un livello', (await attivi()).find((l) => l.id === r1.livello)?.volume === 0.5);
+  await premi('Escape');
+  await premi('1', 'alt');
+  controlla('⌥1 mette in muto il primo livello', (await attivi())[0]?.muto === true, JSON.stringify((await attivi()).map((l) => [l.nome, l.muto])));
+  await premi('1', 'alt');
+  controlla('⌥1 di nuovo lo toglie dal muto', (await attivi())[0]?.muto === false);
+
+  // note in verde e griglia
+  const verde = await finche(() => js(`!!document.querySelector('#livelli .livello .codice .nota')`));
+  controlla('le note che suonano si accendono in verde nel LIVE', verde);
+  const colpi = await js(`document.querySelectorAll('#livelli .livello .griglia .colpo').length`);
+  controlla('la griglia ritmica mostra i colpi', colpi >= 8, String(colpi));
+
+  // in cuffia, in bianco nel CUE
+  await js(`cutxProva.scriviCue(${JSON.stringify(MEL)})`);
+  await js(`cutxProva.cue.libero.vaiAllaRiga(1)`);
+  await premi('Return', 'meta');
+  const bianco = await finche(() => js(`!!document.querySelector('#editor .cm-nota-cuffia')`));
+  controlla('le note che suonano in cuffia si accendono in bianco nel CUE', bianco);
+  await js(`cutxProva.cue.libero.codice = ''`);
+
+  // modificare un livello sul posto
+  const MEL2 = 'note("c3 eb3 g3 bb3").s("triangle").gain(.0001)';
+  await js(`document.querySelector('#livelli .livello:nth-child(2) .codice').click()`);
+  await aspetta(0.3);
+  await js(`(() => { const m = cutxProva.pila.modifiche.get('melodia'); m.editor.codice = ${JSON.stringify(MEL2)}; m.editor.focus(); })()`);
+  await aspetta(0.3);
+  const segnato = await js(`document.querySelector('#livelli .livello.non-applicato .piede-carta')?.textContent ?? ''`);
+  const ancoraVecchio = (await attivi()).find((l) => l.nome === 'melodia')?.codice.includes('e3 g3');
+  controlla('modificando: si vede che ci sono modifiche, il live suona la versione di prima', segnato.includes('non applicate') && ancoraVecchio, segnato);
+  // l'uscita vede la bozza mentre la scrivo
+  await wc().executeJavaScript('window.cutx.uscitaOnOff()');
+  const uscita = await finche(async () => finestre.uscita && (await chiedi(finestre.uscita, 'globalThis.cutxUscita?.()')), 10);
+  const bozza = await finche(async () => (await chiedi(finestre.uscita, 'globalThis.cutxUscita?.()'))?.testo?.includes('eb3 g3 bb3'));
+  controlla('la finestra di uscita si apre', !!uscita);
+  controlla('sull\'uscita si vede quello che scrivo mentre lo scrivo', bozza);
+  await premi('Return', 'meta');
+  const applicata = await finche(async () => (await attivi()).find((l) => l.nome === 'melodia')?.codice === MEL2);
+  const nuova = (await attivi()).find((l) => l.nome === 'melodia');
+  controlla('⌘↵ applica la modifica al prossimo ciclo, senza macchina da scrivere', applicata && Number.isInteger(nuova?.da) && nuova?.scritto === true, JSON.stringify(nuova));
+
+  // errore: resta la versione di prima, l'errore solo sul mio schermo
+  await finche(async () => (await ciclo()) > nuova.da + 0.2, 6);
+  await js(`document.querySelector('#livelli .livello:last-child .codice').click()`);
+  await aspetta(0.3);
+  await js(`(() => { const m = cutxProva.pila.modifiche.get('melodia'); m.editor.codice = 'note("c3".s('; m.editor.focus(); })()`);
+  await premi('Return', 'meta');
+  await aspetta(0.5);
+  const erroreCarta = await js(`[...document.querySelectorAll('#livelli .livello .errore')].map((e) => e.textContent).join('')`);
+  const testoUscita = (await chiedi(finestre.uscita, 'globalThis.cutxUscita?.()'))?.testo ?? '';
+  controlla('codice sbagliato: il livello resta com\'era', (await attivi()).find((l) => l.nome === 'melodia')?.codice === MEL2);
+  controlla('l\'errore si vede nella carta, mai sull\'uscita', erroreCarta.length > 0 && !/Unexpected|error/i.test(testoUscita), erroreCarta);
+  // esc annulla e torna al codice che suona
+  await premi('Escape');
+  const chiusa = await js(`!document.querySelector('#livelli .livello.in-modifica')`);
+  const mostrato = await js(`document.querySelector('#livelli .livello:last-child .codice').textContent`);
+  controlla('esc annulla e torna al codice che sta suonando', chiusa && mostrato.includes('eb3 g3 bb3'), mostrato);
+
+  // il jam
+  await js(`(() => { const j = cutxProva.pila.jam.editor; j.codice = 's("sine*16").freq(8000).gain(.0001)'; j.focus(); })()`);
+  await premi('Return', 'meta');
+  const jam = await finche(async () => (await attivi()).find((l) => l.nome === 'jam'));
+  controlla('il jam entra al prossimo ciclo con ⌘↵', jam?.provenienza === 'jam' && jam?.scritto === true, JSON.stringify(jam));
+  await premi('Escape');
+
+  // il paracadute: ⌘P due volte di fila
+  const prima = (await attivi()).map((l) => l.nome).sort();
+  wc().sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['meta'] });
+  wc().sendInputEvent({ type: 'keyUp', keyCode: 'P', modifiers: ['meta'] });
+  await aspetta(0.1);
+  wc().sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['meta'] });
+  wc().sendInputEvent({ type: 'keyUp', keyCode: 'P', modifiers: ['meta'] });
+  const aperto = await finche(async () => (await live())?.paracadute);
+  const dopoBattito = await finche(async () => {
+    const a = await attivi();
+    return a.length === 1 && a[0].nome === 'paracadute' && (await live()).livelli.every((l) => l.nome === 'paracadute' || l.a !== null);
+  });
+  const p = (await attivi())[0];
+  controlla('paracadute: al battito successivo esce tutto ed entra il codice di emergenza', aperto && dopoBattito && (p?.da * 4) % 1 === 0, JSON.stringify(p));
+  await premi('P', 'meta');
+  // una pressione sola non fa niente
+  await aspetta(0.7);
+  controlla('una pressione sola di ⌘P non fa niente', (await live())?.paracadute === true);
+  wc().sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['meta'] });
+  wc().sendInputEvent({ type: 'keyUp', keyCode: 'P', modifiers: ['meta'] });
+  await aspetta(0.1);
+  wc().sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['meta'] });
+  wc().sendInputEvent({ type: 'keyUp', keyCode: 'P', modifiers: ['meta'] });
+  const tornati = await finche(async () => {
+    const a = (await attivi()).map((l) => l.nome).sort();
+    return JSON.stringify(a) === JSON.stringify(prima) && !(await live()).paracadute;
+  }, 8);
+  const rientrati = await attivi();
+  controlla('di nuovo ⌘P ⌘P: tornano i livelli di prima, al prossimo ciclo, col loro volume', tornati && rientrati.every((l) => Number.isInteger(l.da)) && rientrati.find((l) => l.nome === 'kick')?.volume === 0.5, JSON.stringify(rientrati.map((l) => [l.nome, l.da, l.volume])));
+
+  // salva il live come brano
+  await finche(async () => {
+    const c = await ciclo();
+    return (await attivi()).every((l) => (l.da ?? 0) < c);
+  }, 6);
+  await js(`cutxProva.pila.azioni.muto((${JSON.stringify(await attivi())}).find((l) => l.nome === 'melodia').id, true)`);
+  await aspetta(0.4);
+  const sigla = Date.now().toString(36);
+  wc().executeJavaScript('cutxProva.salvaLiveComeBrano()');
+  await rispondi(`live prova ${sigla}`);
+  const file = path.join(stash.radice(), 'libreria', `live_prova_${sigla}.cutx`);
+  const salvato = await readFile(file, 'utf8').catch(() => '');
+  const b = await import('../renderer/brano.js');
+  const sezioni = b.leggi(salvato).sezioni;
+  controlla('salva il live come brano: un livello per sezione, nell\'ordine di entrata', JSON.stringify(sezioni.map((x) => x.nome)) === JSON.stringify((await attivi()).map((l) => l.nome)), JSON.stringify(sezioni.map((x) => x.nome)));
+  controlla('volume e muto salvati come informazioni della sezione', sezioni.find((x) => x.nome === 'kick')?.info.volume === 0.5 && sezioni.find((x) => x.nome === 'melodia')?.info.muto === true, JSON.stringify(sezioni.map((x) => x.info)));
+  controlla('e compare nella libreria', (await js('cutxProva.libreria()'))?.some((x) => x.file === `live_prova_${sigla}.cutx`));
+  await rm(file, { force: true });
+
+  // l'uscita crasha: le casse non se ne accorgono e lei torna
+  const tardiPrima = (await live()).tardi;
+  finestre.uscita.webContents.forcefullyCrashRenderer();
+  await aspetta(3);
+  const tornata = await finche(async () => (await chiedi(finestre.uscita, 'globalThis.cutxUscita?.()'))?.livelli?.length > 0, 8);
+  controlla('uscita crashata: torna da sola e il live non perde niente', tornata && (await live()).tardi === tardiPrima);
+  await wc().executeJavaScript('window.cutx.uscitaOnOff()');
+  await aspetta(0.5);
+  controlla('l\'uscita si chiude e il live continua', !finestre.uscita && (await attivi()).length > 0);
+
+  await premi('.', 'meta');
+  await js(`cutxProva.pila.jam.editor.codice = ''`);
   return ok;
 }

@@ -90,12 +90,15 @@ export class Cue {
     if (!b.sezioni.length) {
       const righe = testo.split('\n');
       const codice = vuota ? testo : righe.slice(da, a + 1).join('\n');
-      return { nome: 'libero', provenienza: 'libero', codice, inizio: 0 };
+      const base = vuota ? 0 : this.libero.vista.state.doc.line(da + 1).from;
+      return { nome: 'libero', provenienza: 'libero', codice, inizio: 0, dove: { editor: this.libero, base } };
     }
     const blocco = B.bloccoDellaRiga(testo, da);
     if (blocco.sezione < 0) return { errore: 'il cursore è nel preambolo: mettilo in una sezione' };
-    const righe = vuota ? null : testo.split('\n').slice(Math.max(da, blocco.da), Math.min(a + 1, blocco.a));
-    return { nome: blocco.nome, provenienza: 'libero', ...B.codice(b, blocco.sezione, righe) };
+    const prima = vuota ? blocco.da : Math.max(da, blocco.da);
+    const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
+    const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
+    return { nome: blocco.nome, provenienza: 'libero', ...B.codice(b, blocco.sezione, righe), dove: { editor: this.libero, base } };
   }
 
   pezzoBrano() {
@@ -109,6 +112,7 @@ export class Cue {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
       ...B.codice(m, carta.i, righe),
+      dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },
     };
   }
 
@@ -454,6 +458,10 @@ export class Cue {
     } catch (e) {
       this.avviso(`non riesco ad aprire ${file}: ${e.message}`);
     }
+  }
+
+  editors() {
+    return [this.libero, ...this.carte.map((c) => c.editor)];
   }
 
   // Per i test: il testo del brano aperto, com'è adesso.

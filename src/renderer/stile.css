@@ -1139,3 +1139,10 @@ input[type='checkbox'] {
   border-color: var(--marcio);
   box-shadow: 0 0 12px rgba(159, 194, 58, 0.4);
 }
+
+/* le note che suonano in cuffia, in bianco: si capisce sempre cosa senti solo tu */
+.editor .cm-nota-cuffia,
+.editor .cm-nota-cuffia * {
+  background: var(--testo);
+  color: var(--su-marcio) !important;
+}
