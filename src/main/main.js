@@ -7,6 +7,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
 import * as preferenze from './preferenze.js';
 import { trovaProgetti } from '../ableton/scansione.js';
+import * as ableton from './ableton.js';
 import { prova, foto } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
@@ -295,6 +296,14 @@ ipcMain.handle('ableton:aggiungi-cartella', async () => {
   return salvaPreferenze({ cartelleAbleton: [...new Set([...attuali, r.filePaths[0]])] });
 });
 ipcMain.handle('ableton:progetti', () => trovaProgetti(preferenze.leggi().cartelleAbleton ?? []));
+ipcMain.handle('ableton:info', (_e, percorso) => ableton.info(percorso, preferenze.leggi().cartelleAbleton ?? []));
+ipcMain.handle('ableton:modello', async (_e, percorso) => {
+  try {
+    return { modello: await ableton.modello(percorso, preferenze.leggi().cartelleAbleton ?? []) };
+  } catch (e) {
+    return { errore: String(e.message ?? e) };
+  }
+});
 
 ipcMain.handle('stash:scegli', async () => {
   const r = await dialog.showOpenDialog(finestre.controllo, {

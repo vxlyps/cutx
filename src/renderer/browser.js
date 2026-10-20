@@ -37,6 +37,8 @@ export class Browser {
     this.aperti = new Set(); // suoni con le varianti aperte
     this.helpAperti = new Set();
     this.ascoltando = null; // chiave di quello che ho mandato in cuffia dal browser
+    this.progetti = null; // progetti Ableton trovati (null = non ancora cercati)
+    this.infoProgetti = new Map(); // percorso → { bpm, tracce, … } | { errore }
     this.schede = schede;
     cerca.addEventListener('input', () => this.mostra());
     for (const b of schede) b.onclick = () => this.vai(b.dataset.scheda);
@@ -45,7 +47,8 @@ export class Browser {
   vai(nome) {
     this.scheda = nome;
     for (const b of this.schede) b.classList.toggle('on', b.dataset.scheda === nome);
-    this.cerca.placeholder = { suoni: 'cerca nello stash', libreria: 'cerca un brano', help: 'cerca una funzione' }[nome];
+    this.cerca.placeholder = { suoni: 'cerca nello stash', libreria: 'cerca un brano', ableton: 'cerca un progetto', help: 'cerca una funzione' }[nome];
+    if (nome === 'ableton') this.cercaProgetti();
     this.mostra();
   }
 
@@ -56,7 +59,7 @@ export class Browser {
   mostra() {
     const scroll = this.elenco.scrollTop;
     this.elenco.replaceChildren();
-    ({ suoni: () => this.mostraSuoni(), libreria: () => this.mostraLibreria(), help: () => this.mostraHelp() })[this.scheda]();
+    ({ suoni: () => this.mostraSuoni(), libreria: () => this.mostraLibreria(), ableton: () => this.mostraAbleton(), help: () => this.mostraHelp() })[this.scheda]();
     this.elenco.scrollTop = scroll;
   }
 
@@ -163,6 +166,47 @@ export class Browser {
       riga.title = `${b.file} · ${b.sezioni} ${b.sezioni === 1 ? 'sezione' : 'sezioni'}${b.data ? ` · ${b.data}` : ''}`;
       riga.append(crea('span', 'nome', b.nome), crea('span', 'lbl', `${b.sezioni}§${b.bpm ? ` · ${b.bpm}` : ''}`));
       riga.onclick = () => this.azioni.apriBrano(b.file);
+      this.elenco.append(riga);
+    }
+  }
+
+  // --- ableton: i progetti delle cartelle scelte ---
+
+  // Ogni volta che si apre la scheda si guarda di nuovo (un progetto nuovo compare da solo); BPM e tracce
+  // arrivano uno alla volta, perché la lettura di un progetto richiede un momento.
+  async cercaProgetti() {
+    this.progetti = await this.azioni.progettiAbleton();
+    this.mostra();
+    for (const p of this.progetti) {
+      if (this.infoProgetti.get(p.percorso)?.modificato === p.modificato) continue;
+      const info = await this.azioni.infoProgetto(p.percorso);
+      this.infoProgetti.set(p.percorso, { ...info, modificato: p.modificato });
+      if (this.scheda === 'ableton') this.mostra();
+    }
+  }
+
+  mostraAbleton() {
+    if (!this.azioni.cartelleAbleton().length) {
+      this.gruppo('progetti');
+      this.vuoto('nessuna cartella: scegli dove tieni i progetti Ableton');
+      const b = crea('button', 'key', 'aggiungi cartella');
+      b.onclick = () => this.azioni.aggiungiCartellaAbleton();
+      this.elenco.append(b);
+      return;
+    }
+    this.gruppo('progetti');
+    if (this.progetti === null) return this.vuoto('cerco i progetti…');
+    const filtro = this.filtro;
+    const visti = this.progetti.filter((p) => !filtro || p.nome.toLowerCase().includes(filtro));
+    if (!visti.length) return this.vuoto(filtro ? 'nessun progetto con questo nome' : 'nessun progetto .als nelle cartelle scelte');
+    for (const p of visti) {
+      const info = this.infoProgetti.get(p.percorso);
+      const nota = !info ? '…' : info.errore ? 'illeggibile' : `${Math.round(info.bpm * 10) / 10} bpm · ${info.tracce} ${info.tracce === 1 ? 'traccia' : 'tracce'}`;
+      const riga = crea('div', 'voce cliccabile progetto');
+      riga.title = `${p.percorso}${info?.errore ? `\n${info.errore}` : ''}`;
+      riga.classList.toggle('illeggibile', !!info?.errore);
+      riga.append(crea('span', 'nome', p.nome), crea('span', 'lbl', nota));
+      riga.onclick = () => !info?.errore && this.azioni.apriProgetto(p);
       this.elenco.append(riga);
     }
   }

@@ -151,6 +151,10 @@
     "rinomina": {
       "nome": "rinomina",
       "testo": "Cambia il nome della sezione."
+    },
+    "scheda-ableton": {
+      "nome": "ableton",
+      "testo": "I progetti Ableton delle cartelle scelte nelle impostazioni. Un clic apre il pannello per importarne uno come brano."
     }
   },
   "impostazioni": {

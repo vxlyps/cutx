@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('cutx', {
   salvaPreferenze: (modifiche) => ipcRenderer.invoke('preferenze:salva', modifiche),
   suPreferenze: (fn) => ipcRenderer.on('preferenze-cambiate', (_e, p) => fn(p)),
   aggiungiCartellaAbleton: () => ipcRenderer.invoke('ableton:aggiungi-cartella'),
+  infoAbleton: (percorso) => ipcRenderer.invoke('ableton:info', percorso),
+  modelloAbleton: (percorso) => ipcRenderer.invoke('ableton:modello', percorso),
   progettiAbleton: () => ipcRenderer.invoke('ableton:progetti'),
   crasha: (chi) => ipcRenderer.send('crasha', chi),
   uscitaOnOff: () => ipcRenderer.invoke('uscita:onoff'),

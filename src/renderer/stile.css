@@ -324,7 +324,7 @@ body {
 }
 
 .browser {
-  width: 270px;
+  width: 300px;
   flex-shrink: 0;
   border-right: 1px solid var(--linea);
   display: flex;
@@ -1462,4 +1462,27 @@ input[type='checkbox'] {
 .senza-gatto .gatto-posto,
 .senza-insegna .insegna {
   display: none;
+}
+
+/* --- browser: progetti Ableton --- */
+.elenco .voce.progetto.illeggibile {
+  color: var(--spento);
+  cursor: default;
+}
+
+.elenco > .key {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+/* un progetto Ableton: il nome sopra, tempo e tracce sotto (i nomi lunghi non si tagliano) */
+.elenco .voce.progetto {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 6px;
+}
+
+.elenco .voce.progetto .nome {
+  max-width: 100%;
 }

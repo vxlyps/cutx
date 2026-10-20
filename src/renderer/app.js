@@ -356,6 +356,11 @@ browser = new Browser(
     inAscolto: (chiave) => cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'browser' && pezzoCuffia.etichetta.nome === chiave,
     inserisci: (testo) => cue.inserisci(testo),
     apriBrano: (file) => cue.apri(file),
+    cartelleAbleton: () => preferenze.cartelleAbleton ?? [],
+    progettiAbleton: () => window.cutx.progettiAbleton(),
+    infoProgetto: (percorso) => window.cutx.infoAbleton(percorso),
+    aggiungiCartellaAbleton: () => window.cutx.aggiungiCartellaAbleton(),
+    apriProgetto: (progetto) => cue.avviso(`${progetto.nome}: il pannello di importazione arriva al passo 5`),
   },
 );
 function scegliScheda(nome) {
@@ -691,6 +696,7 @@ function applicaPreferenze(p) {
   document.body.classList.toggle('senza-insegna', p.insegna === false);
   aiuto.aggiorna(p);
   imp.disegna();
+  if (browser?.scheda === 'ableton') browser.cercaProgetti();
 }
 window.cutx.suPreferenze(applicaPreferenze);
 applicaPreferenze(await window.cutx.preferenze());

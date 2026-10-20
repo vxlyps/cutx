@@ -195,6 +195,16 @@ export async function foto({ finestre, file: fotoFile }) {
   await aspetta(0.5);
   await writeFile(fotoFile.replace(/\.png$/, '-help.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
   console.log(`[foto] ${fotoFile.replace(/\.png$/, '-help.png')}`);
+  // I progetti Ableton di Valerio (solo letti), se ci sono
+  const progettiVeri = path.join(os.homedir(), 'Desktop', 'x1 Project');
+  if (existsSync(progettiVeri)) {
+    const prima = (await chiedi(finestre.controllo, 'window.cutx.preferenze()')).cartelleAbleton ?? [];
+    await chiedi(finestre.controllo, `window.cutx.salvaPreferenze({ cartelleAbleton: [${JSON.stringify(progettiVeri)}] }); cutxProva.browser.vai('ableton')`);
+    await aspetta(3);
+    await writeFile(fotoFile.replace(/\.png$/, '-ableton.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    console.log(`[foto] ${fotoFile.replace(/\.png$/, '-ableton.png')}`);
+    await chiedi(finestre.controllo, `window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} })`);
+  }
   await chiedi(finestre.controllo, `cutxProva.browser.vai('suoni')`);
   // Un brano aperto: intro live, melodia in cuffia, drop selezionata a metà.
   const cartella = path.join(stash.radice(), 'libreria');
@@ -985,6 +995,29 @@ async function provaAbleton({ finestre, scrivi }) {
     controlla('le impostazioni elencano la cartella e i suoi progetti (senza Backup)', riga.includes('2 progetti'), riga);
     const elenco = await js('window.cutx.progettiAbleton()');
     controlla('la scansione dà nome, cartella e data', elenco.length === 2 && elenco.every((p) => p.nome && p.cartella && p.modificato), JSON.stringify(elenco.map((p) => p.nome)));
+
+    // la scheda ableton del browser: nome, BPM e tracce; un file rotto è "illeggibile"
+    await writeFile(path.join(radice, 'Uno Project', 'rotto.als'), 'non è un progetto');
+    await js(`document.getElementById('impostazioni').hidden = true; cutxProva.browser.vai('ableton')`);
+    let righe = [];
+    for (let i = 0; i < 40 && !righe.some((r) => r.includes('140 bpm')); i++) {
+      await aspetta(0.25);
+      righe = await js(`[...document.querySelectorAll('#elenco .voce.progetto')].map((e) => e.textContent)`);
+    }
+    controlla('la scheda ableton elenca i progetti con BPM e tracce', righe.some((r) => r.startsWith('uno') && r.includes('140 bpm · 5 tracce')), JSON.stringify(righe));
+    controlla('un file che non si legge è segnato illeggibile', righe.some((r) => r.startsWith('rotto') && r.includes('illeggibile')), JSON.stringify(righe));
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = 'du'; c.dispatchEvent(new Event('input')); })()`);
+    controlla('la ricerca filtra i progetti', (await js(`document.querySelectorAll('#elenco .voce.progetto').length`)) === 1);
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
+    const fuori = await js(`window.cutx.infoAbleton('/etc/passwd.als')`);
+    controlla('un progetto fuori dalle cartelle scelte non si legge', !!fuori.errore, JSON.stringify(fuori));
+    await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [] })`);
+    await aspetta(0.8);
+    controlla('senza cartelle la scheda lo dice e propone di aggiungerne una', (await js(`document.getElementById('elenco').textContent`)).includes('nessuna cartella'));
+    await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [${JSON.stringify(radice)}] })`);
+    await js(`cutxProva.browser.vai('suoni')`);
+    await js(`document.getElementById('impostazioni').hidden = false; document.querySelector('#imp-nav [data-sez="ableton"]').click()`);
+    await aspetta(0.6);
     await js(`document.querySelector('#imp-ableton .imp-riga button').click()`);
     await aspetta(0.6);
     controlla('"togli" toglie la cartella dalle preferenze', ((await js('window.cutx.preferenze()')).cartelleAbleton ?? []).length === 0);
