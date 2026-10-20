@@ -121,6 +121,15 @@ export class Cue {
     (this.cartaAttiva ?? this.carte.find((c) => c.i >= 0))?.editor.focus();
   }
 
+  // Il testo nel punto dove sta il cursore (o al posto della selezione), nell'editor in uso.
+  inserisci(testo) {
+    const editor = this.modo === 'libero' ? this.libero : this.cartaAttiva?.editor;
+    if (!editor) return this.avviso('scegli una sezione: clic nella sua card');
+    const v = editor.vista;
+    v.dispatch(v.state.replaceSelection(testo), { scrollIntoView: true });
+    v.focus();
+  }
+
   // --- modi ---
 
   cambiaModo(modo) {

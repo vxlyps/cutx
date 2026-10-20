@@ -1,0 +1,112 @@
+[
+  {
+    "gruppo": "mini-notazione",
+    "voci": [
+      { "nome": "\"a b c\"", "testo": "Gli elementi si dividono il ciclo in parti uguali.", "esempio": "s(\"bd sd hh sd\")" },
+      { "nome": "[ ]", "testo": "Le parentesi quadre raggruppano: tutto quello che c'è dentro sta in un solo passo.", "esempio": "s(\"bd [sd sd] hh [sd bd]\")" },
+      { "nome": "*", "testo": "Ripete un elemento più volte nello stesso passo.", "esempio": "s(\"bd*2 hh*4 sd\")" },
+      { "nome": "/", "testo": "Allunga un elemento su più cicli.", "esempio": "note(\"c3 e3 g3 b3\").s(\"triangle\").slow(2)" },
+      { "nome": "< >", "testo": "Un passo per ciclo, a rotazione: ogni ciclo suona l'elemento successivo.", "esempio": "note(\"<c3 e3 g3 a3>*4\").s(\"sawtooth\").decay(.2).sustain(0)" },
+      { "nome": "~", "testo": "Una pausa.", "esempio": "s(\"bd ~ sd ~\")" },
+      { "nome": ",", "testo": "Suona più cose insieme: accordi o ritmi in parallelo.", "esempio": "note(\"c3,e3,g3\").s(\"triangle\")" },
+      { "nome": "@", "testo": "Dà più peso a un elemento: dura più degli altri.", "esempio": "s(\"bd@3 sd\")" },
+      { "nome": "!", "testo": "Ripete un elemento come passi separati.", "esempio": "s(\"bd! sd hh!2\")" },
+      { "nome": "?", "testo": "Ogni tanto l'elemento salta, a caso.", "esempio": "s(\"hh*8?\")" },
+      { "nome": "(3,8)", "testo": "Ritmo euclideo: 3 colpi distribuiti su 8 passi.", "esempio": "s(\"bd(3,8) hh(5,8)\")" },
+      { "nome": ":", "testo": "Sceglie quale file di un suono: s(\"nome:2\") è il terzo.", "esempio": "s(\"hh:0 hh:1 hh:2 hh:3\")" },
+      { "nome": ".", "testo": "Separa i gruppi senza parentesi.", "esempio": "s(\"bd bd . hh hh hh\")" }
+    ]
+  },
+  {
+    "gruppo": "suoni",
+    "voci": [
+      { "nome": "s()", "testo": "Il suono da suonare: un campione dello stash (una cartella in suoni/) o un synth.", "esempio": "s(\"sine*2 square\")" },
+      { "nome": "note()", "testo": "Le note da suonare, per nome (c3, eb4, bb2) o per numero MIDI.", "esempio": "note(\"c3 [eb3 g3] bb2\").s(\"sawtooth\")" },
+      { "nome": "n()", "testo": "Il numero del grado (con scale()) o del file nel suono scelto.", "esempio": "n(\"0 2 4 7\").scale(\"C:minor\").s(\"triangle\")" },
+      { "nome": "sine · square · sawtooth · triangle", "testo": "I synth sempre disponibili. Anche supersaw, per un suono più largo.", "esempio": "note(\"c2 g2\").s(\"supersaw\")" },
+      { "nome": "bank()", "testo": "La banca di un suono, per esempio una drum machine.", "esempio": "s(\"bd sd\").bank(\"RolandTR909\")" },
+      { "nome": "scale()", "testo": "Porta i numeri di n() dentro una scala.", "esempio": "n(\"0 1 2 3 4 5 6 7\").scale(\"D:dorian\").s(\"triangle\")" },
+      { "nome": "transpose()", "testo": "Sposta le note in su o in giù di semitoni.", "esempio": "note(\"c3 e3 g3\").transpose(\"<0 5 7>\").s(\"triangle\")" },
+      { "nome": "chord() · voicing()", "testo": "Accordi per nome, già disposti bene.", "esempio": "chord(\"<C Am F G>\").voicing().s(\"sawtooth\").lpf(1200)" }
+    ]
+  },
+  {
+    "gruppo": "tempo",
+    "voci": [
+      { "nome": "setcpm()", "testo": "Il tempo in cicli al minuto. 120 BPM in 4/4 si scrive setcpm(120/4).", "esempio": "setcpm(140/4)\ns(\"bd*4\")" },
+      { "nome": "fast() · slow()", "testo": "Accelera o rallenta un pattern.", "esempio": "s(\"bd sd\").fast(2)" },
+      { "nome": "hurry()", "testo": "Accelera il pattern e alza anche la velocità del campione.", "esempio": "s(\"bd sd\").hurry(2)" },
+      { "nome": "segment()", "testo": "Campiona un segnale continuo in tanti passi per ciclo.", "esempio": "note(sine.range(40, 70).segment(8)).s(\"triangle\")" },
+      { "nome": "swingBy()", "testo": "Dà uno swing ai passi.", "esempio": "s(\"hh*8\").swingBy(1/3, 4)" },
+      { "nome": "early() · late()", "testo": "Sposta il pattern indietro o avanti, in frazioni di ciclo.", "esempio": "s(\"bd sd\").late(.125)" }
+    ]
+  },
+  {
+    "gruppo": "struttura",
+    "voci": [
+      { "nome": "stack()", "testo": "Suona più pattern insieme.", "esempio": "stack(\n  s(\"bd*4\"),\n  s(\"~ sd\"),\n  s(\"hh*8\")\n)" },
+      { "nome": "cat()", "testo": "Un pattern dopo l'altro, uno per ciclo.", "esempio": "cat(\n  s(\"bd*4\"),\n  s(\"bd sd hh sd\")\n)" },
+      { "nome": "seq()", "testo": "Più pattern in sequenza dentro un solo ciclo.", "esempio": "seq(s(\"bd\"), s(\"sd sd\"), s(\"hh*3\"))" },
+      { "nome": "rev()", "testo": "Suona il pattern al contrario.", "esempio": "note(\"c3 e3 g3 b3\").s(\"triangle\").rev()" },
+      { "nome": "palindrome()", "testo": "Avanti e poi indietro, a cicli alterni.", "esempio": "note(\"c3 e3 g3 b3\").s(\"triangle\").palindrome()" },
+      { "nome": "iter()", "testo": "A ogni ciclo parte da un passo più avanti.", "esempio": "note(\"c3 e3 g3 b3\").s(\"triangle\").iter(4)" },
+      { "nome": "ply()", "testo": "Ripete ogni nota più volte.", "esempio": "s(\"bd sd\").ply(2)" },
+      { "nome": "struct()", "testo": "Dà un ritmo a un suono continuo, con una griglia di x e ~.", "esempio": "note(\"c2\").struct(\"x ~ x x ~ x ~ x\").s(\"sawtooth\")" },
+      { "nome": "mask()", "testo": "Zittisce le parti dove la maschera vale 0.", "esempio": "s(\"hh*8\").mask(\"1 1 0 1\")" },
+      { "nome": "euclid()", "testo": "Distribuisce i colpi in modo euclideo su un pattern già scritto.", "esempio": "s(\"bd\").euclid(3, 8)" },
+      { "nome": "every()", "testo": "Ogni N cicli applica una funzione.", "esempio": "s(\"bd sd\").every(4, rev)" },
+      { "nome": "sometimes() · often() · rarely()", "testo": "Applica una funzione a caso, con frequenze diverse.", "esempio": "s(\"hh*8\").sometimes(x => x.speed(2))" },
+      { "nome": "degradeBy()", "testo": "Toglie a caso una parte dei colpi.", "esempio": "s(\"hh*16\").degradeBy(.3)" },
+      { "nome": "off()", "testo": "Aggiunge una copia spostata nel tempo, con una trasformazione.", "esempio": "note(\"c3 e3\").s(\"triangle\").off(1/8, x => x.add(7))" },
+      { "nome": "superimpose()", "testo": "Suona il pattern insieme a una sua versione trasformata.", "esempio": "note(\"c3 e3 g3\").s(\"sawtooth\").superimpose(x => x.add(12).detune(.5))" },
+      { "nome": "jux()", "testo": "Applica una funzione solo al canale destro: l'originale va a sinistra.", "esempio": "s(\"bd sd hh sd\").jux(rev)" }
+    ]
+  },
+  {
+    "gruppo": "campioni",
+    "voci": [
+      { "nome": "chop()", "testo": "Taglia il campione in parti uguali e le suona in ordine.", "esempio": "s(\"sine\").chop(4)" },
+      { "nome": "slice()", "testo": "Taglia il campione in parti e le suona nell'ordine che dici tu.", "esempio": "s(\"sine\").slice(4, \"0 2 1 3\")" },
+      { "nome": "begin() · end()", "testo": "Da che punto a che punto del campione suonare (da 0 a 1).", "esempio": "s(\"sine\").begin(.25).end(.75)" },
+      { "nome": "speed()", "testo": "Velocità del campione: cambia anche l'altezza. Negativa = al contrario.", "esempio": "s(\"hh*4\").speed(\"1 2 .5 -1\")" },
+      { "nome": "loopAt()", "testo": "Adatta un campione lungo a N cicli, senza cambiare il tempo.", "esempio": "s(\"sine\").loopAt(2)" },
+      { "nome": "clip()", "testo": "Taglia la nota a una frazione della sua durata (1 = tutta).", "esempio": "s(\"sine*4\").clip(.5)" }
+    ]
+  },
+  {
+    "gruppo": "volume e inviluppo",
+    "voci": [
+      { "nome": "gain()", "testo": "Il volume di un suono (1 = pieno).", "esempio": "s(\"hh*8\").gain(\"1 .5 .7 .5\")" },
+      { "nome": "velocity()", "testo": "La dinamica della nota, moltiplica il gain.", "esempio": "s(\"hh*8\").velocity(\"1 .4\")" },
+      { "nome": "pan()", "testo": "Sinistra-destra, da 0 a 1.", "esempio": "s(\"hh*8\").pan(sine)" },
+      { "nome": "attack() · decay() · sustain() · release()", "testo": "I quattro tempi dell'inviluppo del suono.", "esempio": "note(\"c3 e3\").s(\"sawtooth\").attack(.05).decay(.2).sustain(.3).release(.4)" },
+      { "nome": "adsr()", "testo": "Tutto l'inviluppo in un colpo: attack:decay:sustain:release.", "esempio": "note(\"c3 e3\").s(\"sawtooth\").adsr(\".05:.2:.3:.4\")" },
+      { "nome": "legato()", "testo": "Quanto dura la nota rispetto al suo passo.", "esempio": "note(\"c3 e3 g3\").s(\"sawtooth\").legato(1)" }
+    ]
+  },
+  {
+    "gruppo": "filtri e effetti",
+    "voci": [
+      { "nome": "lpf()", "testo": "Filtro passa-basso: taglia gli acuti sopra la frequenza.", "esempio": "note(\"c2 c3\").s(\"sawtooth\").lpf(sine.range(200, 2000).slow(4))" },
+      { "nome": "hpf()", "testo": "Filtro passa-alto: taglia i bassi sotto la frequenza.", "esempio": "s(\"hh*8\").hpf(4000)" },
+      { "nome": "bpf()", "testo": "Filtro passa-banda: lascia passare solo una zona.", "esempio": "s(\"white*4\").bpf(1500).decay(.05).sustain(0)" },
+      { "nome": "lpq()", "testo": "La risonanza del filtro passa-basso.", "esempio": "note(\"c2 c3\").s(\"sawtooth\").lpf(600).lpq(12)" },
+      { "nome": "delay() · delaytime() · delayfeedback()", "testo": "Eco: quanto se ne sente, ogni quanto torna, quante volte si ripete.", "esempio": "s(\"bd sd\").delay(.5).delaytime(.25).delayfeedback(.5)" },
+      { "nome": "room() · size()", "testo": "Riverbero: quanto se ne sente e quanto è grande la stanza.", "esempio": "s(\"sd\").room(.6).size(4)" },
+      { "nome": "shape() · distort()", "testo": "Distorsione, dolce e dura.", "esempio": "s(\"bd*2\").shape(.6)" },
+      { "nome": "crush() · coarse()", "testo": "Riduzione di bit e di frequenza di campionamento, per il suono sporco.", "esempio": "s(\"hh*8\").crush(4)" },
+      { "nome": "detune() · unison()", "testo": "Più voci leggermente scordate: il synth si allarga.", "esempio": "note(\"c2\").s(\"supersaw\").detune(.4)" },
+      { "nome": "orbit()", "testo": "A che canale di effetti manda il suono: delay e riverbero sono per orbita. Nel LIVE ogni livello ha la sua.", "esempio": "s(\"bd sd\").room(.4).orbit(2)" }
+    ]
+  },
+  {
+    "gruppo": "segnali",
+    "voci": [
+      { "nome": "sine · saw · square · tri", "testo": "Segnali continui da 0 a 1 che si ripetono ogni ciclo.", "esempio": "s(\"hh*16\").gain(sine.range(.3, 1))" },
+      { "nome": "perlin", "testo": "Rumore morbido: cambia piano, mai a salti.", "esempio": "note(\"c2 c3\").s(\"sawtooth\").lpf(perlin.range(300, 2000))" },
+      { "nome": "rand", "testo": "Un numero a caso da 0 a 1.", "esempio": "s(\"hh*8\").pan(rand)" },
+      { "nome": "range()", "testo": "Porta un segnale da 0–1 al campo che serve.", "esempio": "s(\"hh*8\").gain(sine.range(.2, .9))" },
+      { "nome": "slow() su un segnale", "testo": "Un segnale lento dà movimento: un giro ogni N cicli.", "esempio": "note(\"c2 c3\").s(\"sawtooth\").lpf(sine.range(300, 2500).slow(8))" }
+    ]
+  }
+]

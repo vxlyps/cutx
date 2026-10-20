@@ -1146,3 +1146,77 @@ input[type='checkbox'] {
   background: var(--testo);
   color: var(--su-marcio) !important;
 }
+
+/* --- browser: suoni, libreria, help --- */
+.elenco .voce .nome {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.elenco .voce .nome.cliccabile {
+  cursor: pointer;
+}
+
+.elenco .voce .key.piccolo {
+  height: 22px;
+  min-width: 26px;
+  padding: 0 6px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+.elenco .voce.variante {
+  padding-left: 18px;
+  color: var(--secondario);
+}
+
+.elenco .voce.brano.aperto .nome {
+  color: var(--testo);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.elenco .funzione {
+  border-bottom: 1px solid var(--linea);
+  padding: 2px 0 6px;
+}
+
+.elenco .funzione .voce {
+  min-height: 28px;
+}
+
+.elenco .funzione .codice-help {
+  font-family: var(--mono);
+}
+
+.elenco .funzione .spiega {
+  margin: 0 6px 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--secondario);
+}
+
+.elenco .funzione .esempio {
+  margin: 6px 6px 6px;
+  padding: 8px;
+  background: var(--pannello);
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  font: 12px/1.45 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--testo);
+}
+
+.elenco .funzione .esempio-tasti {
+  display: flex;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.elenco .funzione .esempio-tasti .key.piccolo {
+  height: 24px;
+}

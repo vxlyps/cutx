@@ -2,10 +2,11 @@
 // Qui non suona niente: il codice va ai motori live e cuffia, ognuno nel suo processo.
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
+import { Browser, esempiHelp } from './browser.js';
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
-import { analizza } from './analisi.js';
+import { analizza, valuta } from './analisi.js';
 import { attivi } from './evidenzia.js';
 import gattoInPiedi from '../../design/risorse/gatti/gatto_in_piedi_logo_marcio.svg';
 import { Motore } from './motori.js';
@@ -29,9 +30,6 @@ setcpm(120/4)
 s("sine*4").freq(1000).attack(0).decay(.02).sustain(0).gain(.8)
 `;
 
-// I suoni di sintesi di Strudel, sempre disponibili.
-const SYNTH = ['sine', 'square', 'sawtooth', 'triangle', 'supersaw'];
-
 const live = new Motore('live');
 const cuffia = new Motore('cuffia');
 const misuratore = new Misuratore();
@@ -50,6 +48,7 @@ let preferenze = { lunghezzaFrase: 16 };
 let ripreso = false; // ho già preso lo stato dai motori? (dopo un crash dell'interfaccia stanno ancora suonando)
 
 let libreria = [];
+let browser = null; // il browser a sinistra (più sotto): serve già al CUE che si costruisce prima
 const cue = new Cue(CODICE_INIZIALE, {
   provaInCuffia: () => provaInCuffia(),
   goLive: () => goLive(),
@@ -314,77 +313,39 @@ async function apriStash(stato) {
   await aggiornaElenchi();
 }
 
-// --- browser (il contenuto vero arriva al passo 7) ---
+// --- browser: suoni, libreria, help ---
 
-let scheda = 'suoni';
-
-function voce(nome, nota) {
-  const riga = document.createElement('div');
-  riga.className = 'voce';
-  const a = document.createElement('span');
-  a.textContent = nome;
-  const b = document.createElement('span');
-  b.className = 'lbl';
-  b.textContent = nota;
-  riga.append(a, b);
-  return riga;
+browser = new Browser(
+  { elenco: $('elenco'), cerca: $('cerca'), schede: [...document.querySelectorAll('[data-scheda]')] },
+  {
+    suoni: () => suoni,
+    haStash: () => haStash,
+    libreria: () => libreria,
+    branoAperto: () => cue.brano?.file ?? null,
+    // ▶: lo sente solo la cuffia, mai le casse
+    prova: (codice, chiave) => {
+      if (inTest) return;
+      dovaCuffia = null;
+      return manda(cuffia, codice, { nome: chiave, provenienza: 'browser' });
+    },
+    ferma: () => {
+      pezzoCuffia = null;
+      cuffia.manda({ tipo: 'ferma' });
+    },
+    inAscolto: (chiave) => cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'browser' && pezzoCuffia.etichetta.nome === chiave,
+    inserisci: (testo) => cue.inserisci(testo),
+    apriBrano: (file) => cue.apri(file),
+  },
+);
+function scegliScheda(nome) {
+  browser.vai(nome);
 }
-
-function gruppo(nome) {
-  const g = document.createElement('div');
-  g.className = 'lbl gruppo';
-  g.textContent = nome;
-  return g;
-}
-
 function mostraBrowser() {
-  const elenco = $('elenco');
-  elenco.replaceChildren();
-  $('cerca').closest('.cerca').hidden = scheda !== 'suoni';
-  if (scheda === 'libreria') return mostraLibreria(elenco);
-  if (scheda !== 'suoni') {
-    const p = document.createElement('p');
-    p.className = 'secondario';
-    p.textContent = 'la guida di Strudel: arriva al passo 7';
-    return elenco.append(p);
-  }
-  const filtro = $('cerca').value.trim().toLowerCase();
-  const passa = (n) => !filtro || n.toLowerCase().includes(filtro);
-  const nomi = Object.keys(suoni).filter((k) => k !== '_base' && passa(k)).sort();
-  elenco.append(gruppo('stash'));
-  if (nomi.length) for (const n of nomi) elenco.append(voce(n, String(suoni[n].length)));
-  else elenco.append(voce(haStash ? 'nessun suono' : 'nessuno stash', ''));
-  const synth = SYNTH.filter(passa);
-  if (synth.length) {
-    elenco.append(gruppo('synth'));
-    for (const n of synth) elenco.append(voce(n, ''));
-  }
-}
-
-// La libreria: i brani dello stash. Un clic apre il brano nel CUE. (Il browser vero arriva al passo 7.)
-function mostraLibreria(elenco) {
-  elenco.append(gruppo('brani'));
-  if (!libreria.length) {
-    elenco.append(voce(haStash ? 'nessun brano: ⌘S salva il CUE' : 'nessuno stash', ''));
-    return;
-  }
-  for (const b of libreria) {
-    const riga = voce(b.nome, b.bpm ? `${b.bpm}` : '');
-    riga.classList.add('cliccabile');
-    riga.title = `${b.file} · ${b.sezioni} sezioni${b.data ? ` · ${b.data}` : ''}`;
-    riga.onclick = () => cue.apri(b.file);
-    elenco.append(riga);
-  }
+  browser?.mostra();
 }
 
 async function aggiornaLibreria() {
   libreria = await window.cutx.libreria();
-  mostraBrowser();
-}
-
-function scegliScheda(nome) {
-  scheda = nome;
-  for (const x of document.querySelectorAll('[data-scheda]')) x.classList.toggle('on', x.dataset.scheda === nome);
   mostraBrowser();
 }
 
@@ -546,6 +507,7 @@ function mostraCue() {
 
 function mostra() {
   riprendi();
+  browser.aggiornaAscolto();
   mostraLive();
   disegnaTempo();
   mostraCue();
@@ -643,7 +605,6 @@ $('chiudi-impostazioni').onclick = () => impostazioni(false);
 $('manda-cuffia').onclick = provaInCuffia;
 $('manda-live').onclick = goLive;
 $('go-live').onclick = goLive;
-$('cerca').oninput = mostraBrowser;
 $('frase').onclick = fraseDaCapo;
 $('uscita-onoff').onclick = async () => mostraUscita(await window.cutx.uscitaOnOff());
 window.cutx.suUscita(mostraUscita);
@@ -651,7 +612,6 @@ window.cutx.uscitaAperta().then(mostraUscita);
 for (const b of document.querySelectorAll('[data-entra]')) b.onclick = () => scegliEntraTra(Number(b.dataset.entra));
 $('scrittura-macchina').onchange = (e) => window.cutx.salvaPreferenze({ scritturaAMacchina: e.target.checked });
 $('lunghezza-frase').onchange = (e) => window.cutx.salvaPreferenze({ lunghezzaFrase: Number(e.target.value) });
-for (const b of document.querySelectorAll('[data-scheda]')) b.onclick = () => scegliScheda(b.dataset.scheda);
 
 $('uscita-live').onchange = (e) => salva({ uscite: { ...config.uscite, live: e.target.value } });
 $('uscita-cuffia').onchange = (e) => salva({ uscite: { ...config.uscite, cuffia: e.target.value } });
@@ -683,6 +643,12 @@ globalThis.cutxProva = {
   posaGatto: (nome) => posaGatto(nome),
   accendiInsegna: () => accendiInsegna(),
   libreria: () => libreria,
+  browser,
+  ricaricaStash: async () => apriStash(await window.cutx.stash()),
+  ricaricaLibreria: aggiornaLibreria,
+  fermaTutto,
+  esempiHelp,
+  valutaCodice: valuta,
   // seleziona le righe da..a (contate da 0) nell'editor libero
   selezionaRighe: (da, a) => {
     const v = cue.libero.vista;

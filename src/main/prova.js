@@ -30,7 +30,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -149,6 +149,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
   if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
   if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
+  if (parti.includes('browser')) ok = (await sicura('browser', provaBrowser)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -182,6 +183,12 @@ export async function foto({ finestre, file: fotoFile }) {
   const img = await finestre.controllo.webContents.capturePage();
   await writeFile(fotoFile, img.toPNG());
   console.log(`[foto] ${fotoFile}`);
+  // Il browser: la guida con una funzione aperta
+  await chiedi(finestre.controllo, `cutxProva.browser.helpAperti.add('lpf()'); cutxProva.browser.vai('help')`);
+  await aspetta(0.5);
+  await writeFile(fotoFile.replace(/\.png$/, '-help.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  console.log(`[foto] ${fotoFile.replace(/\.png$/, '-help.png')}`);
+  await chiedi(finestre.controllo, `cutxProva.browser.vai('suoni')`);
   // Un brano aperto: intro live, melodia in cuffia, drop selezionata a metà.
   const cartella = path.join(stash.radice(), 'libreria');
   const file = 'foto_notte.cutx';
@@ -651,5 +658,96 @@ async function provaLivelli({ finestre, scrivi }) {
 
   await premi('.', 'meta');
   await js(`cutxProva.pila.jam.editor.codice = ''`);
+  return ok;
+}
+
+// --- prova del browser: suoni, libreria, help ---
+
+async function provaBrowser({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const cartellaSuoni = path.join(stash.radice(), 'suoni', 'prova_cassa');
+  const file = 'foto_browser.cutx';
+  await mkdir(cartellaSuoni, { recursive: true });
+  await writeFile(path.join(cartellaSuoni, 'a.wav'), 'RIFF');
+  await writeFile(path.join(cartellaSuoni, 'b.wav'), 'RIFF');
+  await writeFile(path.join(stash.radice(), 'libreria', file), '// @brano browser\n// @bpm 100\n// @sezione uno\ns("sine")\n');
+  try {
+    await js('cutxProva.ricaricaStash()');
+    await js('cutxProva.fermaTutto?.(); cutxProva.cue.cambiaModo("libero"); cutxProva.scriviCue("")');
+    const righe = (sel = '#elenco .voce .nome') => js(`[...document.querySelectorAll('${sel}')].map((e) => e.textContent)`);
+
+    await js('cutxProva.browser.vai("suoni")');
+    const suoni = await righe();
+    controlla('i suoni dello stash compaiono nel browser, con i synth', suoni.includes('prova_cassa') && suoni.includes('sawtooth'), JSON.stringify(suoni));
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = 'cassa'; c.dispatchEvent(new Event('input')); })()`);
+    const trovati = await righe();
+    controlla('la ricerca filtra i suoni', trovati.length === 1 && trovati[0] === 'prova_cassa', JSON.stringify(trovati));
+    await js(`document.querySelector('#elenco .voce .nome.cliccabile').click()`);
+    const varianti = await righe('#elenco .voce.variante .nome');
+    controlla('un clic su un suono con più file mostra le varianti', varianti.length === 2, JSON.stringify(varianti));
+
+    // + inserisce nel CUE, dove sta il cursore
+    await js(`document.querySelector('#elenco .voce.variante button[data-aiuto="browser-inserisci"]').click()`);
+    const inserito = await js('cutxProva.cue.libero.codice');
+    controlla('+ inserisce il suono nel CUE', inserito.includes('s("prova_cassa:0")'), inserito);
+
+    // ▶ lo fa sentire solo in cuffia
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = 'sine'; c.dispatchEvent(new Event('input')); })()`);
+    await js(`document.querySelector('#elenco .voce button[data-aiuto="browser-prova"]').click()`);
+    let cuffia = null;
+    for (let i = 0; i < 20 && !cuffia?.codice; i++) {
+      await aspetta(0.25);
+      cuffia = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+    }
+    controlla('▶ manda il suono in cuffia', cuffia?.codice?.includes('.s("sine")'), cuffia?.codice);
+    const live = await chiedi(finestre.live, 'globalThis.cutxStato?.()');
+    controlla('e non tocca le casse', !live.livelli?.length, JSON.stringify(live.livelli));
+    controlla('il tasto diventa ■ mentre suona', (await js(`document.querySelector('#elenco .voce button.on')?.textContent`)) === '■');
+    await js(`document.querySelector('#elenco .voce button.on').click()`);
+    await aspetta(0.5);
+    controlla('■ ferma la cuffia', !(await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).codice);
+
+    // libreria
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
+    await js('cutxProva.ricaricaLibreria().then(() => cutxProva.browser.vai("libreria"))');
+    const brani = await righe();
+    controlla('la libreria elenca i brani', brani.includes('browser'), JSON.stringify(brani));
+    await js(`[...document.querySelectorAll('#elenco .voce.brano')].find((e) => e.textContent.startsWith('browser')).click()`);
+    await aspetta(0.8);
+    controlla('un clic carica il brano nel CUE', (await js('cutxProva.cue.brano?.file')) === file);
+    await js(`cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`);
+
+    // help
+    await js('cutxProva.browser.vai("help")');
+    const gruppi = await js(`[...document.querySelectorAll('#elenco .gruppo')].map((e) => e.textContent)`);
+    controlla('la guida ha i suoi gruppi', gruppi.length >= 6, JSON.stringify(gruppi));
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = 'lpf'; c.dispatchEvent(new Event('input')); })()`);
+    controlla('la ricerca trova una funzione', (await js(`document.querySelectorAll('#elenco .funzione').length`)) >= 1);
+    await js(`document.querySelector('#elenco .funzione .voce').click()`);
+    controlla('un clic apre la spiegazione con un esempio', (await js(`!!document.querySelector('#elenco .funzione .esempio')`)) === true);
+    await js(`document.querySelector('#elenco .esempio-tasti button[data-aiuto="browser-inserisci"]').click()`);
+    controlla('+ inserisce l\'esempio nel CUE', (await js('cutxProva.cue.libero.codice')).includes('lpf('));
+    // gli esempi si valutano tutti, senza errori
+    const errori = await js(`(async () => {
+      const e = [];
+      for (const { nome, esempio } of cutxProva.esempiHelp()) {
+        const r = await cutxProva.valutaCodice(esempio);
+        if (r.errore) e.push(nome + ': ' + r.errore);
+      }
+      return e;
+    })()`);
+    controlla('tutti gli esempi della guida si valutano', errori.length === 0, errori.join(' | '));
+    controlla('(e la valutazione sa dire quando un codice è sbagliato)', !!(await js(`cutxProva.valutaCodice('funzioneCheNonEsiste(1)')`)).errore);
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
+  } finally {
+    await rm(cartellaSuoni, { recursive: true, force: true });
+    await rm(path.join(stash.radice(), 'libreria', file), { force: true });
+    await js('cutxProva.ricaricaStash()');
+  }
   return ok;
 }
