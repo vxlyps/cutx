@@ -38,6 +38,7 @@ export class Browser {
     this.aperti = new Set(); // suoni con le varianti aperte
     this.helpAperti = new Set();
     this.ascoltando = null; // chiave di quello che ho mandato in cuffia dal browser
+    this.inPartenza = null; // la chiave di quello che sta partendo (si cerca la durata del file)
     this.progetti = null; // progetti Ableton trovati (null = non ancora cercati)
     this.infoProgetti = new Map(); // percorso → { bpm, tracce, … } | { errore }
     this.schede = schede;
@@ -76,7 +77,7 @@ export class Browser {
 
   // Un suono in ascolto si riconosce dal codice che il browser ha mandato in cuffia.
   suonaOra(chiave) {
-    return this.ascoltando === chiave && this.azioni.inAscolto(chiave);
+    return this.ascoltando === chiave && (this.inPartenza === chiave || this.azioni.inAscolto(chiave));
   }
 
   riga(nome, nota, { codice, chiave, inserisci, apri, aperto, campione }) {
@@ -100,19 +101,25 @@ export class Browser {
   // Un campione parte subito, suona una volta e il ■ torna ▶ alla fine; un synth si ferma col ■.
   async suona(codice, chiave, campione = null) {
     if (this.suonaOra(chiave)) {
+      this.inPartenza = null;
       this.ascoltando = null;
       this.azioni.ferma();
     } else {
+      // "in partenza": il tasto è già ■ mentre si cerca la durata del file, e nessun controllo lo rimette ▶ prima che parta
       this.ascoltando = chiave;
-      const anteprima = campione ? { cicli: 1, audioS: (await this.azioni.durataSuono(campione.file)) ?? 0 } : undefined;
-      if (this.ascoltando === chiave) this.azioni.prova(codice, chiave, anteprima);
+      this.inPartenza = chiave;
+      this.mostra();
+      const anteprima = campione ? { cicli: 1, audioS: (await this.azioni.durataSuono(campione.file).catch(() => null)) ?? 0 } : undefined;
+      const ancora = this.inPartenza === chiave; // nel frattempo non l'ho fermato con un secondo clic
+      if (this.inPartenza === chiave) this.inPartenza = null;
+      if (ancora && this.ascoltando === chiave) this.azioni.prova(codice, chiave, anteprima);
     }
     this.mostra();
   }
 
   // Chiamato quando la cuffia smette di suonare quello che avevo mandato.
   aggiornaAscolto() {
-    if (this.ascoltando && !this.azioni.inAscolto(this.ascoltando)) {
+    if (this.ascoltando && !this.inPartenza && !this.azioni.inAscolto(this.ascoltando)) {
       this.ascoltando = null;
       this.mostra();
     }

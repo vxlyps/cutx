@@ -1645,12 +1645,15 @@ async function provaTempo({ finestre, scrivi }) {
 
     // --- il numero si cambia da lì: frecce, ⇧, scrittura, trascinamento; entra all'inizio del ciclo dopo ---
     await js(`document.getElementById('bpm').focus()`);
-    await premi('Up');
+    // (senza l'attesa di premi(): il cambio resta "in arrivo" da pochi decimi di secondo a un ciclo intero, e con 0,4 s di attesa
+    // a volte il ciclo era già cambiato prima di guardare)
+    wc().sendInputEvent({ type: 'keyDown', keyCode: 'Up', modifiers: [] });
+    wc().sendInputEvent({ type: 'keyUp', keyCode: 'Up', modifiers: [] });
     let visto = null;
-    for (let i = 0; i < 40 && !visto; i++) {
+    for (let i = 0; i < 80 && !visto; i++) {
       const stato = await live();
       if (stato.tempoInArrivo?.length) visto = { stato, testo: await testoBpm() };
-      else await aspetta(0.04);
+      else await aspetta(0.02);
     }
     controlla('↑ chiede +1 BPM e il cambio è in arrivo (non subito)', !!visto && Math.abs(visto.stato.cps - cpsDi(60)) < 1e-9 && Math.abs(visto.stato.tempoInArrivo[0].cps - cpsDi(61)) < 1e-9, JSON.stringify(visto?.stato.tempoInArrivo));
     controlla('il numero mostra "60 → 61" finché non entra', visto?.testo === '60 → 61', visto?.testo);
