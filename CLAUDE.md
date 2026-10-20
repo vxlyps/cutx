@@ -1,6 +1,6 @@
 # CUTX · contesto operativo
 
-App per Mac di live coding musicale basata su Strudel, usata come un CDJ. Progetto di Valerio (vxlyps), poi regalato alla community. Si chiamava DANEEL. Repo: https://github.com/vxlyps/cutx (pubblico, `main`). Roadmap e criteri: `docs/PIANO.md`. **Fase 1 in corso: piano approvato e decisioni in `docs/FASE-1.md`, da leggere prima di tutto.** Grafica: `design/DESIGN.md` e le tavole in `design/riferimenti/`.
+App per Mac di live coding musicale basata su Strudel, usata come un CDJ. Progetto di Valerio (vxlyps), poi regalato alla community. Si chiamava DANEEL. Repo: https://github.com/vxlyps/cutx (pubblico, `main`). Roadmap e criteri: `docs/PIANO.md`. **Fase 1 fatta, in verifica di Valerio (decisioni in `docs/FASE-1.md`). Fase 2 (importare progetti Ableton): piano in `docs/ableton/ESTENSIONE-ABLETON.md`, prototipo Python di riferimento `docs/ableton/als2cutx.py`; da leggere prima di toccare la fase 2.** Grafica: `design/DESIGN.md` e le tavole in `design/riferimenti/`.
 
 ## Regole di lavoro
 - Italiano, diretto, conciso. Niente linguaggio corporate.
@@ -15,7 +15,7 @@ App per Mac di live coding musicale basata su Strudel, usata come un CDJ. Proget
 - Stash di prova: `~/Progetti/cutx-stash-test` (fuori dal repo).
 
 ## Cosa non fare
-- Niente suoni, stem o video personali nel repo (`.gitignore` li blocca, tranne `esempi/`).
+- Niente suoni, stem o video personali nel repo (`.gitignore` li blocca, tranne `esempi/`). Neppure i progetti Ableton veri di Valerio (`.als`): i test usano piccoli `.als` creati apposta.
 - Niente AI o servizi online nel cuore.
 - Niente tracciamenti, analytics, account.
 - Niente fork di Strudel; pacchetti npm ufficiali non modificati. Se serve cambiarne il comportamento, prima se ne parla.
@@ -97,3 +97,4 @@ Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuff
 - Fase 1, passo 9 (impostazioni e scorciatoie personalizzabili): fatto. Impostazioni a tutta finestra come la tavola (`impostazioni.js`): **generale** (lunghezza frase, help), **audio** (uscite, offset, test sfasamento, anello, robustezza: tutto quello della fase 0), **scorciatoie**, **proiezione** (hydra*, scrittura a macchina, gatto, insegna, logo sopra hydra*: *salvati, effetto in fase 3), **stash** (cambia stash, suoni, paracadute: interruttore + editor con ⌘↵ in cuffia, salvato in `stash.json`, vuoto = predefinito), **estensioni** (segnaposto, fase 7). Scorciatoie: `scorciatoie.js` (puro, test in `test/scorciatoie.test.js`) con 20 azioni, tasti per codice fisico (`Meta+KeyK`…), salvati in `preferenze.scorciatoie` (solo i cambiati). Clic sul tasto e premi la combinazione: rifiuta le già usate (dice da chi) e le riservate (⌘Q ⌘C…); il muto vuole un modificatore + cifra. Regola: una combinazione senza ⌘/⌃ (che scrive un carattere) vale solo fuori dagli editor; esc non si cambia; ripristina. L'uscita usa le stesse preferenze. `--prova=impostazioni` prova help, ⌘I, rimappatura reale (la nuova combinazione fa go live, la vecchia no), interruttori e paracadute.
 - Prova completa (`npm run prova`): 115 controlli OK · `npm test`: 17/17.
 - **Fase 1 completa. Fermata in attesa della verifica di Valerio** (lista delle verifiche a orecchio e a occhio nel messaggio finale; la fase 2 si decide dopo).
+- **Fase 2 (importare progetti Ableton): piano proposto, in attesa dell'ok di Valerio prima di scrivere codice.** Sostituisce la vecchia fase "le mie canzoni". L'estensione si scrive in JavaScript dentro CUTX (il `.als` è XML in gzip: `zlib` nel processo principale); il prototipo Python serve solo da riferimento per la logica. Punto da verificare sui file reali: la nota di ricezione dei pad del Drum Rack risulta salvata invertita (128 meno la nota).

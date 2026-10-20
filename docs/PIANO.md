@@ -1,6 +1,6 @@
 # CUTX · Piano
 
-Piano dettagliato e decisioni della fase 1: [`FASE-1.md`](FASE-1.md).
+Piano dettagliato e decisioni della fase 1: [`FASE-1.md`](FASE-1.md). Fase 2: [`ableton/ESTENSIONE-ABLETON.md`](ableton/ESTENSIONE-ABLETON.md).
 
 Una fase è chiusa solo quando Valerio ha verificato tutti i criteri.
 
@@ -42,13 +42,19 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Formato manifest `cutx-pack.json` per estensioni e pacchi
 - [ ] Punti di aggancio del cuore, provati con un'estensione d'esempio
 
-## Fase 2 · Le mie canzoni
-- [ ] Gli stem esportati da Ableton (WAV) nello stash diventano suoni e pezzi pronti
+## Fase 2 · Importare progetti Ableton
+Sostituisce la vecchia fase "le mie canzoni": la musica fatta a casa in Ableton arriva in CUTX da qui. Piano e regole di conversione: [`ableton/ESTENSIONE-ABLETON.md`](ableton/ESTENSIONE-ABLETON.md); il prototipo Python `ableton/als2cutx.py` è solo riferimento per la logica (l'estensione si scrive in JavaScript dentro CUTX). I progetti veri di Valerio non vanno mai nel repo.
+- [ ] Nelle impostazioni scelgo le cartelle dove tengo i progetti Ableton
+- [ ] Nel browser c'è la scheda **ableton**: elenca i `.als` trovati (senza `Backup/`) con nome, BPM e numero di tracce
+- [ ] Clic su un progetto: pannello di importazione con una riga per traccia (tipo, strumento rilevato, codice o audio, varianti con ▶ in cuffia) e anteprima delle sezioni
+- [ ] Importa: brano `.cutx` nella libreria, suoni copiati nello stash, brano aperto nel CUE in modalità brano
+- [ ] Tracce MIDI → codice Strudel con un synth di CUTX scelto dal nome della traccia; Drum Rack → una riga per ruolo; tracce audio → `s("…").begin().end()` dai loop e dai warp
+- [ ] File mancanti (libreria di Ableton, altre cartelle): elenco, "cerca" a mano, suggerimento "Raccogli tutto e salva"; le sezioni si creano lo stesso con l'avviso
+- [ ] Limiti detti chiaramente nell'interfaccia (strumenti ed effetti non riprodotti, niente time-stretch, niente automazioni)
+- [ ] Test sul convertitore con piccoli `.als` creati per i test; ogni sezione prodotta si valuta con Strudel
+- [ ] Importo un mio progetto vero (x1, Mayia) e suono una mia canzone smontata e rimontata dal vivo
 - [ ] Suoni base (bd, sd, hh…) nello stash; licenza di ogni banca controllata prima di farne un pacco pubblico
-- [ ] Sample di codice: beat jungle che spezzetta uno stem
-- [ ] Sample di codice: loop pronto
-- [ ] Sample di codice: una canzone da mandare live un pezzo alla volta
-- [ ] Suono una mia canzone smontata e rimontata dal vivo
+- [ ] Sample di codice: beat jungle che spezzetta uno stem, loop pronto, una canzone da mandare live un pezzo alla volta
 
 ## Fase 3 · Proiezione
 - [ ] La finestra di uscita (dalla fase 1) diventa il proiettore: riga che suona in verde, Hydra sotto

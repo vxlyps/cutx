@@ -40,3 +40,7 @@ release/
 !esempi/**/*.flac
 !esempi/**/*.mp4
 !esempi/**/*.mov
+
+# Progetti Ableton veri: mai nel repo (i test usano .als piccoli in test/)
+*.als
+!test/**/*.als
