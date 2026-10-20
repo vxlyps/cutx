@@ -51,6 +51,7 @@ export class Cue {
     $('modo-libero').onclick = () => this.cambiaModo('libero');
     $('modo-brano').onclick = () => this.cambiaModo('brano');
     $('aggiungi-sezione').onclick = () => this.aggiungiSezione();
+    $('cue-porta').onclick = () => this.portaA && this.azioni.portaIlSet(this.portaA);
     this.mostraModo();
   }
 
@@ -63,6 +64,34 @@ export class Cue {
     this.libero.ridisegnaSezioni();
     if (this.brano) this.mostraBrano(false);
     this.mostraModo();
+  }
+
+  // Il tempo del brano che ho davanti (aperto in modalità brano, o scritto a sezioni nell'editor libero), o null.
+  tempoBrano() {
+    if (this.modo === 'brano') return this.brano ? B.bpmDelBrano(this.brano.modello) : null;
+    const b = B.leggi(this.libero.codice);
+    return b.sezioni.length ? B.bpmDelBrano(b) : null;
+  }
+
+  // Il brano è a un altro tempo e il live sta suonando: il set non cambia da solo. In cima al CUE, accanto al nome del brano,
+  // "brano a X · set a Y" e il pulsante per portare il set a X; sulle sezioni audio, che non seguono il tempo, un avviso.
+  aggiornaTempo({ set, occupato }) {
+    const brano = this.tempoBrano();
+    const diverso = brano !== null && set !== null && occupato && Math.abs(brano - set) > 0.05;
+    const zona = $('cue-tempo');
+    zona.hidden = !diverso;
+    if (diverso) {
+      const n = (x) => String(Math.round(x * 10) / 10);
+      $('cue-tempo-testo').textContent = `brano a ${n(brano)} · set a ${n(set)}`;
+      $('cue-porta').textContent = `porta il set a ${n(brano)}`;
+      this.portaA = brano;
+    }
+    for (const c of this.carte) {
+      if (!c.avvisoTempo) continue;
+      const audio = diverso && c.i >= 0 && B.eSezioneAudio(c.editor.codice);
+      c.avvisoTempo.hidden = !audio;
+      if (audio) c.avvisoTempo.textContent = `audio: suona al suo tempo originale (${Math.round(brano * 10) / 10} bpm), il set è a ${Math.round(set * 10) / 10}`;
+    }
   }
 
   statoSezione(provenienza, nome) {
@@ -91,14 +120,14 @@ export class Cue {
       const righe = testo.split('\n');
       const codice = vuota ? testo : righe.slice(da, a + 1).join('\n');
       const base = vuota ? 0 : this.libero.vista.state.doc.line(da + 1).from;
-      return { nome: 'libero', provenienza: 'libero', codice, inizio: 0, dove: { editor: this.libero, base } };
+      return { nome: 'libero', provenienza: 'libero', codice, inizio: 0, bpmBrano: null, dove: { editor: this.libero, base } };
     }
     const blocco = B.bloccoDellaRiga(testo, da);
     if (blocco.sezione < 0) return { errore: 'il cursore è nel preambolo: mettilo in una sezione' };
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
     const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
     const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
-    return { nome: blocco.nome, provenienza: 'libero', ...B.codice(b, blocco.sezione, righe), dove: { editor: this.libero, base } };
+    return { nome: blocco.nome, provenienza: 'libero', ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
   }
 
   pezzoBrano() {
@@ -112,6 +141,7 @@ export class Cue {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
       ...B.codice(m, carta.i, righe),
+      bpmBrano: B.bpmDelBrano(m),
       dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },
     };
   }
@@ -287,9 +317,11 @@ export class Cue {
     testa.append(nome, stato, el('div', 'spazio'));
     const corpo = el('div', 'editor editor-carta');
     const piede = el('div', 'lbl piede-carta');
-    art.append(testa, corpo, piede);
+    const avvisoTempo = el('p', 'avviso-audio');
+    avvisoTempo.hidden = true;
+    art.append(testa, avvisoTempo, corpo, piede);
 
-    const carta = { i, el: art, stato };
+    const carta = { i, el: art, stato, avvisoTempo };
     const righe = preambolo ? m.preambolo : m.sezioni[i].corpo;
     carta.editor = creaEditor({
       root: corpo,

@@ -36,7 +36,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -159,6 +159,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('impostazioni')) ok = (await sicura('impostazioni', provaImpostazioni)) && ok;
   if (parti.includes('ableton')) ok = (await sicura('ableton', provaAbleton)) && ok;
   if (parti.includes('neon')) ok = (await sicura('neon', provaNeon)) && ok;
+  if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -1433,6 +1434,17 @@ export async function schermate({ finestre, cartella }) {
     await aspetta(1);
     await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 1); cutxProva.cue.attiva(c); })()`);
     await scatta('cue-brano');
+    // il brano è a 140 e il set a 100: "brano a 140 · set a 100", il pulsante, l'avviso sulle sezioni audio; e un cambio in arrivo
+    await js(`cutxProva.valuta('live', 'setcpm(60/4)\\ns("sine*2").gain(.0001)')`);
+    await aspetta(1.5);
+    await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 2); if (c) c.editor.codice = 's("sine").begin(.1).end(.5).gain(.0001)'; })()`);
+    await js(`document.getElementById('bpm').focus()`);
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Up', modifiers: [] });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'Up', modifiers: [] });
+    await aspetta(0.6);
+    await scatta('cue-brano-tempo');
+    await js(`cutxProva.valuta('live', ${JSON.stringify(FOTO_LIVE)})`);
+    await aspetta(1);
     await js(`cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`);
     await rm(path.join(cartellaLibreria, 'schermate_notte.cutx'), { force: true });
     // le impostazioni, una sezione alla volta
@@ -1526,5 +1538,179 @@ async function provaNeon({ finestre, scrivi }) {
   // i tempi: tra un flicker e l'altro 8–20 s, una lettera ogni 5–14 s (sono costanti del modulo)
   const sorgente = await readFile(new URL('../renderer/insegna.js', import.meta.url), 'utf8');
   controlla('i tempi sono quelli chiesti: flicker ogni 8–20 s', /FLICKER_MIN_MS = 8_000/.test(sorgente) && /FLICKER_MAX_MS = 20_000/.test(sorgente));
+  return ok;
+}
+
+// --- prova del tempo del set: il numero in alto, il preambolo dei brani, la frase, il salvataggio ---
+
+async function provaTempo({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const wc = () => finestre.controllo.webContents;
+  const premi = async (tasto, ...modificatori) => {
+    wc().sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    wc().sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(0.4);
+  };
+  let s = null;
+  const testoBpm = () => js(`document.getElementById('bpm').textContent`);
+  const cpsDi = (bpm) => bpm / 240;
+  // aspetta che il tempo del set (cps) arrivi a quel valore, al massimo s secondi
+  const finche = async (fn, s = 8) => {
+    for (let i = 0; i < s * 5; i++) {
+      const r = await fn();
+      if (r) return r;
+      await aspetta(0.2);
+    }
+    return null;
+  };
+  const impostaSet = async (bpm) => {
+    await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(${bpm}/4)\\ns("sine*2").gain(.0001)')`);
+    await aspetta(0.8);
+  };
+  const file = path.join(stash.radice(), 'libreria', 'prova_tempo.cutx');
+  const filesLibro = path.join(stash.radice(), 'libreria', 'prova_tempo_salvato.cutx');
+  await writeFile(file, '// @brano prova tempo\n// @bpm 86\nsetcpm(86/4)\n// @sezione drum\ns("sine*2").gain(.0001)\n// @sezione loop\ns("sine").begin(.1).end(.5).gain(.0001)\n');
+  try {
+    await js('cutxProva.cue.brano = null; cutxProva.cue.cambiaModo("libero"); cutxProva.fermaTutto()');
+    // a 60 BPM un ciclo dura 4 secondi: il cambio resta "in arrivo" abbastanza da vederlo
+    await impostaSet(60);
+    controlla('il numero in alto è il tempo del set', (await testoBpm()) === '60', await testoBpm());
+
+    // --- il numero si cambia da lì: frecce, ⇧, scrittura, trascinamento; entra all'inizio del ciclo dopo ---
+    await js(`document.getElementById('bpm').focus()`);
+    await premi('Up');
+    let visto = null;
+    for (let i = 0; i < 40 && !visto; i++) {
+      const stato = await live();
+      if (stato.tempoInArrivo?.length) visto = { stato, testo: await testoBpm() };
+      else await aspetta(0.04);
+    }
+    controlla('↑ chiede +1 BPM e il cambio è in arrivo (non subito)', !!visto && Math.abs(visto.stato.cps - cpsDi(60)) < 1e-9 && Math.abs(visto.stato.tempoInArrivo[0].cps - cpsDi(61)) < 1e-9, JSON.stringify(visto?.stato.tempoInArrivo));
+    controlla('il numero mostra "60 → 61" finché non entra', visto?.testo === '60 → 61', visto?.testo);
+    controlla('entra all\'inizio del ciclo dopo', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(61)) < 1e-9)) && !!(await finche(async () => (await testoBpm()) === '61', 2)), await testoBpm());
+    await premi('Up', 'shift');
+    controlla('⇧↑ sono ±0,1', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(61.1)) < 1e-9, 10)), String((await live()).cps * 240));
+    await premi('Down');
+    controlla('↓ toglie 1', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(60.1)) < 1e-9, 10)), String((await live()).cps * 240));
+    // scrivo il numero: clic, scrivo, invio
+    await js(`(() => { const e = document.getElementById('bpm'); e.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientY: 10, pointerId: 1, bubbles: true })); e.dispatchEvent(new PointerEvent('pointerup', { button: 0, clientY: 10, pointerId: 1, bubbles: true })); })()`);
+    controlla('un clic sul numero apre la scrittura', (await js(`!!document.querySelector('#bpm input.bpm-input')`)) === true);
+    await js(`(() => { const i = document.querySelector('#bpm input.bpm-input'); i.value = '90,5'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    controlla('scrivo 90,5 e invio: il set va lì al ciclo dopo', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(90.5)) < 1e-9, 10)), String((await live()).cps * 240));
+    // esc lascia com'era
+    await js(`(() => { const e = document.getElementById('bpm'); e.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientY: 10, pointerId: 1, bubbles: true })); e.dispatchEvent(new PointerEvent('pointerup', { button: 0, clientY: 10, pointerId: 1, bubbles: true })); })()`);
+    await js(`(() => { const i = document.querySelector('#bpm input.bpm-input'); i.value = '200'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`);
+    await aspetta(0.5);
+    controlla('esc annulla la scrittura', Math.abs((await live()).cps - cpsDi(90.5)) < 1e-9 && !(await js(`!!document.querySelector('#bpm input.bpm-input')`)));
+    // trascino: 20 pixel in su sono 4 passi
+    await js(`(() => { const e = document.getElementById('bpm'); const p = (tipo, y) => e.dispatchEvent(new PointerEvent(tipo, { button: 0, clientY: y, pointerId: 1, bubbles: true })); p('pointerdown', 100); p('pointermove', 90); p('pointermove', 80); p('pointerup', 80); })()`);
+    controlla('trascinando su di 20 pixel il tempo sale di 4', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(94.5)) < 1e-9, 10)), String((await live()).cps * 240));
+
+    // --- la frase continua a contare normale attraverso i cambi di tempo ---
+    await impostaSet(120);
+    const viste = [];
+    const t0 = Date.now();
+    await js(`document.getElementById('bpm').focus()`);
+    let giri = 0;
+    while (Date.now() - t0 < 12000) {
+      if (giri === 8) await premi('Up'); // cambi di tempo mentre guardo la frase
+      if (giri === 30) await premi('Down', 'shift');
+      giri++;
+      const f = Number(await js(`document.getElementById('frase-numero').textContent`));
+      if (Number.isFinite(f) && viste.at(-1) !== f) viste.push(f);
+      await aspetta(0.15);
+    }
+    const salti = viste.filter((f, i) => i > 0 && f !== (viste[i - 1] % 16) + 1);
+    controlla('la frase conta di uno alla volta anche cambiando il tempo', viste.length >= 3 && salti.length === 0, JSON.stringify(viste));
+
+    // --- la cuffia segue il cambio di tempo entrando al ciclo giusto (restano allineate: stesso ciclo nello stesso momento) ---
+    await impostaSet(120);
+    await aspetta(1);
+    let scarto = 0;
+    let campioni = 0;
+    await js(`document.getElementById('bpm').focus()`);
+    for (let i = 0; i < 70; i++) {
+      if (i === 5) await premi('Up', 'shift');
+      if (i === 5) for (let k = 0; k < 4; k++) await premi('Up'); // un salto di qualche BPM
+      const [a, b] = [await live(), await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')];
+      if (a.ciclo !== null && b.ciclo !== null) {
+        scarto = Math.max(scarto, Math.abs(a.ciclo - b.ciclo));
+        campioni++;
+      }
+      await aspetta(0.1);
+    }
+    const [sl, sc] = [await live(), await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')];
+    controlla('cuffia e live restano allo stesso ciclo attraverso il cambio di tempo (scarto < 0,1 cicli)', campioni > 30 && scarto < 0.1, `scarto ${scarto.toFixed(3)} su ${campioni}`);
+    controlla('e la cuffia è al nuovo tempo', Math.abs(sc.cps - sl.cps) < 1e-9 && sl.cps * 240 > 124, `${sl.cps * 240} / ${sc.cps * 240}`);
+
+    // --- un brano a un altro BPM, con il live che suona: il set non cambia da solo ---
+    await impostaSet(120);
+    await js('cutxProva.ricaricaLibreria()');
+    await js(`cutxProva.cue.apri('prova_tempo.cutx')`);
+    await aspetta(1);
+    const vista = await finche(() => js(`!document.getElementById('cue-tempo').hidden`), 4);
+    controlla('nel CUE, accanto al nome del brano, "brano a 86 · set a 120" col pulsante per portare il set', vista && (await js(`document.getElementById('cue-tempo-testo').textContent`)) === 'brano a 86 · set a 120' && (await js(`document.getElementById('cue-porta').textContent`)) === 'porta il set a 86');
+    controlla('e sta nell\'intestazione, vicino al brano', (await js(`(() => { const t = document.querySelector('.cue .testa'); return t.contains(document.getElementById('cue-tempo')) && t.contains(document.getElementById('modo-brano')); })()`)) === true);
+    const avvisoAudio = await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 1); c.avvisoTempo.hidden; return [c.avvisoTempo.hidden, c.avvisoTempo.textContent]; })()`);
+    controlla('la sezione audio (begin/end) avvisa che non segue il tempo', avvisoAudio[0] === false && avvisoAudio[1].includes('tempo originale') && avvisoAudio[1].includes('86'), JSON.stringify(avvisoAudio));
+    controlla('quella di codice no', (await js(`cutxProva.cue.carte.find((c) => c.i === 0).avvisoTempo.hidden`)) === true);
+    await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 0); cutxProva.cue.attiva(c); })()`);
+    await js('cutxProva.scegliEntraTra(1)');
+    const r = await wc().executeJavaScript('cutxProva.goLive()');
+    await aspetta(2.5);
+    s = await live();
+    controlla('mando live la sezione: il tempo del set NON cambia', !r.errore && Math.abs(s.cps - cpsDi(120)) < 1e-9, JSON.stringify([r.errore, s.cps]));
+    const nuovo = s.livelli.find((l) => l.nome === 'drum');
+    controlla('e il suo codice non porta il setcpm del brano', !!nuovo && !nuovo.codice.includes('setcpm(86'), nuovo?.codice);
+    controlla('il CUE dice che il set resta', (await js(`document.getElementById('cue-avviso').textContent`)).includes('il set resta a 120'), await js(`document.getElementById('cue-avviso').textContent`));
+    await js(`document.getElementById('cue-porta').click()`);
+    controlla('"porta il set a 86" porta il set lì, al ciclo dopo', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(86)) < 1e-9)), String((await live()).cps * 240));
+    await aspetta(0.5);
+    controlla('e l\'avviso sparisce', (await js(`document.getElementById('cue-tempo').hidden`)) === true);
+    // il live vuoto prende il tempo del brano, come sempre (il suo preambolo resta nel codice)
+    await impostaSet(120);
+    await js(`cutxProva.fermaTutto()`);
+    await aspetta(1.2);
+    await js(`cutxProva.ricaricaLibreria(); cutxProva.cue.apri('prova_tempo.cutx')`);
+    await aspetta(1);
+    await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 0); cutxProva.cue.attiva(c); })()`);
+    const r2 = await wc().executeJavaScript('cutxProva.goLive()');
+    controlla('con il live vuoto il brano porta il suo tempo (86)', !r2.errore && !!(await finche(async () => Math.abs((await live()).cps - cpsDi(86)) < 1e-9)), String((await live()).cps * 240));
+    controlla('e il suo codice ha ancora il setcpm del brano', ((await live()).livelli.find((l) => l.nome === 'drum')?.codice ?? '').includes('setcpm(86/4)'));
+    controlla('senza messaggi sul tempo che non cambia', !(await js(`document.getElementById('cue-avviso').textContent`)).includes('il set resta'));
+
+    // a) il set va a 128; mando live un'altra sezione (stesso brano a 86: il set resta) e salvo il live come brano:
+    //    @bpm e setcpm del file sono il tempo del set in quel momento (128), non quello del brano da cui venivano le sezioni (86)
+    await js(`(() => { const e = document.getElementById('bpm'); e.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientY: 10, pointerId: 1, bubbles: true })); e.dispatchEvent(new PointerEvent('pointerup', { button: 0, clientY: 10, pointerId: 1, bubbles: true })); })()`);
+    await js(`(() => { const i = document.querySelector('#bpm input.bpm-input'); i.value = '128'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    controlla('il set va a 128', !!(await finche(async () => Math.abs((await live()).cps - cpsDi(128)) < 1e-9)));
+    // un livello che entrava più tardi col suo tempo non lo riporta indietro: il numero a mano ha l'ultima parola
+    await aspetta(3);
+    controlla('e ci resta (il tempo scelto a mano vince su un livello in arrivo col suo setcpm)', Math.abs((await live()).cps - cpsDi(128)) < 1e-9, String((await live()).cps * 240));
+    await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 1); cutxProva.cue.attiva(c); })()`);
+    const r3 = await wc().executeJavaScript('cutxProva.goLive()');
+    await aspetta(2.5);
+    s = await live();
+    controlla('un\'altra sezione del brano a 86 entra e il set resta a 128', !r3.errore && Math.abs(s.cps - cpsDi(128)) < 1e-9 && s.livelli.filter((l) => l.a === null).length === 2, JSON.stringify([r3.errore, s.cps * 240, s.livelli.length]));
+    wc().executeJavaScript('cutxProva.salvaLiveComeBrano()');
+    await aspetta(0.4);
+    await js(`(() => { const i = document.querySelector('.dialogo input'); i.value = 'prova tempo salvato'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    await aspetta(1.2);
+    const salvato = existsSync(filesLibro) ? await readFile(filesLibro, 'utf8') : '';
+    const brano = (await import('../renderer/brano.js')).leggi(salvato);
+    controlla('il brano salvato ha @bpm 128, e il tempo del set', salvato.includes('// @bpm 128') && brano.preambolo.includes('setcpm(128/4)'), salvato.slice(0, 160));
+    controlla('e non il tempo del brano da cui venivano le sezioni', !salvato.includes('86') && !/setcpm\(86/.test(salvato), salvato);
+    controlla('con le due sezioni', brano.sezioni.length === 2, String(brano.sezioni.length));
+  } finally {
+    await rm(file, { force: true });
+    await rm(filesLibro, { force: true });
+    await js('cutxProva.fermaTutto(); cutxProva.cue.brano = null; cutxProva.cue.cambiaModo("libero")');
+  }
   return ok;
 }

@@ -7,6 +7,8 @@ import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
 import { Importa } from './importa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
+import { ControlloBpm } from './bpm.js';
+import { arrotondaBpm, bpmDi, cicloDi, cpsAl, fraseDi, tempoInArrivo } from './tempo.js';
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
@@ -59,8 +61,9 @@ const cue = new Cue(CODICE_INIZIALE, {
   fermaTutto: () => fermaTutto(),
   suoniStash: () => suoni,
   haStash: () => haStash,
-  bpm: () => (mappa ? Math.round(mappa.cps * 240 * 10) / 10 : null),
+  bpm: () => bpmSet(),
   libreriaCambiata: () => aggiornaLibreria(),
+  portaIlSet: (bpm) => live.manda({ tipo: 'tempo', bpm }),
   mostraLibreria: () => scegliScheda('libreria'),
 });
 
@@ -109,8 +112,21 @@ async function goLive() {
   if (inTest) return;
   const p = cue.pezzo();
   if (p.errore) return cue.avviso(p.errore);
-  const r = await live.richiesta({ tipo: 'entra', codice: p.codice, nome: p.nome, provenienza: p.provenienza, cicli: entraTra });
+  let codice = p.codice;
+  // Un brano a un altro BPM che entra in un live che sta già suonando NON cambia il tempo del set: si tolgono dal suo preambolo
+  // le righe setcpm (un setcpm scritto dentro la sezione, o in un livello, continua a funzionare). Con il live vuoto il brano
+  // porta il suo tempo, come sempre.
+  const set = bpmSet();
+  const diverso = p.bpmBrano && set !== null && livelliLive.some((l) => l.a === null) && Math.abs(p.bpmBrano - set) > 0.05;
+  const messaggi = [];
+  if (diverso) {
+    codice = B.senzaTempo(codice.slice(0, p.inizio)) + codice.slice(p.inizio);
+    messaggi.push(`il set resta a ${set} bpm (il brano è a ${p.bpmBrano})`);
+    if (B.eSezioneAudio(codice.slice(p.inizio))) messaggi.push('questa sezione suona un file audio: va al suo tempo originale');
+  }
+  const r = await live.richiesta({ tipo: 'entra', codice, nome: p.nome, provenienza: p.provenienza, cicli: entraTra });
   mostraErrore(r.errore, 'live');
+  if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;
 }
 
@@ -170,7 +186,7 @@ async function salvaLiveComeBrano() {
   if (!nome) return;
   const usati = new Set();
   for (const l of livelli) for (const n of (await analizza(l.codice, suoni)).suoni) usati.add(n);
-  const bpm = mappa ? Math.round(mappa.cps * 240 * 10) / 10 : undefined;
+  const bpm = bpmSet() ?? undefined; // il tempo del set in questo momento, non quello del brano da cui vengono le sezioni
   const testo = B.daLivelli(livelli, { nome, bpm, data: oggi(), suoni: [...usati].sort() });
   const file = B.nomeFile(nome);
   let r = await window.cutx.scriviBrano(file, testo);
@@ -592,6 +608,7 @@ function mostraCue() {
   // live = sta suonando o sta per entrare
   const inLive = livelliLive.filter((l) => l.a === null).map((l) => ({ nome: l.nome, provenienza: l.provenienza }));
   cue.aggiornaStati({ live: inTest ? [] : inLive, cuffia: inTest ? null : etichetta(cuffia) });
+  cue.aggiornaTempo({ set: bpmSet(), occupato: livelliLive.some((l) => l.a === null) });
   const b = $('cuffia-onoff');
   b.classList.toggle('on', cuffia.viva && cuffiaUdibile);
   b.querySelector('i').textContent = !cuffia.viva ? '–' : cuffiaUdibile ? 'on' : 'off';
@@ -626,20 +643,25 @@ function mostraTempo() {
   disegnaTempo();
 }
 
+// Il tempo del set com'è in questo momento (con la mappa del live: cambia solo all'inizio di un ciclo).
+const epocaOra = () => performance.timeOrigin + performance.now();
+function bpmSet() {
+  return mappa && live.viva ? arrotondaBpm(bpmDi(cpsAl(mappa, epocaOra()))) : null;
+}
+
 function disegnaTempo() {
+  controlloBpm.disegna();
   if (!mappa || !live.viva) {
-    $('bpm').textContent = '–';
     $('frase-numero').textContent = '–';
     $('piede-frase').textContent = 'frase –';
     return;
   }
-  const epoca = performance.timeOrigin + performance.now();
-  const ciclo = mappa.ciclo0 + ((epoca - mappa.epoca0) / 1000) * mappa.cps;
+  const epoca = epocaOra();
+  const ciclo = cicloDi(mappa, epoca);
   const intero = Math.floor(ciclo);
   const quarto = Math.floor((ciclo - intero) * 4);
   const lunghezza = preferenze.lunghezzaFrase;
-  const frase = (((intero - (mappa.ancoraFrase ?? 0)) % lunghezza) + lunghezza) % lunghezza + 1;
-  $('bpm').textContent = Math.round(mappa.cps * 240 * 10) / 10;
+  const frase = fraseDi(mappa, epoca, lunghezza);
   $('frase-numero').textContent = frase;
   $('frase-lunghezza').textContent = `/${lunghezza}`;
   $('piede-frase').textContent = `frase ${frase}/${lunghezza}`;
@@ -659,6 +681,15 @@ function disegnaTempo() {
     });
   }
 }
+
+// Il numero dei BPM in alto: il tempo del set, che si cambia da lì (bpm.js). Il cambio entra al ciclo dopo.
+const controlloBpm = new ControlloBpm($('bpm'), {
+  leggi: () => ({
+    attuale: bpmSet(),
+    inArrivo: mappa && live.viva ? ((x) => (x === null ? null : arrotondaBpm(bpmDi(x))))(tempoInArrivo(mappa, epocaOra())) : null,
+  }),
+  manda: (bpm) => live.manda({ tipo: 'tempo', bpm }),
+});
 
 function fraseDaCapo() {
   live.manda({ tipo: 'frase-da-capo' });

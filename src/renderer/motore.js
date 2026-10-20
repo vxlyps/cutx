@@ -12,7 +12,7 @@ import {
   samples,
   webaudioOutput,
 } from '@strudel/webaudio';
-import { Orologio } from './tempo.js';
+import { Orologio, cpsDi, risolvi } from './tempo.js';
 import { impostaUscita } from './uscite.js';
 import { Riproduttore, TICK_S } from './riproduttore.js';
 import { Sentinella, Anello } from './ascolto.js';
@@ -98,8 +98,8 @@ async function valuta(codice, etichetta = {}) {
       // ciclo 0 cada fra ~150 ms, e la sorgente dura quanti sono i suoi cicli; poi il motore si ferma da solo,
       // così il ▶ dell'interfaccia torna com'era (lascia finire i suoni già partiti: niente tagli).
       const { cicli, audioS = 0 } = etichetta.anteprima;
-      const cps = rip.mappa?.cps ?? CPS_INIZIALE;
-      const inizio = rip.ciclo(ac.currentTime) + 0.15 * cps;
+      const cps = rip.mappa ? rip.cpsAl(ac.currentTime) : CPS_INIZIALE;
+      const inizio = (rip.mappa ? rip.cicloAl(ac.currentTime) : 0) + 0.15 * cps;
       // (la fine è un millesimo di ciclo prima: un inizio che cade sul confine, a meno di un arrotondamento, non è più dentro)
       rip.sorgenti = [{ pattern: c.pattern.late(inizio), da: inizio, a: inizio + cicli - 0.001 }];
       const id = anteprimaId;
@@ -115,7 +115,7 @@ async function valuta(codice, etichetta = {}) {
   // Live, subito: un livello solo al posto di tutti (test di sfasamento, prova automatica).
   for (const l of livelli) liberaGuadagno(l.id);
   livelli = codice.trim() ? [nuovoLivello(codice, c.pattern, etichetta, -Infinity)] : [];
-  if (c.cps) cambiaCps(c.cps);
+  if (c.cps) cambiaTempo(c.cps, 'subito');
   iniziaSet(rip.prossimoConfine());
   aggiornaLivelli();
   return null;
@@ -151,7 +151,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false }) 
     l.muto = vecchio.muto;
   }
   livelli.push(l);
-  if (c.cps) rip.cambiaCpsA(da, c.cps);
+  if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
   iniziaSet(da);
   aggiornaLivelli();
   return { da, livello: l.id };
@@ -304,28 +304,45 @@ function pulisci() {
 
 // --- tempo ---
 
+// La mappa del tempo è una sola, e si pubblica da qui: cuffia, interfaccia e uscita la leggono (tempo.js).
+// Fase 4: anche il click di sync del PO-33 leggerà il tempo da questa mappa, mai da altre strade.
 function pubblicaMappa() {
   if (!LIVE || !rip.mappa || orologio.aggiorna() === null) return;
-  // Si riparte da adesso, così il conto in tempo assoluto resta fresco.
-  // Anche all'interfaccia, per BPM, battute e frase: in tempo assoluto, cioè quando si sente.
+  // Si riparte da adesso, così il conto in tempo assoluto resta fresco. Il tempo di *adesso* è quello di prima di un
+  // cambio già programmato, che è nei `cambi`: ognuno entra all'inizio di un ciclo, quindi la frase non sballa.
   const t0 = ac.currentTime;
-  const mappa = { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps, ancoraFrase, inizioSet };
+  const mappa = { tipo: 'mappa', ciclo0: rip.cicloAl(t0), epoca0: orologio.epoca(t0), cps: rip.cpsAl(t0), cambi: rip.cambiProssimi(t0), ancoraFrase, inizioSet };
   manda('cuffia', mappa);
   manda('controllo', mappa);
   manda('uscita', mappa);
 }
 
-function cambiaCps(cps) {
-  rip.cambiaCps(cps);
+// L'UNICO punto da cui cambia il tempo del set: setcpm di un livello (dal ciclo in cui entra), un evento con un tempo suo,
+// il numero in alto ('ciclo' = all'inizio del ciclo dopo). Mai `rip.cambiaCps*` da altre parti: lo controlla un test.
+// quando: 'subito' | 'ciclo' | un numero di ciclo.
+function cambiaTempo(cps, quando) {
+  if (!LIVE || !(cps > 0) || !rip.mappa) return;
+  if (quando === 'subito') rip.cambiaCps(cps);
+  else if (quando === 'ciclo') {
+    // a mano: vince su un livello che stava per portare il suo tempo (entrerebbe dopo e lo cambierebbe di nuovo)
+    const ciclo = rip.prossimoConfine();
+    rip.annullaCambiDopo(ciclo);
+    rip.cambiaCpsA(ciclo, cps);
+  } else rip.cambiaCpsA(quando, cps);
   pubblicaMappa();
 }
 rip.suMappa = pubblicaMappa;
 
+// Il tempo del set com'è adesso e i cambi in arrivo: per leggerlo da fuori (fase 4: sync PO-33).
+const tempoSet = () => ({ cps: rip.cpsAl(ac.currentTime), cambi: rip.cambiProssimi(ac.currentTime) });
+
 // Cuffia: la mappa del live, portata nel tempo del mio contesto. Si rifà a ogni giro perché
-// il rapporto tra i due orologi si legge di continuo.
+// il rapporto tra i due orologi si legge di continuo. I cambi in arrivo restano cambi: entrano al ciclo giusto.
 function seguiLive() {
   if (!mappaLive || orologio.aggiorna() === null) return;
-  rip.mappa = { ciclo0: mappaLive.ciclo0, t0: orologio.tempo(mappaLive.epoca0 + offsetMs), cps: mappaLive.cps };
+  const r = risolvi({ ...mappaLive, epoca0: mappaLive.epoca0 + offsetMs }, orologio.epoca(ac.currentTime));
+  rip.mappa = { ciclo0: r.ciclo0, t0: orologio.tempo(r.epoca0), cps: r.cps };
+  rip.cambiTempo = r.cambi.map((c) => ({ ciclo: c.ciclo, cps: c.cps }));
 }
 
 // --- ascolto: misuratore, sentinella e anello ---
@@ -347,7 +364,7 @@ rip.suEvento = (hap, t, sorgente) => {
   // A suono avvenuto: quando dice questo motore di averlo suonato.
   setTimeout(() => manda('controllo', { tipo: 'eco', ruolo: RUOLO, ciclo, epoca: orologio.epoca(t) }), (t - ac.currentTime) * 1000 + 50);
 };
-rip.suCps = (cps) => LIVE && cambiaCps(cps);
+rip.suCps = (cps) => cambiaTempo(cps, 'subito');
 anello && (anello.suMisura = (ms) => manda('controllo', { tipo: 'anello', ms }));
 
 function giro() {
@@ -399,7 +416,8 @@ function stato() {
     eventi: rip.eventi,
     anteprima: !LIVE ? !!prova.anteprima : undefined,
     giroMax,
-    cps: rip.mappa?.cps ?? null,
+    cps: rip.mappa ? rip.cpsAl(ac.currentTime) : null,
+    tempoInArrivo: LIVE && rip.mappa ? rip.cambiProssimi(ac.currentTime) : undefined,
     ciclo: rip.mappa ? rip.ciclo(ac.currentTime) : null,
     sentinella: sentinella.riepilogo(),
     udibile,
@@ -464,6 +482,8 @@ async function ricevi(da, m) {
     case 'livelli-live':
       livelliLive = m.livelli;
       return;
+    case 'tempo': // il numero in alto: il set va a quel BPM all'inizio del ciclo dopo
+      return cambiaTempo(cpsDi(Math.min(300, Math.max(20, Number(m.bpm) || 0))), 'ciclo');
     case 'frase-da-capo': // la frase riparte da 1 al prossimo ciclo
       if (!rip.mappa) return;
       ancoraFrase = Math.ceil(rip.ciclo(ac.currentTime));
@@ -493,6 +513,7 @@ window.cutx.suStashCambiato(configura);
 
 // Per la prova automatica di robustezza (npm run prova).
 globalThis.cutxStato = stato;
+globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 
 await configura();
 if (LIVE) {

@@ -2,6 +2,7 @@
 // motore live, e dall'interfaccia solo le bozze (quello che sto scrivendo, che fa parte dello
 // spettacolo). Gli errori non arrivano mai qui. Se si chiude o crasha, le casse non lo sentono.
 import { aspetto, cicloDi } from './aspetto.js';
+import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
@@ -100,8 +101,8 @@ function disegna() {
   const intero = Math.floor(ciclo);
   const quarto = Math.floor((ciclo - intero) * 4);
   const lunghezza = preferenze.lunghezzaFrase ?? 16;
-  $('bpm').textContent = `${Math.round(mappa.cps * 240 * 10) / 10} BPM`;
-  $('frase').textContent = ((((intero - (mappa.ancoraFrase ?? 0)) % lunghezza) + lunghezza) % lunghezza) + 1;
+  $('bpm').textContent = `${arrotondaBpm(bpmDi(cpsAl(mappa, epoca)))} BPM`;
+  $('frase').textContent = fraseDi(mappa, epoca, lunghezza);
   [...$('battute').children].forEach((d, i) => {
     d.classList.toggle('passata', i < quarto);
     d.classList.toggle('ora', i === quarto);

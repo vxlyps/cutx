@@ -96,6 +96,28 @@ export function conTesta(brano, valori) {
   return { ...brano, testa: testaNuova };
 }
 
+// --- il tempo ---
+
+// Una riga che cambia il tempo: setcpm(...) o setcps(...) da sola.
+const RIGA_TEMPO = /^\s*setcp[ms]\s*\(.*\)\s*;?\s*(\/\/.*)?$/;
+
+// Il testo senza le righe che cambiano il tempo: serve quando un brano a un altro BPM entra in un live che sta già suonando
+// (il tempo del set non cambia da solo) e quando si salva il live (il tempo è uno solo, nel preambolo).
+export const senzaTempo = (testo) => testo.split('\n').filter((r) => !RIGA_TEMPO.test(r)).join('\n');
+
+// Il BPM di un brano: quello che suona (il setcpm del preambolo, 4 quarti per ciclo), o se manca quello della testa.
+export function bpmDelBrano(brano) {
+  for (const riga of brano.preambolo) {
+    const m = /^\s*setcpm\s*\(\s*([\d.]+)\s*(?:\/\s*([\d.]+))?\s*\)/.exec(riga);
+    if (m && Number(m[2] ?? 1) > 0) return Math.round(((Number(m[1]) / Number(m[2] ?? 1)) * 4) * 1000) / 1000;
+  }
+  const { bpm } = testa(brano);
+  return Number.isFinite(bpm) && bpm > 0 ? bpm : null;
+}
+
+// Una sezione che suona un file audio da una parte all'altra (s("…").begin().end()): non segue il tempo del set.
+export const eSezioneAudio = (testo) => /\.(begin|end)\(/.test(testo);
+
 // --- il codice da suonare ---
 
 // Preambolo + righe della sezione (tutte, o solo quelle scelte). In `inizio` c'è dove
@@ -208,6 +230,8 @@ export function aggiungiSezione(testo, da, a, nome) {
 // --- dal live a un brano ---
 
 // livelli: [{ nome, codice, volume, muto }] nell'ordine in cui sono entrati.
+// Il tempo del file è uno solo, quello del set in quel momento (bpm): in testa e nel preambolo. Le righe setcpm dei livelli,
+// che vengono dal brano da cui erano partiti, si tolgono: non devono contraddirlo.
 export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
   const visti = new Map();
   const sezioni = livelli.map((l) => {
@@ -217,9 +241,9 @@ export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
     const info = {};
     if (l.volume !== undefined && l.volume !== 1) info.volume = l.volume;
     if (l.muto) info.muto = true;
-    return { riga: rigaSezione(n, info), nome: n, info, corpo: l.codice.replace(/\n+$/, '').split('\n') };
+    return { riga: rigaSezione(n, info), nome: n, info, corpo: (bpm ? senzaTempo(l.codice) : l.codice).replace(/\n+$/, '').split('\n') };
   });
-  const vuoto = { testa: [], preambolo: [], sezioni };
+  const vuoto = { testa: [], preambolo: bpm ? ['', `setcpm(${bpm}/4)`, ''] : [], sezioni };
   return scrivi(conTesta(vuoto, { brano: nome, bpm, data, suoni })) + '\n';
 }
 

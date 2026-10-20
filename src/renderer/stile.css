@@ -2058,3 +2058,69 @@ input[type='checkbox'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* --- il numero dei BPM in alto: si cambia da lì --- */
+#bpm {
+  cursor: ns-resize;
+  user-select: none;
+  min-width: 3.4ch;
+  text-align: right;
+  outline: none;
+  border-radius: 3px;
+}
+
+#bpm:hover,
+#bpm:focus-visible {
+  background: var(--pannello);
+}
+
+#bpm.trascina {
+  color: var(--testo);
+  background: var(--pannello);
+}
+
+#bpm.in-arrivo {
+  color: var(--marcio);
+  text-shadow: var(--bagliore-testo);
+}
+
+.bpm-input {
+  width: 5ch;
+  height: 1.1em;
+  padding: 0;
+  background: var(--fondo);
+  border: 0;
+  border-bottom: 2px solid var(--marcio);
+  color: var(--testo);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+
+/* --- CUE: il brano è a un altro tempo --- */
+.cue .testa {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 52px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  row-gap: 6px;
+}
+
+.cue-tempo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cue-tempo .lbl {
+  color: var(--marcio);
+  white-space: nowrap;
+}
+
+.avviso-audio {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #d9b36a;
+}

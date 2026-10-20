@@ -1,8 +1,9 @@
 // Come si vede un livello adesso (in arrivo, che suona, in uscita), dalla mappa del tempo.
 // Lo usano la pila del LIVE e la finestra di uscita, così mostrano la stessa cosa.
 
-export const cicloDi = (mappa, epoca) => mappa.ciclo0 + ((epoca - mappa.epoca0) / 1000) * mappa.cps;
-export const epocaDi = (mappa, ciclo) => mappa.epoca0 + ((ciclo - mappa.ciclo0) / mappa.cps) * 1000;
+import { cicloDi, epocaDi } from './tempo.js';
+
+export { cicloDi, epocaDi };
 
 // Come si vede un livello adesso: quanto testo, se arriva o se esce. Serve anche all'uscita.
 export function aspetto(l, livelli, mappa, epoca, { scrittura = true, inizioUscita = null } = {}) {

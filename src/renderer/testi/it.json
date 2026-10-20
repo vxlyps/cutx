@@ -25,8 +25,8 @@
       "azione": "impostazioni"
     },
     "bpm": {
-      "nome": "bpm",
-      "testo": "Il tempo del live, in battiti al minuto."
+      "nome": "bpm del set",
+      "testo": "Il tempo del set. Clic: scrivi il numero e invio. Trascina su/giù o usa ↑ ↓ per ±1 (con ⇧ ±0,1). Il cambio entra all'inizio del ciclo dopo; finché non entra vedi «140 → 128»."
     },
     "battute": {
       "nome": "battute",
@@ -171,6 +171,10 @@
     "ableton-scegli": {
       "nome": "scegli cartella",
       "testo": "Scegli la cartella dove tieni i progetti Ableton (o quella che li contiene tutti). CUTX li legge soltanto."
+    },
+    "cue-tempo": {
+      "nome": "tempo del brano",
+      "testo": "Il brano è a un BPM diverso dal set. Mentre il live suona il set non cambia da solo: «porta il set a …» lo porta al tempo del brano, all'inizio del ciclo dopo."
     }
   },
   "impostazioni": {
