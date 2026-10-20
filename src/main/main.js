@@ -6,7 +6,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
 import * as preferenze from './preferenze.js';
-import { trovaProgetti } from '../ableton/scansione.js';
+import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
 import { prova, foto } from './prova.js';
 
@@ -71,6 +71,9 @@ function serviFile(req) {
   if (rel.startsWith('stash/')) {
     const radice = stash.radice();
     file = radice && dentro(radice, rel.slice('stash/'.length));
+  } else if (rel.startsWith('anteprima/')) {
+    // un file audio di un progetto Ableton, per sentirlo in cuffia prima di importarlo
+    file = ableton.percorsoAnteprima(rel.slice('anteprima/'.length));
   } else {
     file = dentro(DIST, rel || 'index.html');
   }
@@ -297,6 +300,22 @@ ipcMain.handle('ableton:aggiungi-cartella', async () => {
 });
 ipcMain.handle('ableton:progetti', () => trovaProgetti(preferenze.leggi().cartelleAbleton ?? []));
 ipcMain.handle('ableton:info', (_e, percorso) => ableton.info(percorso, preferenze.leggi().cartelleAbleton ?? []));
+ipcMain.handle('ableton:file', async (_e, percorso, file) => {
+  const cartelle = preferenze.leggi().cartelleAbleton ?? [];
+  if (!consentito(percorso, cartelle)) return { errore: 'progetto fuori dalle cartelle scelte' };
+  return { file: await ableton.risolviFile(path.dirname(percorso), file) };
+});
+// Cerca a mano un file audio (un file mancante, o lo stem di una traccia MIDI).
+ipcMain.handle('ableton:scegli-file', async (_e, titolo) => {
+  const r = await dialog.showOpenDialog(finestre.controllo, {
+    title: titolo || 'Scegli il file audio',
+    properties: ['openFile'],
+    filters: [{ name: 'Audio', extensions: ['wav', 'aif', 'aiff', 'mp3', 'flac', 'ogg', 'm4a'] }],
+  });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const f = await ableton.fileScelto(r.filePaths[0]);
+  return f.errore ? f : { ...f, durata: await ableton.durataWav(f.percorso) };
+});
 ipcMain.handle('ableton:modello', async (_e, percorso) => {
   try {
     return { modello: await ableton.modello(percorso, preferenze.leggi().cartelleAbleton ?? []) };

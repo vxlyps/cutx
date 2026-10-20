@@ -203,6 +203,15 @@ export async function foto({ finestre, file: fotoFile }) {
     await aspetta(3);
     await writeFile(fotoFile.replace(/\.png$/, '-ableton.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
     console.log(`[foto] ${fotoFile.replace(/\.png$/, '-ableton.png')}`);
+    // il pannello di importazione su un progetto vero (x1 e Mayia)
+    for (const [nome, sigla] of [['x1', 'x1'], ['Mayia u influeced me a bit maybe?', 'mayia']]) {
+      await chiedi(finestre.controllo, `cutxProva.importa.apri({ nome: ${JSON.stringify(nome)}, percorso: ${JSON.stringify(path.join(progettiVeri, `${nome}.als`))}, cartella: ${JSON.stringify(progettiVeri)} })`);
+      await aspetta(2.5);
+      const f = fotoFile.replace(/\.png$/, `-importa-${sigla}.png`);
+      await writeFile(f, (await finestre.controllo.webContents.capturePage()).toPNG());
+      console.log(`[foto] ${f}`);
+      await chiedi(finestre.controllo, `cutxProva.importa.chiudi()`);
+    }
     await chiedi(finestre.controllo, `window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} })`);
   }
   await chiedi(finestre.controllo, `cutxProva.browser.vai('suoni')`);
@@ -951,6 +960,25 @@ function progettoFinto() {
   });
 }
 
+// Un WAV di silenzio, valido (per le prove: dura `secondi`).
+function wavSilenzio(secondi, frequenza = 8000) {
+  const dati = Buffer.alloc(secondi * frequenza * 2);
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0);
+  h.writeUInt32LE(36 + dati.length, 4);
+  h.write('WAVEfmt ', 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(frequenza, 24);
+  h.writeUInt32LE(frequenza * 2, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write('data', 36);
+  h.writeUInt32LE(dati.length, 40);
+  return Buffer.concat([h, dati]);
+}
+
 async function provaAbleton({ finestre, scrivi }) {
   let ok = true;
   const controlla = (nome, vero, dettagli = '') => {
@@ -998,6 +1026,16 @@ async function provaAbleton({ finestre, scrivi }) {
 
     // la scheda ableton del browser: nome, BPM e tracce; un file rotto è "illeggibile"
     await writeFile(path.join(radice, 'Uno Project', 'rotto.als'), 'non è un progetto');
+    // un progetto con un file audio che c'è e uno che manca
+    const { clipAudio, tracciaAudio } = finto;
+    await mkdir(path.join(radice, 'Uno Project', 'Samples'), { recursive: true });
+    await writeFile(path.join(radice, 'Uno Project', 'Samples', 'loop.wav'), wavSilenzio(4));
+    await writeFile(path.join(radice, 'Uno Project', 'tre.als'), finto.als({ bpm: 140, tracce: [
+      finto.tracciaMidi({ nome: '1-Dark Pad', clip: [finto.clipMidi({ inizio: 0, loop: [0, 16], note: [finto.note(0, 4, 60), finto.note(4, 4, 63), finto.note(8, 4, 67), finto.note(12, 4, 70)] })] }),
+      finto.tracciaMidi({ nome: '2-Basso', clip: [finto.clipMidi({ inizio: 16, loop: [0, 16], note: [finto.note(0, 4, 38), finto.note(4, 4, 43), finto.note(8, 4, 36), finto.note(12, 4, 41)] })] }),
+      tracciaAudio({ nome: '3-Audio', clip: [clipAudio({ inizio: 0, loop: [0, 8], marcatori: [[0, 0], [8, 3.4]], durata: 4, file: 'Samples/loop.wav' })] }),
+      tracciaAudio({ nome: '4-Audio', clip: [clipAudio({ inizio: 8, loop: [0, 4], marcatori: [[0, 0], [4, 1.7]], durata: 2, file: 'Samples/manca.wav', assoluto: '/non/esiste/manca.wav' })] }),
+    ] }));
     await js(`document.getElementById('impostazioni').hidden = true; cutxProva.browser.vai('ableton')`);
     let righe = [];
     for (let i = 0; i < 40 && !righe.some((r) => r.includes('140 bpm')); i++) {
@@ -1011,7 +1049,66 @@ async function provaAbleton({ finestre, scrivi }) {
     await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
     const fuori = await js(`window.cutx.infoAbleton('/etc/passwd.als')`);
     controlla('un progetto fuori dalle cartelle scelte non si legge', !!fuori.errore, JSON.stringify(fuori));
+
+    // il pannello di importazione
+    const conta = (sel) => js(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+    const testo = (sel) => js(`document.querySelector(${JSON.stringify(sel)})?.textContent ?? ''`);
+    await js(`[...document.querySelectorAll('#elenco .voce.progetto')].find((e) => e.textContent.startsWith('tre')).click()`);
+    for (let i = 0; i < 40 && !(await conta('#importa-tracce .traccia')); i++) await aspetta(0.25);
+    controlla('un clic su un progetto apre il pannello', (await js(`!document.getElementById('importa').hidden`)) === true);
+    controlla('il pannello mostra nome, tempo e tracce', (await testo('#importa-nome')) === 'tre' && (await testo('#importa-dati')).includes('140 bpm') && (await conta('#importa-tracce .traccia')) === 4);
+    controlla('e il brano che ne esce: una sezione per traccia', (await conta('#importa-sezioni .sezione-riga')) === 4, String(await conta('#importa-sezioni .sezione-riga')));
+    controlla('un file che non c\'è è segnalato, con il consiglio di Ableton', (await js(`!document.getElementById('importa-mancanti').hidden`)) && (await testo('#importa-mancanti')).includes('Raccogli tutto'), await testo('#importa-mancanti'));
+    controlla('i limiti sono scritti nel pannello', (await testo('#importa-limiti')).includes('time-stretch'));
+
+    // sceglie: togliere una traccia, cambiare il synth, cambiare nome
+    await js(`document.querySelectorAll('#importa-tracce .traccia')[1].querySelector('.casella').click()`);
+    controlla('togliere una traccia toglie la sua sezione', (await conta('#importa-sezioni .sezione-riga')) === 3);
+    await js(`document.querySelectorAll('#importa-tracce .traccia')[1].querySelector('.casella').click()`);
+    await js(`(() => { const s = document.querySelectorAll('#importa-tracce .traccia')[0].querySelector('select.synth'); s.value = 'lead'; s.dispatchEvent(new Event('change')); })()`);
+    controlla('il synth si cambia dal menu', (await js('cutxProva.importa.risultato().testo')).includes('.s("square")'));
+    await js(`(() => { const i = document.querySelector('#importa-sezioni .nome-sezione'); i.value = 'intro'; i.dispatchEvent(new Event('change')); })()`);
+    const testoBrano = await js('cutxProva.importa.risultato().testo');
+    controlla('il nome di una sezione si cambia', testoBrano.includes('// @sezione intro') && testoBrano.includes('// @origine '), testoBrano.slice(0, 200));
+    await js(`(() => { const i = document.getElementById('importa-titolo'); i.value = 'tre notti'; i.dispatchEvent(new Event('change')); })()`);
+    controlla('il nome del brano si cambia', (await js('cutxProva.importa.risultato().testo')).startsWith('// @brano tre notti'));
+
+    // MIDI come audio: stem, e il promemoria "dalla battuta 1"
+    await js(`[...document.querySelectorAll('#importa-tracce .traccia')[1].querySelectorAll('.segmenti .key')].find((b) => b.textContent === 'audio').click()`);
+    controlla('una traccia MIDI in modalità audio chiede lo stem e ricorda la battuta 1', (await conta('#importa-tracce .stem-riga')) === 1 && (await testo('#importa-tracce .stem-nota')).includes('battuta 1'));
+    await js(`[...document.querySelectorAll('#importa-tracce .traccia')[1].querySelectorAll('.segmenti .key')].find((b) => b.textContent === 'codice').click()`);
+
+    // ▶ in cuffia: la sezione col tempo del progetto; mai nelle casse
+    const cuffiaStato = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+    await js(`document.querySelectorAll('#importa-tracce .traccia')[0].querySelector('.variante-riga button.key').click()`);
+    let c = null;
+    for (let i = 0; i < 20 && !c?.codice; i++) {
+      await aspetta(0.25);
+      c = await cuffiaStato();
+    }
+    controlla('▶ su una sezione di codice la manda in cuffia, al tempo del progetto', c?.codice?.startsWith('setcpm(140/4)') && c.codice.includes('note('), c?.codice);
+    controlla('e il tasto diventa ■', (await testo('#importa-tracce .traccia .variante-riga button.key.on')) === '■', JSON.stringify([await testo('#importa-tracce .traccia .variante-riga button.key.on'), await js('cutxProva.importa.ascoltando'), await js('[...document.querySelectorAll("#importa-tracce .variante-riga button")].map((b) => b.className + ":" + b.textContent)')]));
+    await js(`document.querySelectorAll('#importa-tracce .traccia')[2].querySelector('.variante-riga button.key').click()`);
+    await aspetta(1.2);
+    c = await cuffiaStato();
+    controlla('▶ su un audio lo manda in cuffia col suo file (nome provvisorio)', c?.codice?.includes('s("ant_') && !c.errore, JSON.stringify([c?.codice, c?.errore]));
+    controlla('l\'audio mancante non si può ascoltare', (await js(`document.querySelectorAll('#importa-tracce .traccia')[3].querySelector('.variante-riga button.key').disabled`)) === true);
+    controlla('le casse non sentono niente', !(((await chiedi(finestre.live, 'globalThis.cutxStato?.()')).livelli ?? []).length));
+    await js(`document.querySelector('#importa-tracce .traccia .variante-riga button.key.on').click()`);
+    await aspetta(0.5);
+    controlla('■ ferma la cuffia', !(await cuffiaStato()).codice);
+
+    // un file mancante si indica a mano: lo si simula passando dal dialogo, che qui non si può automatizzare
+    const mancanti = await conta('#importa-mancanti .mancante');
+    controlla('il file mancante è elencato con "cerca…"', mancanti === 1 && (await testo('#importa-mancanti .mancante button')) === 'cerca…', String(mancanti));
+    await js(`document.getElementById('importa-vai').click()`);
+    await aspetta(0.5);
+    controlla('importa ora avvisa (la scrittura arriva al passo 6)', (await js(`document.getElementById('cue-avviso').textContent`)).includes('passo 6'));
+    await js(`document.getElementById('importa').hidden ? 0 : document.getElementById('importa-chiudi').click()`);
+    controlla('chiudi chiude il pannello', (await js(`document.getElementById('importa').hidden`)) === true);
+
     await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [] })`);
+    await js(`cutxProva.browser.vai('ableton')`);
     await aspetta(0.8);
     controlla('senza cartelle la scheda lo dice e propone di aggiungerne una', (await js(`document.getElementById('elenco').textContent`)).includes('nessuna cartella'));
     await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [${JSON.stringify(radice)}] })`);
@@ -1022,7 +1119,7 @@ async function provaAbleton({ finestre, scrivi }) {
     await aspetta(0.6);
     controlla('"togli" toglie la cartella dalle preferenze', ((await js('window.cutx.preferenze()')).cartelleAbleton ?? []).length === 0);
   } finally {
-    await js(`window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} }); document.getElementById('impostazioni').hidden = true`);
+    await js(`window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} }); document.getElementById('impostazioni').hidden = true; document.getElementById('importa').hidden = true`);
     await rm(radice, { recursive: true, force: true });
   }
   return ok;

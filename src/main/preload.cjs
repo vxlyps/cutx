@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('cutx', {
   aggiungiCartellaAbleton: () => ipcRenderer.invoke('ableton:aggiungi-cartella'),
   infoAbleton: (percorso) => ipcRenderer.invoke('ableton:info', percorso),
   modelloAbleton: (percorso) => ipcRenderer.invoke('ableton:modello', percorso),
+  fileAbleton: (percorso, file) => ipcRenderer.invoke('ableton:file', percorso, file),
+  scegliFileAbleton: (titolo) => ipcRenderer.invoke('ableton:scegli-file', titolo),
   progettiAbleton: () => ipcRenderer.invoke('ableton:progetti'),
   crasha: (chi) => ipcRenderer.send('crasha', chi),
   uscitaOnOff: () => ipcRenderer.invoke('uscita:onoff'),

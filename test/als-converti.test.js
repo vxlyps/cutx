@@ -198,3 +198,14 @@ test('note fuori dalla griglia dei sedicesimi: avviso', () => {
   const m = modello({ tracce: [tracciaMidi({ nome: '1-Arp', clip: [clipMidi({ loop: [0, 4], note: [note(0, 1 / 3, 60), note(1 / 3, 1 / 3, 62)] })] })] });
   assert.match(converti(m, undefined, { titolo: 'x' }).avvisi.join(' '), /griglia/);
 });
+
+test('anteprima: l\'audio ha nomi provvisori (ant_…), i suoni veri restano quelli del brano', () => {
+  const m = modello({ tracce: [tracciaAudio({ nome: '1-Audio', clip: [clipAudio({ file: 'Samples/a.wav' })] })] });
+  const vero = costruisci(m, undefined, { titolo: 'x' });
+  assert.match(vero.sezioni[0].codice, /s\("x_01_a"\)/);
+  assert.equal(vero.provvisori.length, 0);
+  const ant = costruisci(m, undefined, { titolo: 'x', anteprima: true });
+  assert.match(ant.sezioni[0].codice, /s\("ant_[a-z0-9]+"\)/);
+  assert.equal(ant.suoni.length, 0);
+  assert.equal(ant.provvisori[0].relativo, 'Samples/a.wav');
+});

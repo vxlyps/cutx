@@ -155,6 +155,14 @@
     "scheda-ableton": {
       "nome": "ableton",
       "testo": "I progetti Ableton delle cartelle scelte nelle impostazioni. Un clic apre il pannello per importarne uno come brano."
+    },
+    "importa-casella": {
+      "nome": "includi",
+      "testo": "Se è spuntata, finisce nel brano."
+    },
+    "importa-synth": {
+      "nome": "synth",
+      "testo": "Il suono di CUTX che prende il posto dello strumento di Ableton. Proposto dal nome della traccia: puoi cambiarlo."
     }
   },
   "impostazioni": {
@@ -205,5 +213,11 @@
       "nome": "paracadute",
       "testo": "il pulsante CUTX, scelgo te! nel LIVE; spento = non c'è"
     }
+  },
+  "importa": {
+    "limiti": "Strumenti ed effetti di Ableton e dei plugin non si possono riprodurre: in modalità codice suona un synth di CUTX che ci somiglia, in modalità audio suona l'audio originale. Gli audio con un tempo molto diverso da quello del progetto cambiano altezza (Strudel non fa time-stretch). Automazioni e mix (volumi, filtri automatizzati) per ora non vengono importati.",
+    "stem": "In Ableton esporta lo stem dalla battuta 1 (File → Esporta audio/video), poi sceglilo qui. Se l'hai esportato da un altro punto, scrivi da quale battuta parte.",
+    "mancanti": "Alcuni file non stanno nella cartella del progetto (la libreria di Ableton, o file presi da altre cartelle come Download). La soluzione più semplice: in Ableton, File → Raccogli tutto e salva, che copia tutti i file usati dentro la cartella del progetto; poi riapri il progetto qui. Oppure indicali a mano.",
+    "cuffia": "Le anteprime suonano in cuffia al tempo del live."
   }
 }

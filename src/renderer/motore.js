@@ -416,6 +416,9 @@ async function ricevi(da, m) {
       if (m.muto !== undefined) l.muto = m.muto === 'inverti' ? !l.muto : !!m.muto; // inverti: lo stato vero è qui
       return aggiornaLivelli();
     }
+    case 'suoni-extra': // suoni solo da ascoltare (anteprima dei progetti Ableton): nome → [indirizzi]
+      await pronto;
+      return samples(m.mappa);
     case 'ferma':
       return ferma();
     case 'eco':

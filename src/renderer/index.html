@@ -122,6 +122,35 @@
       </section>
     </main>
 
+    <!-- L'importazione da Ableton: si sceglie cosa portare in CUTX e si vede il brano che ne esce. -->
+    <div id="importa" class="importa" hidden>
+      <header class="imp-testa">
+        <span class="lbl">importa da ableton</span>
+        <span id="importa-nome" class="importa-nome"></span>
+        <span id="importa-dati" class="lbl"></span>
+        <div class="spazio"></div>
+        <button id="importa-chiudi" class="key">chiudi <i>esc</i></button>
+      </header>
+      <div class="importa-corpo">
+        <section class="importa-colonna importa-sinistra">
+          <p id="importa-limiti" class="secondario importa-limiti"></p>
+          <div id="importa-tracce"></div>
+        </section>
+        <section class="importa-colonna importa-destra">
+          <div class="importa-titolo-riga"><h2 class="lbl">brano che esce</h2><span id="importa-conteggio" class="lbl"></span></div>
+          <div id="importa-sezioni"></div>
+          <div id="importa-mancanti" class="importa-mancanti" hidden></div>
+        </section>
+      </div>
+      <footer class="importa-piede">
+        <label class="importa-nome-brano"><span class="lbl">nome del brano</span><input id="importa-titolo" type="text" spellcheck="false" /></label>
+        <span id="importa-riepilogo" class="lbl"></span>
+        <div class="spazio"></div>
+        <button id="importa-annulla" class="key">annulla</button>
+        <button id="importa-vai" class="key acid grande">importa</button>
+      </footer>
+    </div>
+
     <!-- Le impostazioni: come design/riferimenti/impostazioni.html. Le righe di scorciatoie, proiezione e help si disegnano da impostazioni.js. -->
     <div id="impostazioni" class="impostazioni" hidden>
       <header class="imp-testa">

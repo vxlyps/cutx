@@ -215,17 +215,21 @@ export function sceltePredefinite(modello) {
 
 // opzioni: { titolo }. Ritorna { sezioni: [{ id, traccia, nome, etichetta, codice, incluso, inizio, scena, usi, battute,
 // suoni, avvisi }], suoni }. Le sezioni non incluse ci sono lo stesso (servono per ascoltarle in cuffia prima di sceglierle):
-// il loro audio ha un nome provvisorio `ant_…` e non finisce in `suoni`.
-export function costruisci(modello, scelte = sceltePredefinite(modello), { titolo = 'brano' } = {}) {
+// il loro audio ha un nome provvisorio `ant_…` e finisce in `provvisori`, non in `suoni`. Con `anteprima: true` lo hanno tutte.
+export function costruisci(modello, scelte = sceltePredefinite(modello), { titolo = 'brano', anteprima = false } = {}) {
   const bpm = modello.bpm;
   const prima = slug(pulisci(titolo).split(' ')[0]) || 'brano';
   const suoni = new Map(); // chiave del file → { nome, relativo, assoluto, durata }
+  const provvisori = new Map(); // i suoni solo da ascoltare
   const chiaveFile = (file) => file.relativo || file.assoluto;
   const nomeBreve = (file) => chiaveFile(file).split('/').pop().replace(/\.[^.]+$/, '').slice(0, 14);
   // i suoni veri si numerano nell'ordine in cui compaiono; quelli solo da ascoltare hanno un nome provvisorio
   const nomeSuono = (file, incluso) => {
     const chiave = chiaveFile(file);
-    if (!incluso) return { nome: `ant_${hash(chiave)}`, relativo: file.relativo, assoluto: file.assoluto, durata: file.durata ?? 0, provvisorio: true };
+    if (!incluso || anteprima) {
+      if (!provvisori.has(chiave)) provvisori.set(chiave, { nome: `ant_${hash(chiave)}`, relativo: file.relativo, assoluto: file.assoluto, durata: file.durata ?? 0 });
+      return provvisori.get(chiave);
+    }
     if (!suoni.has(chiave)) {
       suoni.set(chiave, { nome: slug(`${prima} ${String(suoni.size + 1).padStart(2, '0')} ${nomeBreve(file)}`).slice(0, 32), relativo: file.relativo, assoluto: file.assoluto, durata: file.durata ?? 0 });
     }
@@ -245,13 +249,15 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
       const ordine = inclusa(v) ? incluse.indexOf(v) : i;
       const quante = inclusa(v) ? incluse.length : vs.length;
       const auto = quante <= 1 ? base : `${base} ${LETTERE[ordine] ?? ordine + 1}`;
-      lavoro.push({ t, v, sc, incluso: inclusa(v), auto, base });
+      // la sigla non cambia se si spunta o no: sempre la lettera tra tutte le varianti della traccia
+      const sigla = vs.length <= 1 ? base : `${base} ${LETTERE[i] ?? i + 1}`;
+      lavoro.push({ t, v, sc, incluso: inclusa(v), auto, base, sigla });
     });
   }
 
   // 2. il codice di ogni sezione
   const tutte = [];
-  for (const { t, v, sc, incluso, auto } of lavoro) {
+  for (const { t, v, sc, incluso, auto, sigla } of lavoro) {
     const modalita = sc.modalita ?? (t.tipo === 'audio' ? 'audio' : 'codice');
     const synth = SYNTH[sc.synth] ? sc.synth : synthProposto(t);
     const padNota = new Map(t.pad.map((p) => [p.nota, p.nome]));
@@ -318,6 +324,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
       traccia: t.ordine,
       nome,
       etichetta: auto,
+      sigla,
       codice,
       incluso,
       tipo: v.tipo,
@@ -335,7 +342,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
     const [x, y] = [chiave(a), chiave(b)];
     return x[0] - y[0] || x[1] - y[1] || a.traccia - b.traccia;
   });
-  return { sezioni: tutte, suoni: [...suoni.values()] };
+  return { sezioni: tutte, suoni: [...suoni.values()], provvisori: [...provvisori.values()] };
 }
 
 // Il brano finito: testa, preambolo col tempo, una sezione per ogni variante scelta.

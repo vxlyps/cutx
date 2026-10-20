@@ -5,6 +5,7 @@ import { Cue } from './cue.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
+import { Importa } from './importa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
@@ -252,7 +253,8 @@ const FA = {
   passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
   help: helpOnOff,
   esci: () => {
-    if (!$('impostazioni').hidden) impostazioni(false);
+    if (importa.aperto) importa.chiudi();
+    else if (!$('impostazioni').hidden) impostazioni(false);
     else if (!pila.annulla()) document.activeElement?.blur();
   },
   impostazioni: () => impostazioni(),
@@ -334,6 +336,28 @@ const aiuto = new Aiuto({
   combo: (azione) => effettive(preferenze.scorciatoie)[azione],
 });
 
+// --- importazione da Ableton ---
+
+const importa = new Importa({
+  // ▶: la cuffia, mai le casse
+  provaInCuffia: (codice, chiave) => {
+    if (inTest) return;
+    dovaCuffia = null;
+    return manda(cuffia, codice, { nome: chiave, provenienza: 'ableton' });
+  },
+  ferma: () => {
+    pezzoCuffia = null;
+    cuffia.manda({ tipo: 'ferma' });
+  },
+  inAscolto: (chiave) => cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'ableton' && pezzoCuffia.etichetta.nome === chiave,
+  registraSuoni: (mappa) => cuffia.manda({ tipo: 'suoni-extra', mappa }),
+  avviso: (testo) => cue.avviso(testo),
+  importa: async (risultato) => {
+    cue.avviso(`importazione: arriva al passo 6 (${risultato.sezioni} sezioni pronte)`);
+    return false;
+  },
+});
+
 // --- browser: suoni, libreria, help ---
 
 browser = new Browser(
@@ -360,7 +384,7 @@ browser = new Browser(
     progettiAbleton: () => window.cutx.progettiAbleton(),
     infoProgetto: (percorso) => window.cutx.infoAbleton(percorso),
     aggiungiCartellaAbleton: () => window.cutx.aggiungiCartellaAbleton(),
-    apriProgetto: (progetto) => cue.avviso(`${progetto.nome}: il pannello di importazione arriva al passo 5`),
+    apriProgetto: (progetto) => importa.apri(progetto),
   },
 );
 function scegliScheda(nome) {
@@ -534,6 +558,7 @@ function mostraCue() {
 function mostra() {
   riprendi();
   browser.aggiornaAscolto();
+  importa.aggiornaAscolto();
   mostraLive();
   disegnaTempo();
   mostraCue();
@@ -665,6 +690,7 @@ globalThis.cutxProva = {
   lanciaParacadute,
   pila,
   imp,
+  importa,
   scriviCue: (codice) => (cue.libero.codice = codice),
   cue,
   posaGatto: (nome) => posaGatto(nome),
