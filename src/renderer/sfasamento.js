@@ -105,7 +105,7 @@ export class Misuratore {
       },
     });
     this.sorgente = this.ac.createMediaStreamSource(this.flusso);
-    this.rivelatore = new AudioWorkletNode(this.ac, 'daneel-rivelatore');
+    this.rivelatore = new AudioWorkletNode(this.ac, 'cutx-rivelatore');
     this.muto = new GainNode(this.ac, { gain: 0 }); // il nodo deve arrivare all'uscita per lavorare
     this.sorgente.connect(this.rivelatore).connect(this.muto).connect(this.ac.destination);
     this.rivelatore.port.onmessage = ({ data }) => this.arrivo(data);
@@ -159,6 +159,6 @@ export class Misuratore {
       extra,
     ].join(' | ');
     console.log('[sfasamento]', riga);
-    window.daneel.log(this.fileLog, riga);
+    window.cutx.log(this.fileLog, riga);
   }
 }

@@ -1,7 +1,7 @@
-// La valigetta: cartella del set (di solito su SSD esterno). DANEEL ricorda l'ultima usata.
+// Lo stash: cartella del set (di solito su SSD esterno). CUTX ricorda l'ultimo usato.
 import { app } from 'electron';
 import path from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 
 export const FORMATO = 1;
@@ -11,13 +11,14 @@ const AUDIO = new Set(['wav', 'mp3', 'ogg', 'flac']);
 let percorso = null;
 
 const fileImpostazioni = () => path.join(app.getPath('userData'), 'impostazioni.json');
-const fileConfig = () => path.join(percorso, 'daneel.json');
+const fileConfig = () => path.join(percorso, 'stash.json');
 
 export const radice = () => (percorso && existsSync(percorso) ? percorso : null);
 
 export function carica() {
   try {
-    percorso = JSON.parse(readFileSync(fileImpostazioni(), 'utf8')).valigetta ?? null;
+    const impostazioni = JSON.parse(readFileSync(fileImpostazioni(), 'utf8'));
+    percorso = impostazioni.stash ?? impostazioni.valigetta ?? null;
   } catch {
     percorso = null;
   }
@@ -26,11 +27,13 @@ export function carica() {
 export async function imposta(nuovo) {
   percorso = nuovo;
   await prepara();
-  await writeFile(fileImpostazioni(), JSON.stringify({ valigetta: nuovo }, null, 2));
+  await writeFile(fileImpostazioni(), JSON.stringify({ stash: nuovo }, null, 2));
 }
 
-// Una cartella qualsiasi diventa una valigetta: crea quello che manca, non tocca il resto.
+// Una cartella qualsiasi diventa uno stash: crea quello che manca, non tocca il resto.
 async function prepara() {
+  const vecchio = path.join(percorso, 'daneel.json'); // stash di quando si chiamava DANEEL
+  if (existsSync(vecchio) && !existsSync(fileConfig())) renameSync(vecchio, fileConfig());
   for (const c of CARTELLE) await mkdir(path.join(percorso, c), { recursive: true });
   if (!existsSync(fileConfig())) {
     await scriviConfig({ nome: path.basename(percorso), formato: FORMATO, uscite: {}, offsetCuffiaMs: 0 });
@@ -65,7 +68,7 @@ export async function stato() {
 // I file sciolti in suoni/ diventano un suono col nome del file.
 async function mappaSuoni() {
   const base = path.join(percorso, 'suoni');
-  const mappa = { _base: 'daneel://app/valigetta/suoni/' };
+  const mappa = { _base: 'cutx://app/stash/suoni/' };
   let voci;
   try {
     voci = await readdir(base, { recursive: true, withFileTypes: true });

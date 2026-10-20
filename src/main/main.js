@@ -1,27 +1,43 @@
-// Processo principale: finestre, protocollo daneel://, permessi, motore cuffia.
+// Processo principale: finestre, protocollo cutx://, permessi, motore cuffia.
 import { app, BrowserWindow, protocol, net, ipcMain, dialog, session, MessageChannelMain } from 'electron';
 import path from 'node:path';
+import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import * as valigetta from './valigetta.js';
+import * as stash from './stash.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(QUI, '../../dist');
 const PRELOAD = path.join(QUI, 'preload.cjs');
-const ORIGINE = 'daneel://app';
+const ORIGINE = 'cutx://app';
 const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
-const ICONA = path.resolve(QUI, '../../risorse/icona.png');
+const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 
-// Una sola DANEEL alla volta: due motori live sulla stessa scheda sarebbero un disastro.
+// Una sola CUTX alla volta: due motori live sulla stessa scheda sarebbero un disastro.
 if (!app.requestSingleInstanceLock()) app.exit(0);
+
+// CUTX si chiamava DANEEL: al primo avvio impostazioni e log passano alla cartella nuova.
+function migraDaDaneel() {
+  const sposta = (da, a) => {
+    if (!existsSync(da) || existsSync(a)) return;
+    mkdirSync(path.dirname(a), { recursive: true });
+    renameSync(da, a);
+  };
+  const vecchiDati = path.join(app.getPath('appData'), 'daneel');
+  for (const nome of ['impostazioni.json', 'log']) sposta(path.join(vecchiDati, nome), path.join(app.getPath('userData'), nome));
+  const vecchiLog = path.join(path.dirname(app.getPath('logs')), 'DANEEL', 'avvio.log');
+  sposta(vecchiLog, path.join(app.getPath('logs'), 'avvio-daneel.log'));
+}
+migraDaDaneel();
+
 app.on('second-instance', () => {
   if (controllo?.isMinimized()) controllo.restore();
   controllo?.focus();
 });
 
-// daneel:// deve essere un contesto sicuro: setSinkId, Web MIDI e getUserMedia funzionano solo lì.
+// cutx:// deve essere un contesto sicuro: setSinkId, Web MIDI e getUserMedia funzionano solo lì.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'daneel', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  { scheme: 'cutx', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
 
 // Risolve rel dentro radice; null se prova a uscirne.
@@ -33,9 +49,9 @@ function dentro(radice, rel) {
 function serviFile(req) {
   const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '');
   let file;
-  if (rel.startsWith('valigetta/')) {
-    const radice = valigetta.radice();
-    file = radice && dentro(radice, rel.slice('valigetta/'.length));
+  if (rel.startsWith('stash/')) {
+    const radice = stash.radice();
+    file = radice && dentro(radice, rel.slice('stash/'.length));
   } else {
     file = dentro(DIST, rel || 'index.html');
   }
@@ -76,7 +92,7 @@ function creaControllo() {
     width: 1280,
     height: 800,
     backgroundColor: '#000000',
-    title: 'DANEEL',
+    title: 'CUTX',
     webPreferences,
   });
   inoltraConsole(controllo.webContents, 'controllo');
@@ -121,17 +137,17 @@ function riavviaCuffia() {
   setTimeout(creaCuffia, 300);
 }
 
-ipcMain.handle('valigetta:stato', () => valigetta.stato());
-ipcMain.handle('valigetta:scegli', async () => {
+ipcMain.handle('stash:stato', () => stash.stato());
+ipcMain.handle('stash:scegli', async () => {
   const r = await dialog.showOpenDialog(controllo, {
-    title: 'Scegli la valigetta',
+    title: 'Scegli lo stash',
     properties: ['openDirectory', 'createDirectory'],
   });
-  if (r.canceled || !r.filePaths[0]) return valigetta.stato();
-  await valigetta.imposta(r.filePaths[0]);
-  return valigetta.stato();
+  if (r.canceled || !r.filePaths[0]) return stash.stato();
+  await stash.imposta(r.filePaths[0]);
+  return stash.stato();
 });
-ipcMain.handle('valigetta:salva', (_e, config) => valigetta.salvaConfig(config));
+ipcMain.handle('stash:salva', (_e, config) => stash.salvaConfig(config));
 ipcMain.on('cuffia:crasha', () => cuffia?.webContents.forcefullyCrashRenderer());
 
 const CARTELLA_LOG = () => path.join(app.getPath('userData'), 'log');
@@ -144,8 +160,8 @@ ipcMain.on('log', async (_e, nome, riga) => {
 
 app.whenReady().then(async () => {
   app.dock?.setIcon(ICONA);
-  valigetta.carica();
-  protocol.handle('daneel', serviFile);
+  stash.carica();
+  protocol.handle('cutx', serviFile);
   const nostro = (url) => url?.startsWith(ORIGINE);
   session.defaultSession.setPermissionRequestHandler((wc, permesso, cb) =>
     cb(PERMESSI.has(permesso) && nostro(wc.getURL())),

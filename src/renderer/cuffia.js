@@ -24,7 +24,7 @@ export class Cuffia {
     window.addEventListener('message', (e) => {
       if (e.data === 'porta-cuffia' && e.ports[0]) this.collega(e.ports[0]);
     });
-    window.daneel.suCuffiaRiavvio(() => {
+    window.cutx.suCuffiaRiavvio(() => {
       this.porta = null;
       this.controlla();
     });

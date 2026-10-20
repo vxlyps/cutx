@@ -23,4 +23,4 @@ class Rivelatore extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('daneel-rivelatore', Rivelatore);
+registerProcessor('cutx-rivelatore', Rivelatore);

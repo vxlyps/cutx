@@ -1,5 +1,6 @@
 {
-  "name": "daneel",
+  "name": "cutx",
+  "productName": "CUTX",
   "version": "0.0.1",
   "description": "Live coding musicale come un CDJ, basato su Strudel",
   "license": "AGPL-3.0-or-later",

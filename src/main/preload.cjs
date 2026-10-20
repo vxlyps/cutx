@@ -1,10 +1,10 @@
 // L'unica porta tra le finestre e il disco. Niente Node nelle pagine.
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('daneel', {
-  valigetta: () => ipcRenderer.invoke('valigetta:stato'),
-  scegliValigetta: () => ipcRenderer.invoke('valigetta:scegli'),
-  salvaConfig: (config) => ipcRenderer.invoke('valigetta:salva', config),
+contextBridge.exposeInMainWorld('cutx', {
+  stash: () => ipcRenderer.invoke('stash:stato'),
+  scegliStash: () => ipcRenderer.invoke('stash:scegli'),
+  salvaConfig: (config) => ipcRenderer.invoke('stash:salva', config),
   crashaCuffia: () => ipcRenderer.send('cuffia:crasha'),
   suCuffiaRiavvio: (fn) => ipcRenderer.on('cuffia-riavvio', () => fn()),
   log: (nome, riga) => ipcRenderer.send('log', nome, riga),

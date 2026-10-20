@@ -1,4 +1,4 @@
-// Finestra di controllo, fase 0: editor, valigetta, uscite, test di sfasamento.
+// Finestra di controllo, fase 0: editor, stash, uscite, test di sfasamento.
 // Qui vivono l'orologio e il motore live: sono il riferimento del tempo.
 import { getAudioContext, samples, webaudioOutput } from '@strudel/webaudio';
 import { creaEditor } from './editor.js';
@@ -9,14 +9,14 @@ import { Misuratore } from './sfasamento.js';
 
 const $ = (id) => document.getElementById(id);
 
-const CODICE_INIZIALE = `// DANEEL · fase 0
+const CODICE_INIZIALE = `// CUTX
 // Ctrl+Invio suona, Ctrl+. ferma.
-// I suoni della valigetta: s("nome_cartella")
+// I suoni dello stash: s("nome_cartella")
 setcpm(120/4)
 note("c2 [eb2 g2] c3 <bb1 f2>").s("sawtooth").lpf(800).decay(.2).sustain(0)
 `;
 
-const CODICE_TEST = `// DANEEL · test sfasamento: un click per quarto a 120 BPM,
+const CODICE_TEST = `// CUTX · test sfasamento: un click per quarto a 120 BPM,
 // uguale su live e cuffia.
 setcpm(120/4)
 s("sine*4").freq(1000).attack(0).decay(.02).sustain(0).gain(.8)
@@ -31,7 +31,7 @@ let destinazione = { live: true, cuffia: false };
 let inTest = false;
 let codicePrimaDelTest = CODICE_INIZIALE;
 let config = { uscite: {}, offsetCuffiaMs: 0 };
-let haValigetta = false;
+let haStash = false;
 
 // Ogni evento dell'orologio passa da qui e va al live, alla cuffia o a entrambi.
 function uscita(hap, deadline, durata, cps, t) {
@@ -62,22 +62,22 @@ function scegliDestinazione(dest) {
   aggiornaSpie();
 }
 
-// --- valigetta ---
+// --- stash ---
 
 async function salva(modifiche) {
   Object.assign(config, modifiche);
-  if (haValigetta) await window.daneel.salvaConfig(modifiche);
+  if (haStash) await window.cutx.salvaConfig(modifiche);
 }
 
-async function apriValigetta(stato) {
-  haValigetta = !!stato.config;
+async function apriStash(stato) {
+  haStash = !!stato.config;
   if (!stato.percorso) {
-    $('valigetta-nome').textContent = 'nessuna valigetta';
+    $('stash-nome').textContent = 'nessuno stash';
   } else if (stato.mancante) {
-    $('valigetta-nome').textContent = `valigetta non trovata: ${stato.percorso} (attacca il disco o scegline un'altra)`;
+    $('stash-nome').textContent = `stash non trovato: ${stato.percorso} (attacca il disco o scegline un altro)`;
   } else {
     config = { uscite: {}, offsetCuffiaMs: 0, ...stato.config };
-    $('valigetta-nome').textContent = `${config.nome} · ${stato.percorso}`;
+    $('stash-nome').textContent = `${config.nome} · ${stato.percorso}`;
     const nomi = Object.keys(stato.suoni).filter((k) => k !== '_base');
     $('suoni').textContent = nomi.length
       ? nomi.map((n) => `${n} (${stato.suoni[n].length})`).join(' · ')
@@ -178,7 +178,7 @@ function mostraMisure() {
 
 // --- collegamenti ---
 
-$('valigetta-scegli').onclick = async () => apriValigetta(await window.daneel.scegliValigetta());
+$('stash-scegli').onclick = async () => apriStash(await window.cutx.scegliStash());
 $('dest-live').onclick = () => scegliDestinazione('live');
 $('dest-cuffia').onclick = () => scegliDestinazione('cuffia');
 $('uscita-live').onchange = (e) => cambiaUscita('live', e.target.value);
@@ -203,7 +203,7 @@ $('anello-attiva').onclick = async () => {
 };
 $('anello-riferimento').onclick = () => misuratore.salvaRiferimento();
 $('cuffia-blocca').onclick = () => cuffia.blocca(5000);
-$('cuffia-crasha').onclick = () => window.daneel.crashaCuffia();
+$('cuffia-crasha').onclick = () => window.cutx.crashaCuffia();
 cuffia.suEco = ({ id, epoca }) => misuratore.eco(id, 'cuffia', epoca);
 cuffia.suStato = (viva) => {
   $('stato-cuffia').classList.toggle('accesa', viva);
@@ -212,5 +212,5 @@ cuffia.suStato = (viva) => {
 navigator.mediaDevices.addEventListener('devicechange', applicaUscite);
 
 setInterval(mostraMisure, 250);
-$('percorso-log').textContent = `log: ${await window.daneel.percorsoLog()}`;
-await apriValigetta(await window.daneel.valigetta());
+$('percorso-log').textContent = `log: ${await window.cutx.percorsoLog()}`;
+await apriStash(await window.cutx.stash());
