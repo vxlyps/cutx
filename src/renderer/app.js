@@ -1,7 +1,8 @@
 // La postazione: browser a sinistra, CUE al centro (cuffia), LIVE a destra (casse).
 // Qui non suona niente: il codice va ai motori live e cuffia, ognuno nel suo processo.
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
-import { creaEditor } from './editor.js';
+import { Cue } from './cue.js';
+import { dialogoAperto } from './dialogo.js';
 import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
 import { Misuratore } from './sfasamento.js';
@@ -31,7 +32,8 @@ const cuffia = new Motore('cuffia');
 const misuratore = new Misuratore();
 
 let inTest = false;
-let codiceCuffia = ''; // per ridarlo alla cuffia se rinasce
+let erroreInVista = false;
+let pezzoCuffia = null; // { codice, etichetta }: per ridarlo alla cuffia se rinasce
 let cuffiaUdibile = true;
 let mappa = null; // la mappa del tempo del live, in tempo assoluto
 let config = { uscite: {}, offsetCuffiaMs: 0 };
@@ -40,24 +42,39 @@ let haStash = false;
 let preferenze = { lunghezzaFrase: 16 };
 let ripreso = false; // ho già preso lo stato dai motori? (dopo un crash dell'interfaccia stanno ancora suonando)
 
-const editor = creaEditor({ root: $('editor'), codice: CODICE_INIZIALE, suValuta: provaInCuffia, suFerma: fermaTutto });
+let libreria = [];
+const cue = new Cue(CODICE_INIZIALE, {
+  provaInCuffia: () => provaInCuffia(),
+  goLive: () => goLive(),
+  fermaTutto: () => fermaTutto(),
+  suoniStash: () => suoni,
+  haStash: () => haStash,
+  bpm: () => (mappa ? Math.round(mappa.cps * 240 * 10) / 10 : null),
+  libreriaCambiata: () => aggiornaLibreria(),
+  mostraLibreria: () => scegliScheda('libreria'),
+});
 
 // --- i gesti ---
 
-async function manda(motore, codice) {
-  if (motore === cuffia) codiceCuffia = codice;
-  const errore = await motore.valuta(codice);
-  $('errore-codice').textContent = errore ? `${motore.ruolo}: ${errore}` : '';
+// Gli errori si vedono solo qui, nel CUE: mai sull'uscita.
+async function manda(motore, codice, etichetta = {}) {
+  if (motore === cuffia) pezzoCuffia = { codice, etichetta };
+  const errore = await motore.valuta(codice, etichetta);
+  if (errore) cue.avviso(`${motore.ruolo}: ${errore}`, { persistente: true });
+  else if (erroreInVista) cue.avviso('');
+  erroreInVista = !!errore;
   return errore;
 }
 
-function provaInCuffia() {
-  if (!inTest) manda(cuffia, editor.codice);
+function mandaPezzo(motore) {
+  if (inTest) return;
+  const p = cue.pezzo();
+  if (p.errore) return cue.avviso(p.errore);
+  return manda(motore, p.codice, { nome: p.nome, provenienza: p.provenienza });
 }
 
-function goLive() {
-  if (!inTest) manda(live, editor.codice);
-}
+const provaInCuffia = () => mandaPezzo(cuffia);
+const goLive = () => mandaPezzo(live);
 
 function fermaLive() {
   if (!inTest) live.manda({ tipo: 'ferma' });
@@ -65,7 +82,7 @@ function fermaLive() {
 
 function fermaTutto() {
   if (inTest) return fermaTest();
-  codiceCuffia = '';
+  pezzoCuffia = null;
   live.manda({ tipo: 'ferma' });
   cuffia.manda({ tipo: 'ferma' });
 }
@@ -89,11 +106,14 @@ const SCORCIATOIE = [
   { tasto: 'k', fa: () => cuffiaOnOff() },
   { tasto: ',', fa: () => impostazioni() },
   { tasto: '0', fa: fraseDaCapo },
+  { tasto: 's', shift: false, fa: () => cue.salva() },
+  { tasto: 'e', fa: () => cue.aggiungiSezione() },
 ];
 
 window.addEventListener(
   'keydown',
   (e) => {
+    if (dialogoAperto()) return; // i dialoghi gestiscono i tasti da soli
     if (e.key === 'Escape') {
       if (!$('impostazioni').hidden) impostazioni(false);
       else document.activeElement?.blur();
@@ -139,7 +159,7 @@ async function apriStash(stato) {
     ? nomi.map((n) => `${n} (${suoni[n].length})`).join(' · ')
     : 'nessun suono: metti dei WAV in suoni/<nome>/';
   $('offset-cuffia').value = config.offsetCuffiaMs ?? 0;
-  mostraBrowser();
+  await aggiornaLibreria();
   await aggiornaElenchi();
 }
 
@@ -170,10 +190,11 @@ function mostraBrowser() {
   const elenco = $('elenco');
   elenco.replaceChildren();
   $('cerca').closest('.cerca').hidden = scheda !== 'suoni';
+  if (scheda === 'libreria') return mostraLibreria(elenco);
   if (scheda !== 'suoni') {
     const p = document.createElement('p');
     p.className = 'secondario';
-    p.textContent = scheda === 'libreria' ? 'brani e pezzi dello stash: arriva al passo 7' : 'la guida di Strudel: arriva al passo 7';
+    p.textContent = 'la guida di Strudel: arriva al passo 7';
     return elenco.append(p);
   }
   const filtro = $('cerca').value.trim().toLowerCase();
@@ -187,6 +208,33 @@ function mostraBrowser() {
     elenco.append(gruppo('synth'));
     for (const n of synth) elenco.append(voce(n, ''));
   }
+}
+
+// La libreria: i brani dello stash. Un clic apre il brano nel CUE. (Il browser vero arriva al passo 7.)
+function mostraLibreria(elenco) {
+  elenco.append(gruppo('brani'));
+  if (!libreria.length) {
+    elenco.append(voce(haStash ? 'nessun brano: ⌘S salva il CUE' : 'nessuno stash', ''));
+    return;
+  }
+  for (const b of libreria) {
+    const riga = voce(b.nome, b.bpm ? `${b.bpm}` : '');
+    riga.classList.add('cliccabile');
+    riga.title = `${b.file} · ${b.sezioni} sezioni${b.data ? ` · ${b.data}` : ''}`;
+    riga.onclick = () => cue.apri(b.file);
+    elenco.append(riga);
+  }
+}
+
+async function aggiornaLibreria() {
+  libreria = await window.cutx.libreria();
+  mostraBrowser();
+}
+
+function scegliScheda(nome) {
+  scheda = nome;
+  for (const x of document.querySelectorAll('[data-scheda]')) x.classList.toggle('on', x.dataset.scheda === nome);
+  mostraBrowser();
 }
 
 // --- uscite (provvisorie, nelle impostazioni) ---
@@ -233,21 +281,20 @@ function fermaTest() {
     m.manda({ tipo: 'eco', attivo: false });
     m.manda({ tipo: 'ferma' });
   }
-  codiceCuffia = '';
+  pezzoCuffia = null;
 }
 
 // All'avvio chiedo ai motori cosa suonano: dopo un crash dell'interfaccia non si sono fermati.
 function riprendi() {
   if (ripreso || !live.viva || !cuffia.viva) return;
   ripreso = true;
-  codiceCuffia = cuffia.stato.codice ?? '';
-  cuffiaUdibile = cuffia.stato.udibile ?? true;
+  const c = cuffia.stato;
+  pezzoCuffia = c.codice ? { codice: c.codice, etichetta: { nome: c.nome, provenienza: c.provenienza } } : null;
+  cuffiaUdibile = c.udibile ?? true;
   if (live.stato.eco) {
     inTest = true;
     misuratore.avvia();
     misuratore.scriviLog('interfaccia ripartita, test in corso');
-  } else if (codiceCuffia) {
-    editor.codice = codiceCuffia;
   }
 }
 
@@ -299,8 +346,9 @@ function mostraLive() {
   const suona = !!codice;
   document.body.classList.toggle('live-suona', suona);
   $('conteggio').textContent = live.viva ? `${suona ? 1 : 0} live` : 'live fermo';
-  if (codice === livelloMostrato) return;
-  livelloMostrato = codice;
+  const chiave = `${codice}\u0000${live.stato.nome}\u0000${live.stato.provenienza}`;
+  if (chiave === livelloMostrato) return;
+  livelloMostrato = chiave;
   const livelli = $('livelli');
   livelli.replaceChildren();
   if (!suona) {
@@ -312,23 +360,23 @@ function mostraLive() {
   const card = document.createElement('article');
   card.className = 'card livello';
   card.innerHTML =
-    '<div class="card-testa"><span class="nome">● libero</span><span class="lbl">cue</span><div class="spazio"></div>' +
+    '<div class="card-testa"><span class="nome"></span><span class="lbl provenienza"></span><div class="spazio"></div>' +
     '<button class="key piccolo" aria-label="Togli" title="Togli · ⇧⌘⌫">×</button></div><pre class="codice"></pre>';
   card.querySelector('pre').textContent = codice.replace(/\s+$/, '');
+  card.querySelector('.nome').textContent = `● ${live.stato.nome ?? 'libero'}`;
+  card.querySelector('.provenienza').textContent = live.stato.provenienza ?? '';
   card.querySelector('button').onclick = fermaLive;
   livelli.append(card);
 }
 
 function mostraCue() {
-  const inCuffia = cuffia.viva && !!cuffia.stato.codice && !inTest;
-  $('card-libero').classList.toggle('in-cuffia', inCuffia);
-  $('manda-cuffia').classList.toggle('on', inCuffia);
-  const stato = $('libero-stato');
-  stato.textContent = inTest ? 'test sfasamento in corso' : inCuffia ? '◖◗ lo stai sentendo' : 'pronta';
-  stato.style.color = inCuffia ? 'var(--testo)' : '';
+  const etichetta = (m) => (m.viva && m.stato.codice && m.stato.nome ? { nome: m.stato.nome, provenienza: m.stato.provenienza ?? '' } : null);
+  const l = etichetta(live);
+  cue.aggiornaStati({ live: l ? [l] : [], cuffia: inTest ? null : etichetta(cuffia) });
   const b = $('cuffia-onoff');
   b.classList.toggle('on', cuffia.viva && cuffiaUdibile);
   b.querySelector('i').textContent = !cuffia.viva ? '–' : cuffiaUdibile ? 'on' : 'off';
+  $('manda-cuffia').classList.toggle('on', $('card-libero').classList.contains('in-cuffia'));
 }
 
 function mostra() {
@@ -399,7 +447,7 @@ cuffia.suCollegato = () => {
   if (!ripreso) return;
   if (inTest) cuffia.manda({ tipo: 'eco', attivo: true });
   if (!cuffiaUdibile) cuffia.manda({ tipo: 'udibile', on: false });
-  if (codiceCuffia) manda(cuffia, codiceCuffia);
+  if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
 };
 
 $('wordmark').src = wordmark;
@@ -416,13 +464,7 @@ $('go-live').onclick = goLive;
 $('cerca').oninput = mostraBrowser;
 $('frase').onclick = fraseDaCapo;
 $('lunghezza-frase').onchange = (e) => window.cutx.salvaPreferenze({ lunghezzaFrase: Number(e.target.value) });
-for (const b of document.querySelectorAll('[data-scheda]')) {
-  b.onclick = () => {
-    scheda = b.dataset.scheda;
-    for (const x of document.querySelectorAll('[data-scheda]')) x.classList.toggle('on', x === b);
-    mostraBrowser();
-  };
-}
+for (const b of document.querySelectorAll('[data-scheda]')) b.onclick = () => scegliScheda(b.dataset.scheda);
 
 $('uscita-live').onchange = (e) => salva({ uscite: { ...config.uscite, live: e.target.value } });
 $('uscita-cuffia').onchange = (e) => salva({ uscite: { ...config.uscite, cuffia: e.target.value } });
@@ -442,10 +484,18 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 globalThis.cutxProva = {
   avviaTest,
   bloccaInterfaccia,
-  valuta: (ruolo, codice) => manda(ruolo === 'live' ? live : cuffia, codice),
-  scriviCue: (codice) => (editor.codice = codice),
+  valuta: (ruolo, codice, etichetta) => manda(ruolo === 'live' ? live : cuffia, codice, etichetta),
+  scriviCue: (codice) => (cue.libero.codice = codice),
+  cue,
   posaGatto: (nome) => posaGatto(nome),
   accendiInsegna: () => accendiInsegna(),
+  libreria: () => libreria,
+  // seleziona le righe da..a (contate da 0) nell'editor libero
+  selezionaRighe: (da, a) => {
+    const v = cue.libero.vista;
+    v.dispatch({ selection: { anchor: v.state.doc.line(da + 1).from, head: v.state.doc.line(a + 1).to } });
+    v.focus();
+  },
   misure: () => ({ stima: misuratore.stima.riepilogo(), live: live.stato, cuffia: cuffia.stato }),
 };
 

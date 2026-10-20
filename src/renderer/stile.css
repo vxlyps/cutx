@@ -501,7 +501,7 @@ body {
   color: var(--marcio);
 }
 
-.cue .card {
+#card-libero {
   flex: 1;
   min-height: 0;
 }
@@ -697,4 +697,255 @@ td:first-child {
 
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* --- CUE: avvisi, mappa del brano, card delle sezioni --- */
+
+.avviso {
+  margin: 0;
+  padding: 8px 16px 0;
+  font-size: 12px;
+  color: var(--secondario);
+}
+
+.avviso:empty {
+  display: none;
+}
+
+.corpo-brano {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mappa {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--linea);
+}
+
+.blocco-mappa {
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--grigio);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--secondario);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+}
+
+.blocco-mappa.live {
+  background: var(--marcio);
+  border-color: var(--marcio);
+  color: var(--su-marcio);
+}
+
+.blocco-mappa.cuffia {
+  border: 2px solid var(--testo);
+  color: var(--testo);
+}
+
+.blocco-mappa.sopra {
+  outline: 1px dashed var(--testo);
+  outline-offset: 2px;
+}
+
+.riga-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--spento);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.punto-live {
+  color: var(--marcio);
+}
+
+.carte {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card.sezione.attiva:not(.in-cuffia) {
+  border-color: var(--spento);
+}
+
+.card.preambolo {
+  border-style: dashed;
+}
+
+.card.e-live .nome-sezione {
+  color: var(--marcio);
+}
+
+.nome-sezione {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--testo);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.card .card-testa .lbl {
+  white-space: nowrap;
+}
+
+.editor-carta {
+  flex: none;
+  min-height: 0;
+}
+
+.piede-carta:empty {
+  display: none;
+}
+
+/* le sezioni dentro l'editor: fascia a sinistra, etichetta col nome */
+.editor .cm-line.cm-sez {
+  box-shadow: inset 2px 0 0 var(--bordo);
+  padding-left: 12px;
+}
+
+.editor .cm-line.cm-sez-cuffia {
+  box-shadow: inset 2px 0 0 var(--testo);
+}
+
+.editor .cm-line.cm-sez-live {
+  box-shadow: inset 2px 0 0 var(--marcio);
+}
+
+.editor .cm-line.cm-sez-testa {
+  margin-top: 10px;
+  color: var(--spento) !important;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.editor .cm-line.cm-sez-testa * {
+  color: inherit !important;
+}
+
+.editor .cm-line.cm-sez-testa .cm-sez-nome,
+.editor .cm-line.cm-sez-testa .cm-sez-nome * {
+  color: var(--testo) !important;
+}
+
+.editor .cm-line.cm-sez-live.cm-sez-testa .cm-sez-nome,
+.editor .cm-line.cm-sez-live.cm-sez-testa .cm-sez-nome * {
+  color: var(--marcio) !important;
+}
+
+.editor .cm-line.cm-testa-brano,
+.editor .cm-line.cm-testa-brano * {
+  color: var(--spento) !important;
+}
+
+/* --- dialoghi --- */
+
+.dialogo-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 4, 0.7);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  z-index: 20;
+}
+
+.dialogo {
+  width: 380px;
+  background: var(--fondo);
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialogo input {
+  height: 36px;
+  padding: 0 10px;
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  color: var(--testo);
+  font-family: var(--mono);
+  font-size: 14px;
+  outline: none;
+}
+
+.dialogo input:focus {
+  border-color: var(--spento);
+}
+
+.dialogo-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dialogo-lista:empty {
+  display: none;
+}
+
+.dialogo-piede {
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.elenco .voce.cliccabile {
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 0 6px;
+}
+
+.elenco .voce.cliccabile:hover {
+  background: var(--pannello);
+}
+
+/* nelle card strette il nome resta su una riga e lo stato cede spazio, i tasti no */
+.card-testa .nome,
+.card-testa .nome-sezione {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.card-testa .lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-testa .key {
+  flex-shrink: 0;
+}
+
+.card-testa .spazio {
+  min-width: 4px;
 }

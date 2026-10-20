@@ -34,9 +34,10 @@ export class Motore {
   }
 
   // Ritorna l'errore di valutazione, o null. Se il motore non risponde, non si resta appesi.
-  valuta(codice) {
+  // etichetta: { nome, provenienza } di quello che suona, per i colori di sezioni e mappa.
+  valuta(codice, etichetta = {}) {
     const id = this.prossimoId++;
-    this.manda({ tipo: 'valuta', codice, id });
+    this.manda({ tipo: 'valuta', codice, id, ...etichetta });
     return new Promise((resolve) => {
       this.attese.set(id, resolve);
       setTimeout(() => this.attese.delete(id) && resolve(`${this.ruolo}: nessuna risposta`), 5000);

@@ -42,6 +42,7 @@ const manda = (a, m) => porte[a]?.postMessage(m);
 
 let errore = null; // dell'ultima valutazione o della configurazione
 let codice = '';
+let etichetta = { nome: null, provenienza: null }; // cosa suona: nome della sezione e da dove viene
 let offsetMs = 0;
 let eco = false; // per il misuratore: dico quando ho suonato ogni evento
 let mappaLive = null; // cuffia: l'ultima mappa ricevuta, in tempo assoluto
@@ -90,6 +91,7 @@ async function valuta(nuovo) {
 
 function ferma() {
   codice = '';
+  etichetta = { nome: null, provenienza: null };
   rip.pattern = silence;
   if (LIVE) manda('cuffia', { tipo: 'codice-live', codice });
 }
@@ -171,6 +173,7 @@ function stato() {
   return {
     ruolo: RUOLO,
     codice,
+    ...etichetta,
     eco,
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
@@ -187,6 +190,7 @@ async function ricevi(da, m) {
   switch (m.tipo) {
     case 'valuta': {
       const errore = await valuta(m.codice);
+      if (!errore) etichetta = { nome: m.nome ?? null, provenienza: m.provenienza ?? null };
       return manda(da, { tipo: 'valutato', id: m.id, errore });
     }
     case 'ferma':

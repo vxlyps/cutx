@@ -58,21 +58,29 @@
           <span class="titolo">CUE</span>
           <span class="lbl">in cuffia</span>
           <div class="spazio"></div>
-          <button class="key" disabled title="Arriva al passo 4">brano <i>–</i></button>
-          <button class="key on">libero</button>
+          <button id="aggiungi-sezione" class="key" title="Le righe selezionate diventano una sezione · ⌘E">+ sezione <i>⌘E</i></button>
+          <button id="modo-brano" class="key" title="Il brano aperto dalla libreria">brano <i>–</i></button>
+          <button id="modo-libero" class="key on" title="Editor libero">libero</button>
         </div>
-        <div class="corpo">
+        <p id="cue-avviso" class="avviso"></p>
+        <div id="vista-libero" class="corpo">
           <article id="card-libero" class="card">
             <div class="card-testa">
-              <span class="nome">libero</span>
-              <span id="libero-stato" class="lbl">pronta</span>
+              <span id="libero-nome" class="nome">libero</span>
+              <span id="libero-stato" class="lbl"></span>
               <div class="spazio"></div>
               <button id="manda-cuffia" class="key">cuffia <i>⌘↵</i></button>
               <button id="manda-live" class="key">go live <i>⇧⌘↵</i></button>
             </div>
             <div id="editor" class="editor"></div>
-            <p id="errore-codice" class="errore"></p>
           </article>
+        </div>
+        <div id="vista-brano" class="corpo-brano" hidden>
+          <div id="mappa" class="mappa" aria-label="Mappa del brano"></div>
+          <div class="corpo">
+            <button id="riga-live" class="riga-live" hidden></button>
+            <div id="carte" class="carte"></div>
+          </div>
         </div>
         <div class="piede">
           <span class="lbl">entra tra</span>

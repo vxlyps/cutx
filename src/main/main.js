@@ -14,7 +14,8 @@ const PRELOAD = path.join(QUI, 'preload.cjs');
 const ORIGINE = 'cutx://app';
 const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
 const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
-const PROVA = process.argv.includes('--prova'); // prova automatica di robustezza
+// prova automatica: --prova (tutto), --prova=robustezza, --prova=brani
+const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani' : null);
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
 
 // Prova e foto girano con dati a parte, accanto a una CUTX eventualmente aperta e senza toccarne le impostazioni.
@@ -244,6 +245,6 @@ app.whenReady().then(async () => {
   creaMotore('live');
   creaMotore('cuffia');
   creaControllo();
-  if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG() }).then((ok) => app.exit(ok ? 0 : 1));
+  if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') }).then((ok) => app.exit(ok ? 0 : 1));
   if (FOTO) foto({ finestre, file: FOTO }).then(() => app.exit(0));
 });
