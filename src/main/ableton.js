@@ -1,7 +1,7 @@
 // Ableton nel processo principale: legge i progetti (in un worker, uno alla volta, con una piccola memoria)
 // e passa all'interfaccia solo quello che serve. Non scrive mai niente in un progetto.
 import { Worker } from 'node:worker_threads';
-import { stat, open } from 'node:fs/promises';
+import { stat, open, copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { consentito } from '../ableton/scansione.js';
@@ -128,4 +128,35 @@ export async function durataWav(percorso) {
   } finally {
     await f.close();
   }
+}
+
+// --- importare: i suoni di un progetto vanno nello stash, una cartella per file ---
+
+
+// Formati che Chromium sa decodificare (AIFF e M4A no: vanno esportati in WAV).
+const LEGGIBILI = new Set(['.wav', '.mp3', '.flac', '.ogg']);
+
+// suoni: [{ nome, percorso | null }] → suoni/<nome>/<file originale>. Si copiano solo file che abbiamo trovato noi
+// (o che Valerio ha scelto a mano): da qui non si copia niente di altro. Mai una cancellazione.
+export async function copiaSuoni(radiceStash, suoni) {
+  const consentiti = new Set(anteprime.values());
+  const copiati = [];
+  const mancanti = [];
+  const nonSupportati = [];
+  for (const { nome, percorso } of suoni) {
+    if (!/^[a-z0-9_]{1,64}$/.test(nome)) throw new Error(`nome di suono non valido: ${nome}`);
+    if (!percorso || !consentiti.has(percorso)) {
+      mancanti.push(nome);
+      continue;
+    }
+    if (!LEGGIBILI.has(path.extname(percorso).toLowerCase())) {
+      nonSupportati.push(nome);
+      continue;
+    }
+    const cartella = path.join(radiceStash, 'suoni', nome);
+    await mkdir(cartella, { recursive: true });
+    await copyFile(percorso, path.join(cartella, path.basename(percorso)));
+    copiati.push(nome);
+  }
+  return { copiati, mancanti, nonSupportati };
 }

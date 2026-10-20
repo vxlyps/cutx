@@ -986,6 +986,11 @@ async function provaAbleton({ finestre, scrivi }) {
     ok &&= !!vero;
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
+  const premi = async (tasto, ...modificatori) => {
+    finestre.controllo.webContents.sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    finestre.controllo.webContents.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(0.4);
+  };
   const progetti = [{ nome: 'progetto finto', modello: leggiAls(progettoFinto()) }];
   // i progetti veri di Valerio, se ci sono (solo letti, mai scritti)
   for (const f of ['x1.als', 'Mayia u influeced me a bit maybe?.als']) {
@@ -1101,11 +1106,38 @@ async function provaAbleton({ finestre, scrivi }) {
     // un file mancante si indica a mano: lo si simula passando dal dialogo, che qui non si può automatizzare
     const mancanti = await conta('#importa-mancanti .mancante');
     controlla('il file mancante è elencato con "cerca…"', mancanti === 1 && (await testo('#importa-mancanti .mancante button')) === 'cerca…', String(mancanti));
+    // importa: il brano nella libreria, i suoni nello stash, aperto nel CUE in modalità brano
+    const fileBrano = path.join(stash.radice(), 'libreria', 'tre_notti.cutx');
+    const cartellaSuono = path.join(stash.radice(), 'suoni', 'tre_01_loop');
+    await rm(fileBrano, { force: true });
     await js(`document.getElementById('importa-vai').click()`);
+    for (let i = 0; i < 40 && !existsSync(fileBrano); i++) await aspetta(0.25);
+    await aspetta(1);
+    const scritto = existsSync(fileBrano) ? await readFile(fileBrano, 'utf8') : '';
+    controlla('importa scrive il brano nella libreria dello stash', scritto.startsWith('// @brano tre notti') && scritto.includes('// @origine ') && scritto.includes('// @suoni tre_01_loop'), scritto.slice(0, 200));
+    controlla('e copia il suono che c\'è nello stash, in una cartella sua', existsSync(path.join(cartellaSuono, 'loop.wav')));
+    controlla('il file che manca non si copia (e non rompe niente)', !existsSync(path.join(stash.radice(), 'suoni', 'tre_02_manca')));
+    controlla('il pannello si chiude e il brano è aperto nel CUE', (await js(`document.getElementById('importa').hidden`)) && (await js('cutxProva.cue.modo')) === 'brano' && (await js('cutxProva.cue.brano?.file')) === 'tre_notti.cutx');
+    controlla('le sezioni ci sono tutte', (await js('cutxProva.cue.brano.modello.sezioni.length')) === 4);
+    controlla('il browser mostra il suono nuovo e il brano nella libreria', (await js('Object.keys(cutxProva.suoniStash()).includes("tre_01_loop")')) && (await js('cutxProva.libreria().some((b) => b.file === "tre_notti.cutx")')));
+    const avviso = await js(`document.getElementById('cue-avviso').textContent`);
+    controlla('l\'avviso dice cosa è successo, con i file mancanti', avviso.includes('4 sezioni') && avviso.includes('1 suoni copiati') && avviso.includes('mancant'), avviso);
+
+    // riimportare: il brano che c'è non si tocca senza chiedere
+    await js(`cutxProva.importa.apri(${JSON.stringify({ nome: 'tre', percorso: path.join(radice, 'Uno Project', 'tre.als'), cartella: path.join(radice, 'Uno Project') })})`);
+    for (let i = 0; i < 40 && !(await js(`document.querySelectorAll('#importa-tracce .traccia').length`)); i++) await aspetta(0.25);
+    await js(`(() => { const i = document.getElementById('importa-titolo'); i.value = 'tre notti'; i.dispatchEvent(new Event('change')); })()`);
+    await writeFile(fileBrano, scritto + '// modificato a mano\n');
+    await js(`document.getElementById('importa-vai').click()`);
+    await aspetta(1);
+    controlla('se il brano esiste già chiede prima di sovrascrivere', (await js(`document.querySelector('.dialogo')?.textContent ?? ''`)).includes('esiste già'));
+    await premi('Escape');
     await aspetta(0.5);
-    controlla('importa ora avvisa (la scrittura arriva al passo 6)', (await js(`document.getElementById('cue-avviso').textContent`)).includes('passo 6'));
-    await js(`document.getElementById('importa').hidden ? 0 : document.getElementById('importa-chiudi').click()`);
-    controlla('chiudi chiude il pannello', (await js(`document.getElementById('importa').hidden`)) === true);
+    controlla('e dicendo di no non lo tocca', (await readFile(fileBrano, 'utf8')).endsWith('// modificato a mano\n') && (await js(`!document.getElementById('importa').hidden`)));
+    await js(`cutxProva.importa.chiudi(); cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`);
+    await rm(fileBrano, { force: true });
+    await rm(cartellaSuono, { recursive: true, force: true });
+    await js('cutxProva.ricaricaStash()');
 
     await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [] })`);
     await js(`cutxProva.browser.vai('ableton')`);

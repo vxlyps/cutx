@@ -352,9 +352,29 @@ const importa = new Importa({
   inAscolto: (chiave) => cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'ableton' && pezzoCuffia.etichetta.nome === chiave,
   registraSuoni: (mappa) => cuffia.manda({ tipo: 'suoni-extra', mappa }),
   avviso: (testo) => cue.avviso(testo),
+  // Scrive il brano nella libreria, copia i suoni nello stash e lo apre nel CUE in modalità brano.
   importa: async (risultato) => {
-    cue.avviso(`importazione: arriva al passo 6 (${risultato.sezioni} sezioni pronte)`);
-    return false;
+    if (!haStash) {
+      cue.avviso('nessuno stash: sceglilo nella barra in alto');
+      return false;
+    }
+    const richiesta = { file: B.nomeFile(risultato.titolo), testo: risultato.testo, suoni: risultato.suoni.map((s) => ({ nome: s.nome, percorso: s.percorso })) };
+    let r = await window.cutx.importaAbleton(richiesta);
+    if (r.esiste) {
+      if (!(await conferma({ titolo: 'importa da ableton', testo: `${r.file} esiste già nella libreria. Lo sovrascrivo?`, si: 'sovrascrivi' }))) return false;
+      r = await window.cutx.importaAbleton({ ...richiesta, sovrascrivi: true });
+    }
+    if (r.errore) {
+      cue.avviso(`importazione non riuscita: ${r.errore}`, { persistente: true });
+      return false;
+    }
+    await apriStash(await window.cutx.stash()); // suoni e libreria nuovi
+    await cue.apri(r.file);
+    const pezzi = [`importato ${r.file}: ${risultato.sezioni} sezioni`, `${r.copiati.length} suoni copiati nello stash`];
+    if (r.mancanti.length) pezzi.push(`${r.mancanti.length} file mancanti (le sezioni ci sono lo stesso)`);
+    if (r.nonSupportati.length) pezzi.push(`${r.nonSupportati.length} file in un formato che CUTX non legge: esportali in WAV`);
+    cue.avviso(pezzi.join(' · '), { persistente: r.mancanti.length > 0 || r.nonSupportati.length > 0 });
+    return true;
   },
 });
 
@@ -696,6 +716,7 @@ globalThis.cutxProva = {
   posaGatto: (nome) => posaGatto(nome),
   accendiInsegna: () => accendiInsegna(),
   libreria: () => libreria,
+  suoniStash: () => suoni,
   browser,
   ricaricaStash: async () => apriStash(await window.cutx.stash()),
   ricaricaLibreria: aggiornaLibreria,

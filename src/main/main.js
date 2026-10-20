@@ -316,6 +316,21 @@ ipcMain.handle('ableton:scegli-file', async (_e, titolo) => {
   const f = await ableton.fileScelto(r.filePaths[0]);
   return f.errore ? f : { ...f, durata: await ableton.durataWav(f.percorso) };
 });
+// Importa: scrive il brano nella libreria dello stash e copia i suoni che servono. Se il brano c'è già
+// non lo tocca (ritorna { esiste }): sovrascrive solo se gli si dice di sì.
+ipcMain.handle('ableton:importa', async (_e, { file, testo, suoni, sovrascrivi }) => {
+  const radice = stash.radice();
+  if (!radice) return { errore: 'nessuno stash: sceglilo nella barra in alto' };
+  try {
+    const scritto = await stash.scriviBrano(file, testo, { sovrascrivi: !!sovrascrivi });
+    if (scritto.esiste) return { esiste: true, file: scritto.file };
+    const copie = await ableton.copiaSuoni(radice, suoni);
+    avvisaMotori();
+    return { file: scritto.file, ...copie };
+  } catch (e) {
+    return { errore: String(e.message ?? e) };
+  }
+});
 ipcMain.handle('ableton:modello', async (_e, percorso) => {
   try {
     return { modello: await ableton.modello(percorso, preferenze.leggi().cartelleAbleton ?? []) };

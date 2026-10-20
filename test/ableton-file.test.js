@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { durataWav, fileScelto, percorsoAnteprima, risolviFile } from '../src/main/ableton.js';
@@ -62,6 +62,32 @@ test('risolviFile: il percorso relativo parte dalla cartella del progetto, poi s
     // un file scelto a mano: solo audio
     assert.ok((await fileScelto(path.join(r, 'Altrove', 'b.wav'))).id);
     assert.ok((await fileScelto(path.join(r, 'Prog', 'note.txt'))).errore);
+  } finally {
+    await rm(r, { recursive: true, force: true });
+  }
+});
+
+test('copiaSuoni: una cartella per file nello stash, solo file trovati da noi, mancanti e non leggibili segnalati', async () => {
+  const { copiaSuoni } = await import('../src/main/ableton.js');
+  const r = await mkdtemp(path.join(tmpdir(), 'cutx-copia-'));
+  try {
+    await mkdir(path.join(r, 'Prog', 'Samples'), { recursive: true });
+    await mkdir(path.join(r, 'stash'), { recursive: true });
+    await writeFile(path.join(r, 'Prog', 'Samples', 'a b.wav'), wav(1));
+    await writeFile(path.join(r, 'Prog', 'Samples', 'c.aif'), 'aiff');
+    await writeFile(path.join(r, 'segreto.wav'), wav(1));
+    const trovati = await risolviFile(path.join(r, 'Prog'), [{ relativo: 'Samples/a b.wav', assoluto: '' }, { relativo: 'Samples/c.aif', assoluto: '' }]);
+    const out = await copiaSuoni(path.join(r, 'stash'), [
+      { nome: 'x_01_a_b', percorso: trovati[0].percorso },
+      { nome: 'x_02_c', percorso: trovati[1].percorso },
+      { nome: 'x_03_manca', percorso: null },
+      { nome: 'x_04_estraneo', percorso: path.join(r, 'segreto.wav') }, // mai registrato: non si copia
+    ]);
+    assert.deepEqual(out.copiati, ['x_01_a_b']);
+    assert.deepEqual(out.nonSupportati, ['x_02_c']);
+    assert.deepEqual(out.mancanti, ['x_03_manca', 'x_04_estraneo']);
+    assert.equal((await readFile(path.join(r, 'stash', 'suoni', 'x_01_a_b', 'a b.wav'))).length, wav(1).length);
+    await assert.rejects(() => copiaSuoni(path.join(r, 'stash'), [{ nome: '../fuori', percorso: null }]));
   } finally {
     await rm(r, { recursive: true, force: true });
   }
