@@ -163,7 +163,7 @@ export async function foto({ finestre, file }) {
   await chiedi(finestre.controllo, `cutxProva.valuta('live', ${JSON.stringify(FOTO_LIVE)})`);
   await chiedi(finestre.controllo, `cutxProva.scriviCue(${JSON.stringify(FOTO_CUE)})`);
   await chiedi(finestre.controllo, `cutxProva.valuta('cuffia', ${JSON.stringify(FOTO_CUE)})`);
-  await chiedi(finestre.controllo, "cutxProva.posaGatto('lecca')"); // così si vede anche l'insegna
+  await chiedi(finestre.controllo, "cutxProva.posaGatto('lecca'); cutxProva.accendiInsegna()"); // così si vede anche l'insegna accesa
   await aspetta(1.5);
   const img = await finestre.controllo.webContents.capturePage();
   await writeFile(file, img.toPNG());

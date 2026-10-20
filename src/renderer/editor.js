@@ -2,7 +2,8 @@
 import { codemirrorSettings, initEditor } from '@strudel/codemirror';
 
 export function creaEditor({ root, codice, suValuta, suFerma }) {
-  codemirrorSettings.set({ ...codemirrorSettings.get(), theme: 'blackscreen' });
+  // Le righe lunghe vanno a capo: niente scorrimento orizzontale.
+  codemirrorSettings.set({ ...codemirrorSettings.get(), theme: 'blackscreen', isLineWrappingEnabled: true });
   const vista = initEditor({ root, initialCode: codice, onChange: () => {}, onEvaluate: () => (suValuta(), true), onStop: () => (suFerma(), true) });
   return {
     get codice() {

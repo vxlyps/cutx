@@ -6,6 +6,7 @@ import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
 import { Misuratore } from './sfasamento.js';
 import { avviaGatto } from './gatto.js';
+import { avviaInsegna } from './insegna.js';
 import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
 
 const $ = (id) => document.getElementById(id);
@@ -36,6 +37,7 @@ let mappa = null; // la mappa del tempo del live, in tempo assoluto
 let config = { uscite: {}, offsetCuffiaMs: 0 };
 let suoni = {};
 let haStash = false;
+let preferenze = { lunghezzaFrase: 16 };
 let ripreso = false; // ho già preso lo stato dai motori? (dopo un crash dell'interfaccia stanno ancora suonando)
 
 const editor = creaEditor({ root: $('editor'), codice: CODICE_INIZIALE, suValuta: provaInCuffia, suFerma: fermaTutto });
@@ -86,6 +88,7 @@ const SCORCIATOIE = [
   { tasto: '.', fa: fermaTutto },
   { tasto: 'k', fa: () => cuffiaOnOff() },
   { tasto: ',', fa: () => impostazioni() },
+  { tasto: '0', fa: fraseDaCapo },
 ];
 
 window.addEventListener(
@@ -335,30 +338,49 @@ function mostra() {
   if (!$('impostazioni').hidden) mostraImpostazioni();
 }
 
-// Tempo: BPM, battute e ciclo seguono il live, nell'istante in cui si sente.
+// Tempo: BPM, battute e frase seguono il live, nell'istante in cui si sente.
+// La frase è solo da vedere: il ciclo di Strudel non si tocca.
 const battute = [...$('battute').children];
 const quarti = [...$('quarti').children];
+
+function durata(ms) {
+  const s = Math.floor(ms / 1000);
+  const due = (n) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  return h ? `${h}:${due(Math.floor(s / 60) % 60)}:${due(s % 60)}` : `${due(Math.floor(s / 60))}:${due(s % 60)}`;
+}
+
 function mostraTempo() {
   requestAnimationFrame(mostraTempo);
   if (!mappa || !live.viva) {
     $('bpm').textContent = '–';
-    $('ciclo').textContent = '–';
-    $('piede-ciclo').textContent = 'ciclo –';
+    $('frase-numero').textContent = '–';
+    $('piede-frase').textContent = 'frase –';
     return;
   }
   const epoca = performance.timeOrigin + performance.now();
   const ciclo = mappa.ciclo0 + ((epoca - mappa.epoca0) / 1000) * mappa.cps;
   const intero = Math.floor(ciclo);
   const quarto = Math.floor((ciclo - intero) * 4);
+  const lunghezza = preferenze.lunghezzaFrase;
+  const frase = (((intero - (mappa.ancoraFrase ?? 0)) % lunghezza) + lunghezza) % lunghezza + 1;
   $('bpm').textContent = Math.round(mappa.cps * 240 * 10) / 10;
-  $('ciclo').textContent = intero;
-  $('piede-ciclo').textContent = `ciclo ${intero}`;
+  $('frase-numero').textContent = frase;
+  $('frase-lunghezza').textContent = `/${lunghezza}`;
+  $('piede-frase').textContent = `frase ${frase}/${lunghezza}`;
+  const set = mappa.inizioSet && epoca > mappa.inizioSet ? durata(epoca - mappa.inizioSet) : null;
+  $('tempo-set').textContent = set ?? '–:–';
+  $('tempo-live').textContent = set ?? '';
   for (const fila of [battute, quarti]) {
     fila.forEach((d, i) => {
       d.classList.toggle('passata', i < quarto);
       d.classList.toggle('ora', i === quarto);
     });
   }
+}
+
+function fraseDaCapo() {
+  live.manda({ tipo: 'frase-da-capo' });
 }
 
 // --- collegamenti ---
@@ -381,7 +403,8 @@ cuffia.suCollegato = () => {
 };
 
 $('wordmark').src = wordmark;
-const posaGatto = avviaGatto($('gatto'), $('insegna'));
+const posaGatto = avviaGatto($('gatto'));
+const accendiInsegna = avviaInsegna($('insegna'));
 
 $('stash').onclick = async () => apriStash(await window.cutx.scegliStash());
 $('cuffia-onoff').onclick = () => cuffiaOnOff();
@@ -391,6 +414,8 @@ $('manda-cuffia').onclick = provaInCuffia;
 $('manda-live').onclick = goLive;
 $('go-live').onclick = goLive;
 $('cerca').oninput = mostraBrowser;
+$('frase').onclick = fraseDaCapo;
+$('lunghezza-frase').onchange = (e) => window.cutx.salvaPreferenze({ lunghezzaFrase: Number(e.target.value) });
 for (const b of document.querySelectorAll('[data-scheda]')) {
   b.onclick = () => {
     scheda = b.dataset.scheda;
@@ -420,11 +445,18 @@ globalThis.cutxProva = {
   valuta: (ruolo, codice) => manda(ruolo === 'live' ? live : cuffia, codice),
   scriviCue: (codice) => (editor.codice = codice),
   posaGatto: (nome) => posaGatto(nome),
+  accendiInsegna: () => accendiInsegna(),
   misure: () => ({ stima: misuratore.stima.riepilogo(), live: live.stato, cuffia: cuffia.stato }),
 };
 
 setInterval(mostra, 100);
 mostra();
 mostraTempo();
+function applicaPreferenze(p) {
+  preferenze = p;
+  $('lunghezza-frase').value = String(p.lunghezzaFrase);
+}
+window.cutx.suPreferenze(applicaPreferenze);
+applicaPreferenze(await window.cutx.preferenze());
 $('percorso-log').textContent = `log: ${await window.cutx.percorsoLog()}`;
 await apriStash(await window.cutx.stash());

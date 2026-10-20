@@ -51,6 +51,10 @@ let mix = 0; // cuffia: 0 = solo la prova; il mix col live arriva in fase 4 (fad
 
 // --- valutazione: il repl di Strudel compila e basta, a tempo suona il riproduttore ---
 
+// Solo per quello che si vede (barra, proiettore): il ciclo di Strudel non si tocca mai.
+let ancoraFrase = 0; // ciclo in cui la frase vale 1
+let inizioSet = null; // epoca in cui è partito il primo livello live
+
 let erroreValutazione = null;
 const compilatore = repl({
   transpiler,
@@ -71,6 +75,12 @@ async function valuta(nuovo) {
   if (erroreValutazione || !pattern) return erroreValutazione ?? 'valutazione fallita';
   codice = nuovo;
   rip.pattern = pattern;
+  if (LIVE && inizioSet === null && codice.trim() && rip.mappa) {
+    // Il set comincia col primo livello: lì parte anche la frase.
+    ancoraFrase = Math.ceil(rip.fine ?? rip.ciclo(ac.currentTime));
+    inizioSet = orologio.epoca(rip.tempo(ancoraFrase));
+    pubblicaMappa();
+  }
   if (LIVE) {
     if (compilatore.scheduler.cps !== cps) cambiaCps(compilatore.scheduler.cps);
     manda('cuffia', { tipo: 'codice-live', codice });
@@ -91,7 +101,7 @@ function pubblicaMappa() {
   // Si riparte da adesso, così il conto in tempo assoluto resta fresco.
   // Anche all'interfaccia, per BPM, battute e ciclo: in tempo assoluto, cioè quando si sente.
   const t0 = ac.currentTime;
-  const mappa = { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps };
+  const mappa = { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps, ancoraFrase, inizioSet };
   manda('cuffia', mappa);
   manda('controllo', mappa);
 }
@@ -208,6 +218,10 @@ async function ricevi(da, m) {
     case 'codice-live':
       codiceLive = m.codice;
       return;
+    case 'frase-da-capo': // la frase riparte da 1 al prossimo ciclo
+      if (!rip.mappa) return;
+      ancoraFrase = Math.ceil(rip.ciclo(ac.currentTime));
+      return pubblicaMappa();
     case 'mix':
       mix = m.valore;
       return;

@@ -14,7 +14,7 @@
       <div class="marchio">
         <div class="gatto-posto"><img id="gatto" class="gatto" alt="" /></div>
         <img id="wordmark" class="wordmark" alt="CUTX" />
-        <div id="insegna" class="insegna led" style="visibility: hidden">TECNOLOGIA CANAGLIA</div>
+        <div id="insegna" class="insegna led">TECNOLOGIA CANAGLIA</div>
       </div>
       <button id="stash" class="key" title="Scegli lo stash">
         <span class="lbl">stash</span><span id="stash-nome">nessuno</span><i id="stash-dove"></i>
@@ -28,7 +28,10 @@
           <div></div>
           <div></div>
         </div>
-        <div class="valore"><span class="lbl">ciclo</span><span id="ciclo" class="numero">–</span></div>
+        <button id="frase" class="frase" title="Frase da capo al prossimo ciclo · ⌘0">
+          <span id="frase-numero" class="numero">–</span><span id="frase-lunghezza" class="lbl">/16</span>
+        </button>
+        <span id="tempo-set" class="lbl tempo-set" title="Tempo del set">–:–</span>
       </div>
       <div class="spazio"></div>
       <button id="cuffia-onoff" class="key on" title="Cuffia on / off · ⌘K">cuffia <i>on</i></button>
@@ -90,13 +93,14 @@
         </div>
         <div id="livelli" class="corpo"></div>
         <div class="piede">
-          <span id="piede-ciclo" class="lbl">ciclo –</span>
+          <span id="piede-frase" class="lbl">frase –</span>
           <div id="quarti" class="quarti" aria-label="Quarto">
             <div></div>
             <div></div>
             <div></div>
             <div></div>
           </div>
+          <span id="tempo-live" class="lbl tempo-set"></span>
           <span id="conteggio" class="lbl">0 live</span>
         </div>
       </section>
@@ -117,6 +121,9 @@
             <label>live <select id="uscita-live"></select></label>
             <label>cuffia <select id="uscita-cuffia"></select></label>
             <label>offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
+            <label>lunghezza frase
+              <select id="lunghezza-frase"><option>8</option><option>16</option><option>32</option></select>
+            </label>
             <p id="errore-uscite" class="errore"></p>
             <h2 class="lbl">suoni nello stash</h2>
             <p id="suoni" class="secondario"></p>

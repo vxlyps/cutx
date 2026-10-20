@@ -1,10 +1,11 @@
 // Processo principale: finestre, protocollo cutx://, permessi, guardiano dei motori.
-import { app, BrowserWindow, protocol, net, ipcMain, dialog, session, MessageChannelMain } from 'electron';
+import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, session, MessageChannelMain } from 'electron';
 import path from 'node:path';
-import { existsSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
+import * as preferenze from './preferenze.js';
 import { prova, foto } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
@@ -15,6 +16,17 @@ const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
 const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 const PROVA = process.argv.includes('--prova'); // prova automatica di robustezza
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
+
+// Prova e foto girano con dati a parte, accanto a una CUTX eventualmente aperta e senza toccarne le impostazioni.
+if (PROVA || FOTO) {
+  const dati = path.join(app.getPath('appData'), 'CUTX-prova');
+  app.setPath('userData', dati);
+  const impostazioni = path.join(dati, 'impostazioni.json');
+  if (!existsSync(impostazioni)) {
+    mkdirSync(dati, { recursive: true });
+    writeFileSync(impostazioni, JSON.stringify({ stash: path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test') }));
+  }
+}
 
 // Una sola CUTX alla volta: due motori live sulla stessa scheda sarebbero un disastro.
 if (!app.requestSingleInstanceLock()) app.exit(0);
@@ -31,7 +43,7 @@ function migraDaDaneel() {
   const vecchiLog = path.join(path.dirname(app.getPath('logs')), 'DANEEL', 'avvio.log');
   sposta(vecchiLog, path.join(app.getPath('logs'), 'avvio-daneel.log'));
 }
-migraDaDaneel();
+if (!PROVA && !FOTO) migraDaDaneel();
 
 app.on('second-instance', () => {
   const controllo = finestre.controllo;
@@ -171,6 +183,12 @@ function avvisaMotori() {
 }
 
 ipcMain.handle('stash:stato', () => stash.stato());
+ipcMain.handle('preferenze:leggi', () => preferenze.leggi());
+ipcMain.handle('preferenze:salva', async (_e, modifiche) => {
+  const nuove = await preferenze.salva(modifiche);
+  for (const f of Object.values(finestre)) if (f && !f.isDestroyed()) f.webContents.send('preferenze-cambiate', nuove);
+  return nuove;
+});
 ipcMain.handle('stash:scegli', async () => {
   const r = await dialog.showOpenDialog(finestre.controllo, {
     title: 'Scegli lo stash',
@@ -196,8 +214,21 @@ ipcMain.on('log', async (_e, nome, riga) => {
   await appendFile(file, riga + '\n');
 });
 
+// Menu nostro: quello predefinito di Electron si prende tasti che servono a CUTX (⌘0, ⌘R…).
+function creaMenu() {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { label: 'Sviluppo', submenu: [{ role: 'toggleDevTools' }] },
+      { role: 'windowMenu' },
+    ]),
+  );
+}
+
 app.whenReady().then(async () => {
   app.dock?.setIcon(ICONA);
+  creaMenu();
   stash.carica();
   protocol.handle('cutx', serviFile);
   const nostro = (url) => url?.startsWith(ORIGINE);

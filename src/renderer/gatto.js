@@ -1,5 +1,4 @@
 // Il gatto nella barra in alto: cambia posa da solo, a scatti, senza transizioni.
-// Quando non è seduto si accende l'insegna TECNOLOGIA CANAGLIA.
 // Disegni © Michele Ciavarella (DCBstudio), fuori dall'AGPL: vedi design/LICENSE.
 import seduto from '../../design/risorse/gatti/gatto_seduto_logo_marcio.svg';
 import lecca from '../../design/risorse/gatti/gatto_lecca_logo_marcio.svg';
@@ -23,15 +22,13 @@ const SEQUENZA = [
   ['inPiedi', 2000],
 ];
 
-export function avviaGatto(img, insegna, { animato = true } = {}) {
+export function avviaGatto(img, { animato = true } = {}) {
   // Le immagini si caricano tutte subito, così il cambio di posa è secco.
   for (const p of Object.values(POSE)) new Image().src = p.src;
   let i = 0;
   const mostra = (nome) => {
     img.src = POSE[nome].src;
     img.style.height = `${POSE[nome].altezza}px`;
-    // L'insegna tiene il suo posto anche spenta: così BPM e ciclo non saltano.
-    insegna.style.visibility = nome === 'seduto' ? 'hidden' : 'visible';
   };
   if (!animato) {
     mostra('seduto');
