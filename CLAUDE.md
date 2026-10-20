@@ -80,5 +80,6 @@ Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuff
 - Fase 1, passo 2 (motore live separato e test di robustezza): fatto. `npm run prova` superata: in tutte le fasi 0 click persi dal live, scarto max 0,16 ms, cuffia di nuovo a tempo dopo il crash (sfasamento stimato < 0,02 ms). Rinuncia temporanea: niente note evidenziate nell'editor fino al passo 6.
 - Fase 1, passo 3 (struttura della postazione e base grafica): fatto. Tre colonne, barra con gatto animato, wordmark, insegna, stash, BPM, battute e ciclo dal live; CUE in modalità libero con cuffia ⌘↵ e go live ⇧⌘↵; LIVE con un livello solo; scorciatoie ⌘. ⌘K ⌘, ⇧⌘⌫ esc. `npm run prova` superata anche con le scorciatoie premute davvero.
 - Grafica dei passi 2 e 3 approvata da Valerio. Prove con MiniFuse e cuffie: le fa lui appena ha tutto collegato.
-- Aggiunte approvate dopo il passo 3 (ritocchi grafici, conteggio a frasi, CUE come editor musicale, salvataggio, paracadute, Hydra che ascolta): `docs/FASE-1.md` sezione 10, con le scorciatoie nuove nella tabella.
-- **In corso: ritocchi grafici e conteggio a frasi, poi passi 4, 5 e 6 in autonomia** (test, commit, push e CLAUDE.md a fine di ogni passo). Fermarsi alla fine del passo 6, o prima se un test fallisce e non si risolve.
+- Aggiunte approvate dopo il passo 3 (ritocchi grafici, conteggio a frasi, CUE come editor musicale, salvataggio, paracadute, livelli live modificabili sul posto, finestra di uscita, Hydra che ascolta): `docs/FASE-1.md` sezione 10, con le scorciatoie nuove nella tabella.
+- Ritocchi grafici e conteggio a frasi: fatti.
+- **In corso: passo 4, poi 5 e 6 in autonomia** (test, commit, push e CLAUDE.md a fine di ogni passo). Fermarsi alla fine del passo 6, o prima se un test fallisce e non si risolve.

@@ -136,6 +136,7 @@ Scorciatoie predefinite:
 | + sezione dalle righe selezionate | ⌘E |
 | frase da capo al prossimo ciclo | ⌘0 |
 | paracadute "CUTX, scelgo te!" (e ritorno) | ⌘P due volte di fila |
+| uscita a schermo intero | ⌃⌘F |
 
 ---
 
@@ -195,6 +196,20 @@ Valerio ha approvato la grafica dei passi 2 e 3 ("è come il canvas"). Queste ag
 - Il codice paracadute si scrive nelle impostazioni, in un editor con "prova in cuffia", e si salva in `stash.json` (ogni set ha il suo). Interruttore per toglierlo del tutto (spento = il pulsante non c'è).
 - Collegato: se il codice di un livello live ha un errore, continua a suonare la versione precedente. L'errore si vede solo sul mio schermo, mai sul proiettore.
 
+**Modificare i livelli live direttamente (passo 6).**
+- Ogni livello live si modifica sul posto, non solo il jam: clic nel codice del livello e scrivo.
+- Mentre modifico, il livello continua a suonare la versione di prima e mostra che ci sono modifiche non applicate.
+- ⌘↵ applica le modifiche al ciclo successivo; esc annulla e torna al codice che sta suonando.
+- Se il codice nuovo ha un errore, resta la versione di prima e l'errore si vede solo sul mio schermo.
+- Sull'uscita si vede quello che scrivo mentre lo scrivo: fa parte dello spettacolo.
+
+**Finestra di uscita, anche senza proiettore (versione base al passo 6, anticipata dalla fase 3).**
+- Il tasto "uscita" nella barra in alto (al posto di "proiettore" della tavola) apre una finestra separata con quello che vede il pubblico: il codice live grande, come in `design/riferimenti/proiettore.html`, versione solo codice.
+- Finestra normale: si sposta su un secondo schermo o dove voglio, si ridimensiona, e con ⌃⌘F (rimappabile) va a schermo intero sullo schermo in cui si trova.
+- CUTX ricorda su quale schermo e in che modalità l'avevo lasciata.
+- Se l'uscita si chiude o crasha, le casse non se ne accorgono, come per l'interfaccia.
+- Hydra, i video e il resto del proiettore restano nella fase 3.
+
 **Hydra che ascolta (fase 3).** Oltre al tempo, i video reagiscono al volume reale della cassa e dei bassi, letto dal motore live.
 
 ## 9. Ordine dei passi
@@ -204,7 +219,7 @@ Valerio ha approvato la grafica dei passi 2 e 3 ("è come il canvas"). Queste ag
 3. Struttura della postazione e base grafica (colori, font, tasti, gatto, insegna). Più i ritocchi grafici e il conteggio a frasi della sezione 10.
 4. Formato brano, CUE con mappa e sezioni, modalità libero, salvataggio ed esportazione (sezione 10).
 5. GO LIVE con entrata a tempo e scrittura a macchina.
-6. Livelli live, volume, muto, uscita, jam, note evidenziate, paracadute.
+6. Livelli live, volume, muto, uscita a fine ciclo, jam, note evidenziate, paracadute, livelli modificabili sul posto, finestra di uscita (sezione 10).
 7. Browser: suoni, libreria, help.
 8. Help al passaggio e riquadro help.
 9. Impostazioni e scorciatoie personalizzabili (compresi lunghezza della frase e paracadute).

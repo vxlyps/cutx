@@ -34,6 +34,8 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Conteggio a frasi (1–16) e tempo del set nella barra in alto e nel LIVE
 - [ ] Paracadute "CUTX, scelgo te!": al battito successivo entra il codice di emergenza, e si torna indietro
 - [ ] Un errore nel codice di un livello live non lo ferma: continua la versione precedente
+- [ ] Modifico un livello live sul posto: suona la versione di prima finché non applico (⌘↵), esc annulla
+- [ ] Finestra di uscita con il codice live grande, spostabile e a schermo intero (⌃⌘F), ricorda schermo e modalità; se si chiude o crasha le casse non se ne accorgono
 - [ ] Impostazioni; cambio una scorciatoia e funziona subito
 - [ ] Suono 20 minuti di fila solo da tastiera, senza buchi
 - [ ] La postazione corrisponde a `design/riferimenti/main.html`
