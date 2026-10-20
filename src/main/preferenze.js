@@ -7,6 +7,7 @@ import { writeFile } from 'node:fs/promises';
 
 export const PREDEFINITE = {
   lunghezzaFrase: 16,
+  scritturaAMacchina: true,
 };
 
 const file = () => path.join(app.getPath('userData'), 'preferenze.json');

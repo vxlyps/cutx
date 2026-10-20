@@ -84,10 +84,10 @@
         </div>
         <div class="piede">
           <span class="lbl">entra tra</span>
-          <button class="key on" disabled title="Entrata a tempo: arriva al passo 5">1</button>
-          <button class="key" disabled title="Arriva al passo 5">2</button>
-          <button class="key" disabled title="Arriva al passo 5">4</button>
-          <button class="key" disabled title="Arriva al passo 5">8</button>
+          <button class="key on" data-entra="1" title="Entra al prossimo ciclo · 1">1</button>
+          <button class="key" data-entra="2" title="Entra tra 2 cicli · 2">2</button>
+          <button class="key" data-entra="4" title="Entra tra 4 cicli · 4">4</button>
+          <button class="key" data-entra="8" title="Entra tra 8 cicli · 8">8</button>
           <span class="lbl">cicli</span>
           <div class="spazio"></div>
           <button id="go-live" class="key acid grande">GO LIVE <i>⇧⌘↵</i></button>
@@ -129,6 +129,7 @@
             <label>live <select id="uscita-live"></select></label>
             <label>cuffia <select id="uscita-cuffia"></select></label>
             <label>offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
+            <label>scrittura a macchina <input id="scrittura-macchina" type="checkbox" checked /></label>
             <label>lunghezza frase
               <select id="lunghezza-frase"><option>8</option><option>16</option><option>32</option></select>
             </label>

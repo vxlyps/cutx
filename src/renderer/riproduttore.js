@@ -1,5 +1,8 @@
-// Il riproduttore di un motore: legge il pattern a tempo seguendo la mappa del tempo.
+// Il riproduttore di un motore: legge i pattern a tempo seguendo la mappa del tempo.
 // Uguale per live e cuffia; cambia solo chi decide la mappa (il live) e chi la segue (la cuffia).
+//
+// Suona delle sorgenti: ognuna ha un pattern e una finestra di cicli [da, a) in cui suona.
+// Così un livello entra ed esce esattamente al confine di un ciclo.
 import { silence } from '@strudel/core';
 
 export const TICK_S = 0.05; // ogni quanto si guarda avanti
@@ -11,13 +14,21 @@ export class Riproduttore {
   constructor(ac, uscita) {
     this.ac = ac;
     this.uscita = uscita;
-    this.pattern = silence;
+    // { pattern, da, a, volume, muto }: da/a in cicli (a = Infinity: finché non lo tolgo)
+    this.sorgenti = [];
     this.mappa = null; // { ciclo0, t0, cps }: al tempo t0 del contesto siamo al ciclo ciclo0
-    this.fine = null; // fin dove il pattern è già stato programmato, in cicli
+    this.fine = null; // fin dove i pattern sono già stati programmati, in cicli
+    this.cambiTempo = []; // [{ ciclo, cps }]: il tempo cambia esattamente a quel ciclo
     this.tardi = 0;
     this.errore = null;
-    this.suEvento = null; // (hap, t) => {}, per misuratore e sentinella
-    this.suCps = null; // (cps) => {}, quando il codice chiede un tempo nuovo
+    this.suEvento = null; // (hap, t, sorgente) => {}, per misuratore, sentinella e prove
+    this.suCps = null; // (cps) => {}, quando un evento chiede un tempo nuovo (cps nel valore)
+    this.suMappa = null; // () => {}, quando la mappa cambia
+  }
+
+  // Una sorgente sola che suona sempre: la cuffia, la prova.
+  set pattern(p) {
+    this.sorgenti = [{ pattern: p ?? silence, da: -Infinity, a: Infinity, volume: 1, muto: false }];
   }
 
   ciclo(t) {
@@ -30,41 +41,75 @@ export class Riproduttore {
     return m.t0 + (ciclo - m.ciclo0) / m.cps;
   }
 
+  // Il primo ciclo intero non ancora programmato: il primo confine a cui si può ancora entrare.
+  prossimoConfine() {
+    return Math.ceil(this.fine ?? this.ciclo(this.ac.currentTime));
+  }
+
   // Cambio di tempo senza salti: la mappa nuova parte da dove è arrivata la programmazione.
   cambiaCps(cps) {
     if (!(cps > 0) || cps === this.mappa.cps) return;
     const ciclo0 = this.fine ?? this.ciclo(this.ac.currentTime);
     this.mappa = { ciclo0, t0: this.tempo(ciclo0), cps };
+    this.suMappa?.();
+  }
+
+  // Il tempo cambierà esattamente al ciclo dato (quando entra un livello con setcpm).
+  cambiaCpsA(ciclo, cps) {
+    if (!(cps > 0)) return;
+    if (this.fine !== null && ciclo <= this.fine) return this.cambiaCps(cps);
+    this.cambiTempo = [...this.cambiTempo.filter((c) => c.ciclo !== ciclo), { ciclo, cps }].sort((a, b) => a.ciclo - b.ciclo);
   }
 
   tick() {
     if (!this.mappa) return;
     const ora = this.ac.currentTime;
-    const fino = this.ciclo(ora + ANTICIPO_S + TICK_S);
+    const orizzonte = ora + ANTICIPO_S + TICK_S;
     // Prima volta, o dopo un salto all'indietro: si riparte da adesso.
-    if (this.fine === null || this.fine > fino + 1) this.fine = this.ciclo(ora + ANTICIPO_S);
-    if (fino <= this.fine) return;
-    const da = this.fine;
-    this.fine = fino;
-    const cps = this.mappa.cps;
-    let haps;
-    try {
-      haps = this.pattern.queryArc(da, fino, { _cps: cps, cyclist: 'cyclist' });
-      this.errore = null;
-    } catch (e) {
-      this.errore = String(e.message ?? e);
-      return;
+    if (this.fine === null || this.fine > this.ciclo(orizzonte) + 1) this.fine = this.ciclo(ora + ANTICIPO_S);
+    // Fino a un cambio di tempo si va con la mappa vecchia, poi con quella nuova.
+    while (this.cambiTempo.length && this.cambiTempo[0].ciclo < this.ciclo(orizzonte)) {
+      const { ciclo, cps } = this.cambiTempo.shift();
+      if (ciclo > this.fine) this.programma(this.fine, ciclo, ora);
+      this.fine = Math.max(this.fine, ciclo);
+      if (cps !== this.mappa.cps) {
+        this.mappa = { ciclo0: ciclo, t0: this.tempo(ciclo), cps };
+        this.suMappa?.();
+      }
     }
-    for (const hap of haps) {
-      if (!hap.hasOnset()) continue;
-      const t = this.tempo(hap.whole.begin.valueOf());
-      if (!(t > ora + MARGINE_MIN_S)) {
-        this.tardi++;
+    const fino = this.ciclo(orizzonte);
+    if (fino <= this.fine) return;
+    this.programma(this.fine, fino, ora);
+    this.fine = fino;
+  }
+
+  programma(da, fino, ora) {
+    const cps = this.mappa.cps;
+    this.errore = null;
+    for (const s of this.sorgenti) {
+      const inizio = Math.max(da, s.da);
+      const fine = Math.min(fino, s.a);
+      if (fine <= inizio || s.muto) continue;
+      let haps;
+      try {
+        haps = s.pattern.queryArc(inizio, fine, { _cps: cps, cyclist: 'cyclist' });
+      } catch (e) {
+        this.errore = String(e.message ?? e);
         continue;
       }
-      this.uscita(hap, t - ora, hap.duration / cps, cps, t);
-      this.suEvento?.(hap, t);
-      if (hap.value?.cps !== undefined && hap.value.cps !== cps) this.suCps?.(hap.value.cps);
+      for (const hap of haps) {
+        if (!hap.hasOnset()) continue;
+        const t = this.tempo(hap.whole.begin.valueOf());
+        if (!(t > ora + MARGINE_MIN_S)) {
+          this.tardi++;
+          continue;
+        }
+        // Il volume del livello passa dalla velocity: superdough la moltiplica nel guadagno.
+        const h = s.volume === 1 ? hap : hap.withValue((v) => ({ ...v, velocity: (v.velocity ?? 1) * s.volume }));
+        this.uscita(h, t - ora, hap.duration / cps, cps, t);
+        this.suEvento?.(h, t, s);
+        if (hap.value?.cps !== undefined && hap.value.cps !== cps) this.suCps?.(hap.value.cps);
+      }
     }
   }
 }

@@ -30,7 +30,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -144,7 +144,10 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
     controlla('⌘. ferma tutto', !(await stato('cuffia')).codice);
 
   })();
-  if (parti.includes('brani')) ok = (await provaBrani({ finestre, scrivi })) && ok;
+  // un errore dentro una prova è un fallimento, non un blocco
+  const sicura = (nome, fn) => fn({ finestre, scrivi }).catch((e) => (scrivi(`FALLITO ${nome}: ${e.stack ?? e}`), false));
+  if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
+  if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -168,6 +171,11 @@ export async function foto({ finestre, file: fotoFile }) {
   await chiedi(finestre.controllo, `cutxProva.valuta('live', ${JSON.stringify(FOTO_LIVE)})`);
   await chiedi(finestre.controllo, `cutxProva.scriviCue(${JSON.stringify(FOTO_CUE)})`);
   await chiedi(finestre.controllo, `cutxProva.valuta('cuffia', ${JSON.stringify(FOTO_CUE)})`);
+  // un livello in arrivo, a metà della scrittura a macchina
+  await chiedi(finestre.controllo, `cutxProva.scriviCue(${JSON.stringify('// @sezione basso\nnote("<c1 c1 eb1 g0>*8").s("supersaw")\n  .lpf(sine.range(200, 900).slow(4)).gain(.0001)')}); cutxProva.scegliEntraTra(4)`);
+  await finestre.controllo.webContents.executeJavaScript('cutxProva.goLive()');
+  await chiedi(finestre.controllo, `cutxProva.scriviCue(${JSON.stringify(FOTO_CUE)}); cutxProva.scegliEntraTra(1)`);
+  await aspetta(3);
   await chiedi(finestre.controllo, "cutxProva.posaGatto('lecca'); cutxProva.accendiInsegna()"); // così si vede anche l'insegna accesa
   await aspetta(1.5);
   const img = await finestre.controllo.webContents.capturePage();
@@ -321,5 +329,119 @@ async function provaBrani({ finestre, scrivi }) {
 
   for (const f of creati) await rm(path.join(cartella, f), { force: true });
   await js(`cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`);
+  return ok;
+}
+
+// --- prova dell'entrata a tempo: GO LIVE, sostituzione, uscita, tempo nuovo, errori ---
+
+async function provaEntrata({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const livello = async (id) => (await live())?.livelli?.find((l) => l.id === id);
+  const premi = async (tasto, ...modificatori) => {
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(0.3);
+  };
+  // manda live dal CUE libero il codice dato, entrando tra `cicli`
+  const goLive = async (codice, cicli = 1) => {
+    await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue(${JSON.stringify(codice)}); cutxProva.scegliEntraTra(${cicli})`);
+    const wc = finestre.controllo.webContents;
+    return wc.executeJavaScript('cutxProva.goLive().then((r) => r ?? { nulla: true }, (e) => ({ eccezione: String(e.stack ?? e) }))');
+  };
+  const ciclo = async () => (await live())?.ciclo ?? -Infinity;
+  // aspetta che il live arrivi al ciclo c, ma non per sempre
+  const finoAlCiclo = async (c, massimo = 25) => {
+    const fine = Date.now() + massimo * 1000;
+    while ((await ciclo()) < c) {
+      if (Date.now() > fine) {
+        scrivi(`FALLITO il live non arriva al ciclo ${c} (è a ${await ciclo()})`);
+        ok = false;
+        return false;
+      }
+      await aspetta(0.2);
+    }
+    return true;
+  };
+
+  await premi('.', 'meta');
+  await js(`cutxProva.valuta('live', 'setcpm(120/4)')`); // 2 secondi a ciclo
+  await premi('.', 'meta');
+  await aspetta(0.5);
+
+  // 1. entra al prossimo confine, e il primo suono è proprio lì
+  const prima = await ciclo();
+  const r1 = await goLive('// @sezione kick\ns("sine*4").freq(60).gain(.0001)', 1);
+  controlla('GO LIVE risponde col ciclo di entrata, il prossimo confine', Number.isInteger(r1?.da) && r1.da > prima && r1.da - prima <= 1.2, JSON.stringify([prima, r1]));
+  await finoAlCiclo(r1.da + 0.5);
+  const l1 = await livello(r1.livello);
+  controlla('il primo suono del livello cade esattamente sul ciclo di entrata', l1?.primo === r1.da, JSON.stringify(l1));
+
+  // 2. entra tra 4 cicli (il tasto 4 vale fuori dall'editor: prima esc)
+  await premi('Escape');
+  await premi('4');
+  const tasto4 = await js(`document.querySelector('[data-entra="4"]').classList.contains('on')`);
+  const prima4 = await ciclo();
+  const r4 = await goLive('// @sezione hat\ns("sine*8").freq(4000).gain(.0001)', 4);
+  controlla('il tasto 4 sceglie "entra tra 4 cicli"', tasto4);
+  controlla('entra tra 4 cicli: tre confini dopo il prossimo', r4?.da === Math.ceil(prima4 + 0.06) + 3 || r4?.da === Math.ceil(prima4) + 3, JSON.stringify([prima4, r4?.da]));
+  await aspetta(2);
+  const scritto = await js(`document.querySelector('#livelli .livello.in-arrivo .codice')?.textContent ?? null`);
+  const intero = '// @sezione hat\ns("sine*8").freq(4000).gain(.0001)';
+  controlla('mentre arriva, il codice si scrive a macchina', scritto !== null && scritto.length > 0 && scritto.length < intero.length, JSON.stringify(scritto));
+  await js('cutxProva.scegliEntraTra(1)');
+
+  // 3. un livello con lo stesso nome sostituisce il vecchio esattamente al confine
+  const r2 = await goLive('// @sezione kick\ns("sine*2").freq(50).gain(.0001)', 1);
+  const vecchio = await livello(r1.livello);
+  controlla('stesso nome: il vecchio esce dove entra il nuovo', vecchio?.a === r2.da, JSON.stringify([vecchio?.a, r2.da]));
+  await finoAlCiclo(r2.da + 0.6);
+  const dopo = await live();
+  const nuovo = dopo.livelli.find((l) => l.id === r2.livello);
+  controlla('il vecchio non suona più dopo il confine, il nuovo sì', !dopo.livelli.some((l) => l.id === r1.livello) && nuovo?.primo === r2.da, JSON.stringify(dopo.livelli.map((l) => [l.id, l.primo, l.ultimo, l.a])));
+
+  // 4. codice sbagliato: il live non cambia, l'errore si vede nel CUE
+  const primaErr = JSON.stringify((await live()).livelli.map((l) => l.id));
+  const re = await goLive('// @sezione kick\ns("sine*2".gain(', 1);
+  const avviso = await js(`document.getElementById('cue-avviso').textContent`);
+  controlla('codice sbagliato: il live resta com\'era e l\'errore si vede solo nel CUE', re?.errore && JSON.stringify((await live()).livelli.map((l) => l.id)) === primaErr && avviso.includes('live'), JSON.stringify([re, avviso]));
+
+  // 5. togliere: esce a fine ciclo, cancellandosi (lo tolgo a inizio ciclo, così si vede uscire)
+  await finoAlCiclo(Math.floor(await ciclo()) + 1.05);
+  const c5 = await ciclo();
+  await js(`cutxProva.togli(${r2.livello})`);
+  await aspetta(0.3);
+  const uscente = await livello(r2.livello);
+  if (uscente?.a == null) scrivi(`  livelli: ${JSON.stringify((await live())?.livelli?.map((l) => [l.id, l.nome, l.da, l.a]))} · r2 ${r2.livello}`);
+  controlla('togli: esce al prossimo confine', uscente?.a === Math.ceil(c5) || uscente?.a === Math.ceil(c5) + 1, JSON.stringify([c5, uscente?.a]));
+  const inUscita = await js(`!!document.querySelector('#livelli .livello.in-uscita')`);
+  controlla('mentre esce, il livello si vede in uscita', inUscita);
+  const fineUscita = uscente?.a ?? 0;
+  await finoAlCiclo(fineUscita + 0.5);
+  const andato = !(await live()).livelli.some((l) => l.id === r2.livello);
+  controlla('a fine ciclo il livello se ne è andato', andato);
+
+  // 6. un livello che cambia tempo lo cambia esattamente quando entra
+  const r6 = await goLive('// @sezione veloce\nsetcpm(150/4)\ns("sine*4").freq(70).gain(.0001)', 2);
+  if (!r6?.da) {
+    scrivi(`  go live non ha risposto: ${JSON.stringify(r6)} · ${await js(`document.getElementById('cue-avviso').textContent`)}`);
+    return false;
+  }
+  const cpsPrima = (await live()).cps;
+  await finoAlCiclo(r6.da + 0.3);
+  const cpsDopo = (await live()).cps;
+  controlla('setcpm in un livello cambia il tempo solo quando entra', Math.abs(cpsPrima - 0.5) < 1e-9 && Math.abs(cpsDopo - 150 / 240) < 1e-9, JSON.stringify([cpsPrima, cpsDopo]));
+  const l6 = await livello(r6.livello);
+  controlla('e il suo primo suono è sul ciclo di entrata', l6?.primo === r6.da, JSON.stringify(l6));
+
+  await premi('.', 'meta');
+  await js(`cutxProva.valuta('live', 'setcpm(120/4)')`);
+  await premi('.', 'meta');
   return ok;
 }

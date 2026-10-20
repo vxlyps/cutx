@@ -40,21 +40,24 @@ const pronto = (async () => {
 const porte = {}; // controllo, live o cuffia → MessagePort
 const manda = (a, m) => porte[a]?.postMessage(m);
 
-let errore = null; // dell'ultima valutazione o della configurazione
-let codice = '';
-let etichetta = { nome: null, provenienza: null }; // cosa suona: nome della sezione e da dove viene
+let errore = null; // della configurazione
 let offsetMs = 0;
 let eco = false; // per il misuratore: dico quando ho suonato ogni evento
 let mappaLive = null; // cuffia: l'ultima mappa ricevuta, in tempo assoluto
-let codiceLive = ''; // cuffia: il codice live, per il futuro mix cuffia/live
+let livelliLive = []; // cuffia: i livelli live, per il futuro mix cuffia/live
 let udibile = true;
 let mix = 0; // cuffia: 0 = solo la prova; il mix col live arriva in fase 4 (fader dell'APC)
 
-// --- valutazione: il repl di Strudel compila e basta, a tempo suona il riproduttore ---
+// Cuffia: una prova sola. Live: una pila di livelli, ognuno con la sua finestra di cicli.
+let prova = { codice: '', nome: null, provenienza: null };
+let livelli = []; // { id, nome, provenienza, codice, pattern, da, a, richiesto, volume, muto }
+let prossimoLivello = 1;
 
 // Solo per quello che si vede (barra, proiettore): il ciclo di Strudel non si tocca mai.
 let ancoraFrase = 0; // ciclo in cui la frase vale 1
 let inizioSet = null; // epoca in cui è partito il primo livello live
+
+// --- valutazione: il repl di Strudel compila e basta, a tempo suona il riproduttore ---
 
 let erroreValutazione = null;
 const compilatore = repl({
@@ -65,35 +68,129 @@ const compilatore = repl({
 });
 const rip = new Riproduttore(ac, getTrigger({ getTime: () => ac.currentTime, defaultOutput: webaudioOutput }));
 
-async function valuta(nuovo) {
-  await pronto;
-  erroreValutazione = null;
-  // setcpm e cpm() vedono il tempo attuale. Solo il live può cambiarlo: in cuffia è innocuo.
-  const cps = rip.mappa?.cps ?? CPS_INIZIALE;
-  compilatore.scheduler.cps = cps;
-  const pattern = nuovo.trim() ? await compilatore.evaluate(nuovo, false) : silence;
-  setTime(() => (rip.mappa ? rip.ciclo(ac.currentTime) : 0));
-  if (erroreValutazione || !pattern) return erroreValutazione ?? 'valutazione fallita';
-  codice = nuovo;
-  rip.pattern = pattern;
-  if (LIVE && inizioSet === null && codice.trim() && rip.mappa) {
-    // Il set comincia col primo livello: lì parte anche la frase.
-    ancoraFrase = Math.ceil(rip.fine ?? rip.ciclo(ac.currentTime));
-    inizioSet = orologio.epoca(rip.tempo(ancoraFrase));
-    pubblicaMappa();
+// { pattern, cps } oppure { errore }. cps c'è se il codice chiede un tempo nuovo (setcpm).
+let coda = Promise.resolve();
+function compila(codice) {
+  const lavoro = coda.then(async () => {
+    await pronto;
+    erroreValutazione = null;
+    // setcpm e cpm() vedono il tempo attuale; il tempo nuovo lo applica solo il live.
+    const cps = rip.mappa?.cps ?? CPS_INIZIALE;
+    compilatore.scheduler.cps = cps;
+    const pattern = codice.trim() ? await compilatore.evaluate(codice, false) : silence;
+    setTime(() => (rip.mappa ? rip.ciclo(ac.currentTime) : 0));
+    if (erroreValutazione || !pattern) return { errore: erroreValutazione ?? 'valutazione fallita' };
+    return { pattern, cps: compilatore.scheduler.cps !== cps ? compilatore.scheduler.cps : null };
+  });
+  coda = lavoro.catch(() => {});
+  return lavoro;
+}
+
+// Un errore lascia suonare quello che c'era: si risponde con l'errore e basta.
+async function valuta(codice, etichetta = {}) {
+  const c = await compila(codice);
+  if (c.errore) return c.errore;
+  if (!LIVE) {
+    rip.pattern = c.pattern;
+    prova = { codice, nome: etichetta.nome ?? null, provenienza: etichetta.provenienza ?? null };
+    return null;
   }
-  if (LIVE) {
-    if (compilatore.scheduler.cps !== cps) cambiaCps(compilatore.scheduler.cps);
-    manda('cuffia', { tipo: 'codice-live', codice });
-  }
+  // Live, subito: un livello solo al posto di tutti (test di sfasamento, prova automatica).
+  livelli = codice.trim() ? [nuovoLivello(codice, c.pattern, etichetta, -Infinity)] : [];
+  if (c.cps) cambiaCps(c.cps);
+  iniziaSet(rip.prossimoConfine());
+  aggiornaLivelli();
   return null;
 }
 
+function nuovoLivello(codice, pattern, { nome, provenienza } = {}, da) {
+  return {
+    id: prossimoLivello++,
+    nome: nome ?? 'libero',
+    provenienza: provenienza ?? '',
+    codice,
+    pattern,
+    da,
+    a: Infinity,
+    richiesto: orologio.epoca(ac.currentTime),
+    volume: 1,
+    muto: false,
+  };
+}
+
+// GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
+async function entra({ codice, nome, provenienza, cicli = 1 }) {
+  const c = await compila(codice);
+  if (c.errore) return { errore: c.errore };
+  const da = rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  const l = nuovoLivello(codice, c.pattern, { nome, provenienza }, da);
+  for (const vecchio of livelli) {
+    if (vecchio.nome !== l.nome || vecchio.a <= da) continue;
+    vecchio.a = Math.max(vecchio.da, da);
+    l.volume = vecchio.volume;
+    l.muto = vecchio.muto;
+  }
+  livelli.push(l);
+  if (c.cps) rip.cambiaCpsA(da, c.cps);
+  iniziaSet(da);
+  aggiornaLivelli();
+  return { da, livello: l.id };
+}
+
+// Esce alla fine del ciclo in corso.
+function togli(id) {
+  const l = livelli.find((x) => x.id === id);
+  if (!l || l.a !== Infinity) return;
+  l.a = Math.max(l.da, rip.prossimoConfine());
+  aggiornaLivelli();
+}
+
 function ferma() {
-  codice = '';
-  etichetta = { nome: null, provenienza: null };
+  prova = { codice: '', nome: null, provenienza: null };
   rip.pattern = silence;
-  if (LIVE) manda('cuffia', { tipo: 'codice-live', codice });
+  if (LIVE) {
+    livelli = [];
+    aggiornaLivelli();
+  }
+}
+
+// Il set comincia col primo livello: lì parte anche la frase.
+function iniziaSet(ciclo) {
+  if (!LIVE || inizioSet !== null || !rip.mappa) return;
+  ancoraFrase = ciclo === -Infinity ? rip.prossimoConfine() : ciclo;
+  inizioSet = orologio.epoca(rip.tempo(ancoraFrase));
+  pubblicaMappa();
+}
+
+const descrivi = (l) => ({
+  id: l.id,
+  nome: l.nome,
+  provenienza: l.provenienza,
+  codice: l.codice,
+  da: l.da === -Infinity ? null : l.da,
+  a: l.a === Infinity ? null : l.a,
+  richiesto: l.richiesto,
+  volume: l.volume,
+  muto: l.muto,
+  primo: l.primo ?? null,
+  ultimo: l.ultimo ?? null,
+});
+
+function aggiornaLivelli() {
+  rip.sorgenti = livelli;
+  const descritti = livelli.map(descrivi);
+  manda('controllo', { tipo: 'livelli', livelli: descritti });
+  manda('cuffia', { tipo: 'livelli-live', livelli: descritti });
+}
+
+// I livelli usciti del tutto (già programmati fino alla loro fine) se ne vanno.
+function pulisci() {
+  if (!LIVE || rip.fine === null) return;
+  const restano = livelli.filter((l) => l.a > rip.fine);
+  if (restano.length !== livelli.length) {
+    livelli = restano;
+    aggiornaLivelli();
+  }
 }
 
 // --- tempo ---
@@ -101,7 +198,7 @@ function ferma() {
 function pubblicaMappa() {
   if (!LIVE || !rip.mappa || orologio.aggiorna() === null) return;
   // Si riparte da adesso, così il conto in tempo assoluto resta fresco.
-  // Anche all'interfaccia, per BPM, battute e ciclo: in tempo assoluto, cioè quando si sente.
+  // Anche all'interfaccia, per BPM, battute e frase: in tempo assoluto, cioè quando si sente.
   const t0 = ac.currentTime;
   const mappa = { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps, ancoraFrase, inizioSet };
   manda('cuffia', mappa);
@@ -112,6 +209,7 @@ function cambiaCps(cps) {
   rip.cambiaCps(cps);
   pubblicaMappa();
 }
+rip.suMappa = pubblicaMappa;
 
 // Cuffia: la mappa del live, portata nel tempo del mio contesto. Si rifà a ogni giro perché
 // il rapporto tra i due orologi si legge di continuo.
@@ -127,7 +225,11 @@ const anello = LIVE ? new Anello(ac) : null;
 let ultimoGiro = 0;
 let giroMax = 0; // il ritardo più lungo tra due giri del riproduttore, in ms
 
-rip.suEvento = (hap, t) => {
+rip.suEvento = (hap, t, sorgente) => {
+  // Il primo e l'ultimo ciclo suonati da ogni livello: per controllare che entri ed esca a tempo.
+  const inizio = hap.whole.begin.valueOf();
+  sorgente.primo ??= inizio;
+  sorgente.ultimo = inizio;
   if (!eco) return;
   sentinella.atteso(t);
   anello?.atteso(t);
@@ -144,6 +246,7 @@ function giro() {
   ultimoGiro = ora;
   if (!LIVE) seguiLive();
   rip.tick();
+  pulisci();
 }
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
@@ -170,10 +273,14 @@ async function configura() {
 // --- messaggi ---
 
 function stato() {
+  // codice, nome e provenienza: la prova in cuffia, l'ultimo livello entrato nel live
+  const ultimo = LIVE ? livelli.filter((l) => l.a === Infinity).at(-1) : null;
   return {
     ruolo: RUOLO,
-    codice,
-    ...etichetta,
+    codice: LIVE ? (ultimo?.codice ?? '') : prova.codice,
+    nome: LIVE ? (ultimo?.nome ?? null) : prova.nome,
+    provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
+    livelli: LIVE ? livelli.map(descrivi) : undefined,
     eco,
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
@@ -183,15 +290,29 @@ function stato() {
     sentinella: sentinella.riepilogo(),
     udibile,
     mix,
+    livelliLive: LIVE ? undefined : livelliLive.length,
   };
 }
 
 async function ricevi(da, m) {
   switch (m.tipo) {
     case 'valuta': {
-      const errore = await valuta(m.codice);
-      if (!errore) etichetta = { nome: m.nome ?? null, provenienza: m.provenienza ?? null };
+      const errore = await valuta(m.codice, m);
       return manda(da, { tipo: 'valutato', id: m.id, errore });
+    }
+    case 'entra': {
+      const r = LIVE ? await entra(m) : { errore: 'solo il live fa entrare i livelli' };
+      return manda(da, { tipo: 'risposta', ...r, id: m.id });
+    }
+    case 'togli':
+      return togli(m.livello);
+    case 'livello': {
+      // volume e muto di un livello, subito
+      const l = livelli.find((x) => x.id === m.livello);
+      if (!l) return;
+      if (m.volume !== undefined) l.volume = Math.max(0, Math.min(1.5, Number(m.volume)));
+      if (m.muto !== undefined) l.muto = !!m.muto;
+      return aggiornaLivelli();
     }
     case 'ferma':
       return ferma();
@@ -219,8 +340,8 @@ async function ricevi(da, m) {
     case 'mappa':
       mappaLive = m;
       return;
-    case 'codice-live':
-      codiceLive = m.codice;
+    case 'livelli-live':
+      livelliLive = m.livelli;
       return;
     case 'frase-da-capo': // la frase riparte da 1 al prossimo ciclo
       if (!rip.mappa) return;
@@ -241,9 +362,11 @@ window.addEventListener('message', (e) => {
   if (!con || !e.ports[0]) return;
   porte[con] = e.ports[0];
   porte[con].onmessage = ({ data }) => ricevi(con, data);
-  // Chi arriva riceve subito il tempo; una cuffia appena (ri)nata anche il codice live.
-  if (LIVE) pubblicaMappa();
-  if (LIVE && con === 'cuffia') manda('cuffia', { tipo: 'codice-live', codice });
+  // Chi arriva riceve subito il tempo e i livelli live.
+  if (LIVE) {
+    pubblicaMappa();
+    aggiornaLivelli();
+  }
 });
 window.cutx.suStashCambiato(configura);
 

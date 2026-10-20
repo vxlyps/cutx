@@ -44,6 +44,16 @@ export class Motore {
     });
   }
 
+  // Una domanda con risposta ({ tipo: 'risposta', id, ... }). Se il motore tace, risponde il tempo.
+  richiesta(m) {
+    const id = this.prossimoId++;
+    this.manda({ ...m, id }); // l'id della richiesta vince su tutto
+    return new Promise((resolve) => {
+      this.attese.set(id, resolve);
+      setTimeout(() => this.attese.delete(id) && resolve({ errore: `${this.ruolo}: nessuna risposta` }), 5000);
+    });
+  }
+
   ping() {
     this.manda({ tipo: 'ping' });
     const viva = !!this.porta && performance.now() - this.ultimoPong < SILENZIO_MS;
@@ -58,8 +68,8 @@ export class Motore {
       this.ultimoPong = performance.now();
       this.stato = m;
       if (!this.viva) this.ping();
-    } else if (m.tipo === 'valutato') {
-      this.attese.get(m.id)?.(m.errore);
+    } else if (m.tipo === 'valutato' || m.tipo === 'risposta') {
+      this.attese.get(m.id)?.(m.tipo === 'valutato' ? m.errore : m);
       this.attese.delete(m.id);
     } else {
       this.suMessaggio?.(m);

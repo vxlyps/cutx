@@ -949,3 +949,56 @@ td:first-child {
 .card-testa .spazio {
   min-width: 4px;
 }
+
+/* --- LIVE: livelli in arrivo, che suonano, in uscita --- */
+
+.livello .punto {
+  color: var(--marcio);
+}
+
+.livello .nome {
+  color: var(--marcio);
+}
+
+.livello.in-arrivo {
+  border: 1px dashed var(--marcio);
+}
+
+.livello.in-arrivo .stato-livello {
+  color: var(--marcio);
+}
+
+.livello.in-uscita {
+  border-color: var(--linea);
+}
+
+.livello.in-uscita .codice {
+  color: var(--secondario);
+}
+
+.livello .conto {
+  font-family: var(--stencil);
+  font-size: 20px;
+  color: var(--marcio);
+  font-variant-numeric: tabular-nums;
+}
+
+.barra-arrivo {
+  height: 3px;
+  background: var(--bordo);
+}
+
+.barra-arrivo div {
+  height: 3px;
+  width: 0;
+  background: var(--marcio);
+}
+
+.codice .cursore {
+  background: var(--marcio);
+  color: var(--su-marcio);
+}
+
+input[type='checkbox'] {
+  accent-color: var(--testo);
+}
