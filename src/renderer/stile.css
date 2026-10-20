@@ -72,6 +72,10 @@ h3 {
   margin: 4px 0 0;
 }
 
+.a-capo {
+  white-space: pre-line;
+}
+
 .spia {
   padding: 2px 8px;
   border: 1px solid var(--linea);
@@ -97,9 +101,20 @@ main {
   min-height: 0;
 }
 
-#editor {
+#centro {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#centro .errore {
+  padding: 0 14px 8px;
+}
+
+#editor {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   font-family: var(--mono);
 }

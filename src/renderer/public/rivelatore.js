@@ -2,10 +2,12 @@
 // il segnale in ingresso supera la soglia, poi ignora tutto per un attimo.
 const SOGLIA = 0.2;
 const PAUSA_S = 0.15;
+// La soglia si può cambiare: la sentinella ascolta il segnale digitale, che può essere piano.
 
 class Rivelatore extends AudioWorkletProcessor {
-  constructor() {
+  constructor({ processorOptions } = {}) {
     super();
+    this.soglia = processorOptions?.soglia ?? SOGLIA;
     this.ultimo = -1;
   }
   process(ingressi) {
@@ -13,7 +15,7 @@ class Rivelatore extends AudioWorkletProcessor {
     if (canale) {
       for (let i = 0; i < canale.length; i++) {
         const t = currentTime + i / sampleRate;
-        if (Math.abs(canale[i]) > SOGLIA && t - this.ultimo > PAUSA_S) {
+        if (Math.abs(canale[i]) > this.soglia && t - this.ultimo > PAUSA_S) {
           this.ultimo = t;
           this.port.postMessage(t);
         }

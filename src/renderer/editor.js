@@ -1,30 +1,15 @@
-// Editor Strudel (codemirror). L'uscita degli eventi la decide chi lo crea.
-import { StrudelMirror } from '@strudel/codemirror';
-import { evalScope } from '@strudel/core';
-import { transpiler } from '@strudel/transpiler';
-import { getAudioContext, initAudio, registerSynthSounds } from '@strudel/webaudio';
+// Editor Strudel (codemirror), solo per scrivere: il codice lo suonano i motori.
+import { codemirrorSettings, initEditor } from '@strudel/codemirror';
 
-export function creaEditor({ root, codice, uscita, suToggle }) {
-  const editor = new StrudelMirror({
-    root,
-    initialCode: codice,
-    defaultOutput: uscita,
-    getTime: () => getAudioContext().currentTime,
-    transpiler,
-    onToggle: suToggle,
-    prebake: async () => {
-      await evalScope(
-        import('@strudel/core'),
-        import('@strudel/mini'),
-        import('@strudel/tonal'),
-        import('@strudel/webaudio'),
-        import('@strudel/codemirror'),
-        import('@strudel/draw'),
-      );
-      await registerSynthSounds();
-      await initAudio();
+export function creaEditor({ root, codice, suValuta, suFerma }) {
+  codemirrorSettings.set({ ...codemirrorSettings.get(), theme: 'blackscreen' });
+  const vista = initEditor({ root, initialCode: codice, onChange: () => {}, onEvaluate: () => (suValuta(), true), onStop: () => (suFerma(), true) });
+  return {
+    get codice() {
+      return vista.state.doc.toString();
     },
-  });
-  editor.setTheme('blackscreen');
-  return editor;
+    set codice(testo) {
+      vista.dispatch({ changes: { from: 0, to: vista.state.doc.length, insert: testo } });
+    },
+  };
 }

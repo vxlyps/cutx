@@ -1,7 +1,7 @@
 // Misuratore di sfasamento tra live e cuffia, a due livelli:
 // - stima: ogni motore dice quando ha suonato lo stesso click, secondo il proprio orologio;
 // - anello: il click della cuffia (o del live, per il riferimento) rientra col cavo
-//   nell'ingresso della MiniFuse e lo misuriamo davvero.
+//   nell'ingresso della MiniFuse e il motore live lo misura davvero.
 
 export const SOGLIA_MS = 5; // sfasamento massimo accettato
 export const SOGLIA_DERIVA_MS = 2; // quanto può muoversi in 10 minuti
@@ -41,21 +41,18 @@ class Serie {
   }
 }
 
+// Qui non si ascolta niente: i motori dicono quando hanno suonato ogni click (stima)
+// e il live misura l'anello col cavo. Qui si confronta e si scrive il log.
 export class Misuratore {
-  constructor(ac, orologio) {
-    this.ac = ac;
-    this.orologio = orologio;
+  constructor() {
     this.riferimento = null; // ms dell'anello misurato col cavo dal live
-    this.anelloAttivo = false;
     this.azzera();
   }
 
   azzera() {
     this.stima = new Serie();
     this.anello = new Serie();
-    this.echi = new Map(); // id → { live, cuffia }
-    this.clickLive = []; // tempi del contesto live dei click
-    this.prossimoId = 1;
+    this.echi = new Map(); // posizione nel ciclo → { live, cuffia }
     this.fileLog = `sfasamento-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.log`;
   }
 
@@ -70,60 +67,22 @@ export class Misuratore {
     this.timerLog = null;
   }
 
-  // Un click di test sta per suonare al tempo t del contesto live. Ritorna l'id da dare alla cuffia.
-  click(t) {
-    const id = this.prossimoId++;
-    this.clickLive.push(t);
-    if (this.clickLive.length > 64) this.clickLive.shift();
-    setTimeout(() => this.eco(id, 'live', this.orologio.epoca(t)), (t - this.ac.currentTime) * 1000 + 50);
-    return id;
-  }
-
-  eco(id, chi, epoca) {
-    const e = this.echi.get(id) ?? {};
+  // Un motore ha suonato il click della posizione ciclo all'epoca data.
+  eco(ciclo, chi, epoca) {
+    const e = this.echi.get(ciclo) ?? {};
     e[chi] = epoca;
     if (e.live !== undefined && e.cuffia !== undefined) {
-      this.echi.delete(id);
+      this.echi.delete(ciclo);
       this.stima.aggiungi(e.cuffia - e.live);
     } else {
-      this.echi.set(id, e);
+      this.echi.set(ciclo, e);
     }
     if (this.echi.size > 200) this.echi.delete(this.echi.keys().next().value);
   }
 
-  // Anello: ascolta l'ingresso scelto nello stesso contesto del live.
-  async attivaAnello(ingresso) {
-    this.disattivaAnello();
-    this.caricato ??= this.ac.audioWorklet.addModule('./rivelatore.js');
-    await this.caricato;
-    this.flusso = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: { exact: ingresso.deviceId },
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
-    });
-    this.sorgente = this.ac.createMediaStreamSource(this.flusso);
-    this.rivelatore = new AudioWorkletNode(this.ac, 'cutx-rivelatore');
-    this.muto = new GainNode(this.ac, { gain: 0 }); // il nodo deve arrivare all'uscita per lavorare
-    this.sorgente.connect(this.rivelatore).connect(this.muto).connect(this.ac.destination);
-    this.rivelatore.port.onmessage = ({ data }) => this.arrivo(data);
-    this.anelloAttivo = true;
-  }
-
-  disattivaAnello() {
-    this.sorgente?.disconnect();
-    this.rivelatore?.disconnect();
-    this.muto?.disconnect();
-    this.flusso?.getTracks().forEach((t) => t.stop());
-    this.anelloAttivo = false;
-  }
-
-  // Un click è rientrato dall'ingresso al tempo arrivo (contesto live).
-  arrivo(arrivo) {
-    const t = this.clickLive.filter((c) => c <= arrivo && arrivo - c < 0.5).at(-1);
-    if (t !== undefined) this.anello.aggiungi((arrivo - t) * 1000);
+  // Un click è rientrato col cavo, ms dopo essere partito dal live.
+  misuraAnello(ms) {
+    this.anello.aggiungi(ms);
   }
 
   salvaRiferimento() {

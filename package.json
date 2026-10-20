@@ -9,7 +9,8 @@
   "main": "src/main/main.js",
   "scripts": {
     "build": "vite build",
-    "start": "vite build && electron ."
+    "start": "vite build && electron .",
+    "prova": "vite build && electron . --prova"
   },
   "dependencies": {
     "@strudel/codemirror": "1.3.0",
