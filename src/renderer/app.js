@@ -68,7 +68,7 @@ const cue = new Cue(CODICE_INIZIALE, {
 
 // Gli errori si vedono solo qui, nel CUE: mai sull'uscita.
 async function manda(motore, codice, etichetta = {}) {
-  if (motore === cuffia) pezzoCuffia = { codice, etichetta };
+  if (motore === cuffia) pezzoCuffia = { codice, etichetta, da: performance.now() };
   const errore = await motore.valuta(codice, etichetta);
   mostraErrore(errore, motore.ruolo);
   return errore;
@@ -340,16 +340,18 @@ const aiuto = new Aiuto({
 
 const importa = new Importa({
   // ▶: la cuffia, mai le casse
-  provaInCuffia: (codice, chiave) => {
+  provaInCuffia: (codice, chiave, anteprima) => {
     if (inTest) return;
     dovaCuffia = null;
-    return manda(cuffia, codice, { nome: chiave, provenienza: 'ableton' });
+    return manda(cuffia, codice, { nome: chiave, provenienza: 'ableton', anteprima });
   },
   ferma: () => {
     pezzoCuffia = null;
     cuffia.manda({ tipo: 'ferma' });
   },
-  inAscolto: (chiave) => cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'ableton' && pezzoCuffia.etichetta.nome === chiave,
+  // finché non finisce da sola: il motore svuota il suo codice, e qui il tasto torna ▶ (1,5 s di tolleranza per la partenza)
+  inAscolto: (chiave) =>
+    cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'ableton' && pezzoCuffia.etichetta.nome === chiave && (performance.now() - pezzoCuffia.da < 1500 || !!cuffia.stato?.codice),
   registraSuoni: (mappa) => cuffia.manda({ tipo: 'suoni-extra', mappa }),
   avviso: (testo) => cue.avviso(testo),
   // Scrive il brano nella libreria, copia i suoni nello stash e lo apre nel CUE in modalità brano.

@@ -265,6 +265,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
     const avvisiSezione = [];
     const usati = [];
     let codice;
+    let durataS = null; // quanto dura l'audio della sezione, se è audio
     if (v.tipo === 'midi') {
       const { note, lunghezza } = v.clip;
       const b = battute(lunghezza);
@@ -282,6 +283,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
           const beg = Math.max(0, Math.min(1, da / f.durata));
           const end = Math.max(0, Math.min(1, (da + dur) / f.durata));
           codice = `s("${s.nome}").begin(${quattro(beg)}).end(${quattro(end)})${lento}\n  .gain(.8)`;
+          durataS = Math.max(0, (end - beg) * f.durata);
         }
       }
       if (codice === undefined) {
@@ -312,6 +314,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
       const b = battute(c.loop.fine - c.loop.inizio);
       const [beg, end] = dur ? [Math.max(0, s0 / dur), Math.min(1, s1 / dur)] : [0, 1];
       codice = `s("${s.nome}").begin(${quattro(beg)}).end(${quattro(end)})${b > 1 ? `.slow(${b})` : ''}\n  .gain(.8)`;
+      durataS = dur ? Math.max(0, (end - beg) * dur) : Math.max(0, s1 - s0);
       if (c.warp && c.marcatori.length >= 2) {
         // un loop il cui tempo è lontano da quello del progetto cambierà altezza (niente time-stretch)
         const [m0, m1] = [c.marcatori[0], c.marcatori.at(-1)];
@@ -333,6 +336,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
       usi: v.usi,
       battute: battute(v.tipo === 'midi' ? v.clip.lunghezza : v.clip.loop.fine - v.clip.loop.inizio),
       suoni: usati,
+      durataS,
       avvisi: avvisiSezione,
     });
   }

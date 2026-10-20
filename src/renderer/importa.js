@@ -244,7 +244,8 @@ export class Importa {
     }
     if (Object.keys(mappa).length) await this.azioni.registraSuoni(mappa);
     this.ascoltando = id;
-    this.azioni.provaInCuffia(`setcpm(${this.modello.bpm}/4)\n${s.codice}`, `ableton:${id}`);
+    // parte subito, suona una volta e si ferma da sola quando finisce (cicli per il codice, secondi del buffer per l'audio)
+    this.azioni.provaInCuffia(`setcpm(${this.modello.bpm}/4)\n${s.codice}`, `ableton:${id}`, { cicli: s.battute, audioS: s.durataS ?? 0 });
     this.disegna();
   }
 

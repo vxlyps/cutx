@@ -50,6 +50,7 @@ let mix = 0; // cuffia: 0 = solo la prova; il mix col live arriva in fase 4 (fad
 
 // Cuffia: una prova sola. Live: una pila di livelli, ognuno con la sua finestra di cicli.
 let prova = { codice: '', nome: null, provenienza: null };
+let anteprimaId = 0; // per fermare da soli solo l'anteprima che sta ancora suonando
 let livelli = []; // { id, nome, provenienza, codice, pattern, da, a, richiesto, volume, muto }
 let prossimoLivello = 1;
 
@@ -93,7 +94,22 @@ async function valuta(codice, etichetta = {}) {
   if (!LIVE) {
     // unaVolta (▶ di un campione nel browser): un solo colpo, al prossimo ciclo, per intero.
     // Il pattern si stira su un milione di cicli e parte dal confine: l'unico inizio è quello.
-    rip.pattern = etichetta.unaVolta ? c.pattern.slow(1e6).late(rip.prossimoConfine()) : c.pattern;
+    anteprimaId++;
+    if (etichetta.anteprima) {
+      // Anteprima (progetti Ableton): parte subito e suona una volta sola. Il pattern si sposta in modo che il suo
+      // ciclo 0 cada fra ~150 ms, e la sorgente dura quanti sono i suoi cicli; poi il motore si ferma da solo,
+      // così il ▶ dell'interfaccia torna com'era (lascia finire i suoni già partiti: niente tagli).
+      const { cicli, audioS = 0 } = etichetta.anteprima;
+      const cps = rip.mappa?.cps ?? CPS_INIZIALE;
+      const inizio = rip.ciclo(ac.currentTime) + 0.15 * cps;
+      rip.sorgenti = [{ pattern: c.pattern.late(inizio), da: inizio, a: inizio + cicli }];
+      const id = anteprimaId;
+      setTimeout(() => {
+        if (id !== anteprimaId) return;
+        prova = { codice: '', nome: null, provenienza: null };
+        rip.pattern = silence;
+      }, (Math.max(cicli / cps, audioS) + 0.5) * 1000);
+    } else rip.pattern = etichetta.unaVolta ? c.pattern.slow(1e6).late(rip.prossimoConfine()) : c.pattern;
     prova = { codice, nome: etichetta.nome ?? null, provenienza: etichetta.provenienza ?? null, unaVolta: !!etichetta.unaVolta };
     return null;
   }
@@ -193,6 +209,7 @@ function tagliaSuoni() {
 }
 
 function ferma() {
+  anteprimaId++;
   paracadute = null;
   prova = { codice: '', nome: null, provenienza: null };
   rip.pattern = silence;

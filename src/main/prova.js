@@ -1083,25 +1083,42 @@ async function provaAbleton({ finestre, scrivi }) {
     controlla('una traccia MIDI in modalità audio chiede lo stem e ricorda la battuta 1', (await conta('#importa-tracce .stem-riga')) === 1 && (await testo('#importa-tracce .stem-nota')).includes('battuta 1'));
     await js(`[...document.querySelectorAll('#importa-tracce .traccia')[1].querySelectorAll('.segmenti .key')].find((b) => b.textContent === 'codice').click()`);
 
-    // ▶ in cuffia: la sezione col tempo del progetto; mai nelle casse
+    // ▶ in cuffia: parte subito, col tempo del progetto, mai nelle casse; torna ▶ da solo quando finisce
     const cuffiaStato = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+    const prima0 = (await cuffiaStato()).eventi;
+    const t0 = Date.now();
     await js(`document.querySelectorAll('#importa-tracce .traccia')[0].querySelector('.variante-riga button.key').click()`);
     let c = null;
-    for (let i = 0; i < 20 && !c?.codice; i++) {
-      await aspetta(0.25);
+    let ms = null;
+    for (let i = 0; i < 40; i++) {
       c = await cuffiaStato();
+      if (c.eventi > prima0) {
+        ms = Date.now() - t0;
+        break;
+      }
+      await aspetta(0.05);
     }
+    controlla('▶ parte subito, non al ciclo dopo (primo suono programmato entro mezzo secondo)', ms !== null && ms < 600, `${ms} ms`);
     controlla('▶ su una sezione di codice la manda in cuffia, al tempo del progetto', c?.codice?.startsWith('setcpm(140/4)') && c.codice.includes('note('), c?.codice);
-    controlla('e il tasto diventa ■', (await testo('#importa-tracce .traccia .variante-riga button.key.on')) === '■', JSON.stringify([await testo('#importa-tracce .traccia .variante-riga button.key.on'), await js('cutxProva.importa.ascoltando'), await js('[...document.querySelectorAll("#importa-tracce .variante-riga button")].map((b) => b.className + ":" + b.textContent)')]));
+    controlla('e il tasto diventa ■', (await testo('#importa-tracce .traccia .variante-riga button.key.on')) === '■');
+    await js(`document.querySelector('#importa-tracce .traccia .variante-riga button.key.on').click()`);
+    await aspetta(0.5);
+    controlla('■ ferma la cuffia', !(await cuffiaStato()).codice);
     await js(`document.querySelectorAll('#importa-tracce .traccia')[2].querySelector('.variante-riga button.key').click()`);
     await aspetta(1.2);
     c = await cuffiaStato();
     controlla('▶ su un audio lo manda in cuffia col suo file (nome provvisorio)', c?.codice?.includes('s("ant_') && !c.errore, JSON.stringify([c?.codice, c?.errore]));
     controlla('l\'audio mancante non si può ascoltare', (await js(`document.querySelectorAll('#importa-tracce .traccia')[3].querySelector('.variante-riga button.key').disabled`)) === true);
     controlla('le casse non sentono niente', !(((await chiedi(finestre.live, 'globalThis.cutxStato?.()')).livelli ?? []).length));
-    await js(`document.querySelector('#importa-tracce .traccia .variante-riga button.key.on').click()`);
+    // suona una volta sola e finisce: il motore si svuota e il tasto torna ▶ senza che nessuno lo tocchi
+    let finita = false;
+    for (let i = 0; i < 40 && !finita; i++) {
+      await aspetta(0.25);
+      finita = !(await cuffiaStato()).codice;
+    }
     await aspetta(0.5);
-    controlla('■ ferma la cuffia', !(await cuffiaStato()).codice);
+    controlla('a fine anteprima la cuffia si ferma da sola', finita);
+    controlla('e il tasto torna ▶ da solo', (await js(`document.querySelectorAll('#importa-tracce .traccia')[2].querySelector('.variante-riga button.key').textContent`)) === '▶');
 
     // un file mancante si indica a mano: lo si simula passando dal dialogo, che qui non si può automatizzare
     const mancanti = await conta('#importa-mancanti .mancante');
@@ -1236,4 +1253,142 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
     await js('cutxProva.ricaricaStash()');
   }
   return true;
+}
+
+// --- schermate: ogni pannello a più dimensioni, con la ricerca di testo tagliato e di cose che escono ---
+
+// Gira nella pagina: elenca quello che esce dal viewport, dal suo contenitore o viene tagliato senza puntini.
+const CERCA_PROBLEMI = `(() => {
+  const problemi = [];
+  const vw = innerWidth;
+  const visibile = (el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    for (let p = el; p && p !== document.body; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (s.display === 'none' || s.visibility === 'hidden' || p.hidden) return false;
+    }
+    return true;
+  };
+  const nome = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase()) + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
+  const testo = (el) => (el.textContent || el.value || '').trim().replace(/\\s+/g, ' ').slice(0, 40);
+  for (const el of document.querySelectorAll('body *')) {
+    if (!visibile(el) || el.closest('.suggerimento, svg')) continue;
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    // 1. fuori dalla finestra
+    if (r.right > vw + 1 || r.left < -1) problemi.push({ tipo: 'fuori dalla finestra', el: nome(el), testo: testo(el) });
+    // 2. tagliato senza puntini (un elemento che nasconde l'eccesso)
+    if ((s.overflowX === 'hidden' || s.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== 'ellipsis' && el.children.length === 0 && testo(el))
+      problemi.push({ tipo: 'testo tagliato', el: nome(el), testo: testo(el) });
+    // 3. pulsanti e etichette che non ci stanno nella propria scatola
+    if (el.matches('.key, .lbl, button, select, label') && el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== 'ellipsis' && s.overflowX !== 'auto' && s.overflowX !== 'scroll' && !el.matches('select'))
+      problemi.push({ tipo: 'più largo della sua scatola', el: nome(el), testo: testo(el) });
+    // 4. esce dal contenitore che taglia (overflow nascosto) in orizzontale
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const ps = getComputedStyle(p);
+      if (ps.overflowX === 'hidden' || ps.overflowX === 'clip' || ps.overflowX === 'auto' || ps.overflowX === 'scroll') {
+        const pr = p.getBoundingClientRect();
+        if (r.right > pr.right + 1 && ps.overflowX !== 'auto' && ps.overflowX !== 'scroll') problemi.push({ tipo: 'tagliato dal contenitore', el: nome(el), testo: testo(el) });
+        break;
+      }
+    }
+  }
+  // 5. pulsanti che si sovrappongono nella stessa riga
+  for (const riga of document.querySelectorAll('.schede, .piede, .testa, .card-testa, .barra, .traccia-testa, .imp-testa, .importa-piede, .esempio-tasti, .fila')) {
+    if (!visibile(riga)) continue;
+    const figli = [...riga.children].filter(visibile).map((c) => c.getBoundingClientRect());
+    for (let i = 0; i < figli.length; i++) for (let j = i + 1; j < figli.length; j++) {
+      const a = figli[i], b = figli[j];
+      if (a.left < b.right - 2 && b.left < a.right - 2 && a.top < b.bottom - 2 && b.top < a.bottom - 2) problemi.push({ tipo: 'si sovrappongono', el: nome(riga), testo: testo(riga) });
+    }
+  }
+  const visti = new Set();
+  return problemi.filter((p) => !visti.has(p.tipo + p.el + p.testo) && visti.add(p.tipo + p.el + p.testo)).slice(0, 30);
+})()`;
+
+export async function schermate({ finestre, cartella }) {
+  const pronta = () => chiedi(finestre.controllo, '!!globalThis.cutxProva && !!document.querySelector(".cm-editor")');
+  await aspettaChe(async () => (await chiedi(finestre.live, 'globalThis.cutxStato?.()')) && (await pronta()));
+  await aspetta(1);
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const wc = finestre.controllo.webContents;
+  const progettiVeri = path.join(os.homedir(), 'Desktop', 'x1 Project');
+  const haVeri = existsSync(progettiVeri);
+  const prima = (await js('window.cutx.preferenze()')).cartelleAbleton ?? [];
+  if (haVeri) await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [${JSON.stringify(progettiVeri)}] })`);
+  // uno stato da fotografare: un po' di live, un editor con del codice
+  await js(`cutxProva.valuta('live', ${JSON.stringify(FOTO_LIVE)})`);
+  await js(`cutxProva.scriviCue(${JSON.stringify(FOTO_CUE)})`);
+  await js(`cutxProva.valuta('cuffia', ${JSON.stringify(FOTO_CUE)})`);
+  await js(`cutxProva.scriviCue('// @sezione quiet streets ambience sound library\\nnote("c2 [eb2 g2] c3 <bb1 f2>").s("sawtooth").lpf(800).gain(.0001)'); cutxProva.scegliEntraTra(1)`);
+  await wc.executeJavaScript('cutxProva.goLive()');
+  await js(`cutxProva.scriviCue(${JSON.stringify(FOTO_CUE)})`);
+  await aspetta(3);
+
+  const riepilogo = [];
+  for (const [w, h] of [[1280, 800], [1440, 900]]) {
+    finestre.controllo.setContentSize(w, h);
+    await aspetta(1);
+    const dir = path.join(cartella, `${w}x${h}`);
+    await mkdir(dir, { recursive: true });
+    const scatta = async (nome) => {
+      await aspetta(0.5);
+      await writeFile(path.join(dir, `${nome}.png`), (await wc.capturePage()).toPNG());
+      const problemi = await js(CERCA_PROBLEMI);
+      riepilogo.push({ w, h, nome, problemi });
+      console.log(`[schermate] ${w}x${h} ${nome}: ${problemi.length ? problemi.length + ' problemi' : 'ok'}`);
+      for (const p of problemi) console.log(`     - ${p.tipo}: ${p.el} "${p.testo}"`);
+    };
+    const scheda = (n) => js(`cutxProva.browser.vai(${JSON.stringify(n)})`);
+    await scheda('suoni');
+    await scatta('postazione');
+    await scheda('libreria');
+    await scatta('browser-libreria');
+    if (haVeri) {
+      await scheda('ableton');
+      await aspetta(3);
+      await scatta('browser-ableton');
+    }
+    await js(`cutxProva.browser.helpAperti.add('lpf()'); cutxProva.browser.vai('help')`);
+    await scatta('browser-help');
+    await scheda('suoni');
+    // il CUE in modalità brano
+    const cartellaLibreria = path.join(stash.radice(), 'libreria');
+    await writeFile(path.join(cartellaLibreria, 'schermate_notte.cutx'), NOTTE);
+    await js(`cutxProva.cue.apri('schermate_notte.cutx')`);
+    await aspetta(1);
+    await js(`(() => { const c = cutxProva.cue.carte.find((c) => c.i === 1); cutxProva.cue.attiva(c); })()`);
+    await scatta('cue-brano');
+    await js(`cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`);
+    await rm(path.join(cartellaLibreria, 'schermate_notte.cutx'), { force: true });
+    // le impostazioni, una sezione alla volta
+    wc.sendInputEvent({ type: 'keyDown', keyCode: ',', modifiers: ['meta'] });
+    await aspetta(1);
+    for (const sez of ['generale', 'audio', 'scorciatoie', 'proiezione', 'stash', 'ableton', 'estensioni']) {
+      await js(`document.querySelector('#imp-nav [data-sez="${sez}"]').click()`);
+      await scatta(`impostazioni-${sez}`);
+    }
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    await aspetta(0.5);
+    // il pannello di importazione
+    if (haVeri) {
+      for (const [nome, sigla] of [['x1', 'x1'], ['Mayia u influeced me a bit maybe?', 'mayia']]) {
+        await js(`cutxProva.importa.apri(${JSON.stringify({ nome, percorso: path.join(progettiVeri, `${nome}.als`), cartella: progettiVeri })})`);
+        await aspetta(2.5);
+        await scatta(`importa-${sigla}`);
+        if (sigla === 'x1') {
+          // una traccia MIDI in modalità audio: la riga dello stem
+          await js(`(() => { const t = [...document.querySelectorAll('#importa-tracce .traccia')].find((t) => t.querySelector('.segmenti')); t?.querySelectorAll('.segmenti .key')[1]?.click(); })()`);
+          await scatta('importa-x1-stem');
+        }
+        await js('cutxProva.importa.chiudi()');
+      }
+    }
+  }
+  await js(`window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} })`);
+  const totale = riepilogo.reduce((n, r) => n + r.problemi.length, 0);
+  console.log(`[schermate] ${riepilogo.length} schermate, ${totale} problemi`);
+  await writeFile(path.join(cartella, 'problemi.json'), JSON.stringify(riepilogo, null, 2));
+  return totale;
 }

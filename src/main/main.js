@@ -8,7 +8,7 @@ import * as stash from './stash.js';
 import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
-import { prova, foto } from './prova.js';
+import { prova, foto, schermate } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(QUI, '../../dist');
@@ -18,10 +18,11 @@ const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
 const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 // prova automatica: --prova (tutto), --prova=robustezza, --prova=brani
 const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton' : null);
+const SCHERMATE = process.argv.find((a) => a.startsWith('--schermate='))?.slice('--schermate='.length); // giro di tutti i pannelli a più dimensioni
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
 
 // Prova e foto girano con dati a parte, accanto a una CUTX eventualmente aperta e senza toccarne le impostazioni.
-if (PROVA || FOTO) {
+if (PROVA || FOTO || SCHERMATE) {
   const dati = path.join(app.getPath('appData'), 'CUTX-prova');
   app.setPath('userData', dati);
   const impostazioni = path.join(dati, 'impostazioni.json');
@@ -46,7 +47,7 @@ function migraDaDaneel() {
   const vecchiLog = path.join(path.dirname(app.getPath('logs')), 'DANEEL', 'avvio.log');
   sposta(vecchiLog, path.join(app.getPath('logs'), 'avvio-daneel.log'));
 }
-if (!PROVA && !FOTO) migraDaDaneel();
+if (!PROVA && !FOTO && !SCHERMATE) migraDaDaneel();
 
 app.on('second-instance', () => {
   const controllo = finestre.controllo;
@@ -394,4 +395,5 @@ app.whenReady().then(async () => {
   if (preferenze.leggi().uscita?.aperta) creaUscita();
   if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') }).then((ok) => app.exit(ok ? 0 : 1));
   if (FOTO) foto({ finestre, file: FOTO }).then(() => app.exit(0));
+  if (SCHERMATE) schermate({ finestre, cartella: path.resolve(SCHERMATE) }).then((n) => app.exit(n ? 1 : 0));
 });
