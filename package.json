@@ -20,7 +20,8 @@
     "@strudel/mini": "1.2.6",
     "@strudel/tonal": "1.2.6",
     "@strudel/transpiler": "1.2.6",
-    "@strudel/webaudio": "1.3.0"
+    "@strudel/webaudio": "1.3.0",
+    "fast-xml-parser": "^5.11.2"
   },
   "devDependencies": {
     "electron": "^44.9.0",
