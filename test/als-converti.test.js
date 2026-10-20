@@ -209,3 +209,41 @@ test('anteprima: l\'audio ha nomi provvisori (ant_…), i suoni veri restano que
   assert.equal(ant.suoni.length, 0);
   assert.equal(ant.provvisori[0].relativo, 'Samples/a.wav');
 });
+
+test('file lungo usato solo in parte: ritaglio con margine, e begin/end rifatti sul file ritagliato', () => {
+  const clip = (inizio, loop) => clipAudio({ inizio, loop, marcatori: [[0, 0], [100, 100]], durata: 100, file: 'Samples/lungo.wav' });
+  const m = modello({ bpm: 60, tracce: [tracciaAudio({ nome: '1-Audio', clip: [clip(0, [10, 14]), clip(8, [30, 34])] })] });
+  const info = { 'Samples/lungo.wav': { dimensione: 100e6, taglia: true } };
+  const r = converti(m, undefined, { titolo: 'x', file: info });
+  const s = r.suoni[0];
+  // si usa 10–14 s e 30–34 s: si tiene 9–35 (margine di 1 s) di 100 s
+  assert.deepEqual(s.ritaglio, { da: 9, a: 35 });
+  assert.equal(s.dimensione, 100e6);
+  assert.equal(s.peso, 26e6);
+  const [a, b] = r.sezioni.map((x) => x.codice);
+  assert.match(a, /begin\(0\.0385\)\.end\(0\.1923\)/); // (10-9)/26, (14-9)/26
+  assert.match(b, /begin\(0\.8077\)\.end\(0\.9615\)/); // (30-9)/26, (34-9)/26
+  // senza informazioni sul file (o se non si può ritagliare) resta tutto com'era
+  assert.equal(converti(m, undefined, { titolo: 'x' }).suoni[0].ritaglio, null);
+  assert.equal(converti(m, undefined, { titolo: 'x', file: { 'Samples/lungo.wav': { dimensione: 100e6, taglia: false } } }).suoni[0].ritaglio, null);
+});
+
+test('niente ritaglio se si usa quasi tutto il file o se si risparmia poco', () => {
+  const clip = clipAudio({ loop: [0, 98], marcatori: [[0, 0], [100, 100]], durata: 100, file: 'Samples/a.wav' });
+  const m = modello({ bpm: 60, tracce: [tracciaAudio({ nome: '1-Audio', clip: [clip] })] });
+  assert.equal(converti(m, undefined, { titolo: 'x', file: { 'Samples/a.wav': { dimensione: 190e6, taglia: true } } }).suoni[0].ritaglio, null);
+  const poco = clipAudio({ loop: [10, 20], marcatori: [[0, 0], [100, 100]], durata: 100, file: 'Samples/b.wav' });
+  const m2 = modello({ bpm: 60, tracce: [tracciaAudio({ nome: '1-Audio', clip: [poco] })] });
+  assert.equal(converti(m2, undefined, { titolo: 'x', file: { 'Samples/b.wav': { dimensione: 500e3, taglia: true } } }).suoni[0].ritaglio, null); // 500 KB: non vale la pena
+});
+
+test('lo stem di una traccia MIDI si ritaglia sulle sezioni che ne usano un pezzo', () => {
+  const m = modello({ bpm: 60, tracce: [tracciaMidi({ nome: '1-Pad', clip: [clipMidi({ inizio: 40, loop: [0, 8], note: [note(0, 4, 60)] })] })] });
+  const s = sceltePredefinite(m);
+  s.tracce[0].modalita = 'audio';
+  s.tracce[0].stem = { file: { relativo: '', assoluto: '/x/stem.wav', durata: 200 }, battuta: 1 };
+  const r = converti(m, s, { titolo: 'x', file: { '/x/stem.wav': { dimensione: 80e6, taglia: true } } });
+  // la sezione sta a 40 quarti = 40 s e dura 8 s: si tiene 39–49
+  assert.deepEqual(r.suoni[0].ritaglio, { da: 39, a: 49 });
+  assert.match(r.sezioni[0].codice, /begin\(0\.1000\)\.end\(0\.9000\)/);
+});

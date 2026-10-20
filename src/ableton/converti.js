@@ -148,6 +148,8 @@ export function secondiDaBattute(marcatori, battuta) {
 }
 
 const quattro = (x) => x.toFixed(4);
+const MARGINE_S = 1; // secondi di margine intorno a quello che si usa di un file
+const RISPARMIO_MIN = 1e6; // sotto 1 MB di risparmio non si ritaglia
 
 // --- varianti ---
 
@@ -216,7 +218,7 @@ export function sceltePredefinite(modello) {
 // opzioni: { titolo }. Ritorna { sezioni: [{ id, traccia, nome, etichetta, codice, incluso, inizio, scena, usi, battute,
 // suoni, avvisi }], suoni }. Le sezioni non incluse ci sono lo stesso (servono per ascoltarle in cuffia prima di sceglierle):
 // il loro audio ha un nome provvisorio `ant_…` e finisce in `provvisori`, non in `suoni`. Con `anteprima: true` lo hanno tutte.
-export function costruisci(modello, scelte = sceltePredefinite(modello), { titolo = 'brano', anteprima = false } = {}) {
+export function costruisci(modello, scelte = sceltePredefinite(modello), { titolo = 'brano', anteprima = false, file: infoFile = {} } = {}) {
   const bpm = modello.bpm;
   const prima = slug(pulisci(titolo).split(' ')[0]) || 'brano';
   const suoni = new Map(); // chiave del file → { nome, relativo, assoluto, durata }
@@ -265,7 +267,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
     const avvisiSezione = [];
     const usati = [];
     let codice;
-    let durataS = null; // quanto dura l'audio della sezione, se è audio
+    let audio = null; // se la sezione è audio: il suono e da dove a dove (in secondi); il codice si scrive alla fine, dopo i ritagli
     if (v.tipo === 'midi') {
       const { note, lunghezza } = v.clip;
       const b = battute(lunghezza);
@@ -280,13 +282,10 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
           usati.push(s.nome);
           const da = ((v.inizio - ((sc.stem.battuta ?? 1) - 1) * 4) * 60) / bpm;
           const dur = (lunghezza * 60) / bpm;
-          const beg = Math.max(0, Math.min(1, da / f.durata));
-          const end = Math.max(0, Math.min(1, (da + dur) / f.durata));
-          codice = `s("${s.nome}").begin(${quattro(beg)}).end(${quattro(end)})${lento}\n  .gain(.8)`;
-          durataS = Math.max(0, (end - beg) * f.durata);
+          audio = { suono: s, s0: da, s1: da + dur, durataFile: f.durata, lento };
         }
       }
-      if (codice === undefined) {
+      if (codice === undefined && !audio) {
         if (fuoriGriglia(note)) avvisiSezione.push('note fuori dalla griglia dei sedicesimi (terzine?): arrotondate');
         if (t.drum) {
           const perRuolo = new Map();
@@ -312,9 +311,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
         if (s0 === null) [s0, s1] = [(c.loop.inizio * 60) / bpm, (c.loop.fine * 60) / bpm];
       } else [s0, s1] = [c.loop.inizio, c.loop.fine];
       const b = battute(c.loop.fine - c.loop.inizio);
-      const [beg, end] = dur ? [Math.max(0, s0 / dur), Math.min(1, s1 / dur)] : [0, 1];
-      codice = `s("${s.nome}").begin(${quattro(beg)}).end(${quattro(end)})${b > 1 ? `.slow(${b})` : ''}\n  .gain(.8)`;
-      durataS = dur ? Math.max(0, (end - beg) * dur) : Math.max(0, s1 - s0);
+      audio = { suono: s, s0, s1, durataFile: dur, lento: b > 1 ? `.slow(${b})` : '' };
       if (c.warp && c.marcatori.length >= 2) {
         // un loop il cui tempo è lontano da quello del progetto cambierà altezza (niente time-stretch)
         const [m0, m1] = [c.marcatori[0], c.marcatori.at(-1)];
@@ -336,9 +333,44 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
       usi: v.usi,
       battute: battute(v.tipo === 'midi' ? v.clip.lunghezza : v.clip.loop.fine - v.clip.loop.inizio),
       suoni: usati,
-      durataS,
+      durataS: null,
+      audio,
       avvisi: avvisiSezione,
     });
+    // quanto del file serve davvero (solo per i suoni che finiscono nel brano)
+    if (audio && incluso && !anteprima) {
+      const u = (audio.suono.uso ??= { min: Infinity, max: 0 });
+      u.min = Math.min(u.min, Math.max(0, audio.s0));
+      u.max = Math.max(u.max, audio.durataFile ? Math.min(audio.durataFile, audio.s1) : audio.s1);
+    }
+  }
+
+  // Un file di cui si usa solo una parte si copia ritagliato (con un po' di margine): niente 190 MB per 5 minuti.
+  // Solo per i WAV che il main sa ritagliare, e solo se si risparmia davvero.
+  for (const [chiave, suono] of suoni) {
+    const info = infoFile[chiave];
+    suono.dimensione = info?.dimensione ?? null;
+    suono.ritaglio = null;
+    const u = suono.uso;
+    if (info?.taglia && suono.durata && u && Number.isFinite(u.min) && info.dimensione) {
+      const da = Math.max(0, u.min - MARGINE_S);
+      const a = Math.min(suono.durata, u.max + MARGINE_S);
+      const resta = (a - da) / suono.durata;
+      if (resta <= 0.95 && info.dimensione * (1 - resta) >= RISPARMIO_MIN) suono.ritaglio = { da, a };
+    }
+    suono.peso = suono.dimensione === null ? null : suono.ritaglio ? Math.round(suono.dimensione * ((suono.ritaglio.a - suono.ritaglio.da) / suono.durata)) : suono.dimensione;
+  }
+  // ora il codice dell'audio, con begin/end rispetto al file che finirà nello stash (ritagliato o no)
+  for (const sez of tutte) {
+    if (!sez.audio) continue;
+    const { suono, s0, s1, durataFile, lento } = sez.audio;
+    const r = suono.ritaglio;
+    const d = r ? r.a - r.da : durataFile;
+    const [x0, x1] = r ? [s0 - r.da, s1 - r.da] : [s0, s1];
+    const [beg, end] = d ? [Math.max(0, Math.min(1, x0 / d)), Math.max(0, Math.min(1, x1 / d))] : [0, 1];
+    sez.codice = `s("${suono.nome}").begin(${quattro(beg)}).end(${quattro(end)})${lento}\n  .gain(.8)`;
+    sez.durataS = d ? Math.max(0, (end - beg) * d) : Math.max(0, s1 - s0);
+    delete sez.audio;
   }
   // nell'ordine dell'arrangiamento; quelle solo della Session dopo, per scena
   const chiave = (s) => (s.inizio !== null ? [0, s.inizio] : [1, s.scena ?? 0]);
@@ -350,8 +382,8 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
 }
 
 // Il brano finito: testa, preambolo col tempo, una sezione per ogni variante scelta.
-export function converti(modello, scelte, { titolo, data, origine } = {}) {
-  const r = costruisci(modello, scelte, { titolo });
+export function converti(modello, scelte, { titolo, data, origine, file } = {}) {
+  const r = costruisci(modello, scelte, { titolo, file });
   const incluse = r.sezioni.filter((s) => s.incluso);
   const usati = new Set(incluse.flatMap((s) => s.suoni));
   const suoni = r.suoni.filter((s) => usati.has(s.nome));

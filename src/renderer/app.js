@@ -360,7 +360,7 @@ const importa = new Importa({
       cue.avviso('nessuno stash: sceglilo nella barra in alto');
       return false;
     }
-    const richiesta = { file: B.nomeFile(risultato.titolo), testo: risultato.testo, suoni: risultato.suoni.map((s) => ({ nome: s.nome, percorso: s.percorso })) };
+    const richiesta = { file: B.nomeFile(risultato.titolo), testo: risultato.testo, suoni: risultato.suoni.map((s) => ({ nome: s.nome, percorso: s.percorso, ritaglio: s.ritaglio })) };
     let r = await window.cutx.importaAbleton(richiesta);
     if (r.esiste) {
       if (!(await conferma({ titolo: 'importa da ableton', testo: `${r.file} esiste già nella libreria. Lo sovrascrivo?`, si: 'sovrascrivi' }))) return false;
@@ -373,6 +373,7 @@ const importa = new Importa({
     await apriStash(await window.cutx.stash()); // suoni e libreria nuovi
     await cue.apri(r.file);
     const pezzi = [`importato ${r.file}: ${risultato.sezioni} sezioni`, `${r.copiati.length} suoni copiati nello stash`];
+    if (r.ritagliati?.length) pezzi.push(`${r.ritagliati.length} ritagliati: −${Math.round(r.ritagliati.reduce((n, x) => n + x.prima - x.dopo, 0) / 1e5) / 10} MB`);
     if (r.mancanti.length) pezzi.push(`${r.mancanti.length} file mancanti (le sezioni ci sono lo stesso)`);
     if (r.nonSupportati.length) pezzi.push(`${r.nonSupportati.length} file in un formato che CUTX non legge: esportali in WAV`);
     cue.avviso(pezzi.join(' · '), { persistente: r.mancanti.length > 0 || r.nonSupportati.length > 0 });

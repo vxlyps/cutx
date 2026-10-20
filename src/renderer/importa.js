@@ -88,7 +88,7 @@ export class Importa {
     const visti = new Map();
     for (const t of this.modello.tracce) for (const c of t.clip) if (c.tipo === 'audio') visti.set(c.file.relativo || c.file.assoluto, { relativo: c.file.relativo, assoluto: c.file.assoluto });
     const r = await window.cutx.fileAbleton(this.progetto.percorso, [...visti.values()]);
-    for (const f of r.file ?? []) this.files.set(f.chiave, { percorso: f.percorso, id: f.id });
+    for (const f of r.file ?? []) this.files.set(f.chiave, { percorso: f.percorso, id: f.id, dimensione: f.dimensione, wav: f.wav });
   }
 
   // I file che servono a qualcosa e non ci sono.
@@ -104,8 +104,15 @@ export class Importa {
   }
 
   // La conversione con le scelte di adesso. `anteprima` serve per ascoltare: i suoni hanno nomi provvisori.
+  // Di ogni file: quanto pesa e se si può ritagliare (solo i WAV che ci sono).
+  infoFile() {
+    const info = {};
+    for (const [chiave, f] of this.files) if (f.percorso && f.dimensione) info[chiave] = { dimensione: f.dimensione, taglia: !!f.wav };
+    return info;
+  }
+
   conversione() {
-    const c = converti(this.modello, this.scelte, { titolo: this.titolo, data: oggi(), origine: this.progetto.percorso });
+    const c = converti(this.modello, this.scelte, { titolo: this.titolo, data: oggi(), origine: this.progetto.percorso, file: this.infoFile() });
     // ogni sezione sa quali file usa (per i mancanti)
     const perNome = new Map(c.suoni.map((s) => [s.nome, s]));
     for (const s of c.sezioni) s.suoniInfo = s.suoni.map((n) => perNome.get(n)).filter(Boolean);
@@ -177,7 +184,7 @@ export class Importa {
       const f = await window.cutx.scegliFileAbleton(`Lo stem di ${t.nome.replace(/^\d+-/, '')}, esportato da Ableton`);
       if (!f) return;
       if (f.errore) return this.azioni.avviso(f.errore);
-      this.files.set(f.percorso, { percorso: f.percorso, id: f.id });
+      this.files.set(f.percorso, { percorso: f.percorso, id: f.id, dimensione: f.dimensione, wav: f.wav });
       sc.stem = { file: { relativo: '', assoluto: f.percorso, durata: f.durata ?? 0 }, battuta: stem?.battuta ?? 1 };
       if (!f.durata) this.azioni.avviso('di questo formato non so la durata: usa un WAV');
       this.disegna();
@@ -297,15 +304,42 @@ export class Importa {
           const r = await window.cutx.scegliFileAbleton(`Dov'è ${(f.relativo || f.assoluto).split('/').pop()}?`);
           if (!r) return;
           if (r.errore) return this.azioni.avviso(r.errore);
-          this.files.set(f.relativo || f.assoluto, { percorso: r.percorso, id: r.id, manuale: true });
+          this.files.set(f.relativo || f.assoluto, { percorso: r.percorso, id: r.id, dimensione: r.dimensione, wav: r.wav, manuale: true });
           this.disegna();
         };
         riga.append(t, cerca);
         box.append(riga);
       }
     }
+    // file pesanti: sopra i 50 MB si dice quanto pesano e perché
+    const mb = (n) => `${Math.round(n / 1e5) / 10} MB`;
+    const grandi = c.suoni.filter((x) => x.peso !== null && x.peso > 50e6);
+    const boxGrandi = $('importa-grandi');
+    boxGrandi.replaceChildren();
+    boxGrandi.hidden = !grandi.length;
+    if (grandi.length) {
+      boxGrandi.append(crea('h2', 'lbl', `${grandi.length} ${grandi.length === 1 ? 'file pesante' : 'file pesanti'} (sopra 50 MB)`));
+      for (const x of grandi) {
+        const usato = x.uso && x.durata ? Math.round((100 * (x.uso.max - x.uso.min)) / x.durata) : null;
+        const nota = x.ritaglio
+          ? `ritagliato: da ${mb(x.dimensione)} a ${mb(x.peso)}`
+          : x.dimensione && usato !== null && this.files.get(x.relativo || x.assoluto)?.wav
+            ? `si usa il ${usato}% del file: ritagliarlo non serve`
+            : 'non è un WAV: CUTX lo copia intero';
+        const riga = crea('div', 'mancante');
+        const t = crea('div', 'imp-testo');
+        t.append(crea('span', '', (x.relativo || x.assoluto).split('/').pop()), crea('span', 'imp-nota', nota));
+        riga.append(t, crea('span', 'lbl peso', mb(x.peso)));
+        boxGrandi.append(riga);
+      }
+    }
+    const ritagliati = c.suoni.filter((x) => x.ritaglio);
+    const risparmio = ritagliati.reduce((n, x) => n + (x.dimensione - x.peso), 0);
     const avvisi = c.avvisi.length + mancanti.length;
-    $('importa-riepilogo').textContent = `${c.sezioni.length} sezioni · ${c.suoni.length} ${c.suoni.length === 1 ? 'suono' : 'suoni'} da copiare${avvisi ? ` · ${avvisi} ${avvisi === 1 ? 'avviso' : 'avvisi'}` : ''}`;
+    $('importa-riepilogo').textContent =
+      `${c.sezioni.length} sezioni · ${c.suoni.length} ${c.suoni.length === 1 ? 'suono' : 'suoni'} da copiare` +
+      (ritagliati.length ? ` (${ritagliati.length} ritagliati, −${mb(risparmio)})` : '') +
+      (avvisi ? ` · ${avvisi} ${avvisi === 1 ? 'avviso' : 'avvisi'}` : '');
     $('importa-vai').disabled = !c.sezioni.length;
     this.ultima = c;
   }
@@ -317,7 +351,7 @@ export class Importa {
       titolo: this.titolo,
       testo: c.testo,
       sezioni: c.sezioni.length,
-      suoni: c.suoni.map((s) => ({ nome: s.nome, percorso: this.files.get(s.relativo || s.assoluto)?.percorso ?? null, originale: s.relativo || s.assoluto })),
+      suoni: c.suoni.map((s) => ({ nome: s.nome, percorso: this.files.get(s.relativo || s.assoluto)?.percorso ?? null, originale: s.relativo || s.assoluto, ritaglio: s.ritaglio, peso: s.peso })),
       avvisi: c.avvisi,
     };
   }

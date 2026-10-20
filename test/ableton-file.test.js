@@ -92,3 +92,51 @@ test('copiaSuoni: una cartella per file nello stash, solo file trovati da noi, m
     await rm(r, { recursive: true, force: true });
   }
 });
+
+test('ritagliaWav: un WAV vero con solo i secondi chiesti, dati identici a quelli dell\'originale', async () => {
+  const { ritagliaWav } = await import('../src/main/ableton.js');
+  const r = await mkdtemp(path.join(tmpdir(), 'cutx-ritaglio-'));
+  try {
+    // 10 secondi a 8 kHz, 16 bit, mono: ogni campione ha un valore che dice dov'è
+    const frequenza = 8000;
+    const dati = Buffer.alloc(10 * frequenza * 2);
+    for (let i = 0; i < 10 * frequenza; i++) dati.writeInt16LE(i % 30000, i * 2);
+    const originale = wav(10, frequenza);
+    dati.copy(originale, 44);
+    await writeFile(path.join(r, 'a.wav'), originale);
+    const durata = await ritagliaWav(path.join(r, 'a.wav'), path.join(r, 'b.wav'), 2.5, 4);
+    assert.equal(durata, 1.5);
+    assert.equal(await durataWav(path.join(r, 'b.wav')), 1.5);
+    const b = await readFile(path.join(r, 'b.wav'));
+    assert.equal(b.length, 44 + 1.5 * frequenza * 2);
+    assert.ok(b.subarray(44).equals(originale.subarray(44 + 2.5 * frequenza * 2, 44 + 4 * frequenza * 2)));
+    // oltre la fine: si tiene fino alla fine; da dopo la fine: un file vuoto ma valido
+    assert.equal(await ritagliaWav(path.join(r, 'a.wav'), path.join(r, 'c.wav'), 9, 20), 1);
+    assert.equal(await ritagliaWav(path.join(r, 'a.wav'), path.join(r, 'd.wav'), 20, 30), 0);
+    assert.equal(await durataWav(path.join(r, 'd.wav')), 0);
+    await writeFile(path.join(r, 'x.wav'), 'non un wav');
+    await assert.rejects(() => ritagliaWav(path.join(r, 'x.wav'), path.join(r, 'y.wav'), 0, 1));
+  } finally {
+    await rm(r, { recursive: true, force: true });
+  }
+});
+
+test('copiaSuoni ritaglia i WAV quando glielo si chiede, e dice quanto ha risparmiato', async () => {
+  const { copiaSuoni } = await import('../src/main/ableton.js');
+  const r = await mkdtemp(path.join(tmpdir(), 'cutx-copia2-'));
+  try {
+    await mkdir(path.join(r, 'Prog'), { recursive: true });
+    await mkdir(path.join(r, 'stash'), { recursive: true });
+    await writeFile(path.join(r, 'Prog', 'lungo.wav'), wav(10));
+    const [t] = await risolviFile(path.join(r, 'Prog'), [{ relativo: 'lungo.wav', assoluto: '' }]);
+    assert.equal(t.wav, true);
+    assert.equal(t.dimensione, wav(10).length);
+    const out = await copiaSuoni(path.join(r, 'stash'), [{ nome: 'x_01_lungo', percorso: t.percorso, ritaglio: { da: 1, a: 3 } }]);
+    assert.deepEqual(out.copiati, ['x_01_lungo']);
+    assert.equal(out.ritagliati[0].prima, wav(10).length);
+    assert.equal(out.ritagliati[0].dopo, 44 + 2 * 8000 * 2);
+    assert.equal(await durataWav(path.join(r, 'stash', 'suoni', 'x_01_lungo', 'lungo.wav')), 2);
+  } finally {
+    await rm(r, { recursive: true, force: true });
+  }
+});

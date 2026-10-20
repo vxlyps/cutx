@@ -1735,3 +1735,15 @@ input[type='checkbox'] {
   opacity: 0.4;
   cursor: default;
 }
+
+.importa-grandi {
+  border-color: var(--bordo);
+}
+
+.importa-grandi h2 {
+  color: #d9b36a;
+}
+
+.lbl.peso {
+  white-space: nowrap;
+}

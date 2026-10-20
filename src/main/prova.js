@@ -2,10 +2,11 @@
 // poi blocca e crasha interfaccia e cuffia, una cosa alla volta. Per ogni fase conta i click
 // che la sentinella del live ha sentito davvero in uscita: le casse non devono perderne uno.
 import path from 'node:path';
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as stash from './stash.js';
 import { leggiAls, leggiAlsFile } from '../ableton/leggi.js';
 import { converti } from '../ableton/converti.js';
+import { durataWav, risolviFile } from './ableton.js';
 import * as finto from '../../test/als-finto.js';
 import os from 'node:os';
 import { existsSync } from 'node:fs';
@@ -1195,7 +1196,12 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
       const fileBrano = path.join(radiceStash, 'libreria', `prova_${sigla}.cutx`);
       if (existsSync(fileBrano)) throw new Error(`${fileBrano} esiste già: non lo tocco`);
       const modello = await leggiAlsFile(percorso);
-      const atteso = converti(modello, undefined, { titolo, data: '2026-01-01' });
+      // quello che il pannello sa dei file: quanto pesano e se si possono ritagliare
+      const visti = new Map();
+      for (const t of modello.tracce) for (const c of t.clip) if (c.tipo === 'audio') visti.set(c.file.relativo || c.file.assoluto, c.file);
+      const trovati = await risolviFile(cartellaProgetti, [...visti.values()]);
+      const infoFile = Object.fromEntries(trovati.filter((f) => f.percorso).map((f) => [f.chiave, { dimensione: f.dimensione, taglia: f.wav }]));
+      const atteso = converti(modello, undefined, { titolo, data: '2026-01-01', file: infoFile });
 
       await js(`cutxProva.importa.apri(${JSON.stringify({ nome, percorso, cartella: cartellaProgetti })})`);
       for (let i = 0; i < 60 && !(await js(`document.querySelectorAll('#importa-tracce .traccia').length`)); i++) await aspetta(0.25);
@@ -1213,6 +1219,10 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
         controlla(`${sigla}: l'anteprima di un file vero si serve (${r[1]} byte)`, r[0] === 200 && r[1] > 1000, JSON.stringify(r));
       }
 
+      // i file pesanti sono nel pannello col loro peso; quelli ritagliabili si ritagliano
+      const grandi = await js(`document.getElementById('importa-grandi').hidden ? '' : document.getElementById('importa-grandi').textContent`);
+      scrivi(`      ${sigla}: ${atteso.suoni.filter((x) => x.ritaglio).length} suoni da ritagliare su ${atteso.suoni.length}; file pesanti nel pannello: ${grandi ? grandi.replace(/\s+/g, ' ').slice(0, 160) : 'nessuno'}`);
+      if (atteso.suoni.some((x) => x.peso > 50e6)) controlla(`${sigla}: i file sopra 50 MB compaiono nel pannello col peso`, grandi.includes('MB') && grandi.includes('pesant'), grandi);
       // ▶ su una variante audio e su una di codice
       const tasti = await js(`[...document.querySelectorAll('#importa-tracce .variante-riga button.key')].map((b, i) => [i, b.disabled])`);
       const primoAudio = await js(`(() => { const t = [...document.querySelectorAll('#importa-tracce .traccia')].find((t) => t.textContent.includes('I FILE AUDIO') || t.textContent.toLowerCase().includes('i file audio')); const b = t?.querySelector('.variante-riga button.key:not(:disabled)'); if (!b) return false; b.click(); return true; })()`);
@@ -1238,6 +1248,12 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
       const copiati = suoniAttesi.filter((n) => existsSync(path.join(radiceStash, 'suoni', n)));
       const trovabili = await js(`[...cutxProva.importa.files.entries()].filter(([, f]) => f.percorso).length`);
       scrivi(`      ${sigla}: suoni copiati nello stash ${copiati.length} su ${suoniAttesi.length}`);
+      for (const x of atteso.suoni.filter((y) => y.ritaglio)) {
+        const cartellaSuono = path.join(radiceStash, 'suoni', x.nome);
+        const wavScritto = existsSync(cartellaSuono) ? (await readdir(cartellaSuono)).find((f) => f.endsWith('.wav')) : null;
+        const durata = wavScritto ? await durataWav(path.join(cartellaSuono, wavScritto)) : null;
+        controlla(`${sigla}: ${x.nome} è stato ritagliato (${Math.round(x.ritaglio.a - x.ritaglio.da)} s di ${Math.round(x.durata)} s)`, durata !== null && Math.abs(durata - (x.ritaglio.a - x.ritaglio.da)) < 0.01 && (await stat(path.join(cartellaSuono, wavScritto))).size < x.dimensione, String(durata));
+      }
       controlla(`${sigla}: ogni file trovato è stato copiato`, copiati.length === suoniAttesi.filter((n) => atteso.suoni.find((x) => x.nome === n) && true).length - (suoniAttesi.length - copiati.length) && trovabili >= copiati.length);
       // ogni sezione, dal file scritto, si valuta con Strudel
       const codici = brano.sezioni.map((sez) => `${brano.preambolo.join('\n')}\n${sez.corpo.join('\n')}`);
