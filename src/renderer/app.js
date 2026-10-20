@@ -372,8 +372,8 @@ const importa = new Importa({
     }
     await apriStash(await window.cutx.stash()); // suoni e libreria nuovi
     await cue.apri(r.file);
-    const pezzi = [`importato ${r.file}: ${risultato.sezioni} sezioni`, `${r.copiati.length} suoni copiati nello stash`];
-    if (r.ritagliati?.length) pezzi.push(`${r.ritagliati.length} ritagliati: −${Math.round(r.ritagliati.reduce((n, x) => n + x.prima - x.dopo, 0) / 1e5) / 10} MB`);
+    const pezzi = [`creato il brano «${risultato.titolo}»: ${risultato.sezioni} ${risultato.sezioni === 1 ? 'sezione' : 'sezioni'}, ${r.copiati.length} ${r.copiati.length === 1 ? 'suono copiato' : 'suoni copiati'}, aperto nel CUE`];
+    if (r.ritagliati?.length) pezzi.push(`${r.ritagliati.length} ritagliati (−${Math.round(r.ritagliati.reduce((n, x) => n + x.prima - x.dopo, 0) / 1e5) / 10} MB)`);
     if (r.mancanti.length) pezzi.push(`${r.mancanti.length} file mancanti (le sezioni ci sono lo stesso)`);
     if (r.nonSupportati.length) pezzi.push(`${r.nonSupportati.length} file in un formato che CUTX non legge: esportali in WAV`);
     cue.avviso(pezzi.join(' · '), { persistente: r.mancanti.length > 0 || r.nonSupportati.length > 0 });

@@ -1747,3 +1747,187 @@ input[type='checkbox'] {
 .lbl.peso {
   white-space: nowrap;
 }
+
+/* --- importazione: i tre passi --- */
+.importa-passi {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--linea);
+}
+
+.passo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 16px 0 8px;
+  background: transparent;
+  border: 1px solid var(--bordo);
+  border-radius: 18px;
+  color: var(--secondario);
+  font: 13px var(--mono);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.passo b {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--grigio);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.passo.on {
+  background: var(--testo);
+  border-color: var(--testo);
+  color: var(--su-marcio);
+}
+
+.passo.on b {
+  border-color: var(--su-marcio);
+}
+
+.passo.fatto b {
+  background: var(--marcio);
+  border-color: var(--marcio);
+  color: var(--su-marcio);
+}
+
+.passo-freccia {
+  width: 28px;
+  height: 1px;
+  background: var(--bordo);
+}
+
+.importa-pagina {
+  flex: 1;
+}
+
+.importa-pagina > * {
+  max-width: 880px;
+}
+
+.importa-intro {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.importa-cosa {
+  margin: 18px 0 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 720px;
+}
+
+.progetto-dati {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  align-items: baseline;
+}
+
+.progetto-voce {
+  display: contents;
+}
+
+.progetto-valore {
+  font-size: 15px;
+}
+
+.traccia-modi {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.modo {
+  min-height: 34px;
+  padding: 6px 12px;
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  border-bottom-width: 3px;
+  border-radius: 3px;
+  color: var(--secondario);
+  font: 12px/1.3 var(--mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.modo.on {
+  background: var(--testo);
+  border-color: var(--testo);
+  border-bottom-color: #7a7e72;
+  color: var(--su-marcio);
+}
+
+.modo.fisso {
+  cursor: default;
+}
+
+.traccia-effetto {
+  margin: 8px 12px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--secondario);
+}
+
+.apri-codice {
+  margin-left: auto;
+}
+
+.sezione-codice {
+  margin: 0 0 8px 32px;
+  padding: 10px 12px;
+  background: var(--pannello);
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--testo);
+}
+
+.importa-mancanti {
+  flex-shrink: 0;
+  margin: 0;
+  max-height: 42%;
+  overflow-y: auto;
+  border-width: 1px 0;
+  border-radius: 0;
+  padding: 14px 24px;
+  background: #140a08;
+}
+
+.importa-mancanti.importa-grandi {
+  margin: 20px 0 0;
+  border-width: 1px;
+  border-radius: 3px;
+  background: transparent;
+}
+
+.consiglio {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px dashed #5a2f22;
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--testo);
+}
+
+.ableton-vuota {
+  margin: 4px 2px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--secondario);
+}

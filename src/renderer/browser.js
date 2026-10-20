@@ -1,6 +1,7 @@
 // Il browser a sinistra, tre schede: i suoni dello stash, la libreria dei brani, la guida di Strudel.
 // ▶ fa sentire in cuffia, + inserisce nel CUE dove c'è il cursore. Funziona offline: la guida è un file locale.
 import help from './testi/help.json';
+import it from './testi/it.json';
 
 // I synth di Strudel, sempre disponibili, con una nota di prova.
 export const SYNTH = ['sine', 'square', 'sawtooth', 'triangle', 'supersaw'];
@@ -187,9 +188,11 @@ export class Browser {
 
   mostraAbleton() {
     if (!this.azioni.cartelleAbleton().length) {
-      this.gruppo('progetti');
-      this.vuoto('nessuna cartella: scegli dove tieni i progetti Ableton');
-      const b = crea('button', 'key', 'aggiungi cartella');
+      // la prima volta: cosa fa, e il pulsante lì dentro (senza passare dalle impostazioni)
+      this.gruppo('ableton');
+      this.elenco.append(crea('p', 'ableton-vuota', it.ableton.vuota));
+      const b = crea('button', 'key acid', 'scegli cartella');
+      b.dataset.aiuto = 'ableton-scegli';
       b.onclick = () => this.azioni.aggiungiCartellaAbleton();
       this.elenco.append(b);
       return;
@@ -198,7 +201,15 @@ export class Browser {
     if (this.progetti === null) return this.vuoto('cerco i progetti…');
     const filtro = this.filtro;
     const visti = this.progetti.filter((p) => !filtro || p.nome.toLowerCase().includes(filtro));
-    if (!visti.length) return this.vuoto(filtro ? 'nessun progetto con questo nome' : 'nessun progetto .als nelle cartelle scelte');
+    if (!visti.length) {
+      this.vuoto(filtro ? 'nessun progetto con questo nome' : 'nessun progetto .als nelle cartelle scelte');
+      if (!filtro) {
+        const b = crea('button', 'key', 'scegli un\'altra cartella');
+        b.onclick = () => this.azioni.aggiungiCartellaAbleton();
+        this.elenco.append(b);
+      }
+      return;
+    }
     for (const p of visti) {
       const info = this.infoProgetti.get(p.percorso);
       const nota = !info ? '…' : info.errore ? 'illeggibile' : `${Math.round(info.bpm * 10) / 10} bpm · ${info.tracce} ${info.tracce === 1 ? 'traccia' : 'tracce'}`;

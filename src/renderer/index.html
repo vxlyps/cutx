@@ -122,32 +122,45 @@
       </section>
     </main>
 
-    <!-- L'importazione da Ableton: si sceglie cosa portare in CUTX e si vede il brano che ne esce. -->
+    <!-- L'importazione da Ableton, in tre passi: 1 progetto, 2 tracce, 3 importa. -->
     <div id="importa" class="importa" hidden>
       <header class="imp-testa">
         <span class="lbl">importa da ableton</span>
         <span id="importa-nome" class="importa-nome"></span>
-        <span id="importa-dati" class="lbl"></span>
         <div class="spazio"></div>
         <button id="importa-chiudi" class="key">chiudi <i>esc</i></button>
       </header>
+      <nav id="importa-passi" class="importa-passi" aria-label="Passi">
+        <button class="passo on" data-passo="1"><b>1</b> progetto</button>
+        <span class="passo-freccia" aria-hidden="true"></span>
+        <button class="passo" data-passo="2"><b>2</b> tracce</button>
+        <span class="passo-freccia" aria-hidden="true"></span>
+        <button class="passo" data-passo="3"><b>3</b> importa</button>
+      </nav>
+      <div id="importa-mancanti" class="importa-mancanti" hidden></div>
       <div class="importa-corpo">
-        <section class="importa-colonna importa-sinistra">
+        <section id="importa-p1" class="importa-colonna importa-pagina" data-passo="1">
+          <div id="importa-progetto"></div>
           <p id="importa-limiti" class="secondario importa-limiti"></p>
+        </section>
+        <section id="importa-p2" class="importa-colonna importa-pagina" data-passo="2" hidden>
+          <p class="importa-intro">scegli cosa portare in CUTX. Ogni clip diversa di una traccia diventa una sezione: spunta quelle che ti servono e ascoltale con ▶.</p>
           <div id="importa-tracce"></div>
         </section>
-        <section class="importa-colonna importa-destra">
-          <div class="importa-titolo-riga"><h2 class="lbl">brano che esce</h2><span id="importa-conteggio" class="lbl"></span></div>
+        <section id="importa-p3" class="importa-colonna importa-pagina" data-passo="3" hidden>
+          <div class="importa-titolo-riga"><h2 class="lbl">il brano che esce</h2><span id="importa-conteggio" class="lbl"></span></div>
+          <label class="importa-nome-brano"><span class="lbl">nome del brano</span><input id="importa-titolo" type="text" spellcheck="false" /></label>
+          <p class="secondario importa-intro">le sezioni sono nell'ordine dell'arrangiamento. Cambia un nome scrivendoci sopra; apri una sezione per vedere il codice che verrà creato.</p>
           <div id="importa-sezioni"></div>
-          <div id="importa-mancanti" class="importa-mancanti" hidden></div>
           <div id="importa-grandi" class="importa-mancanti importa-grandi" hidden></div>
         </section>
       </div>
       <footer class="importa-piede">
-        <label class="importa-nome-brano"><span class="lbl">nome del brano</span><input id="importa-titolo" type="text" spellcheck="false" /></label>
         <span id="importa-riepilogo" class="lbl"></span>
         <div class="spazio"></div>
         <button id="importa-annulla" class="key">annulla</button>
+        <button id="importa-indietro" class="key">← indietro</button>
+        <button id="importa-avanti" class="key acid grande">avanti →</button>
         <button id="importa-vai" class="key acid grande">importa</button>
       </footer>
     </div>

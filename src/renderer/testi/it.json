@@ -163,6 +163,14 @@
     "importa-synth": {
       "nome": "synth",
       "testo": "Il suono di CUTX che prende il posto dello strumento di Ableton. Proposto dal nome della traccia: puoi cambiarlo."
+    },
+    "importa-passo": {
+      "nome": "passi",
+      "testo": "L'importazione ha tre passi: 1 il progetto, 2 le tracce da portare, 3 il brano che esce. Puoi tornare indietro quando vuoi."
+    },
+    "ableton-scegli": {
+      "nome": "scegli cartella",
+      "testo": "Scegli la cartella dove tieni i progetti Ableton (o quella che li contiene tutti). CUTX li legge soltanto."
     }
   },
   "impostazioni": {
@@ -217,7 +225,25 @@
   "importa": {
     "limiti": "Strumenti ed effetti di Ableton e dei plugin non si possono riprodurre: in modalità codice suona un synth di CUTX che ci somiglia, in modalità audio suona l'audio originale. Gli audio con un tempo molto diverso da quello del progetto cambiano altezza (Strudel non fa time-stretch). Automazioni e mix (volumi, filtri automatizzati) per ora non vengono importati.",
     "stem": "In Ableton esporta lo stem dalla battuta 1 (File → Esporta audio/video), poi sceglilo qui. Se l'hai esportato da un altro punto, scrivi da quale battuta parte.",
-    "mancanti": "Alcuni file non stanno nella cartella del progetto (la libreria di Ableton, o file presi da altre cartelle come Download). La soluzione più semplice: in Ableton, File → Raccogli tutto e salva, che copia tutti i file usati dentro la cartella del progetto; poi riapri il progetto qui. Oppure indicali a mano.",
-    "cuffia": "Le anteprime suonano in cuffia al tempo del live."
+    "mancanti": "Questi file non stanno nella cartella del progetto (la libreria di Ableton, o file presi da altre cartelle come Download). La soluzione più semplice: in Ableton, File → Raccogli tutto e salva, che copia tutti i file usati dentro la cartella del progetto; poi riapri il progetto qui. Oppure indicali a mano con «cerca…».",
+    "cuffia": "Le anteprime suonano in cuffia al tempo del live.",
+    "passi": [
+      "progetto",
+      "tracce",
+      "importa"
+    ],
+    "cosaSuccede": "CUTX legge il progetto e non lo modifica mai. Ogni traccia diventa una o più sezioni di un brano: una per ogni clip diversa, nell'ordine in cui compaiono nell'arrangiamento. Le note MIDI diventano codice con un synth di CUTX; l'audio suona dai file originali, che si copiano nello stash.",
+    "modoCodice": "synth di CUTX (le note, modificabili)",
+    "modoAudio": "audio di Ableton (il suono originale)",
+    "effettoCodice": "Le note diventano codice Strudel col synth «{synth}»: lo puoi modificare e suonarci sopra dal vivo.",
+    "effettoBatteria": "Il Drum Rack diventa una riga di batteria sintetica per ogni suono (cassa, rullante, charleston…), battuta per battuta.",
+    "effettoAudio": "Suona i file audio del progetto, ritagliati dove stanno nelle clip. Niente codice delle note: è l'audio originale.",
+    "effettoStem": "Suona lo stem «{stem}»: ogni sezione è il suo pezzo, contando dalla battuta {battuta} dello stem.",
+    "effettoSenzaStem": "Scegli lo stem che hai esportato da Ableton: finché non lo scegli, la traccia resta col synth di CUTX.",
+    "intro3": "le sezioni sono nell'ordine dell'arrangiamento",
+    "creato": "creato il brano «{titolo}»: {sezioni} sezioni, {suoni} suoni copiati, aperto nel CUE"
+  },
+  "ableton": {
+    "vuota": "Porta in CUTX i tuoi progetti Ableton: scegli la cartella dove li tieni e li trovi qui, pronti da importare come brani."
   }
 }
