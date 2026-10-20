@@ -36,7 +36,30 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo'] }) {
+// Le prove usano la tastiera e il fuoco dell'editor, che esistono solo se la finestra è quella attiva di macOS: se in quel
+// momento si sta usando un'altra applicazione (un browser, il Terminale) i fuochi non arrivano e i controlli falliscono per
+// motivi che non c'entrano con CUTX. Prima di ogni parte si porta la finestra in primo piano.
+// macOS non lascia più a un'applicazione partita dal Terminale il diritto di prendersi il fuoco: se la finestra non è quella
+// attiva, `element.focus()` non fa scattare l'evento 'focus' (da cui l'editor capisce quale card è in uso). Per le prove si
+// fa scattare lo stesso, solo quando la pagina non ha il fuoco vero (con un utente al suo posto non cambia niente).
+const SIMULA_FUOCO = `(() => {
+  if (window.__simulaFuoco) return;
+  window.__simulaFuoco = true;
+  const vero = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (...a) {
+    vero.apply(this, a);
+    if (!document.hasFocus()) this.dispatchEvent(new FocusEvent('focus'));
+  };
+})()`;
+
+async function primoPiano(finestre) {
+  // (niente `app.focus()`: non si ruba il fuoco a quello che l'utente sta usando; basta la simulazione nella pagina)
+  const f = finestre.controllo;
+  if (f && !f.isDestroyed()) await f.webContents.executeJavaScript(SIMULA_FUOCO).catch(() => {});
+  await aspetta(0.2);
+}
+
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -53,6 +76,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   const pid = (r) => finestre[r].webContents.getOSProcessId();
   scrivi(`processi: controllo ${pid('controllo')} · live ${pid('live')} · cuffia ${pid('cuffia')}`);
   await aspetta(2);
+  await primoPiano(finestre);
   let ok = true;
   if (parti.includes('robustezza')) await (async () => {
     await chiedi(finestre.controllo, `cutxProva.avviaTest(${JSON.stringify(CODICE)})`);
@@ -151,7 +175,10 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
 
   })();
   // un errore dentro una prova è un fallimento, non un blocco
-  const sicura = (nome, fn) => fn({ finestre, scrivi }).catch((e) => (scrivi(`FALLITO ${nome}: ${e.stack ?? e}`), false));
+  const sicura = async (nome, fn) => {
+    await primoPiano(finestre);
+    return fn({ finestre, scrivi }).catch((e) => (scrivi(`FALLITO ${nome}: ${e.stack ?? e}`), false));
+  };
   if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
   if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
   if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
@@ -160,6 +187,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('ableton')) ok = (await sicura('ableton', provaAbleton)) && ok;
   if (parti.includes('neon')) ok = (await sicura('neon', provaNeon)) && ok;
   if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
+  if (parti.includes('solidita')) ok = (await sicura('solidita', provaSolidita)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -355,7 +383,7 @@ async function provaBrani({ finestre, scrivi }) {
   await premi('Return', 'meta', 'shift');
   await aspetta(1);
   const live = await chiedi(finestre.live, 'globalThis.cutxStato?.()');
-  controlla('go live da una card manda la sezione col suo nome', live?.nome === 'melodia' && live?.provenienza === `${nome} §2`, JSON.stringify([live?.nome, live?.provenienza]));
+  controlla('go live da una card manda la sezione col suo nome', live?.nome === 'melodia' && live?.provenienza === `${nome} §2`, JSON.stringify([live?.nome, live?.provenienza, await js('cutxProva.diagnosi()')]));
   await aspetta(0.5);
   const classi = await js(`[...document.querySelectorAll('#mappa .blocco-mappa')].map((b) => b.className)`);
   controlla('la mappa mostra la sezione live in verde', classi?.[1]?.includes('live'), JSON.stringify(classi));
@@ -1284,8 +1312,11 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
       const tasti = await js(`[...document.querySelectorAll('#importa-tracce .variante-riga button.key')].map((b, i) => [i, b.disabled])`);
       const primoAudio = await js(`(() => { const t = [...document.querySelectorAll('#importa-tracce .traccia')].find((t) => t.textContent.includes('I FILE AUDIO') || t.textContent.toLowerCase().includes('i file audio')); const b = t?.querySelector('.variante-riga button.key:not(:disabled)'); if (!b) return false; b.click(); return true; })()`);
       if (primoAudio) {
-        await aspetta(1.5);
-        const c = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+        let c = null;
+        for (let i = 0; i < 40 && !c?.codice; i++) {
+          await aspetta(0.25);
+          c = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+        }
         controlla(`${sigla}: ▶ su un audio vero va in cuffia senza errori`, c.codice?.includes('s("ant_') && !c.errore, JSON.stringify([c.codice?.slice(0, 60), c.errore]));
         await js(`document.querySelector('#importa-tracce .variante-riga button.key.on')?.click()`);
       }
@@ -1298,8 +1329,9 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
       creati.push(fileBrano, ...suoniAttesi.map((n) => path.join(radiceStash, 'suoni', n)));
       await js('cutxProva.importa.vai(3)');
       await js(`document.getElementById('importa-vai').click()`);
-      for (let i = 0; i < 80 && !existsSync(fileBrano); i++) await aspetta(0.25);
-      await aspetta(1.5);
+      // l'importazione è finita quando il pannello si chiude: dopo aver scritto il brano, copiato i suoni (anche 175 MB) e aperto il CUE
+      for (let i = 0; i < 240 && (await js(`document.getElementById('importa').hidden`)) !== true; i++) await aspetta(0.25);
+      await aspetta(0.5);
       const testo = existsSync(fileBrano) ? await readFile(fileBrano, 'utf8') : '';
       const brano = parse(testo);
       controlla(`${sigla}: il brano importato ha le sue ${atteso.sezioni.length} sezioni, @origine e @suoni`, brano.sezioni.length === atteso.sezioni.length && testo.includes(`// @origine ${percorso}`) && testo.includes('// @suoni '), testo.slice(0, 200));
@@ -1712,5 +1744,141 @@ async function provaTempo({ finestre, scrivi }) {
     await rm(filesLibro, { force: true });
     await js('cutxProva.fermaTutto(); cutxProva.cue.brano = null; cutxProva.cue.cambiaModo("libero")');
   }
+  return ok;
+}
+
+// --- prova di solidità: versione e registro, stash non collegato, scheda audio scollegata, motori che crashano ---
+
+async function provaSolidita({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const liveJs = (codice) => chiedi(finestre.live, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const wc = () => finestre.controllo.webContents;
+  const finche = async (fn, s = 8) => {
+    for (let i = 0; i < s * 5; i++) {
+      const r = await fn();
+      if (r) return r;
+      await aspetta(0.2);
+    }
+    return null;
+  };
+  const registro = path.join(path.dirname(finestre.controllo.webContents.session.getStoragePath() ?? ''), 'log', 'cutx.log');
+  void registro;
+  const fileLog = path.join(os.homedir(), 'Library', 'Application Support', 'CUTX-prova', 'log', 'cutx.log');
+  const versione = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')).version;
+
+  // --- versione e registro ---
+  await js(`document.getElementById('impostazioni').hidden = false; document.querySelector('#imp-nav [data-sez="generale"]').click()`);
+  await aspetta(0.6);
+  controlla(`la versione (${versione}) si vede nelle impostazioni`, (await js(`document.getElementById('imp-versione').textContent`)) === `versione ${versione}`, await js(`document.getElementById('imp-versione').textContent`));
+  controlla('con Electron e Chromium', /Electron \d+/.test(await js(`document.getElementById('imp-versione-dettagli').textContent`)));
+  controlla('e il percorso del registro', (await js(`document.getElementById('imp-registro').textContent`)).endsWith('cutx.log'));
+  await js(`document.getElementById('impostazioni').hidden = true`);
+  await wc().executeJavaScript(`console.error('prova-errore-nel-registro'); console.warn('prova-avviso-nel-registro')`);
+  await aspetta(0.8);
+  const testoLog = await readFile(fileLog, 'utf8').catch(() => '');
+  controlla('il registro ha la riga di avvio con la versione', new RegExp(`\\[info\\] \\[avvio\\] CUTX ${versione.replace(/\./g, '\\.')}`).test(testoLog), testoLog.slice(0, 200));
+  controlla('gli errori delle pagine finiscono nel registro, con data, livello e chi parla', /\d{4}-\d\d-\d\dT[\d:.]+Z \[errore\] \[controllo\] prova-errore-nel-registro/.test(testoLog));
+  controlla('e gli avvisi', /\[avviso\] \[controllo\] prova-avviso-nel-registro/.test(testoLog));
+
+  // --- stash su un SSD non collegato ---
+  const vero = stash._percorsoPerProva('/Volumes/SSD-non-collegato/stash-del-set');
+  await js('cutxProva.ricaricaStash()');
+  controlla('stash non collegato: un avviso chiaro in cima, non una schermata vuota', (await js(`!document.getElementById('avviso-stash').hidden`)) === true);
+  const avvisoStash = await js(`document.getElementById('avviso-stash-testo').textContent`);
+  controlla('dice quale stash e cosa fare', avvisoStash.includes('stash-del-set') && avvisoStash.includes('non è collegato') && avvisoStash.includes('Attacca il disco'), avvisoStash);
+  controlla('e la barra dice che manca', (await js(`document.getElementById('stash-nome').textContent`)) === 'manca');
+  controlla('la postazione c\'è lo stesso (CUE, browser, LIVE)', (await js(`!!document.querySelector('.cm-editor') && !!document.getElementById('elenco') && !!document.getElementById('livelli')`)) === true);
+  stash._percorsoPerProva(vero); // il disco torna
+  controlla('appena il disco torna CUTX riprende da solo', !!(await finche(async () => (await js(`document.getElementById('avviso-stash').hidden`)) === true, 6)));
+  controlla('e lo dice', (await js(`document.getElementById('cue-avviso').textContent`)).includes('ritrovato'), await js(`document.getElementById('cue-avviso').textContent`));
+  await aspetta(0.5);
+  controlla('con i suoni di nuovo al loro posto', Object.keys(await js('cutxProva.suoniStash()')).length > 1);
+
+  // --- scheda audio scollegata e ricollegata mentre suona ---
+  const configPrima = (await js('window.cutx.stash()')).config?.uscite ?? {};
+  await liveJs(`(() => {
+    const md = navigator.mediaDevices;
+    window.__finto = { elenco: [{ deviceId: 'finto1', kind: 'audiooutput', label: 'MiniFuse prova', groupId: 'g' }], sink: [], enumera: md.enumerateDevices, setSink: AudioContext.prototype.setSinkId };
+    md.enumerateDevices = async () => window.__finto.elenco;
+    AudioContext.prototype.setSinkId = async function (id) { window.__finto.sink.push(id); Object.defineProperty(this, 'sinkId', { value: id, configurable: true }); };
+  })()`);
+  await js(`window.cutx.salvaConfig({ uscite: { live: 'MiniFuse prova', cuffia: '' } })`);
+  controlla('con la scheda collegata il live suona lì', !!(await finche(async () => (await live()).uscita?.ok && (await live()).uscita.dettaglio.includes('MiniFuse prova'))), JSON.stringify((await live()).uscita));
+  controlla('(usando davvero quel dispositivo)', (await liveJs('window.__finto.sink')).includes('finto1'));
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*4").gain(.0001)')`);
+  await aspetta(1);
+  await liveJs(`(() => { window.__finto.elenco = []; navigator.mediaDevices.dispatchEvent(new Event('devicechange')); })()`);
+  const spenta = await finche(async () => (await live()).uscita?.ok === false);
+  controlla('scheda scollegata mentre suona: il live se ne accorge', !!spenta, JSON.stringify((await live()).uscita));
+  controlla('e passa all\'uscita predefinita, così non resta muto', (await liveJs('window.__finto.sink')).at(-1) === '');
+  controlla('niente crash: il live continua a girare', (await live()).errore !== undefined && (await live()).livelli.length === 1);
+  const avvisoUscita = await finche(async () => (await js(`document.getElementById('cue-avviso').textContent`)).includes('non collegata'));
+  controlla('un avviso chiaro, che dice che riprende da sola', !!avvisoUscita && (await js(`document.getElementById('cue-avviso').textContent`)).includes('MiniFuse prova') && (await js(`document.getElementById('cue-avviso').textContent`)).includes('riprende da sola'), await js(`document.getElementById('cue-avviso').textContent`));
+  await liveJs(`(() => { window.__finto.elenco = [{ deviceId: 'finto1', kind: 'audiooutput', label: 'MiniFuse prova', groupId: 'g' }]; navigator.mediaDevices.dispatchEvent(new Event('devicechange')); })()`);
+  controlla('ricollegata, si riprende da sola', !!(await finche(async () => (await live()).uscita?.ok === true)) && (await liveJs('window.__finto.sink')).at(-1) === 'finto1', JSON.stringify((await live()).uscita));
+  controlla('e lo dice', !!(await finche(async () => (await js(`document.getElementById('cue-avviso').textContent`)).includes('ripresa'))), await js(`document.getElementById('cue-avviso').textContent`));
+  const testoLog2 = await readFile(fileLog, 'utf8').catch(() => '');
+  controlla('nel registro c\'è la scheda scollegata e ripresa', /\[avviso\] \[(live|uscite)\].*non collegata/.test(testoLog2) && /\[info\] \[uscite\].*ripresa/.test(testoLog2));
+  await liveJs(`(() => { const f = window.__finto; navigator.mediaDevices.enumerateDevices = f.enumera; AudioContext.prototype.setSinkId = f.setSink; delete window.__finto; })()`);
+  await js(`window.cutx.salvaConfig({ uscite: ${JSON.stringify(configPrima)} })`);
+  await aspetta(0.5);
+
+  // --- il motore live crasha: si riavvia da solo e rimette quello che suonava, il CUE non si tocca ---
+  await js(`cutxProva.fermaTutto()`);
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scegliEntraTra(1)`);
+  await js(`cutxProva.valuta('live', 'setcpm(100/4)\\ns("sine*2").gain(.0001)')`); // il primo livello (libero), a 100 BPM
+  await js(`cutxProva.scriviCue('// @sezione secondo\\ns("sine*4").gain(.0001)')`);
+  await wc().executeJavaScript('cutxProva.goLive()');
+  await aspetta(3);
+  const prima = await live();
+  const idLibero = prima.livelli.find((l) => l.nome === 'libero')?.id;
+  const idSecondo = prima.livelli.find((l) => l.nome === 'secondo')?.id;
+  await js(`cutxProva.pila.azioni.volume(${idLibero}, 0.4); cutxProva.pila.azioni.muto(${idSecondo}, true)`);
+  await aspetta(1);
+  const testoCue = '// questo è il testo del CUE: non si perde\\nnote("c3 e3 g3").s("triangle").gain(.0001)';
+  await js(`cutxProva.scriviCue('${testoCue}')`);
+  const pidPrima = finestre.live.webContents.getOSProcessId();
+  const intero = await live();
+  controlla('prima del crash ci sono due livelli a 100 BPM', intero.livelli.filter((l) => l.a === null).length === 2 && Math.abs(intero.cps * 240 - 100) < 0.2, JSON.stringify([intero.livelli.length, intero.cps * 240]));
+  await js(`window.cutx.crasha('live')`);
+  const tornato = await finche(async () => {
+    const f = finestre.live;
+    if (!f || f.isDestroyed() || f.webContents.getOSProcessId() === pidPrima) return false;
+    const s = await chiedi(f, 'globalThis.cutxStato?.()').catch(() => null);
+    return s && s.livelli?.filter((l) => l.a === null).length === 2 ? s : false;
+  }, 25);
+  controlla('il live si riavvia da solo (un processo nuovo)', !!tornato && finestre.live.webContents.getOSProcessId() !== pidPrima);
+  const dopo = tornato || (await live());
+  controlla('e rimette gli stessi livelli, con volume e muto', dopo.livelli.some((l) => l.nome === 'libero' && l.a === null && Math.abs(l.volume - 0.4) < 0.01) && dopo.livelli.some((l) => l.nome === 'secondo' && l.a === null && l.muto === true), JSON.stringify(dopo.livelli?.map((l) => [l.nome, l.a, l.volume, l.muto])));
+  controlla('allo stesso tempo (100 BPM)', await finche(async () => Math.abs((await live()).cps * 240 - 100) < 0.5, 6), String((await live()).cps * 240));
+  controlla('il testo del CUE è quello di prima', (await js('cutxProva.cue.libero.codice')) === testoCue.replace(/\\n/g, '\n'), await js('cutxProva.cue.libero.codice'));
+  controlla('un avviso lo dice', (await js(`document.getElementById('cue-avviso').textContent`)).includes('il live si è riavviato'), await js(`document.getElementById('cue-avviso').textContent`));
+  const testoLog3 = await readFile(fileLog, 'utf8').catch(() => '');
+  controlla('nel registro: processo terminato e livelli rimessi', /\[errore\] \[live\] processo terminato/.test(testoLog3) && /\[avviso\] \[live\] riavviato: rimetto 2 livelli/.test(testoLog3));
+
+  // --- l'interfaccia crasha: ripartita, si riprende il testo del CUE ---
+  await js(`cutxProva.scriviCue('// bozza da non perdere\\ns("sine").gain(.0001)')`);
+  await aspetta(1.3); // la bozza si salva dopo un attimo
+  const pidUi = wc().getOSProcessId();
+  await js(`window.cutx.crasha('controllo')`).catch(() => {});
+  const ripartita = await finche(async () => {
+    try {
+      return wc().getOSProcessId() !== pidUi && (await js(`!!globalThis.cutxProva && !!document.querySelector('.cm-editor')`));
+    } catch {
+      return false;
+    }
+  }, 25);
+  controlla('l\'interfaccia ripartita', !!ripartita);
+  await primoPiano(finestre); // dopo un crash la finestra non è più quella attiva
+  await aspetta(1);
+  controlla('riprende il testo del CUE', (await js('cutxProva.cue.libero.codice')).includes('bozza da non perdere'), await js('cutxProva.cue.libero.codice'));
+  controlla('e lo dice', (await js(`document.getElementById('cue-avviso').textContent`)).includes('ho ripreso il testo del CUE'), await js(`document.getElementById('cue-avviso').textContent`));
+  await js('cutxProva.fermaTutto()');
   return ok;
 }

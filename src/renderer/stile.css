@@ -2124,3 +2124,21 @@ input[type='checkbox'] {
   font-size: 12px;
   color: #d9b36a;
 }
+
+/* --- stash non collegato --- */
+.avviso-stash {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #140a08;
+  border-bottom: 1px solid #5a2f22;
+  color: #e0795b;
+  font-size: 13px;
+}
+
+.avviso-stash span {
+  flex: 1;
+  min-width: 0;
+}

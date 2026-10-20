@@ -46,6 +46,13 @@ export class Impostazioni {
     $('scorciatoie-ripristina').onclick = () => this.dati.salvaPreferenze({ scorciatoie: {} });
     $('imp-cambia-stash').onclick = () => this.dati.scegliStash();
     $('imp-ableton-aggiungi').onclick = () => window.cutx.aggiungiCartellaAbleton();
+    $('imp-mostra-log').onclick = () => window.cutx.mostraLog();
+    // la versione e dov'è il registro: si chiedono una volta
+    window.cutx.infoApp().then((i) => {
+      $('imp-versione').textContent = `versione ${i.versione}`;
+      $('imp-versione-dettagli').textContent = `Electron ${i.electron} · Chromium ${i.chrome} · ${i.sistema}`;
+      $('imp-registro').textContent = i.registro ?? 'non disponibile';
+    });
     window.addEventListener('keydown', (e) => this.tasto(e), true);
 
     // l'editor del paracadute: ⌘↵ lo prova in cuffia, si salva da solo in stash.json

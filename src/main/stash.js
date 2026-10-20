@@ -139,3 +139,10 @@ export async function scriviBrano(nome, testo, { sovrascrivi = false } = {}) {
   await writeFile(file, testo);
   return { file: path.basename(file) };
 }
+
+// Solo per le prove: cambia il percorso senza crearlo, per far finta che l'SSD non sia collegato. Ritorna quello di prima.
+export function _percorsoPerProva(nuovo) {
+  const vecchio = percorso;
+  percorso = nuovo;
+  return vecchio;
+}

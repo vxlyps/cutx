@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('cutx', {
   stash: () => ipcRenderer.invoke('stash:stato'),
   scegliStash: () => ipcRenderer.invoke('stash:scegli'),
+  rileggiStash: () => ipcRenderer.invoke('stash:rileggi'),
   salvaConfig: (config) => ipcRenderer.invoke('stash:salva', config),
   suStashCambiato: (fn) => ipcRenderer.on('stash-cambiato', () => fn()),
   durataSuono: (rel) => ipcRenderer.invoke('suoni:durata', rel),
@@ -25,6 +26,9 @@ contextBridge.exposeInMainWorld('cutx', {
   uscitaSchermoIntero: () => ipcRenderer.invoke('uscita:schermo-intero'),
   uscitaAperta: () => ipcRenderer.invoke('uscita:aperta'),
   suUscita: (fn) => ipcRenderer.on('uscita-stato', (_e, aperta) => fn(aperta)),
+  logEvento: (livello, fonte, testo) => ipcRenderer.send('log:evento', livello, fonte, testo),
+  infoApp: () => ipcRenderer.invoke('app:info'),
+  mostraLog: () => ipcRenderer.invoke('log:mostra'),
   log: (nome, riga) => ipcRenderer.send('log', nome, riga),
   percorsoLog: () => ipcRenderer.invoke('log:percorso'),
 });

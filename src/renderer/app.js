@@ -64,8 +64,34 @@ const cue = new Cue(CODICE_INIZIALE, {
   bpm: () => bpmSet(),
   libreriaCambiata: () => aggiornaLibreria(),
   portaIlSet: (bpm) => live.manda({ tipo: 'tempo', bpm }),
+  bozza: () => salvaBozza(),
   mostraLibreria: () => scegliScheda('libreria'),
 });
+
+// La bozza del CUE: il testo dell'editor libero si salva mentre scrivo. Se l'interfaccia crasha e il guardiano la ricarica
+// (la pagina riparte vuota) il testo torna com'era; a un avvio normale non si tocca.
+const CHIAVE_BOZZA = 'cutx.bozza.libero';
+let timerBozza = null;
+function salvaBozza() {
+  clearTimeout(timerBozza);
+  timerBozza = setTimeout(() => {
+    try {
+      localStorage.setItem(CHIAVE_BOZZA, cue.libero.codice);
+    } catch {
+      // senza memoria della pagina si va avanti lo stesso
+    }
+  }, 800);
+}
+try {
+  const ricaricata = performance.getEntriesByType('navigation')[0]?.type === 'reload';
+  const bozza = localStorage.getItem(CHIAVE_BOZZA);
+  if (ricaricata && bozza && bozza !== CODICE_INIZIALE) {
+    cue.libero.codice = bozza;
+    cue.avviso("l'interfaccia è ripartita: ho ripreso il testo del CUE");
+  }
+} catch {
+  // idem
+}
 
 // --- i gesti ---
 
@@ -310,6 +336,26 @@ async function salva(modifiche) {
   if (haStash) await window.cutx.salvaConfig(modifiche);
 }
 
+// Lo stash è su un SSD che non c'è (non ancora collegato, o scollegato): un avviso chiaro in cima, mai una schermata vuota senza
+// spiegazioni. CUTX riguarda ogni pochi secondi: appena il disco torna riprende da solo (e lo dice ai motori, per i suoni).
+let stashMancante = false;
+function mostraAvvisoStash(stato) {
+  const mancante = !!stato.percorso && !!stato.mancante;
+  const era = stashMancante;
+  stashMancante = mancante;
+  $('avviso-stash').hidden = !mancante;
+  if (mancante) {
+    const nome = stato.percorso.split('/').filter(Boolean).pop();
+    $('avviso-stash-testo').textContent = `Lo stash «${nome}» non è collegato (${stato.percorso}). Attacca il disco: CUTX lo ritrova da solo. Finché manca non ci sono suoni né brani.`;
+    if (!era) window.cutx.logEvento('avviso', 'stash', `non collegato: ${stato.percorso}`);
+  } else if (era) {
+    cue.avviso(`stash «${config.nome ?? ''}» ritrovato`);
+    window.cutx.logEvento('info', 'stash', 'ritrovato');
+    window.cutx.rileggiStash(); // i motori ricaricano i suoni
+  }
+}
+setInterval(async () => stashMancante && apriStash(await window.cutx.stash()), 3000);
+
 async function apriStash(stato) {
   haStash = !!stato.config;
   suoni = {};
@@ -326,6 +372,7 @@ async function apriStash(stato) {
     $('stash-dove').textContent = stato.percorso.startsWith('/Volumes/') ? 'ssd' : 'mac';
   }
   $('stash').title = stato.percorso ?? 'Scegli lo stash';
+  mostraAvvisoStash(stato);
   const nomi = Object.keys(suoni).filter((k) => k !== '_base');
   $('suoni').textContent = nomi.length
     ? nomi.map((n) => `${n} (${suoni[n].length})`).join(' · ')
@@ -525,6 +572,66 @@ function bloccaInterfaccia(ms) {
   while (performance.now() < fine);
 }
 
+// --- uscite audio: se una scheda sparisce o torna, lo si dice (il motore intanto suona sulla predefinita e riprende da solo) ---
+
+const ultimaUscita = { live: null, cuffia: null };
+function controllaUsciteAudio() {
+  for (const m of [live, cuffia]) {
+    const u = m.stato.uscita;
+    if (!u?.dettaglio) continue; // il motore non ha ancora controllato l'uscita
+    const chiave = `${u.ok}|${u.dettaglio}`;
+    if (ultimaUscita[m.ruolo] === chiave) continue;
+    const prima = ultimaUscita[m.ruolo];
+    ultimaUscita[m.ruolo] = chiave;
+    if (!u.ok) {
+      cue.avviso(`${m.ruolo}: ${u.dettaglio}. Si riprende da sola appena la ricolleghi.`, { persistente: true });
+      window.cutx.logEvento('avviso', 'uscite', `${m.ruolo}: ${u.dettaglio}`);
+    } else if (prima) {
+      cue.avviso(`${m.ruolo}: ${u.dettaglio} — ripresa`);
+      window.cutx.logEvento('info', 'uscite', `${m.ruolo}: ${u.dettaglio} — ripresa`);
+    }
+  }
+}
+
+// --- motore live crashato: si riavvia da solo (il guardiano) e l'interfaccia gli rimette quello che suonava ---
+// L'interfaccia sa sempre cosa c'era live (livelli, volumi, muti, tempo): se il motore rinasce vuoto, lo rimette al ciclo dopo.
+// Il CUE non si tocca: sta qui, non nel motore.
+
+let istantaneaLive = null; // { bpm, livelli: [{ codice, nome, provenienza, volume, muto }] }
+let ripristinando = false;
+
+function aggiornaIstantanea() {
+  if (!ripreso || !live.viva || ripristinando) return;
+  const attivi = livelliLive.filter((l) => l.a === null);
+  istantaneaLive = attivi.length
+    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ codice: l.codice, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    : null;
+}
+
+async function ripristinaLive() {
+  const snap = istantaneaLive;
+  if (!snap?.livelli.length || ripristinando) return;
+  ripristinando = true; // intanto lo stato (vuoto) del motore nuovo non deve sostituire l'istantanea
+  try {
+    // aspetto il primo stato del motore nuovo (non quello vecchio): se è già pieno non è rinato, non c'è niente da rimettere
+    for (let i = 0; i < 50 && !(live.ultimoPong > live.collegatoDa); i++) await new Promise((r) => setTimeout(r, 100));
+    if (!(live.ultimoPong > live.collegatoDa) || (live.stato.livelli ?? []).some((l) => l.a === null)) return;
+    window.cutx.logEvento('avviso', 'live', `riavviato: rimetto ${snap.livelli.length} livelli a ${snap.bpm} bpm`);
+    if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
+    for (const l of snap.livelli) {
+      // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), nome: l.nome, provenienza: l.provenienza, cicli: 1, scritto: true });
+      if (r.livello) {
+        if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
+        if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
+      }
+    }
+    cue.avviso(`il live si è riavviato: ho rimesso ${snap.livelli.length} ${snap.livelli.length === 1 ? 'livello' : 'livelli'} a ${snap.bpm} bpm`, { persistente: true });
+  } finally {
+    ripristinando = false;
+  }
+}
+
 // --- disegno ---
 
 const f = (x) => (x === null || x === undefined ? '–' : x.toFixed(2));
@@ -617,6 +724,8 @@ function mostraCue() {
 
 function mostra() {
   riprendi();
+  controllaUsciteAudio();
+  aggiornaIstantanea();
   browser.aggiornaAscolto();
   importa.aggiornaAscolto();
   mostraLive();
@@ -698,7 +807,12 @@ function fraseDaCapo() {
 // --- collegamenti ---
 
 for (const m of [live, cuffia]) {
-  m.suStato = (viva) => inTest && misuratore.scriviLog(`${m.ruolo} ${viva ? 'vivo' : 'fermo'}`);
+  m.suStato = (viva) => {
+    if (inTest) misuratore.scriviLog(`${m.ruolo} ${viva ? 'vivo' : 'fermo'}`);
+    if (!ripreso) return;
+    if (!viva) window.cutx.logEvento('avviso', m.ruolo, 'non risponde');
+    else window.cutx.logEvento('info', m.ruolo, 'di nuovo vivo');
+  };
   m.suMessaggio = (msg) => {
     if (msg.tipo === 'mappa') mappa = msg;
     else if (msg.tipo === 'livelli') {
@@ -710,9 +824,14 @@ for (const m of [live, cuffia]) {
     else if (msg.tipo === 'anello-stato') $('anello-stato').textContent = msg.attivo ? 'in ascolto' : `errore: ${msg.errore}`;
   };
 }
+// Un live rinato dopo un crash riparte vuoto: l'interfaccia gli rimette quello che suonava (se non aveva perso niente, non fa niente).
+live.suCollegato = () => {
+  if (ripreso) ripristinaLive();
+};
 // Una cuffia rinata riparte da vuota: le ridò il suo codice.
 cuffia.suCollegato = () => {
   if (!ripreso) return;
+  window.cutx.logEvento('avviso', 'cuffia', 'ricollegata (riavviata): le ridò il suo codice');
   if (inTest) cuffia.manda({ tipo: 'eco', attivo: true });
   if (!cuffiaUdibile) cuffia.manda({ tipo: 'udibile', on: false });
   if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
@@ -726,6 +845,7 @@ pulsanteParacadute();
 const insegna = avviaInsegna($('insegna'));
 
 $('stash').onclick = async () => apriStash(await window.cutx.scegliStash());
+$('avviso-stash-cambia').onclick = async () => apriStash(await window.cutx.scegliStash());
 $('cuffia-onoff').onclick = () => cuffiaOnOff();
 $('apri-impostazioni').onclick = () => impostazioni(true);
 $('chiudi-impostazioni').onclick = () => impostazioni(false);
@@ -754,6 +874,8 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  // per capire un fallimento: cosa vede l'interfaccia in questo momento
+  diagnosi: () => ({ inTest, ripreso, avviso: $('cue-avviso').textContent, livelli: livelliLive.map((l) => `${l.nome}:${l.da}-${l.a}`), liveViva: live.viva, cuffiaViva: cuffia.viva, bpm: bpmSet(), ripristinando, haFuoco: document.hasFocus() }),
   avviaTest,
   bloccaInterfaccia,
   valuta: (ruolo, codice, etichetta) => manda(ruolo === 'live' ? live : cuffia, codice, etichetta),

@@ -41,6 +41,11 @@
       <button id="apri-impostazioni" data-aiuto="apri-impostazioni" class="key" aria-label="Impostazioni">⚙ <i>⌘,</i></button>
     </header>
 
+    <div id="avviso-stash" class="avviso-stash" role="alert" hidden>
+      <span id="avviso-stash-testo"></span>
+      <button id="avviso-stash-cambia" class="key piccolo">scegli un altro stash</button>
+    </div>
+
     <main class="postazione">
       <aside class="browser">
         <nav class="schede" aria-label="Pannello">
@@ -198,6 +203,14 @@
           </div>
           <h1 class="imp-titolo secondo">help?</h1>
           <div id="imp-help" class="imp-gruppo"></div>
+          <h1 class="imp-titolo secondo">CUTX</h1>
+          <div class="imp-riga">
+            <div class="imp-testo"><span id="imp-versione">versione –</span><span id="imp-versione-dettagli" class="imp-nota"></span></div>
+          </div>
+          <div class="imp-riga">
+            <div class="imp-testo"><span>registro di errori e avvisi</span><span id="imp-registro" class="imp-nota"></span></div>
+            <button id="imp-mostra-log" class="key">mostra il file</button>
+          </div>
         </section>
 
         <section class="imp-sez" data-sez="audio" hidden>

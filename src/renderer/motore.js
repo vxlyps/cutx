@@ -13,7 +13,7 @@ import {
   webaudioOutput,
 } from '@strudel/webaudio';
 import { Orologio, cpsDi, risolvi } from './tempo.js';
-import { impostaUscita } from './uscite.js';
+import { elencoUscite, impostaUscita } from './uscite.js';
 import { Riproduttore, TICK_S } from './riproduttore.js';
 import { Sentinella, Anello } from './ascolto.js';
 
@@ -378,20 +378,62 @@ function giro() {
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
 
+// --- l'uscita audio ---
+// Se la scheda sparisce mentre suona, o il contesto si ferma, si dice e si suona sull'uscita predefinita (meglio che restare muti);
+// quando la scheda torna, si riprende da soli. L'interfaccia legge `uscita` dallo stato e avvisa.
+let uscitaVoluta = ''; // il nome scelto nello stash ('' = predefinita di macOS)
+let uscitaStato = { ok: true, dettaglio: '' };
+let controllandoUscita = false;
+
+async function controllaUscita() {
+  if (controllandoUscita) return;
+  controllandoUscita = true;
+  try {
+    await pronto;
+    let nuovo;
+    try {
+      const elenco = await elencoUscite();
+      if (uscitaVoluta && !elenco.some((u) => u.label === uscitaVoluta)) {
+        if (ac.sinkId) await ac.setSinkId('');
+        nuovo = { ok: false, dettaglio: `uscita «${uscitaVoluta}» non collegata: suono sull'uscita predefinita` };
+      } else {
+        await impostaUscita(ac, uscitaVoluta);
+        nuovo = { ok: true, dettaglio: uscitaVoluta ? `uscita «${uscitaVoluta}»` : 'uscita predefinita' };
+      }
+      if (ac.state === 'suspended' || ac.state === 'interrupted') await ac.resume();
+    } catch (e) {
+      nuovo = { ok: false, dettaglio: `uscita: ${e.message ?? e}` };
+    }
+    if (nuovo.ok !== uscitaStato.ok || nuovo.dettaglio !== uscitaStato.dettaglio) {
+      uscitaStato = nuovo;
+      if (!nuovo.ok) console.warn(`${RUOLO}: ${nuovo.dettaglio}`); // finisce nel registro
+    }
+    errore = uscitaStato.ok ? (errore?.startsWith('uscita') ? null : errore) : uscitaStato.dettaglio;
+  } finally {
+    controllandoUscita = false;
+  }
+}
+navigator.mediaDevices.addEventListener('devicechange', () => setTimeout(controllaUscita, 300));
+ac.addEventListener('statechange', () => ac.state !== 'running' && setTimeout(controllaUscita, 100));
+setInterval(controllaUscita, 3000);
+
+// --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
+
 let suoniCaricati = null;
 async function configura() {
   await pronto;
   const stato = await window.cutx.stash();
   const config = stato.config ?? {};
+  uscitaVoluta = config.uscite?.[RUOLO] ?? '';
+  await controllaUscita(); // non lancia mai: se l'uscita non c'è si suona sulla predefinita e si dice
+  errore = uscitaStato.ok ? null : uscitaStato.dettaglio;
   try {
-    await impostaUscita(ac, config.uscite?.[RUOLO] ?? '');
     const chiave = JSON.stringify(stato.suoni ?? null);
     if (stato.suoni && chiave !== suoniCaricati) {
       await samples(stato.suoni);
       suoniCaricati = chiave;
     }
     if (!LIVE) offsetMs = Number(config.offsetCuffiaMs) || 0;
-    errore = null;
   } catch (e) {
     errore = String(e.message ?? e);
   }
@@ -411,6 +453,7 @@ function stato() {
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     eco,
+    uscita: uscitaStato,
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
     eventi: rip.eventi,

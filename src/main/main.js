@@ -1,5 +1,5 @@
 // Processo principale: finestre, protocollo cutx://, permessi, guardiano dei motori.
-import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, screen, session, MessageChannelMain } from 'electron';
+import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, screen, session, shell, MessageChannelMain } from 'electron';
 import path from 'node:path';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { appendFile, mkdir } from 'node:fs/promises';
@@ -8,6 +8,7 @@ import * as stash from './stash.js';
 import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
+import * as log from './log.js';
 import { prova, foto, schermate } from './prova.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
@@ -17,13 +18,14 @@ const ORIGINE = 'cutx://app';
 const PERMESSI = new Set(['media', 'midi', 'midiSysex', 'speaker-selection']);
 const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 // prova automatica: --prova (tutto), --prova=robustezza, --prova=brani
-const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton,neon' : null);
+const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton,neon,tempo,solidita' : null);
 const SCHERMATE = process.argv.find((a) => a.startsWith('--schermate='))?.slice('--schermate='.length); // giro di tutti i pannelli a più dimensioni
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
+const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('--chiusura='.length); // prova: si apre e si chiude in un certo modo
 
 // Prova e foto girano con dati a parte, accanto a una CUTX eventualmente aperta e senza toccarne le impostazioni.
-if (PROVA || FOTO || SCHERMATE) {
-  const dati = path.join(app.getPath('appData'), 'CUTX-prova');
+if (PROVA || FOTO || SCHERMATE || CHIUSURA) {
+  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : 'CUTX-prova');
   app.setPath('userData', dati);
   const impostazioni = path.join(dati, 'impostazioni.json');
   if (!existsSync(impostazioni)) {
@@ -47,12 +49,35 @@ function migraDaDaneel() {
   const vecchiLog = path.join(path.dirname(app.getPath('logs')), 'DANEEL', 'avvio.log');
   sposta(vecchiLog, path.join(app.getPath('logs'), 'avvio-daneel.log'));
 }
-if (!PROVA && !FOTO && !SCHERMATE) migraDaDaneel();
+if (!PROVA && !FOTO && !SCHERMATE && !CHIUSURA) migraDaDaneel();
+
+// Il registro: errori e avvisi di tutti i processi, in ~/Library/Logs/CUTX (nelle prove, in una cartella a parte).
+const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || CHIUSURA);
+log.inizia(PER_PROVE ? path.join(app.getPath('userData'), 'log') : app.getPath('logs'));
+// Un evento del guardiano o dell'app: nel terminale e nel registro.
+const ev = (livello, fonte, testo) => {
+  console.log(`[${fonte}] ${testo}`);
+  log.scrivi(livello, fonte, testo);
+};
+// Un errore non gestito non deve far comparire finestre né fermare l'app: si scrive e si va avanti.
+process.on('uncaughtException', (e) => log.scrivi('errore', 'main', `eccezione non gestita: ${e?.stack ?? e}`));
+process.on('unhandledRejection', (e) => log.scrivi('errore', 'main', `promessa rifiutata: ${e?.stack ?? e}`));
+// Chiudere da fuori (kill, spegnimento, Terminale) chiude CUTX come ⌘Q.
+for (const segnale of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(segnale, () => app.quit());
+app.on('child-process-gone', (_e, d) => ev('errore', 'processo', `${d.type} terminato (${d.reason}, codice ${d.exitCode})`));
+
+let chiudendo = false; // l'app sta chiudendo: niente più riavvii né messaggi alle finestre
+app.on('before-quit', () => (chiudendo = true));
+const viva = (f) => !!f && !f.isDestroyed();
+// Il contenuto web di una finestra, se esiste ancora (una finestra chiusa non si tocca).
+const wcDi = (nome) => (viva(finestre[nome]) ? finestre[nome].webContents : null);
+const padre = () => (viva(finestre.controllo) ? finestre.controllo : undefined);
 
 app.on('second-instance', () => {
   const controllo = finestre.controllo;
-  if (controllo?.isMinimized()) controllo.restore();
-  controllo?.focus();
+  if (!viva(controllo)) return;
+  if (controllo.isMinimized()) controllo.restore();
+  controllo.focus();
 });
 
 // cutx:// deve essere un contesto sicuro: setSinkId, Web MIDI e getUserMedia funzionano solo lì.
@@ -95,6 +120,10 @@ const webPreferences = {
 function inoltraConsole(wc, nome) {
   wc.on('console-message', (e) => {
     if (e.level !== 'debug') console.log(`[${nome}] ${e.message}`);
+    // errori e avvisi di ogni pagina vanno nel registro (tranne il rumore noto di Electron)
+    if ((e.level === 'error' || e.level === 'warning') && !/Electron Security Warning|Insecure Content-Security-Policy|^%cElectron/.test(e.message)) {
+      log.scrivi(e.level === 'error' ? 'errore' : 'avviso', nome, e.message);
+    }
   });
 }
 
@@ -114,7 +143,7 @@ const COPPIE = [
 function collega(nome) {
   for (const [a, b] of COPPIE) {
     if (a !== nome && b !== nome) continue;
-    if (!pronte[a] || !pronte[b]) continue;
+    if (!pronte[a] || !pronte[b] || !viva(finestre[a]) || !viva(finestre[b])) continue;
     const { port1, port2 } = new MessageChannelMain();
     finestre[a].webContents.postMessage('porta', b, [port1]);
     finestre[b].webContents.postMessage('porta', a, [port2]);
@@ -148,49 +177,58 @@ function creaControllo() {
   // Se l'interfaccia crasha la ricarico: i motori non se ne accorgono e lei riprende da loro.
   finestra.webContents.on('render-process-gone', (_e, dettagli) => {
     pronte.controllo = false;
-    console.log(`[controllo] processo terminato (${dettagli.reason}), ricarico`);
-    setTimeout(() => !finestra.isDestroyed() && finestra.webContents.reload(), 300);
+    ev('errore', 'controllo', `processo terminato (${dettagli.reason}), ricarico`);
+    setTimeout(() => !chiudendo && viva(finestra) && finestra.webContents.reload(), 300);
   });
-  finestra.on('unresponsive', () => console.log('[controllo] bloccata (i motori continuano)'));
-  finestra.on('responsive', () => console.log('[controllo] di nuovo viva'));
-  finestra.on('closed', () => app.quit());
+  finestra.on('unresponsive', () => ev('avviso', 'controllo', 'bloccata (i motori continuano)'));
+  finestra.on('responsive', () => ev('info', 'controllo', 'di nuovo viva'));
+  finestra.on('closed', () => {
+    // chiusa lei, si chiude tutto, in qualsiasi ordine: si smette subito di parlare con le altre finestre
+    if (finestre.controllo === finestra) finestre.controllo = null;
+    pronte.controllo = false;
+    app.quit();
+  });
   finestra.loadURL(`${ORIGINE}/index.html`);
 }
 
 // Ogni motore vive in un processo suo: se uno si blocca o crasha, gli altri non lo sentono.
 function creaMotore(ruolo) {
+  if (chiudendo) return;
   pronte[ruolo] = false;
   const finestra = new BrowserWindow({ show: false, webPreferences });
   finestre[ruolo] = finestra;
   const attuale = seguiCaricamento(ruolo, finestra);
   finestra.webContents.on('render-process-gone', (_e, dettagli) => {
-    if (!attuale()) return;
-    console.log(`[${ruolo}] processo terminato (${dettagli.reason}), riavvio`);
+    if (!attuale() || chiudendo) return;
+    ev('errore', ruolo, `processo terminato (${dettagli.reason}), riavvio`);
     riavviaMotore(ruolo);
   });
   // La cuffia bloccata si riavvia. Il live non si tocca mai: meglio aspettarlo che ucciderlo.
   finestra.on('unresponsive', () => {
     if (!attuale()) return;
-    console.log(`[${ruolo}] bloccato`);
+    ev('avviso', ruolo, ruolo === 'cuffia' ? 'bloccato, lo riavvio' : 'bloccato: lo aspetto (il live non si riavvia da solo mentre risponde)');
     if (ruolo === 'cuffia') riavviaMotore(ruolo);
+  });
+  finestra.on('responsive', () => attuale() && ev('info', ruolo, 'di nuovo vivo'));
+  finestra.on('closed', () => {
+    if (finestre[ruolo] === finestra) finestre[ruolo] = null;
+    pronte[ruolo] = false;
   });
   finestra.loadURL(`${ORIGINE}/motore.html?ruolo=${ruolo}`);
 }
 
 function riavviaMotore(ruolo) {
+  if (chiudendo) return;
   const vecchia = finestre[ruolo];
   finestre[ruolo] = null;
   pronte[ruolo] = false;
-  if (vecchia && !vecchia.isDestroyed()) vecchia.destroy();
+  if (viva(vecchia)) vecchia.destroy();
   setTimeout(() => creaMotore(ruolo), 300);
 }
 
 // --- la finestra di uscita ---
 // Una finestra normale: la sposto dove voglio, ⌃⌘F la mette a schermo intero sullo schermo in cui
 // sta. CUTX ricorda schermo, posizione e modalità. Se si chiude o crasha, i motori non lo sentono.
-
-let chiudendo = false;
-app.on('before-quit', () => (chiudendo = true));
 
 // Solo se la posizione salvata cade ancora su uno schermo collegato.
 function bordiValidi(b) {
@@ -200,12 +238,12 @@ function bordiValidi(b) {
 }
 
 function avvisaUscita() {
-  const wc = finestre.controllo?.webContents;
-  if (wc && !wc.isDestroyed()) wc.send('uscita-stato', !!finestre.uscita);
+  wcDi('controllo')?.send('uscita-stato', viva(finestre.uscita));
 }
 
 function creaUscita() {
-  if (finestre.uscita) return finestre.uscita.focus();
+  if (chiudendo) return;
+  if (viva(finestre.uscita)) return finestre.uscita.focus();
   const ricordo = preferenze.leggi().uscita ?? {};
   const bordi = bordiValidi(ricordo.bordi);
   const finestra = new BrowserWindow({
@@ -234,11 +272,11 @@ function creaUscita() {
   for (const evento of ['move', 'resize', 'enter-full-screen', 'leave-full-screen']) finestra.on(evento, ricorda);
   finestra.webContents.on('render-process-gone', (_e, dettagli) => {
     pronte.uscita = false;
-    console.log(`[uscita] processo terminato (${dettagli.reason}), ricarico`);
-    setTimeout(() => !finestra.isDestroyed() && finestra.webContents.reload(), 300);
+    ev('errore', 'uscita', `processo terminato (${dettagli.reason}), ricarico`);
+    setTimeout(() => !chiudendo && viva(finestra) && finestra.webContents.reload(), 300);
   });
   finestra.on('closed', () => {
-    finestre.uscita = null;
+    if (finestre.uscita === finestra) finestre.uscita = null;
     pronte.uscita = false;
     clearTimeout(timer);
     // chiudere CUTX con l'uscita aperta la ricorda aperta
@@ -252,24 +290,24 @@ function creaUscita() {
 }
 
 ipcMain.handle('uscita:onoff', () => {
-  if (finestre.uscita) finestre.uscita.close();
+  if (viva(finestre.uscita)) finestre.uscita.close();
   else creaUscita();
-  return !!finestre.uscita;
+  return viva(finestre.uscita);
 });
 ipcMain.handle('uscita:schermo-intero', () => {
-  if (!finestre.uscita) creaUscita();
+  if (!viva(finestre.uscita)) creaUscita();
   const f = finestre.uscita;
+  if (!viva(f)) return;
   if (f.webContents.isLoading()) f.once('ready-to-show', () => f.setFullScreen(true));
   else f.setFullScreen(!f.isFullScreen());
 });
-ipcMain.handle('uscita:aperta', () => !!finestre.uscita);
+ipcMain.handle('uscita:aperta', () => viva(finestre.uscita));
 // Solo per i test.
-ipcMain.on('uscita:crasha', () => finestre.uscita?.webContents.forcefullyCrashRenderer());
+ipcMain.on('uscita:crasha', () => wcDi('uscita')?.forcefullyCrashRenderer());
 
 function avvisaMotori() {
   for (const ruolo of ['live', 'cuffia']) {
-    const wc = finestre[ruolo]?.webContents;
-    if (wc && !wc.isDestroyed()) wc.send('stash-cambiato');
+    wcDi(ruolo)?.send('stash-cambiato');
   }
 }
 
@@ -300,7 +338,7 @@ async function salvaPreferenze(modifiche) {
   return nuove;
 }
 ipcMain.handle('ableton:aggiungi-cartella', async () => {
-  const r = await dialog.showOpenDialog(finestre.controllo, {
+  const r = await dialog.showOpenDialog(padre(), {
     title: 'Dove tieni i progetti Ableton?',
     message: 'Scegli una cartella con dei progetti .als, o la cartella che li contiene tutti. CUTX li legge soltanto.',
     properties: ['openDirectory'],
@@ -318,7 +356,7 @@ ipcMain.handle('ableton:file', async (_e, percorso, file) => {
 });
 // Cerca a mano un file audio (un file mancante, o lo stem di una traccia MIDI).
 ipcMain.handle('ableton:scegli-file', async (_e, titolo) => {
-  const r = await dialog.showOpenDialog(finestre.controllo, {
+  const r = await dialog.showOpenDialog(padre(), {
     title: titolo || 'Scegli il file audio',
     properties: ['openFile'],
     filters: [{ name: 'Audio', extensions: ['wav', 'aif', 'aiff', 'mp3', 'flac', 'ogg', 'm4a'] }],
@@ -351,7 +389,7 @@ ipcMain.handle('ableton:modello', async (_e, percorso) => {
 });
 
 ipcMain.handle('stash:scegli', async () => {
-  const r = await dialog.showOpenDialog(finestre.controllo, {
+  const r = await dialog.showOpenDialog(padre(), {
     title: 'Scegli lo stash',
     properties: ['openDirectory', 'createDirectory'],
   });
@@ -360,12 +398,29 @@ ipcMain.handle('stash:scegli', async () => {
   avvisaMotori();
   return stash.stato();
 });
+ipcMain.handle('stash:rileggi', () => avvisaMotori()); // lo stash è tornato: i motori rileggono suoni e uscite
 ipcMain.handle('stash:salva', async (_e, config) => {
   await stash.salvaConfig(config);
   avvisaMotori();
 });
 // Solo per i test di robustezza.
-ipcMain.on('crasha', (_e, chi) => finestre[chi]?.webContents.forcefullyCrashRenderer());
+ipcMain.on('crasha', (_e, chi) => wcDi(chi)?.forcefullyCrashRenderer());
+
+// Il registro (log.js) e le informazioni dell'app, per le impostazioni.
+ipcMain.on('log:evento', (_e, livello, fonte, testo) => {
+  log.scrivi(['info', 'avviso', 'errore'].includes(livello) ? livello : 'info', String(fonte).slice(0, 30), String(testo).slice(0, 4000));
+});
+ipcMain.handle('app:info', () => ({
+  versione: app.getVersion(),
+  electron: process.versions.electron,
+  chrome: process.versions.chrome,
+  sistema: `${process.platform} ${process.arch}`,
+  registro: log.fileDelLog(),
+}));
+ipcMain.handle('log:mostra', () => {
+  const file = log.fileDelLog();
+  if (file) shell.showItemInFolder(file);
+});
 
 const CARTELLA_LOG = () => path.join(app.getPath('userData'), 'log');
 ipcMain.handle('log:percorso', () => CARTELLA_LOG());
@@ -387,10 +442,71 @@ function creaMenu() {
   );
 }
 
+// Solo per la prova di chiusura: apre l'app e la chiude in un certo modo. Chiudere deve essere pulito in qualsiasi ordine:
+// niente errori, uscita con codice 0 e nessun processo rimasto acceso (lo controlla test/app/chiusura.test.js).
+async function provaChiusura(modo) {
+  const aspetta = (ms) => new Promise((r) => setTimeout(r, ms));
+  const finche = async (fn, ms = 20000) => {
+    for (const t = Date.now(); Date.now() - t < ms; await aspetta(100)) if (fn()) return true;
+    return false;
+  };
+  setTimeout(() => {
+    console.log('CHIUSURA-BLOCCATA');
+    app.exit(2);
+  }, 45000);
+  if (!(await finche(() => pronte.controllo && pronte.live && pronte.cuffia))) {
+    console.log('CHIUSURA-NONPRONTA');
+    return app.exit(3);
+  }
+  await aspetta(1500);
+  console.log('CHIUSURA-PRONTA');
+  const conUscita = async () => {
+    creaUscita();
+    await finche(() => pronte.uscita);
+    await aspetta(500);
+  };
+  switch (modo) {
+    case 'controllo':
+      return finestre.controllo.close();
+    case 'uscita-prima':
+      await conUscita();
+      finestre.uscita.close();
+      await aspetta(500);
+      return finestre.controllo.close();
+    case 'controllo-con-uscita':
+      await conUscita();
+      return finestre.controllo.close();
+    case 'tutte-insieme':
+      await conUscita();
+      finestre.uscita.close();
+      return finestre.controllo.close();
+    case 'quit':
+      await conUscita();
+      return app.quit();
+    case 'quit-subito':
+      return app.quit();
+    case 'crash-cuffia':
+    case 'crash-live':
+    case 'crash-controllo':
+      wcDi(modo.replace('crash-', ''))?.forcefullyCrashRenderer();
+      await aspetta(100);
+      return viva(finestre.controllo) ? finestre.controllo.close() : app.quit();
+    case 'attesa': // la chiude da fuori il test (SIGTERM)
+      return undefined;
+    default:
+      console.log(`CHIUSURA-MODO-SCONOSCIUTO ${modo}`);
+      return app.exit(4);
+  }
+}
+
+app.on('window-all-closed', () => app.quit());
+
 app.whenReady().then(async () => {
   app.dock?.setIcon(ICONA);
+  ev('info', 'avvio', `CUTX ${app.getVersion()} · Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · ${process.platform} ${process.arch}${PER_PROVE ? ' · prova' : ''}`);
   creaMenu();
   stash.carica();
+  stash.stato().then((st) => ev(st.mancante ? 'avviso' : 'info', 'avvio', st.percorso ? `stash: ${st.percorso}${st.mancante ? ' — NON COLLEGATO' : ''}` : 'nessuno stash scelto'), () => {});
   protocol.handle('cutx', serviFile);
   const nostro = (url) => url?.startsWith(ORIGINE);
   session.defaultSession.setPermissionRequestHandler((wc, permesso, cb) =>
@@ -406,4 +522,5 @@ app.whenReady().then(async () => {
   if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') }).then((ok) => app.exit(ok ? 0 : 1));
   if (FOTO) foto({ finestre, file: FOTO }).then(() => app.exit(0));
   if (SCHERMATE) schermate({ finestre, cartella: path.resolve(SCHERMATE) }).then((n) => app.exit(n ? 1 : 0));
+  if (CHIUSURA) provaChiusura(CHIUSURA);
 });

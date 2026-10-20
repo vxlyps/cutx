@@ -10,6 +10,7 @@ export class Motore {
     this.porta = null;
     this.viva = false;
     this.ultimoPong = 0;
+    this.collegatoDa = 0;
     this.stato = {}; // l'ultimo pong: codice, errore, tardi, sentinella…
     this.attese = new Map(); // id → resolve, per le valutazioni
     this.prossimoId = 1;
@@ -24,6 +25,7 @@ export class Motore {
 
   collega(porta) {
     this.porta = porta;
+    this.collegatoDa = performance.now(); // da quando parlo con questo motore: i pong di prima sono di un altro
     porta.onmessage = ({ data }) => this.ricevi(data);
     this.ping();
     this.suCollegato?.();

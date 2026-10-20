@@ -46,6 +46,7 @@ export class Cue {
       codice: codiceIniziale,
       suValuta: azioni.provaInCuffia,
       suFerma: azioni.fermaTutto,
+      suCambio: () => azioni.bozza?.(),
       statoSezione: (nome) => this.statoSezione('libero', nome),
     });
     $('modo-libero').onclick = () => this.cambiaModo('libero');
