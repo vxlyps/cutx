@@ -36,7 +36,7 @@
       <div class="spazio"></div>
       <button id="cuffia-onoff" class="key on" title="Cuffia on / off · ⌘K">cuffia <i>on</i></button>
       <button class="key" disabled title="Arriva in fase 3">hydra <i>off</i></button>
-      <button class="key" disabled title="Arriva in fase 3">proiettore <i>off</i></button>
+      <button id="uscita-onoff" class="key" title="La finestra di uscita: quello che vede il pubblico · ⌃⌘F a schermo intero">uscita <i>off</i></button>
       <button id="apri-impostazioni" class="key" aria-label="Impostazioni" title="Impostazioni · ⌘,">⚙ <i>⌘,</i></button>
     </header>
 
@@ -99,7 +99,10 @@
           <span class="titolo">LIVE</span>
           <span class="lbl">casse + proiettore</span>
         </div>
-        <div id="livelli" class="corpo"></div>
+        <div class="corpo">
+          <div id="livelli" class="livelli"></div>
+          <article id="jam" class="card jam"></article>
+        </div>
         <div class="piede">
           <span id="piede-frase" class="lbl">frase –</span>
           <div id="quarti" class="quarti" aria-label="Quarto">
@@ -109,6 +112,9 @@
             <div></div>
           </div>
           <span id="tempo-live" class="lbl tempo-set"></span>
+          <button id="paracadute" class="paracadute" title="CUTX, scelgo te! Tieni premuto un secondo, o ⌘P due volte di fila">
+            <img id="paracadute-gatto" alt="Paracadute" /><span class="carica"></span>
+          </button>
           <span id="conteggio" class="lbl">0 live</span>
         </div>
       </section>

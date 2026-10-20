@@ -103,8 +103,10 @@ async function valuta(codice, etichetta = {}) {
   return null;
 }
 
-function nuovoLivello(codice, pattern, { nome, provenienza } = {}, da) {
+// scritto = il codice si è già visto scrivere (jam, modifiche sul posto, paracadute): niente macchina da scrivere.
+function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = {}, da) {
   return {
+    scritto,
     id: prossimoLivello++,
     nome: nome ?? 'libero',
     provenienza: provenienza ?? '',
@@ -119,11 +121,11 @@ function nuovoLivello(codice, pattern, { nome, provenienza } = {}, da) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1 }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   const da = rip.prossimoConfine() + Math.max(1, cicli) - 1;
-  const l = nuovoLivello(codice, c.pattern, { nome, provenienza }, da);
+  const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
   for (const vecchio of livelli) {
     if (vecchio.nome !== l.nome || vecchio.a <= da) continue;
     vecchio.a = Math.max(vecchio.da, da);
@@ -137,6 +139,40 @@ async function entra({ codice, nome, provenienza, cicli = 1 }) {
   return { da, livello: l.id };
 }
 
+// --- paracadute "CUTX, scelgo te!" ---
+// Al battito successivo esce tutto ed entra il codice di emergenza, subito. I livelli tolti si
+// conservano: la seconda volta escono il paracadute e rientrano loro, al ciclo successivo.
+let paracadute = null; // { id, salvati: [livelli] } quando è aperto
+
+async function lanciaParacadute(codice) {
+  if (paracadute) return riprendiDalParacadute();
+  const c = await compila(codice);
+  if (c.errore) return { errore: c.errore };
+  const battito = Math.ceil((rip.fine ?? rip.ciclo(ac.currentTime)) * 4) / 4;
+  const salvati = livelli.filter((l) => l.a === Infinity);
+  for (const l of salvati) l.a = Math.max(l.da, battito);
+  const p = nuovoLivello(codice, c.pattern, { nome: 'paracadute', provenienza: 'cutx, scelgo te!', scritto: true }, battito);
+  livelli.push(p);
+  paracadute = { id: p.id, salvati };
+  aggiornaLivelli();
+  return { da: battito, paracadute: true };
+}
+
+function riprendiDalParacadute() {
+  const confine = rip.prossimoConfine();
+  const p = livelli.find((l) => l.id === paracadute.id);
+  if (p && p.a === Infinity) p.a = Math.max(p.da, confine);
+  for (const s of paracadute.salvati) {
+    const l = nuovoLivello(s.codice, s.pattern, { nome: s.nome, provenienza: s.provenienza, scritto: true }, confine);
+    l.volume = s.volume;
+    l.muto = s.muto;
+    livelli.push(l);
+  }
+  paracadute = null;
+  aggiornaLivelli();
+  return { da: confine, paracadute: false };
+}
+
 // Esce alla fine del ciclo in corso.
 function togli(id) {
   const l = livelli.find((x) => x.id === id);
@@ -146,6 +182,7 @@ function togli(id) {
 }
 
 function ferma() {
+  paracadute = null;
   prova = { codice: '', nome: null, provenienza: null };
   rip.pattern = silence;
   if (LIVE) {
@@ -172,6 +209,7 @@ const descrivi = (l) => ({
   richiesto: l.richiesto,
   volume: l.volume,
   muto: l.muto,
+  scritto: l.scritto,
   primo: l.primo ?? null,
   ultimo: l.ultimo ?? null,
 });
@@ -179,7 +217,9 @@ const descrivi = (l) => ({
 function aggiornaLivelli() {
   rip.sorgenti = livelli;
   const descritti = livelli.map(descrivi);
-  manda('controllo', { tipo: 'livelli', livelli: descritti });
+  const messaggio = { tipo: 'livelli', livelli: descritti, paracadute: !!paracadute };
+  manda('controllo', messaggio);
+  manda('uscita', messaggio);
   manda('cuffia', { tipo: 'livelli-live', livelli: descritti });
 }
 
@@ -203,6 +243,7 @@ function pubblicaMappa() {
   const mappa = { tipo: 'mappa', ciclo0: rip.ciclo(t0), epoca0: orologio.epoca(t0), cps: rip.mappa.cps, ancoraFrase, inizioSet };
   manda('cuffia', mappa);
   manda('controllo', mappa);
+  manda('uscita', mappa);
 }
 
 function cambiaCps(cps) {
@@ -281,6 +322,7 @@ function stato() {
     nome: LIVE ? (ultimo?.nome ?? null) : prova.nome,
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
+    paracadute: LIVE ? !!paracadute : undefined,
     eco,
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
@@ -302,6 +344,10 @@ async function ricevi(da, m) {
     }
     case 'entra': {
       const r = LIVE ? await entra(m) : { errore: 'solo il live fa entrare i livelli' };
+      return manda(da, { tipo: 'risposta', ...r, id: m.id });
+    }
+    case 'paracadute': {
+      const r = LIVE ? await lanciaParacadute(m.codice) : { errore: 'solo il live ha il paracadute' };
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'togli':

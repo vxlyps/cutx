@@ -3,7 +3,10 @@
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
 import { Pila } from './pila.js';
-import { dialogoAperto } from './dialogo.js';
+import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
+import * as B from './brano.js';
+import { analizza } from './analisi.js';
+import gattoInPiedi from '../../design/risorse/gatti/gatto_in_piedi_logo_marcio.svg';
 import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
 import { Misuratore } from './sfasamento.js';
@@ -98,6 +101,67 @@ function togliLivello(id) {
   if (l) live.manda({ tipo: 'togli', livello: l.id });
 }
 
+// --- paracadute "CUTX, scelgo te!" ---
+
+// Il codice di emergenza del set (stash.json → paracadute), o questo: cassa e charleston, solo synth.
+const PARACADUTE = `// CUTX, scelgo te!
+stack(
+  note("c1*4").s("sine").decay(.3).sustain(0).gain(.9),
+  s("white*8").decay(.03).sustain(0).gain(.2)
+)`;
+
+async function lanciaParacadute() {
+  if (inTest || preferenze.paracadute === false) return;
+  const r = await live.richiesta({ tipo: 'paracadute', codice: config.paracadute || PARACADUTE });
+  if (r.errore) cue.avviso(`paracadute: ${r.errore}`, { persistente: true });
+  else cue.avviso(r.paracadute ? 'paracadute aperto · di nuovo per tornare com\'eri' : 'si torna com\'eri al prossimo ciclo');
+}
+
+// Tenuto premuto un secondo: niente partenze per sbaglio.
+function pulsanteParacadute() {
+  const b = $('paracadute');
+  let timer = null;
+  const lascia = () => {
+    clearTimeout(timer);
+    b.classList.remove('carica');
+  };
+  b.onpointerdown = () => {
+    b.classList.add('carica');
+    timer = setTimeout(() => {
+      lascia();
+      lanciaParacadute();
+    }, 1000);
+  };
+  b.onpointerup = lascia;
+  b.onpointerleave = lascia;
+  $('paracadute-gatto').src = gattoInPiedi;
+}
+
+// --- salva il live come brano: per catturare una jam fatta a casa ---
+
+const oggi = () => new Date().toLocaleDateString('sv-SE');
+
+async function salvaLiveComeBrano() {
+  if (!haStash) return cue.avviso('nessuno stash: sceglilo nella barra in alto');
+  const livelli = livelliLive.filter((l) => l.a === null && l.nome !== 'paracadute');
+  if (!livelli.length) return cue.avviso('niente live da salvare');
+  const nome = await chiediNome({ titolo: 'salva il live come brano', valore: `live ${oggi()}`, conferma: 'salva' });
+  if (!nome) return;
+  const usati = new Set();
+  for (const l of livelli) for (const n of (await analizza(l.codice, suoni)).suoni) usati.add(n);
+  const bpm = mappa ? Math.round(mappa.cps * 240 * 10) / 10 : undefined;
+  const testo = B.daLivelli(livelli, { nome, bpm, data: oggi(), suoni: [...usati].sort() });
+  const file = B.nomeFile(nome);
+  let r = await window.cutx.scriviBrano(file, testo);
+  if (r.esiste) {
+    if (!(await conferma({ titolo: 'salva il live come brano', testo: `${file} esiste già nella libreria. Lo sovrascrivo?`, si: 'sovrascrivi' }))) return;
+    r = await window.cutx.scriviBrano(file, testo, { sovrascrivi: true });
+  }
+  await aggiornaLibreria();
+  cue.avviso(`live salvato come ${r.file}: ${livelli.length} sezioni`);
+  return r.file;
+}
+
 function scegliEntraTra(n) {
   entraTra = n;
   for (const b of document.querySelectorAll('[data-entra]')) b.classList.toggle('on', Number(b.dataset.entra) === n);
@@ -121,8 +185,26 @@ function impostazioni(aperte = $('impostazioni').hidden) {
 }
 
 // Le scorciatoie valgono anche dentro l'editor: le prendo prima di lui.
+// ⌘↵: nel LIVE (jam o livello in modifica) applica al prossimo ciclo, nel CUE prova in cuffia.
+function invio() {
+  if (pila.fuoco()) return pila.applica();
+  return provaInCuffia();
+}
+
+// ⌘P due volte di fila (o il pulsante tenuto premuto): il paracadute non parte per sbaglio.
+const DOPPIO_MS = 500;
+let ultimoP = 0;
+function paracaduteDoppio() {
+  const ora = performance.now();
+  if (ora - ultimoP < DOPPIO_MS) {
+    ultimoP = 0;
+    return lanciaParacadute();
+  }
+  ultimoP = ora;
+}
+
 const SCORCIATOIE = [
-  { tasto: 'Enter', shift: false, fa: provaInCuffia },
+  { tasto: 'Enter', shift: false, fa: invio },
   { tasto: 'Enter', shift: true, fa: goLive },
   { tasto: 'Backspace', shift: true, fa: () => togliLivello() },
   { tasto: '.', fa: fermaTutto },
@@ -130,7 +212,9 @@ const SCORCIATOIE = [
   { tasto: ',', fa: () => impostazioni() },
   { tasto: '0', fa: fraseDaCapo },
   { tasto: 's', shift: false, fa: () => cue.salva() },
+  { tasto: 's', shift: true, fa: () => salvaLiveComeBrano() },
   { tasto: 'e', fa: () => cue.aggiungiSezione() },
+  { tasto: 'p', shift: false, fa: paracaduteDoppio },
 ];
 
 window.addEventListener(
@@ -139,14 +223,33 @@ window.addEventListener(
     if (dialogoAperto()) return; // i dialoghi gestiscono i tasti da soli
     if (e.key === 'Escape') {
       if (!$('impostazioni').hidden) impostazioni(false);
-      else document.activeElement?.blur();
+      else if (!pila.annulla()) document.activeElement?.blur();
       return;
     }
-    // 1 · 2 · 4 · 8 fuori dall'editor: quando entra il prossimo GO LIVE
     const scrivendo = e.target.closest?.('.cm-editor, input, select, textarea');
-    if (!scrivendo && !e.metaKey && !e.ctrlKey && !e.altKey && ['1', '2', '4', '8'].includes(e.key)) {
+    // ⌃⌘F: l'uscita a schermo intero, sullo schermo dove si trova
+    if (e.metaKey && e.ctrlKey && e.code === 'KeyF') {
       e.preventDefault();
-      return scegliEntraTra(Number(e.key));
+      return window.cutx.uscitaSchermoIntero();
+    }
+    // ⌥1–9: muto del livello n (⌃1–5 su questo Mac sono di Mission Control)
+    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
+      e.preventDefault();
+      const l = pila.attivi()[Number(e.code.slice(5)) - 1];
+      if (l) live.manda({ tipo: 'livello', livello: l.id, muto: !l.muto });
+      return;
+    }
+    if (!scrivendo && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // 1 · 2 · 4 · 8 fuori dall'editor: quando entra il prossimo GO LIVE
+      if (['1', '2', '4', '8'].includes(e.key)) {
+        e.preventDefault();
+        return scegliEntraTra(Number(e.key));
+      }
+      // tab fuori dall'editor: dal CUE al LIVE (il jam) e ritorno
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        return e.target.closest?.('.live') ? cue.focus() : pila.focusJam();
+      }
     }
     if (!e.metaKey || e.ctrlKey || e.altKey) return;
     const s = SCORCIATOIE.find(
@@ -368,8 +471,42 @@ function mostraImpostazioni() {
   $('motori-dettagli').textContent = `${descriviMotore(live)}\n${descriviMotore(cuffia)}`;
 }
 
-// Il LIVE: la pila dei livelli, dallo stato del motore live.
-const pila = new Pila($('livelli'), { togli: (id) => togliLivello(id) });
+// Verso la finestra di uscita passano solo le bozze: quello che sto scrivendo nel LIVE.
+let portaUscita = null;
+let ultimeBozze = { livelli: {}, jam: null };
+window.addEventListener('message', (e) => {
+  if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
+  portaUscita = e.ports[0];
+  portaUscita.postMessage({ tipo: 'bozze', ...ultimeBozze });
+});
+
+function mostraUscita(aperta) {
+  $('uscita-onoff').classList.toggle('on', aperta);
+  $('uscita-onoff').querySelector('i').textContent = aperta ? 'on' : 'off';
+}
+
+// Il LIVE: la pila dei livelli, dallo stato del motore live, e il jam in fondo.
+const pila = new Pila($('livelli'), $('jam'), {
+  togli: (id) => togliLivello(id),
+  volume: (id, volume) => live.manda({ tipo: 'livello', livello: id, volume }),
+  muto: (id, muto) => live.manda({ tipo: 'livello', livello: id, muto }),
+  // jam o livello modificato: entra al prossimo ciclo, già scritto. Un errore lascia la versione di prima.
+  applica: async (livello, codice) => {
+    const r = await live.richiesta({
+      tipo: 'entra',
+      codice,
+      nome: livello?.nome ?? 'jam',
+      provenienza: livello?.provenienza ?? 'jam',
+      cicli: 1,
+      scritto: true,
+    });
+    return r.errore ?? null;
+  },
+  bozze: (bozze) => {
+    ultimeBozze = bozze;
+    portaUscita?.postMessage({ tipo: 'bozze', ...bozze });
+  },
+});
 
 function mostraLive() {
   if (!live.viva) livelliLive = [];
@@ -476,6 +613,7 @@ cuffia.suCollegato = () => {
 
 $('wordmark').src = wordmark;
 const posaGatto = avviaGatto($('gatto'));
+pulsanteParacadute();
 const accendiInsegna = avviaInsegna($('insegna'));
 
 $('stash').onclick = async () => apriStash(await window.cutx.scegliStash());
@@ -487,6 +625,9 @@ $('manda-live').onclick = goLive;
 $('go-live').onclick = goLive;
 $('cerca').oninput = mostraBrowser;
 $('frase').onclick = fraseDaCapo;
+$('uscita-onoff').onclick = async () => mostraUscita(await window.cutx.uscitaOnOff());
+window.cutx.suUscita(mostraUscita);
+window.cutx.uscitaAperta().then(mostraUscita);
 for (const b of document.querySelectorAll('[data-entra]')) b.onclick = () => scegliEntraTra(Number(b.dataset.entra));
 $('scrittura-macchina').onchange = (e) => window.cutx.salvaPreferenze({ scritturaAMacchina: e.target.checked });
 $('lunghezza-frase').onchange = (e) => window.cutx.salvaPreferenze({ lunghezzaFrase: Number(e.target.value) });
@@ -514,6 +655,9 @@ globalThis.cutxProva = {
   goLive,
   scegliEntraTra,
   togli: (id) => togliLivello(id),
+  salvaLiveComeBrano,
+  lanciaParacadute,
+  pila,
   scriviCue: (codice) => (cue.libero.codice = codice),
   cue,
   posaGatto: (nome) => posaGatto(nome),
@@ -534,6 +678,7 @@ mostraTempo();
 function applicaPreferenze(p) {
   preferenze = p;
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
+  $('paracadute').hidden = p.paracadute === false;
   $('scrittura-macchina').checked = pila.scritturaAMacchina;
   $('lunghezza-frase').value = String(p.lunghezzaFrase);
 }

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' data:; media-src 'self'"
+    />
+    <title>CUTX · uscita</title>
+    <link rel="stylesheet" href="./uscita.css" />
+  </head>
+  <body>
+    <!-- Quello che vede il pubblico: il codice live grande. Hydra arriva in fase 3. -->
+    <header class="testa">
+      <img id="wordmark" class="wordmark" alt="CUTX" />
+      <span id="bpm" class="bpm"></span>
+    </header>
+    <main id="livelli" class="livelli"></main>
+    <div id="battute" class="battute" aria-hidden="true">
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+    <div class="angolo" aria-hidden="true">
+      <div id="insegna" class="insegna led">TECNOLOGIA CANAGLIA</div>
+      <div class="gatto-posto"><img id="gatto" class="gatto" alt="" /></div>
+      <div id="frase" class="frase"></div>
+    </div>
+    <script type="module" src="./uscita.js"></script>
+  </body>
+</html>

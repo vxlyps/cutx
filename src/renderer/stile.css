@@ -1002,3 +1002,140 @@ td:first-child {
 input[type='checkbox'] {
   accent-color: var(--testo);
 }
+
+/* --- LIVE: volume, muto, griglia, note che suonano, modifica sul posto, jam, paracadute --- */
+
+.livelli {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.volume {
+  width: 70px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  cursor: ew-resize;
+  background: linear-gradient(var(--bordo), var(--bordo)) center / 100% 3px no-repeat;
+  flex-shrink: 0;
+}
+
+.volume div {
+  height: 3px;
+  background: var(--testo);
+}
+
+.livello.muto .volume div {
+  background: var(--spento);
+}
+
+.livello.muto .codice {
+  color: var(--spento);
+}
+
+.livello.muto .nome,
+.livello.muto .punto {
+  color: var(--spento);
+}
+
+.livello .codice {
+  cursor: text;
+}
+
+.codice .nota {
+  background: var(--marcio);
+  color: var(--su-marcio);
+  box-shadow: 0 0 10px rgba(159, 194, 58, 0.6);
+}
+
+.griglia {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.griglia div {
+  height: 6px;
+  background: var(--linea);
+}
+
+.griglia div.colpo {
+  background: var(--testo);
+}
+
+.griglia div.ora {
+  background: var(--grigio);
+}
+
+.griglia div.colpo.ora {
+  background: var(--marcio);
+}
+
+.livello.in-modifica {
+  border-color: var(--spento);
+}
+
+.livello.non-applicato {
+  border: 1px dashed var(--testo);
+}
+
+.livello .errore {
+  font-size: 12px;
+}
+
+.jam {
+  flex-shrink: 0;
+}
+
+.jam .nome-jam {
+  color: var(--testo);
+}
+
+.jam .editor-carta {
+  min-height: 1.7em;
+}
+
+.paracadute {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  border-bottom-width: 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.paracadute img {
+  height: 26px;
+  width: auto;
+  position: relative;
+  filter: drop-shadow(0 0 4px rgba(159, 194, 58, 0.45));
+}
+
+/* tenuto premuto: si riempie di verde in un secondo */
+.paracadute .carica {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: var(--marcio-scuro);
+}
+
+.paracadute.carica .carica {
+  height: 100%;
+  transition: height 1s linear;
+}
+
+.paracadute.aperto {
+  border-color: var(--marcio);
+  box-shadow: 0 0 12px rgba(159, 194, 58, 0.4);
+}

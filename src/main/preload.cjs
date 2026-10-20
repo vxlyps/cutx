@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('cutx', {
   salvaPreferenze: (modifiche) => ipcRenderer.invoke('preferenze:salva', modifiche),
   suPreferenze: (fn) => ipcRenderer.on('preferenze-cambiate', (_e, p) => fn(p)),
   crasha: (chi) => ipcRenderer.send('crasha', chi),
+  uscitaOnOff: () => ipcRenderer.invoke('uscita:onoff'),
+  uscitaSchermoIntero: () => ipcRenderer.invoke('uscita:schermo-intero'),
+  uscitaAperta: () => ipcRenderer.invoke('uscita:aperta'),
+  suUscita: (fn) => ipcRenderer.on('uscita-stato', (_e, aperta) => fn(aperta)),
   log: (nome, riga) => ipcRenderer.send('log', nome, riga),
   percorsoLog: () => ipcRenderer.invoke('log:percorso'),
 });

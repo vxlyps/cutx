@@ -8,6 +8,8 @@ import { writeFile } from 'node:fs/promises';
 export const PREDEFINITE = {
   lunghezzaFrase: 16,
   scritturaAMacchina: true,
+  paracadute: true,
+  uscita: { aperta: false, bordi: null, schermoIntero: false },
 };
 
 const file = () => path.join(app.getPath('userData'), 'preferenze.json');

@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         index: resolve(radice, 'index.html'),
         motore: resolve(radice, 'motore.html'),
+        uscita: resolve(radice, 'uscita.html'),
       },
     },
   },

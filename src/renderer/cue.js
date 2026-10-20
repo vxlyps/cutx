@@ -112,6 +112,11 @@ export class Cue {
     };
   }
 
+  focus() {
+    if (this.modo === 'libero') return this.libero.focus();
+    (this.cartaAttiva ?? this.carte.find((c) => c.i >= 0))?.editor.focus();
+  }
+
   // --- modi ---
 
   cambiaModo(modo) {

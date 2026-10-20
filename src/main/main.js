@@ -1,5 +1,5 @@
 // Processo principale: finestre, protocollo cutx://, permessi, guardiano dei motori.
-import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, session, MessageChannelMain } from 'electron';
+import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, screen, session, MessageChannelMain } from 'electron';
 import path from 'node:path';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { appendFile, mkdir } from 'node:fs/promises';
@@ -93,12 +93,15 @@ function inoltraConsole(wc, nome) {
 }
 
 // Tre finestre, tre processi: controllo (l'interfaccia), live e cuffia (motori nascosti).
-const finestre = { controllo: null, live: null, cuffia: null };
-const pronte = { controllo: false, live: false, cuffia: false };
+// Più, quando è aperta, l'uscita: quello che vede il pubblico.
+const finestre = { controllo: null, live: null, cuffia: null, uscita: null };
+const pronte = { controllo: false, live: false, cuffia: false, uscita: false };
 const COPPIE = [
   ['controllo', 'live'],
   ['controllo', 'cuffia'],
   ['live', 'cuffia'],
+  ['live', 'uscita'],
+  ['controllo', 'uscita'],
 ];
 
 // Collega una finestra appena (ri)caricata alle altre con canali diretti, senza passare da qui.
@@ -176,6 +179,84 @@ function riavviaMotore(ruolo) {
   setTimeout(() => creaMotore(ruolo), 300);
 }
 
+// --- la finestra di uscita ---
+// Una finestra normale: la sposto dove voglio, ⌃⌘F la mette a schermo intero sullo schermo in cui
+// sta. CUTX ricorda schermo, posizione e modalità. Se si chiude o crasha, i motori non lo sentono.
+
+let chiudendo = false;
+app.on('before-quit', () => (chiudendo = true));
+
+// Solo se la posizione salvata cade ancora su uno schermo collegato.
+function bordiValidi(b) {
+  if (!b) return null;
+  const visibile = screen.getAllDisplays().some(({ workArea: w }) => b.x < w.x + w.width - 40 && b.x + b.width > w.x + 40 && b.y < w.y + w.height - 40 && b.y + b.height > w.y);
+  return visibile ? b : null;
+}
+
+function avvisaUscita() {
+  const wc = finestre.controllo?.webContents;
+  if (wc && !wc.isDestroyed()) wc.send('uscita-stato', !!finestre.uscita);
+}
+
+function creaUscita() {
+  if (finestre.uscita) return finestre.uscita.focus();
+  const ricordo = preferenze.leggi().uscita ?? {};
+  const bordi = bordiValidi(ricordo.bordi);
+  const finestra = new BrowserWindow({
+    ...(bordi ?? { width: 1280, height: 720 }),
+    backgroundColor: '#050604',
+    title: 'CUTX · uscita',
+    webPreferences,
+  });
+  finestre.uscita = finestra;
+  pronte.uscita = false;
+  seguiCaricamento('uscita', finestra);
+  let bordiNormali = finestra.getBounds();
+  let timer = null;
+  const ricorda = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (finestra.isDestroyed()) return;
+      const intero = finestra.isFullScreen();
+      if (!intero) bordiNormali = finestra.getBounds();
+      preferenze.salva({ uscita: { aperta: true, bordi: bordiNormali, schermoIntero: intero } });
+    }, 400);
+  };
+  for (const evento of ['move', 'resize', 'enter-full-screen', 'leave-full-screen']) finestra.on(evento, ricorda);
+  finestra.webContents.on('render-process-gone', (_e, dettagli) => {
+    pronte.uscita = false;
+    console.log(`[uscita] processo terminato (${dettagli.reason}), ricarico`);
+    setTimeout(() => !finestra.isDestroyed() && finestra.webContents.reload(), 300);
+  });
+  finestra.on('closed', () => {
+    finestre.uscita = null;
+    pronte.uscita = false;
+    clearTimeout(timer);
+    // chiudere CUTX con l'uscita aperta la ricorda aperta
+    if (!chiudendo) preferenze.salva({ uscita: { ...preferenze.leggi().uscita, aperta: false } });
+    avvisaUscita();
+  });
+  if (ricordo.schermoIntero) finestra.once('ready-to-show', () => finestra.setFullScreen(true));
+  finestra.loadURL(`${ORIGINE}/uscita.html`);
+  preferenze.salva({ uscita: { ...ricordo, aperta: true } });
+  avvisaUscita();
+}
+
+ipcMain.handle('uscita:onoff', () => {
+  if (finestre.uscita) finestre.uscita.close();
+  else creaUscita();
+  return !!finestre.uscita;
+});
+ipcMain.handle('uscita:schermo-intero', () => {
+  if (!finestre.uscita) creaUscita();
+  const f = finestre.uscita;
+  if (f.webContents.isLoading()) f.once('ready-to-show', () => f.setFullScreen(true));
+  else f.setFullScreen(!f.isFullScreen());
+});
+ipcMain.handle('uscita:aperta', () => !!finestre.uscita);
+// Solo per i test.
+ipcMain.on('uscita:crasha', () => finestre.uscita?.webContents.forcefullyCrashRenderer());
+
 function avvisaMotori() {
   for (const ruolo of ['live', 'cuffia']) {
     const wc = finestre[ruolo]?.webContents;
@@ -245,6 +326,7 @@ app.whenReady().then(async () => {
   creaMotore('live');
   creaMotore('cuffia');
   creaControllo();
+  if (preferenze.leggi().uscita?.aperta) creaUscita();
   if (PROVA) prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') }).then((ok) => app.exit(ok ? 0 : 1));
   if (FOTO) foto({ finestre, file: FOTO }).then(() => app.exit(0));
 });

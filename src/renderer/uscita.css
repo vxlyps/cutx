@@ -1,0 +1,227 @@
+/* La finestra di uscita, da design/riferimenti/proiettore.html (versione solo codice).
+   Le misure seguono la larghezza della finestra: --u è un pixel della tavola da 1440. */
+@font-face {
+  font-family: 'Canaglia Stencil';
+  src: url('../../design/risorse/font/CanagliaStencil.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Fragment Mono';
+  src: url('/font/FragmentMono-Regular.ttf') format('truetype');
+}
+
+:root {
+  --fondo: #050604;
+  --testo: #d9dccc;
+  --spento: #7a7e72;
+  --marcio: #9fc23a;
+  --su-marcio: #0b0f03;
+  --grigio: #3a3a38;
+  --u: calc(100vw / 1440);
+  --bagliore: 0 0 calc(12 * var(--u)) rgba(159, 194, 58, 0.6);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--fondo);
+  color: var(--testo);
+  overflow: hidden;
+  font-family: 'Fragment Mono', monospace;
+  cursor: none;
+}
+
+.testa {
+  position: absolute;
+  left: calc(64 * var(--u));
+  right: calc(64 * var(--u));
+  top: calc(40 * var(--u));
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.wordmark {
+  height: calc(38 * var(--u));
+  width: auto;
+}
+
+.bpm {
+  font-size: calc(16 * var(--u));
+  letter-spacing: 0.14em;
+  color: var(--spento);
+}
+
+.livelli {
+  position: absolute;
+  left: calc(64 * var(--u));
+  right: calc(64 * var(--u));
+  top: calc(110 * var(--u));
+  bottom: calc(290 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(30 * var(--u));
+  overflow: hidden;
+}
+
+.livello {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6 * var(--u));
+}
+
+.tag {
+  font-size: calc(15 * var(--u));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--marcio);
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(159, 194, 58, 0.6);
+}
+
+.livello.arriva .tag,
+.livello.bozza .tag {
+  color: var(--testo);
+  text-shadow: none;
+}
+
+.livello.muto .codice {
+  color: var(--spento);
+}
+
+.codice {
+  margin: 0;
+  font-family: 'Fragment Mono', monospace;
+  font-size: calc(40 * var(--u) * var(--scala, 1));
+  line-height: 1.3;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--testo);
+}
+
+.codice .nota {
+  background: var(--marcio);
+  color: var(--su-marcio);
+  box-shadow: 0 0 calc(14 * var(--u)) rgba(159, 194, 58, 0.7);
+}
+
+.codice .cursore {
+  background: var(--marcio);
+  color: var(--marcio);
+}
+
+.battute {
+  position: absolute;
+  left: calc(64 * var(--u));
+  bottom: calc(44 * var(--u));
+  display: flex;
+  gap: calc(14 * var(--u));
+}
+
+.battute div {
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  border-radius: 50%;
+  border: calc(2 * var(--u)) solid var(--grigio);
+  box-sizing: border-box;
+}
+
+.battute div.passata {
+  background: var(--testo);
+  border-color: var(--testo);
+}
+
+.battute div.ora {
+  background: var(--testo);
+  border-color: var(--testo);
+}
+
+.suona .battute div.ora {
+  background: var(--marcio);
+  border-color: var(--marcio);
+}
+
+.angolo {
+  position: absolute;
+  right: calc(64 * var(--u));
+  bottom: calc(38 * var(--u));
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: end;
+  column-gap: calc(30 * var(--u));
+}
+
+.insegna {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+  margin-bottom: calc(14 * var(--u));
+  font-family: 'Canaglia Stencil', 'Fragment Mono', monospace;
+  font-size: calc(30 * var(--u));
+  letter-spacing: 0.06em;
+  color: #2c370e;
+  padding: calc(10 * var(--u)) calc(16 * var(--u));
+  border: 1px solid #1f2614;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.led {
+  background-color: #0a0d06;
+  background-image: radial-gradient(#1a2010 1px, transparent 1.4px);
+  background-size: 4px 4px;
+}
+
+.insegna.accesa {
+  color: var(--marcio);
+  text-shadow: var(--bagliore);
+  animation: neon 0.9s steps(1, end);
+}
+
+@keyframes neon {
+  0%,
+  14%,
+  30%,
+  38% {
+    color: #2c370e;
+    text-shadow: none;
+  }
+  8%,
+  22%,
+  34%,
+  46%,
+  100% {
+    color: var(--marcio);
+    text-shadow: var(--bagliore);
+  }
+}
+
+.gatto-posto {
+  grid-column: 1;
+  grid-row: 2;
+  width: calc(200 * var(--u));
+  height: calc(200 * var(--u));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.gatto {
+  width: auto;
+  filter: drop-shadow(0 0 6px rgba(159, 194, 58, 0.55));
+}
+
+.frase {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: end;
+  font-family: 'Canaglia Stencil', 'Fragment Mono', monospace;
+  font-size: calc(168 * var(--u));
+  line-height: 1;
+  color: var(--marcio);
+  text-shadow: var(--bagliore);
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
