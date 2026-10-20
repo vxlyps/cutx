@@ -30,7 +30,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -150,6 +150,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
   if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
   if (parti.includes('browser')) ok = (await sicura('browser', provaBrowser)) && ok;
+  if (parti.includes('impostazioni')) ok = (await sicura('impostazioni', provaImpostazioni)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -221,8 +222,13 @@ export async function foto({ finestre, file: fotoFile }) {
   wc.sendInputEvent({ type: 'keyDown', keyCode: ',', modifiers: ['meta'] });
   await aspetta(1);
   const altro = fotoFile.replace(/\.png$/, '-impostazioni.png');
+  await chiedi(finestre.controllo, `document.querySelector('#imp-nav [data-sez="scorciatoie"]').click()`);
+  await aspetta(0.4);
   await writeFile(altro, (await wc.capturePage()).toPNG());
   console.log(`[foto] ${altro}`);
+  await chiedi(finestre.controllo, `document.querySelector('#imp-nav [data-sez="stash"]').click()`);
+  await aspetta(0.4);
+  await writeFile(altro.replace('.png', '-stash.png'), (await wc.capturePage()).toPNG());
 }
 
 // --- prova dei brani: + sezione, salva, riapri, modifica, manda live, suoni mancanti ---
@@ -748,6 +754,151 @@ async function provaBrowser({ finestre, scrivi }) {
     await rm(cartellaSuoni, { recursive: true, force: true });
     await rm(path.join(stash.radice(), 'libreria', file), { force: true });
     await js('cutxProva.ricaricaStash()');
+  }
+  return ok;
+}
+
+// --- prova di help al passaggio, impostazioni e scorciatoie personalizzabili ---
+
+async function provaImpostazioni({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const wc = () => finestre.controllo.webContents;
+  const premi = async (tasto, ...modificatori) => {
+    wc().sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    wc().sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(0.4);
+  };
+  const prefs = () => js('window.cutx.preferenze()');
+  const sopra = async (selettore) => {
+    const r = await js(`(() => { const r = document.querySelector(${JSON.stringify(selettore)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    wc().sendInputEvent({ type: 'mouseMove', x: r.x, y: r.y });
+    return r;
+  };
+  const archiviaPreferenze = await prefs();
+
+  try {
+    await js('cutxProva.fermaTutto()');
+    // --- help al passaggio ---
+    await js('window.cutx.salvaPreferenze({ suggerimenti: true, riquadroHelp: true })');
+    await aspetta(0.4);
+    wc().sendInputEvent({ type: 'mouseMove', x: 5, y: 5 });
+    await sopra('#go-live');
+    await aspetta(0.3);
+    controlla('il riquadro help spiega subito quello che sta sotto il mouse', (await js(`document.getElementById('riquadro-help').textContent`)).includes('GO LIVE'));
+    controlla('il suggerimento non compare prima di 800 ms', await js(`document.querySelector('.suggerimento').hidden`));
+    await aspetta(1.0);
+    const tip = await js(`(() => { const t = document.querySelector('.suggerimento'); return { visibile: !t.hidden, testo: t.textContent }; })()`);
+    controlla('dopo il mouse fermo compare il suggerimento, con la scorciatoia', tip.visibile && tip.testo.includes('GO LIVE') && tip.testo.includes('⇧⌘↵'), JSON.stringify(tip));
+    wc().sendInputEvent({ type: 'mouseMove', x: 5, y: 5 });
+    await aspetta(0.3);
+    controlla('muovendo il mouse sparisce', await js(`document.querySelector('.suggerimento').hidden`));
+    controlla('e il riquadro torna al suo invito', (await js(`document.getElementById('riquadro-help').textContent`)).includes('Passa il mouse'));
+    // un title nato dopo (i bottoni di una card) fa da riserva
+    await premi('I', 'meta');
+    const spenti = await prefs();
+    controlla('⌘I spegne suggerimenti e riquadro', spenti.suggerimenti === false && spenti.riquadroHelp === false, JSON.stringify([spenti.suggerimenti, spenti.riquadroHelp]));
+    controlla('il riquadro sparisce', await js(`document.getElementById('riquadro-help').hidden`));
+    await sopra('#go-live');
+    await aspetta(1.2);
+    controlla('e il suggerimento non compare', await js(`document.querySelector('.suggerimento').hidden`));
+    await premi('I', 'meta');
+    const accesi = await prefs();
+    controlla('⌘I di nuovo li riaccende', accesi.suggerimenti === true && accesi.riquadroHelp === true);
+    wc().sendInputEvent({ type: 'mouseMove', x: 5, y: 5 });
+
+    // --- impostazioni: aprono con ⌘, e hanno le sezioni ---
+    await premi(',', 'meta');
+    controlla('⌘, apre le impostazioni', (await js(`!document.getElementById('impostazioni').hidden`)) === true);
+    const sezioni = await js(`[...document.querySelectorAll('#imp-nav [data-sez]')].map((b) => b.textContent)`);
+    controlla('ci sono le sezioni della tavola', ['generale', 'audio', 'scorciatoie', 'proiezione', 'stash', 'estensioni'].every((x) => sezioni.includes(x)), JSON.stringify(sezioni));
+    const vai = (n) => js(`document.querySelector('#imp-nav [data-sez="${n}"]').click()`);
+
+    // --- scorciatoie rimappabili ---
+    await vai('scorciatoie');
+    const righe = await js(`document.querySelectorAll('#scorciatoie-elenco .imp-riga').length`);
+    controlla('l\'elenco ha tutte le azioni', righe === 20, String(righe));
+    const cap = (id) => `#scorciatoie-elenco [data-azione="${id}"] .cap-gruppo`;
+    await js(`document.querySelector('${cap('goLive')}').click()`);
+    controlla('un clic sul tasto aspetta la combinazione nuova', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('premi un tasto'));
+    await premi('Return', 'meta'); // già di "prova in cuffia"
+    const errore = await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`);
+    controlla('una combinazione già usata avvisa e non cambia', errore.includes('già usata') && !(await prefs()).scorciatoie.goLive, errore);
+    await premi('C', 'meta');
+    controlla('una combinazione riservata a macOS si rifiuta', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('riservata'));
+    await premi('G', 'meta');
+    controlla('la combinazione nuova si salva', (await prefs()).scorciatoie.goLive === 'Meta+KeyG', JSON.stringify((await prefs()).scorciatoie));
+    controlla('e il tasto mostra la nuova combinazione', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('G'));
+    await premi('Escape'); // chiude le impostazioni
+
+    // la combinazione nuova fa go live, la vecchia no
+    await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue('setcpm(120/4)\\ns("sine*2").gain(.0001)'); cutxProva.scegliEntraTra(1); cutxProva.cue.focus()`);
+    await js(`cutxProva.valuta('live', 'setcpm(120/4)')`);
+    await js(`cutxProva.fermaTutto()`);
+    await aspetta(0.5);
+    await premi('Return', 'meta', 'shift');
+    await aspetta(0.6);
+    controlla('la vecchia combinazione non fa più go live', ((await live()).livelli ?? []).length === 0);
+    await premi('G', 'meta');
+    await aspetta(1.2);
+    controlla('la nuova fa go live, anche dentro l\'editor', ((await live()).livelli ?? []).filter((l) => l.a === null).length === 1);
+    await js(`cutxProva.fermaTutto()`);
+
+    // ripristina
+    await premi(',', 'meta');
+    await vai('scorciatoie');
+    await js(`document.getElementById('scorciatoie-ripristina').click()`);
+    await aspetta(0.5);
+    controlla('ripristina rimette i tasti predefiniti', Object.keys((await prefs()).scorciatoie).length === 0);
+    await js(`document.querySelector('#scorciatoie-elenco [data-azione="muto"] .cap-gruppo').click()`);
+    await premi('5'); // niente modificatore
+    controlla('il muto vuole un modificatore e una cifra', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="muto"]').textContent`)).includes('modificatore'));
+    await premi('Escape');
+    await premi('Escape');
+
+    // --- proiezione: gatto e insegna ---
+    await premi(',', 'meta');
+    await vai('proiezione');
+    const interruttori = await js(`document.querySelectorAll('#imp-proiezione .imp-riga').length`);
+    controlla('la proiezione ha i suoi cinque interruttori', interruttori === 5, String(interruttori));
+    await js(`document.querySelectorAll('#imp-proiezione .imp-riga')[2].querySelectorAll('button')[1].click()`); // gatto off
+    await aspetta(0.5);
+    controlla('gatto off: sparisce dalla barra', (await prefs()).gatto === false && (await js(`getComputedStyle(document.querySelector('.barra .gatto-posto')).display`)) === 'none');
+    await js(`document.querySelectorAll('#imp-proiezione .imp-riga')[3].querySelectorAll('button')[1].click()`); // insegna off
+    await aspetta(0.4);
+    controlla('insegna off: sparisce', (await js(`getComputedStyle(document.getElementById('insegna')).display`)) === 'none');
+    await js(`window.cutx.salvaPreferenze({ gatto: true, insegna: true })`);
+    await aspetta(0.4);
+    controlla('e tornano', (await js(`getComputedStyle(document.querySelector('.barra .gatto-posto')).display`)) !== 'none');
+
+    // --- generale: frase ---
+    await vai('generale');
+    await js(`[...document.querySelectorAll('#imp-frase button')].find((b) => b.textContent === '8').click()`);
+    await aspetta(0.5);
+    controlla('la lunghezza della frase si cambia', (await prefs()).lunghezzaFrase === 8 && (await js(`document.getElementById('frase-lunghezza').textContent`)) === '/8');
+    await js(`window.cutx.salvaPreferenze({ lunghezzaFrase: 16 })`);
+
+    // --- stash: il paracadute del set ---
+    await vai('stash');
+    const file = path.join(stash.radice(), 'stash.json');
+    const letto = async () => JSON.parse(await readFile(file, 'utf8')).paracadute;
+    const prima = await letto();
+    await js(`cutxProva.imp.editorParacadute.codice = '// paracadute di prova\\ns("sine*2").gain(.0001)'`);
+    await aspetta(1.5);
+    controlla('il paracadute scritto nelle impostazioni si salva in stash.json', (await letto()) === '// paracadute di prova\ns("sine*2").gain(.0001)', JSON.stringify(await letto()));
+    await js(`document.getElementById('paracadute-predefinito').click()`);
+    await aspetta(1);
+    controlla('ripristina il predefinito lo toglie dallo stash', !(await letto()), JSON.stringify(await letto()));
+    await premi('Escape');
+    controlla('esc chiude le impostazioni', (await js(`document.getElementById('impostazioni').hidden`)) === true);
+    if (prima) await js(`cutxProva.imp.dati.salvaConfig({ paracadute: ${JSON.stringify(prima)} })`);
+  } finally {
+    await js(`window.cutx.salvaPreferenze(${JSON.stringify({ scorciatoie: archiviaPreferenze.scorciatoie ?? {}, suggerimenti: archiviaPreferenze.suggerimenti ?? true, riquadroHelp: archiviaPreferenze.riquadroHelp ?? true, gatto: true, insegna: true, lunghezzaFrase: archiviaPreferenze.lunghezzaFrase })})`);
   }
   return ok;
 }

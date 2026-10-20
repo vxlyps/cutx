@@ -4,6 +4,7 @@
 import { aspetto, cicloDi } from './aspetto.js';
 import { attivi, riempi } from './evidenzia.js';
 import { avviaInsegna } from './insegna.js';
+import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
 import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
 import seduto from '../../design/risorse/gatti/gatto_seduto_marcio.svg';
 import lecca from '../../design/risorse/gatti/gatto_lecca_marcio.svg';
@@ -170,9 +171,9 @@ function giro() {
   disegna();
 }
 
-// ⌃⌘F anche da qui: schermo intero sullo schermo dove sta la finestra.
+// La scorciatoia dello schermo intero (⌃⌘F, o quella scelta nelle impostazioni) vale anche da qui.
 window.addEventListener('keydown', (e) => {
-  if (e.metaKey && e.ctrlKey && e.code === 'KeyF') {
+  if (corrisponde(e, AZIONI.find((a) => a.id === 'uscitaIntera'), effettive(preferenze.scorciatoie).uscitaIntera)) {
     e.preventDefault();
     window.cutx.uscitaSchermoIntero();
   }
@@ -181,8 +182,13 @@ window.addEventListener('keydown', (e) => {
 $('wordmark').src = wordmark;
 avviaGatto();
 avviaInsegna($('insegna'));
-window.cutx.suPreferenze((p) => (preferenze = p));
-preferenze = await window.cutx.preferenze();
+function applica(p) {
+  preferenze = p;
+  document.body.classList.toggle('senza-gatto', p.gatto === false);
+  document.body.classList.toggle('senza-insegna', p.insegna === false);
+}
+window.cutx.suPreferenze(applica);
+applica(await window.cutx.preferenze());
 setInterval(disegna, 100);
 giro();
 globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala });

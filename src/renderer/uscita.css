@@ -225,3 +225,9 @@ body {
   min-width: 2ch;
   text-align: right;
 }
+
+/* interruttori delle impostazioni */
+.senza-gatto .gatto-posto,
+.senza-insegna .insegna {
+  display: none;
+}

@@ -9,6 +9,13 @@ export const PREDEFINITE = {
   lunghezzaFrase: 16,
   scritturaAMacchina: true,
   paracadute: true,
+  suggerimenti: true,
+  riquadroHelp: true,
+  gatto: true,
+  insegna: true,
+  hydra: true,
+  logoSopraHydra: true,
+  scorciatoie: {}, // solo quelle cambiate: id → combinazione (vedi scorciatoie.js)
   uscita: { aperta: false, bordi: null, schermoIntero: false },
 };
 

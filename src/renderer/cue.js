@@ -232,7 +232,7 @@ export class Cue {
         const b = el('button', `blocco-mappa ${stati[i] ?? ''}`);
         b.style.flex = String(Math.min(Math.max(s.corpo.filter((r) => r.trim()).length, 1), 8));
         b.textContent = `${i + 1} ${s.nome}${stati[i] === 'cuffia' ? ' ◖◗' : ''}`;
-        b.title = 'clic: vai alla sezione · doppio clic: rinomina · trascina per spostare';
+        b.dataset.aiuto = 'mappa-sezione';
         b.draggable = true;
         b.ondragstart = (e) => e.dataTransfer.setData('text/x-sezione', String(i));
         b.ondragover = (e) => {
@@ -313,7 +313,7 @@ export class Cue {
     corpo.addEventListener('mouseup', selezione);
 
     if (!preambolo) {
-      nome.title = 'Rinomina';
+      nome.dataset.aiuto = 'rinomina';
       nome.onclick = () => this.rinomina(i);
       const unisci = tasto('unisci', '', 'Unisci con la sezione successiva');
       unisci.disabled = i >= m.sezioni.length - 1;

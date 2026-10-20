@@ -3,6 +3,9 @@
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
 import { Browser, esempiHelp } from './browser.js';
+import { Aiuto } from './aiuto.js';
+import { Impostazioni } from './impostazioni.js';
+import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
@@ -198,7 +201,16 @@ function cuffiaOnOff(on = !cuffiaUdibile) {
 
 function impostazioni(aperte = $('impostazioni').hidden) {
   $('impostazioni').hidden = !aperte;
-  if (aperte) aggiornaElenchi();
+  if (aperte) {
+    aggiornaElenchi();
+    imp.disegna();
+  } else imp.catturando = null;
+}
+
+// ⌘I: suggerimenti e riquadro help insieme, tutti e due on o tutti e due off.
+function helpOnOff() {
+  const acceso = preferenze.suggerimenti !== false || preferenze.riquadroHelp !== false;
+  window.cutx.salvaPreferenze({ suggerimenti: !acceso, riquadroHelp: !acceso });
 }
 
 // Le scorciatoie valgono anche dentro l'editor: le prendo prima di lui.
@@ -220,63 +232,55 @@ function paracaduteDoppio() {
   ultimoP = ora;
 }
 
-const SCORCIATOIE = [
-  { tasto: 'Enter', shift: false, fa: invio },
-  { tasto: 'Enter', shift: true, fa: goLive },
-  { tasto: 'Backspace', shift: true, fa: () => togliLivello() },
-  { tasto: '.', fa: fermaTutto },
-  { tasto: 'k', fa: () => cuffiaOnOff() },
-  { tasto: ',', fa: () => impostazioni() },
-  { tasto: '0', fa: fraseDaCapo },
-  { tasto: 's', shift: false, fa: () => cue.salva() },
-  { tasto: 's', shift: true, fa: () => salvaLiveComeBrano() },
-  { tasto: 'e', fa: () => cue.aggiungiSezione() },
-  { tasto: 'p', shift: false, fa: paracaduteDoppio },
-];
+// Cosa fa ogni azione (i tasti sono in scorciatoie.js e nelle preferenze: si cambiano nelle impostazioni).
+const FA = {
+  provaCuffia: invio,
+  goLive,
+  togli: () => togliLivello(),
+  entra1: () => scegliEntraTra(1),
+  entra2: () => scegliEntraTra(2),
+  entra4: () => scegliEntraTra(4),
+  entra8: () => scegliEntraTra(8),
+  // muto del livello n: la cifra arriva dal tasto premuto
+  muto: (n) => {
+    const l = pila.attivi()[n - 1];
+    if (l) live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });
+  },
+  fermaTutto,
+  cuffiaOnOff: () => cuffiaOnOff(),
+  // dal CUE al LIVE (il jam) e ritorno
+  passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
+  help: helpOnOff,
+  esci: () => {
+    if (!$('impostazioni').hidden) impostazioni(false);
+    else if (!pila.annulla()) document.activeElement?.blur();
+  },
+  impostazioni: () => impostazioni(),
+  salva: () => cue.salva(),
+  salvaLive: () => salvaLiveComeBrano(),
+  aggiungiSezione: () => cue.aggiungiSezione(),
+  fraseDaCapo,
+  paracadute: paracaduteDoppio,
+  uscitaIntera: () => window.cutx.uscitaSchermoIntero(),
+};
 
+// Le scorciatoie valgono anche dentro l'editor (le prendo prima di lui), tranne quelle che scrivono
+// un carattere: ⌥5 è ~ sulla tastiera italiana, e 1 2 4 8 sono numeri.
 window.addEventListener(
   'keydown',
   (e) => {
-    if (dialogoAperto()) return; // i dialoghi gestiscono i tasti da soli
-    if (e.key === 'Escape') {
-      if (!$('impostazioni').hidden) impostazioni(false);
-      else if (!pila.annulla()) document.activeElement?.blur();
-      return;
-    }
+    if (dialogoAperto() || imp.catturando) return; // i dialoghi e la scelta di un tasto se li gestiscono da soli
     const scrivendo = e.target.closest?.('.cm-editor, input, select, textarea');
-    // ⌃⌘F: l'uscita a schermo intero, sullo schermo dove si trova
-    if (e.metaKey && e.ctrlKey && e.code === 'KeyF') {
+    const mappa = effettive(preferenze.scorciatoie);
+    for (const a of AZIONI) {
+      const r = corrisponde(e, a, mappa[a.id]);
+      if (!r) continue;
+      if (scrivendo && (a.soloFuori || scriveTesto(mappa[a.id]))) continue;
       e.preventDefault();
-      return window.cutx.uscitaSchermoIntero();
-    }
-    // ⌥1–9 fuori dall'editor: muto del livello n. Dentro gli editor ⌥ scrive (⌥5 è ~ sulla tastiera
-    // italiana); ⌃1–5 invece su questo Mac sono di Mission Control.
-    if (!scrivendo && e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
-      e.preventDefault();
-      const l = pila.attivi()[Number(e.code.slice(5)) - 1];
-      if (l) live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });
+      e.stopPropagation();
+      FA[a.id](r);
       return;
     }
-    if (!scrivendo && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      // 1 · 2 · 4 · 8 fuori dall'editor: quando entra il prossimo GO LIVE
-      if (['1', '2', '4', '8'].includes(e.key)) {
-        e.preventDefault();
-        return scegliEntraTra(Number(e.key));
-      }
-      // tab fuori dall'editor: dal CUE al LIVE (il jam) e ritorno
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        return e.target.closest?.('.live') ? cue.focus() : pila.focusJam();
-      }
-    }
-    if (!e.metaKey || e.ctrlKey || e.altKey) return;
-    const s = SCORCIATOIE.find(
-      (s) => s.tasto === (e.key.length === 1 ? e.key.toLowerCase() : e.key) && (s.shift === undefined || s.shift === e.shiftKey),
-    );
-    if (!s) return;
-    e.preventDefault();
-    e.stopPropagation();
-    s.fa();
   },
   true,
 );
@@ -312,6 +316,23 @@ async function apriStash(stato) {
   await aggiornaLibreria();
   await aggiornaElenchi();
 }
+
+// --- impostazioni e help ---
+
+const imp = new Impostazioni({
+  preferenze: () => preferenze,
+  salvaPreferenze: (m) => window.cutx.salvaPreferenze(m),
+  config: () => config,
+  salvaConfig: (m) => salva(m),
+  percorsoStash: () => $('stash').title === 'Scegli lo stash' ? null : $('stash').title,
+  scegliStash: async () => apriStash(await window.cutx.scegliStash()),
+  provaInCuffia: (codice) => (inTest ? null : (dovaCuffia = null, manda(cuffia, codice, { nome: 'paracadute', provenienza: 'impostazioni' }))),
+  codiceParacaduteBase: PARACADUTE,
+});
+const aiuto = new Aiuto({
+  riquadro: $('riquadro-help'),
+  combo: (azione) => effettive(preferenze.scorciatoie)[azione],
+});
 
 // --- browser: suoni, libreria, help ---
 
@@ -594,7 +615,9 @@ cuffia.suCollegato = () => {
 };
 
 $('wordmark').src = wordmark;
+$('imp-wordmark').src = wordmark;
 const posaGatto = avviaGatto($('gatto'));
+avviaGatto($('imp-gatto'), { animato: false });
 pulsanteParacadute();
 const accendiInsegna = avviaInsegna($('insegna'));
 
@@ -610,8 +633,6 @@ $('uscita-onoff').onclick = async () => mostraUscita(await window.cutx.uscitaOnO
 window.cutx.suUscita(mostraUscita);
 window.cutx.uscitaAperta().then(mostraUscita);
 for (const b of document.querySelectorAll('[data-entra]')) b.onclick = () => scegliEntraTra(Number(b.dataset.entra));
-$('scrittura-macchina').onchange = (e) => window.cutx.salvaPreferenze({ scritturaAMacchina: e.target.checked });
-$('lunghezza-frase').onchange = (e) => window.cutx.salvaPreferenze({ lunghezzaFrase: Number(e.target.value) });
 
 $('uscita-live').onchange = (e) => salva({ uscite: { ...config.uscite, live: e.target.value } });
 $('uscita-cuffia').onchange = (e) => salva({ uscite: { ...config.uscite, cuffia: e.target.value } });
@@ -638,6 +659,7 @@ globalThis.cutxProva = {
   salvaLiveComeBrano,
   lanciaParacadute,
   pila,
+  imp,
   scriviCue: (codice) => (cue.libero.codice = codice),
   cue,
   posaGatto: (nome) => posaGatto(nome),
@@ -665,8 +687,10 @@ function applicaPreferenze(p) {
   preferenze = p;
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   $('paracadute').hidden = p.paracadute === false;
-  $('scrittura-macchina').checked = pila.scritturaAMacchina;
-  $('lunghezza-frase').value = String(p.lunghezzaFrase);
+  document.body.classList.toggle('senza-gatto', p.gatto === false);
+  document.body.classList.toggle('senza-insegna', p.insegna === false);
+  aiuto.aggiorna(p);
+  imp.disegna();
 }
 window.cutx.suPreferenze(applicaPreferenze);
 applicaPreferenze(await window.cutx.preferenze());

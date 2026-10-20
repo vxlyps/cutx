@@ -1,0 +1,205 @@
+{
+  "riquadroVuoto": "Passa il mouse su un comando: qui trovi cosa fa.",
+  "aiuto": {
+    "stash": {
+      "nome": "stash",
+      "testo": "La cartella del set: suoni, libreria dei brani, video. Di solito sta sull'SSD."
+    },
+    "cuffia-onoff": {
+      "nome": "cuffia on / off",
+      "testo": "Spegne o riaccende l'ascolto in cuffia. Il motore continua a girare: si spegne solo l'uscita.",
+      "azione": "cuffiaOnOff"
+    },
+    "hydra": {
+      "nome": "hydra",
+      "testo": "I video generativi sul proiettore. Arrivano nella fase 3."
+    },
+    "uscita-onoff": {
+      "nome": "uscita",
+      "testo": "Apre la finestra con quello che vede il pubblico. Va su un secondo schermo o a schermo intero.",
+      "azione": "uscitaIntera"
+    },
+    "apri-impostazioni": {
+      "nome": "impostazioni",
+      "testo": "Audio, scorciatoie, proiezione, stash e help.",
+      "azione": "impostazioni"
+    },
+    "bpm": {
+      "nome": "bpm",
+      "testo": "Il tempo del live, in battiti al minuto."
+    },
+    "battute": {
+      "nome": "battute",
+      "testo": "I quattro quarti del ciclo in corso."
+    },
+    "frase": {
+      "nome": "frase",
+      "testo": "A che punto sei della frase (1–16). Un clic fa ripartire il conto da 1 al prossimo ciclo: cambia solo quello che vedi, non il suono.",
+      "azione": "fraseDaCapo"
+    },
+    "tempo-set": {
+      "nome": "tempo del set",
+      "testo": "Da quanto suona il set, dal primo livello live."
+    },
+    "scheda-suoni": {
+      "nome": "suoni",
+      "testo": "Tutti i suoni dello stash, per cartella, e i synth. ▶ li senti in cuffia, + li scrive nel CUE."
+    },
+    "scheda-libreria": {
+      "nome": "libreria",
+      "testo": "I brani salvati nello stash. Un clic apre il brano nel CUE."
+    },
+    "scheda-help": {
+      "nome": "help?",
+      "testo": "La guida di Strudel in italiano: funzioni, spiegazioni ed esempi da provare o inserire."
+    },
+    "cerca": {
+      "nome": "cerca",
+      "testo": "Filtra l'elenco della scheda aperta."
+    },
+    "browser-prova": {
+      "nome": "prova in cuffia",
+      "testo": "Lo fa sentire solo in cuffia: le casse non lo sentono."
+    },
+    "browser-ferma": {
+      "nome": "ferma",
+      "testo": "Ferma la prova in cuffia."
+    },
+    "browser-inserisci": {
+      "nome": "inserisci",
+      "testo": "Lo scrive nel CUE, dove sta il cursore."
+    },
+    "aggiungi-sezione": {
+      "nome": "+ sezione",
+      "testo": "Le righe selezionate diventano una sezione del brano, col nome che scegli.",
+      "azione": "aggiungiSezione"
+    },
+    "modo-brano": {
+      "nome": "brano",
+      "testo": "Il brano aperto dalla libreria: mappa in alto, una card per sezione."
+    },
+    "modo-libero": {
+      "nome": "libero",
+      "testo": "Un editor libero per scrivere da zero. Le righe // @sezione lo dividono in sezioni."
+    },
+    "manda-cuffia": {
+      "nome": "cuffia",
+      "testo": "Prova in cuffia il codice o le righe selezionate.",
+      "azione": "provaCuffia"
+    },
+    "manda-live": {
+      "nome": "go live",
+      "testo": "Manda il codice nel live: entra a tempo, scritto a macchina.",
+      "azione": "goLive"
+    },
+    "go-live": {
+      "nome": "GO LIVE",
+      "testo": "Il codice entra nel live al confine di ciclo scelto, scritto a macchina nel LIVE. Se ha un errore, il live non cambia.",
+      "azione": "goLive"
+    },
+    "entra-1": {
+      "nome": "entra tra 1 ciclo",
+      "testo": "Il prossimo GO LIVE entra al prossimo ciclo.",
+      "azione": "entra1"
+    },
+    "entra-2": {
+      "nome": "entra tra 2 cicli",
+      "testo": "Il prossimo GO LIVE entra tra 2 cicli.",
+      "azione": "entra2"
+    },
+    "entra-4": {
+      "nome": "entra tra 4 cicli",
+      "testo": "Il prossimo GO LIVE entra tra 4 cicli.",
+      "azione": "entra4"
+    },
+    "entra-8": {
+      "nome": "entra tra 8 cicli",
+      "testo": "Il prossimo GO LIVE entra tra 8 cicli.",
+      "azione": "entra8"
+    },
+    "paracadute": {
+      "nome": "CUTX, scelgo te!",
+      "testo": "Il paracadute: tienilo premuto un secondo (o premi due volte di fila la scorciatoia). Al battito dopo esce tutto ed entra il codice di emergenza. Rifallo e tornano i livelli di prima.",
+      "azione": "paracadute"
+    },
+    "conteggio": {
+      "nome": "livelli",
+      "testo": "Quanti livelli suonano e quanti stanno per entrare."
+    },
+    "livello-volume": {
+      "nome": "volume",
+      "testo": "Il volume del livello: clic o trascina. Agisce subito, anche sui suoni già partiti."
+    },
+    "livello-muto": {
+      "nome": "muto",
+      "testo": "Zittisce il livello, senza perdere il tempo: quando torna è al punto giusto.",
+      "azione": "muto"
+    },
+    "livello-togli": {
+      "nome": "togli",
+      "testo": "Il livello esce alla fine del ciclo, e il codice si cancella.",
+      "azione": "togli"
+    },
+    "livello-codice": {
+      "nome": "modifica sul posto",
+      "testo": "Clic e scrivi: il live suona la versione di prima finché non applichi con ⌘↵ al ciclo dopo. Esc annulla."
+    },
+    "mappa-sezione": {
+      "nome": "sezione",
+      "testo": "Clic: vai alla sezione. Doppio clic: rinomina. Trascina per spostarla."
+    },
+    "rinomina": {
+      "nome": "rinomina",
+      "testo": "Cambia il nome della sezione."
+    }
+  },
+  "impostazioni": {
+    "frase": {
+      "nome": "lunghezza della frase"
+    },
+    "proiezione": [
+      {
+        "chiave": "hydra",
+        "nome": "hydra",
+        "testo": "spento: sul proiettore solo il codice, set easy (arriva nella fase 3)"
+      },
+      {
+        "chiave": "scritturaAMacchina",
+        "nome": "scrittura a macchina",
+        "testo": "il codice si scrive da solo mentre aspetta il ciclo"
+      },
+      {
+        "chiave": "gatto",
+        "nome": "gatto",
+        "testo": "gira in un angolo e ogni tanto si lecca"
+      },
+      {
+        "chiave": "insegna",
+        "nome": "insegna tecnologia canaglia",
+        "testo": "compare accanto al gatto e sul proiettore"
+      },
+      {
+        "chiave": "logoSopraHydra",
+        "nome": "logo sopra hydra",
+        "testo": "gatto, CUTX e insegna anche quando girano i video (fase 3)"
+      }
+    ],
+    "help": [
+      {
+        "chiave": "suggerimenti",
+        "nome": "suggerimenti al passaggio",
+        "testo": "mouse fermo un secondo sopra un comando"
+      },
+      {
+        "chiave": "riquadroHelp",
+        "nome": "riquadro help",
+        "testo": "in basso a sinistra, come in Ableton"
+      }
+    ],
+    "paracadute": {
+      "chiave": "paracadute",
+      "nome": "paracadute",
+      "testo": "il pulsante CUTX, scelgo te! nel LIVE; spento = non c'è"
+    }
+  }
+}

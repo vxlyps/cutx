@@ -16,41 +16,42 @@
         <img id="wordmark" class="wordmark" alt="CUTX" />
         <div id="insegna" class="insegna led">TECNOLOGIA CANAGLIA</div>
       </div>
-      <button id="stash" class="key" title="Scegli lo stash">
+      <button id="stash" data-aiuto="stash" class="key">
         <span class="lbl">stash</span><span id="stash-nome">nessuno</span><i id="stash-dove"></i>
       </button>
       <div class="spazio"></div>
       <div class="tempo">
-        <div class="valore"><span id="bpm" class="numero">–</span><span class="lbl">bpm</span></div>
-        <div id="battute" class="battute" aria-label="Battuta">
+        <div class="valore"><span id="bpm" class="numero" data-aiuto="bpm">–</span><span class="lbl">bpm</span></div>
+        <div id="battute" class="battute" aria-label="Battuta" data-aiuto="battute">
           <div></div>
           <div></div>
           <div></div>
           <div></div>
         </div>
-        <button id="frase" class="frase" title="Frase da capo al prossimo ciclo · ⌘0">
+        <button id="frase" data-aiuto="frase" class="frase">
           <span id="frase-numero" class="numero">–</span><span id="frase-lunghezza" class="lbl">/16</span>
         </button>
-        <span id="tempo-set" class="lbl tempo-set" title="Tempo del set">–:–</span>
+        <span id="tempo-set" class="lbl tempo-set" data-aiuto="tempo-set">–:–</span>
       </div>
       <div class="spazio"></div>
-      <button id="cuffia-onoff" class="key on" title="Cuffia on / off · ⌘K">cuffia <i>on</i></button>
-      <button class="key" disabled title="Arriva in fase 3">hydra <i>off</i></button>
-      <button id="uscita-onoff" class="key" title="La finestra di uscita: quello che vede il pubblico · ⌃⌘F a schermo intero">uscita <i>off</i></button>
-      <button id="apri-impostazioni" class="key" aria-label="Impostazioni" title="Impostazioni · ⌘,">⚙ <i>⌘,</i></button>
+      <button id="cuffia-onoff" data-aiuto="cuffia-onoff" class="key on">cuffia <i>on</i></button>
+      <button class="key" disabled data-aiuto="hydra">hydra <i>off</i></button>
+      <button id="uscita-onoff" data-aiuto="uscita-onoff" class="key">uscita <i>off</i></button>
+      <button id="apri-impostazioni" data-aiuto="apri-impostazioni" class="key" aria-label="Impostazioni">⚙ <i>⌘,</i></button>
     </header>
 
     <main class="postazione">
       <aside class="browser">
         <nav class="schede" aria-label="Pannello">
-          <button class="key on" data-scheda="suoni">suoni</button>
-          <button class="key" data-scheda="libreria">libreria</button>
-          <button class="key" data-scheda="help">help?</button>
+          <button class="key on" data-scheda="suoni" data-aiuto="scheda-suoni">suoni</button>
+          <button class="key" data-scheda="libreria" data-aiuto="scheda-libreria">libreria</button>
+          <button class="key" data-scheda="help" data-aiuto="scheda-help">help?</button>
         </nav>
         <div class="cerca">
-          <input id="cerca" type="text" placeholder="cerca nello stash" aria-label="Cerca nello stash" spellcheck="false" />
+          <input id="cerca" data-aiuto="cerca" type="text" placeholder="cerca nello stash" aria-label="Cerca nello stash" spellcheck="false" />
         </div>
         <div id="elenco" class="elenco"></div>
+        <div id="riquadro-help" class="riquadro-help" aria-live="polite"></div>
       </aside>
 
       <section class="colonna cue" aria-label="CUE">
@@ -58,9 +59,9 @@
           <span class="titolo">CUE</span>
           <span class="lbl">in cuffia</span>
           <div class="spazio"></div>
-          <button id="aggiungi-sezione" class="key" title="Le righe selezionate diventano una sezione · ⌘E">+ sezione <i>⌘E</i></button>
-          <button id="modo-brano" class="key" title="Il brano aperto dalla libreria">brano <i>–</i></button>
-          <button id="modo-libero" class="key on" title="Editor libero">libero</button>
+          <button id="aggiungi-sezione" data-aiuto="aggiungi-sezione" class="key">+ sezione <i>⌘E</i></button>
+          <button id="modo-brano" data-aiuto="modo-brano" class="key">brano <i>–</i></button>
+          <button id="modo-libero" data-aiuto="modo-libero" class="key on">libero</button>
         </div>
         <p id="cue-avviso" class="avviso"></p>
         <div id="vista-libero" class="corpo">
@@ -69,8 +70,8 @@
               <span id="libero-nome" class="nome">libero</span>
               <span id="libero-stato" class="lbl"></span>
               <div class="spazio"></div>
-              <button id="manda-cuffia" class="key">cuffia <i>⌘↵</i></button>
-              <button id="manda-live" class="key">go live <i>⇧⌘↵</i></button>
+              <button id="manda-cuffia" data-aiuto="manda-cuffia" class="key">cuffia <i>⌘↵</i></button>
+              <button id="manda-live" data-aiuto="manda-live" class="key">go live <i>⇧⌘↵</i></button>
             </div>
             <div id="editor" class="editor"></div>
           </article>
@@ -84,13 +85,13 @@
         </div>
         <div class="piede">
           <span class="lbl">entra tra</span>
-          <button class="key on" data-entra="1" title="Entra al prossimo ciclo · 1">1</button>
-          <button class="key" data-entra="2" title="Entra tra 2 cicli · 2">2</button>
-          <button class="key" data-entra="4" title="Entra tra 4 cicli · 4">4</button>
-          <button class="key" data-entra="8" title="Entra tra 8 cicli · 8">8</button>
+          <button class="key on" data-entra="1" data-aiuto="entra-1">1</button>
+          <button class="key" data-entra="2" data-aiuto="entra-2">2</button>
+          <button class="key" data-entra="4" data-aiuto="entra-4">4</button>
+          <button class="key" data-entra="8" data-aiuto="entra-8">8</button>
           <span class="lbl">cicli</span>
           <div class="spazio"></div>
-          <button id="go-live" class="key acid grande">GO LIVE <i>⇧⌘↵</i></button>
+          <button id="go-live" data-aiuto="go-live" class="key acid grande">GO LIVE <i>⇧⌘↵</i></button>
         </div>
       </section>
 
@@ -112,73 +113,127 @@
             <div></div>
           </div>
           <span id="tempo-live" class="lbl tempo-set"></span>
-          <button id="paracadute" class="paracadute" title="CUTX, scelgo te! Tieni premuto un secondo, o ⌘P due volte di fila">
+          <button id="paracadute" data-aiuto="paracadute" class="paracadute">
             <img id="paracadute-gatto" alt="Paracadute" /><span class="carica"></span>
           </button>
-          <span id="conteggio" class="lbl">0 live</span>
+          <span id="conteggio" class="lbl" data-aiuto="conteggio">0 live</span>
         </div>
       </section>
     </main>
 
-    <!-- Provvisorio: al passo 9 diventano le impostazioni vere (sezione audio). -->
+    <!-- Le impostazioni: come design/riferimenti/impostazioni.html. Le righe di scorciatoie, proiezione e help si disegnano da impostazioni.js. -->
     <div id="impostazioni" class="impostazioni" hidden>
-      <div class="pannello">
-        <div class="testa">
-          <span class="titolo">IMPOSTAZIONI</span>
-          <span class="lbl">audio e test</span>
-          <div class="spazio"></div>
-          <button id="chiudi-impostazioni" class="key">chiudi <i>esc</i></button>
-        </div>
-        <div class="sezioni">
-          <section class="blocco">
-            <h2 class="lbl">uscite</h2>
-            <label>live <select id="uscita-live"></select></label>
-            <label>cuffia <select id="uscita-cuffia"></select></label>
-            <label>offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
-            <label>scrittura a macchina <input id="scrittura-macchina" type="checkbox" checked /></label>
-            <label>lunghezza frase
-              <select id="lunghezza-frase"><option>8</option><option>16</option><option>32</option></select>
-            </label>
-            <p id="errore-uscite" class="errore"></p>
-            <h2 class="lbl">suoni nello stash</h2>
-            <p id="suoni" class="secondario"></p>
-          </section>
+      <header class="imp-testa">
+        <img id="imp-gatto" class="gatto" alt="" />
+        <img id="imp-wordmark" class="wordmark" alt="CUTX" />
+        <span class="lbl">impostazioni</span>
+        <div class="spazio"></div>
+        <button id="chiudi-impostazioni" class="key">chiudi <i>esc</i></button>
+      </header>
+      <div class="imp-corpo">
+        <nav id="imp-nav" class="imp-nav" aria-label="Sezioni">
+          <button class="key on" data-sez="generale">generale</button>
+          <button class="key" data-sez="audio">audio</button>
+          <button class="key" data-sez="scorciatoie">scorciatoie</button>
+          <button class="key" data-sez="proiezione">proiezione</button>
+          <button class="key" data-sez="stash">stash</button>
+          <button class="key" data-sez="estensioni">estensioni</button>
+        </nav>
 
-          <section class="blocco">
-            <h2 class="lbl">test sfasamento</h2>
-            <div class="fila">
-              <button id="test-avvia" class="key">avvia test</button>
-              <button id="test-ferma" class="key">ferma</button>
-            </div>
-            <table id="misure">
-              <tr><th></th><th>ultimo</th><th>media</th><th>min</th><th>max</th><th>deriva</th></tr>
-              <tr id="riga-stima"><td>stima</td></tr>
-              <tr id="riga-vero"><td>anello</td></tr>
-            </table>
-            <p id="verdetto" class="verdetto"></p>
-            <p id="durata" class="secondario"></p>
-            <label>ingresso anello <select id="ingresso-anello"></select></label>
-            <div class="fila">
-              <button id="anello-attiva" class="key">ascolta ingresso</button>
-              <button id="anello-riferimento" class="key">salva riferimento</button>
-            </div>
-            <p id="anello-stato" class="secondario"></p>
-          </section>
+        <section class="imp-sez" data-sez="generale">
+          <h1 class="imp-titolo">generale</h1>
+          <div class="imp-riga">
+            <div class="imp-testo"><span>lunghezza della frase</span><span class="imp-nota">quanti cicli prima che il conto torni a 1 (solo da vedere)</span></div>
+            <div id="imp-frase" class="segmenti"></div>
+          </div>
+          <h1 class="imp-titolo secondo">help?</h1>
+          <div id="imp-help" class="imp-gruppo"></div>
+        </section>
 
-          <section class="blocco">
-            <h2 class="lbl">robustezza</h2>
-            <div class="fila">
-              <button id="cuffia-blocca" class="key">blocca cuffia 5 s</button>
-              <button id="cuffia-crasha" class="key">crasha cuffia</button>
+        <section class="imp-sez" data-sez="audio" hidden>
+          <h1 class="imp-titolo">audio</h1>
+          <div class="imp-colonne">
+            <div class="blocco">
+              <h2 class="lbl">uscite</h2>
+              <label>live <select id="uscita-live"></select></label>
+              <label>cuffia <select id="uscita-cuffia"></select></label>
+              <label>offset cuffia (ms) <input id="offset-cuffia" type="number" step="0.5" value="0" /></label>
+              <p id="errore-uscite" class="errore"></p>
             </div>
-            <div class="fila">
-              <button id="ui-blocca" class="key">blocca interfaccia 5 s</button>
-              <button id="ui-crasha" class="key">crasha interfaccia</button>
+            <div class="blocco">
+              <h2 class="lbl">test sfasamento</h2>
+              <div class="fila">
+                <button id="test-avvia" class="key">avvia test</button>
+                <button id="test-ferma" class="key">ferma</button>
+              </div>
+              <table id="misure">
+                <tr><th></th><th>ultimo</th><th>media</th><th>min</th><th>max</th><th>deriva</th></tr>
+                <tr id="riga-stima"><td>stima</td></tr>
+                <tr id="riga-vero"><td>anello</td></tr>
+              </table>
+              <p id="verdetto" class="verdetto"></p>
+              <p id="durata" class="secondario"></p>
+              <label>ingresso anello <select id="ingresso-anello"></select></label>
+              <div class="fila">
+                <button id="anello-attiva" class="key">ascolta ingresso</button>
+                <button id="anello-riferimento" class="key">salva riferimento</button>
+              </div>
+              <p id="anello-stato" class="secondario"></p>
             </div>
-            <p id="motori-dettagli" class="secondario a-capo"></p>
-            <p id="percorso-log" class="secondario"></p>
-          </section>
-        </div>
+            <div class="blocco">
+              <h2 class="lbl">robustezza</h2>
+              <div class="fila">
+                <button id="cuffia-blocca" class="key">blocca cuffia 5 s</button>
+                <button id="cuffia-crasha" class="key">crasha cuffia</button>
+              </div>
+              <div class="fila">
+                <button id="ui-blocca" class="key">blocca interfaccia 5 s</button>
+                <button id="ui-crasha" class="key">crasha interfaccia</button>
+              </div>
+              <p id="motori-dettagli" class="secondario a-capo"></p>
+              <p id="percorso-log" class="secondario"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="imp-sez" data-sez="scorciatoie" hidden>
+          <div class="imp-titolo-riga">
+            <h1 class="imp-titolo">scorciatoie</h1>
+            <button id="scorciatoie-ripristina" class="key">ripristina</button>
+          </div>
+          <div id="scorciatoie-aiuto" class="lbl imp-aiuto">clicca su un tasto e premi la combinazione nuova</div>
+          <div id="scorciatoie-elenco"></div>
+        </section>
+
+        <section class="imp-sez" data-sez="proiezione" hidden>
+          <h1 class="imp-titolo">proiezione</h1>
+          <div id="imp-proiezione" class="imp-gruppo"></div>
+        </section>
+
+        <section class="imp-sez" data-sez="stash" hidden>
+          <h1 class="imp-titolo">stash</h1>
+          <div class="imp-riga">
+            <div class="imp-testo"><span id="imp-stash-nome">nessuno</span><span id="imp-stash-percorso" class="imp-nota"></span></div>
+            <button id="imp-cambia-stash" class="key">cambia stash</button>
+          </div>
+          <h2 class="lbl imp-sotto">suoni nello stash</h2>
+          <p id="suoni" class="secondario a-capo"></p>
+          <h1 class="imp-titolo secondo">paracadute</h1>
+          <div id="imp-paracadute" class="imp-gruppo"></div>
+          <p class="lbl imp-aiuto">il codice di emergenza di questo set, salvato in stash.json · ⌘↵ lo prova in cuffia</p>
+          <div class="imp-editor"><div id="editor-paracadute"></div></div>
+          <div class="fila">
+            <button id="paracadute-cuffia" class="key">prova in cuffia <i>⌘↵</i></button>
+            <button id="paracadute-predefinito" class="key">ripristina il predefinito</button>
+            <span id="paracadute-stato" class="lbl"></span>
+          </div>
+        </section>
+
+        <section class="imp-sez" data-sez="estensioni" hidden>
+          <h1 class="imp-titolo">estensioni</h1>
+          <p class="secondario">nessuna estensione. Le estensioni (per esempio un aiuto AI, sempre spento di default) arrivano nella fase 7.</p>
+          <p class="secondario">cartella: estensioni/ nello stash.</p>
+        </section>
       </div>
     </div>
 

@@ -562,31 +562,194 @@ body {
   outline: none;
 }
 
-/* --- impostazioni (provvisorie) --- */
+/* --- impostazioni: a tutta finestra, come design/riferimenti/impostazioni.html --- */
 
 .impostazioni {
   position: fixed;
   inset: 0;
-  background: rgba(5, 6, 4, 0.92);
+  background: var(--fondo);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
+  flex-direction: column;
   z-index: 10;
 }
 
-.pannello {
-  width: min(1100px, 100%);
-  max-height: 100%;
-  overflow-y: auto;
-  background: var(--fondo);
-  border: 1px solid var(--bordo);
-  border-radius: 3px;
+.imp-testa {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--linea);
 }
 
-.sezioni {
+.imp-testa .gatto {
+  height: 40px;
+  width: auto;
+}
+
+.imp-testa .wordmark {
+  height: 35px;
+  width: auto;
+}
+
+.imp-corpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.imp-nav {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--linea);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.imp-nav .key {
+  justify-content: flex-start;
+}
+
+.imp-sez {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 32px 40px;
+}
+
+.imp-sez > * {
+  max-width: 760px;
+}
+
+.imp-sez > .imp-colonne {
+  max-width: none;
+}
+
+.imp-titolo {
+  margin: 0;
+  padding-bottom: 16px;
+  font: 400 34px/1.1 var(--stencil);
+}
+
+.imp-titolo.secondo {
+  padding-top: 32px;
+}
+
+.imp-titolo-riga {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.imp-aiuto {
+  padding-bottom: 8px;
+}
+
+.imp-sotto {
+  margin: 24px 0 8px;
+}
+
+.imp-riga {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--linea);
+  font-size: 14px;
+}
+
+.imp-riga.cattura {
+  background: #0c1006;
+  color: var(--marcio);
+}
+
+.imp-riga.errore-riga {
+  background: #140a08;
+}
+
+.imp-testo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.imp-nota {
+  font-size: 12px;
+  color: var(--secondario);
+}
+
+.imp-riga .cap-errore {
+  font-size: 12px;
+  color: #e0795b;
+}
+
+.cap {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--grigio);
+  border-bottom-width: 3px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--testo);
+  background: transparent;
+  font-family: var(--mono);
+}
+
+button.cap {
+  cursor: pointer;
+}
+
+.imp-riga.cattura .cap {
+  border-color: var(--marcio);
+  color: var(--marcio);
+}
+
+.cap-gruppo {
+  display: flex;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.segmenti {
+  display: flex;
+}
+
+.segmenti .key {
+  border-radius: 0;
+}
+
+.segmenti .key:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.segmenti .key:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.imp-colonne {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.imp-editor {
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  padding: 8px;
+  margin-bottom: 8px;
+  min-height: 140px;
 }
 
 .blocco {
@@ -1219,4 +1382,84 @@ input[type='checkbox'] {
 
 .elenco .funzione .esempio-tasti .key.piccolo {
   height: 24px;
+}
+
+/* --- help: suggerimento al passaggio e riquadro in basso a sinistra --- */
+.suggerimento {
+  position: fixed;
+  z-index: 30;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: var(--testo);
+  color: var(--su-marcio);
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.suggerimento strong {
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.caps {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.caps kbd {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #7a7e72;
+  border-bottom-width: 3px;
+  border-radius: 3px;
+  font: 12px var(--mono);
+}
+
+.riquadro-help {
+  flex-shrink: 0;
+  min-height: 116px;
+  padding: 12px;
+  border-top: 1px solid var(--linea);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--secondario);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.riquadro-help strong {
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--testo);
+}
+
+.riquadro-help .vuoto {
+  color: var(--spento);
+}
+
+.riquadro-help .caps kbd {
+  color: var(--testo);
+  border-color: var(--grigio);
+}
+
+/* interruttori delle impostazioni */
+.senza-gatto .gatto-posto,
+.senza-insegna .insegna {
+  display: none;
 }
