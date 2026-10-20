@@ -75,7 +75,7 @@ export class Browser {
     return this.ascoltando === chiave && this.azioni.inAscolto(chiave);
   }
 
-  riga(nome, nota, { codice, chiave, inserisci, apri, aperto }) {
+  riga(nome, nota, { codice, chiave, inserisci, apri, aperto, unaVolta }) {
     const riga = crea('div', 'voce');
     const n = crea('span', apri ? 'nome cliccabile' : 'nome', nome);
     if (apri) {
@@ -85,20 +85,20 @@ export class Browser {
     riga.append(n, crea('span', 'lbl', nota));
     const suona = this.suonaOra(chiave);
     riga.append(
-      tasto(suona ? '■' : '▶', suona ? 'browser-ferma' : 'browser-prova', () => this.suona(codice, chiave), suona ? 'on' : ''),
+      tasto(suona ? '■' : '▶', suona ? 'browser-ferma' : 'browser-prova', () => this.suona(codice, chiave, unaVolta), suona ? 'on' : ''),
       tasto('+', 'browser-inserisci', () => this.azioni.inserisci(inserisci)),
     );
     if (apri) riga.dataset.aperto = aperto ? '1' : '0';
     return riga;
   }
 
-  suona(codice, chiave) {
+  suona(codice, chiave, unaVolta = false) {
     if (this.suonaOra(chiave)) {
       this.ascoltando = null;
       this.azioni.ferma();
     } else {
       this.ascoltando = chiave;
-      this.azioni.prova(codice, chiave);
+      this.azioni.prova(codice, chiave, unaVolta);
     }
     this.mostra();
   }
@@ -124,6 +124,7 @@ export class Browser {
         this.riga(nome, String(file.length), {
           codice: codiceProva(nome),
           chiave: nome,
+          unaVolta: !SYNTH.includes(nome),
           inserisci: codiceSuono(nome),
           apri: file.length > 1 ? () => (this.aperti.has(nome) ? this.aperti.delete(nome) : this.aperti.add(nome), this.mostra()) : null,
           aperto,
@@ -134,6 +135,7 @@ export class Browser {
           const r = this.riga(decodeURIComponent(f.split('/').pop()).replace(/\.[^.]+$/, ''), String(i), {
             codice: codiceProva(nome, i),
             chiave: `${nome}:${i}`,
+            unaVolta: true,
             inserisci: codiceSuono(nome, i),
           });
           r.classList.add('variante');

@@ -20,6 +20,7 @@ export class Riproduttore {
     this.fine = null; // fin dove i pattern sono già stati programmati, in cicli
     this.cambiTempo = []; // [{ ciclo, cps }]: il tempo cambia esattamente a quel ciclo
     this.tardi = 0;
+    this.eventi = 0; // quanti suoni ha programmato, per le prove
     this.errore = null;
     this.suEvento = null; // (hap, t, sorgente) => {}, per misuratore, sentinella e prove
     this.suCps = null; // (cps) => {}, quando un evento chiede un tempo nuovo (cps nel valore)
@@ -108,6 +109,7 @@ export class Riproduttore {
         // così le note lunghe restano a tempo e al ritorno del volume si risente il punto giusto.
         // Il livello ha una sua orbita, così il suo guadagno agisce anche sui suoni già partiti.
         const h = s.orbita === undefined ? hap : hap.withValue((v) => ({ ...v, orbit: s.orbita }));
+        this.eventi++;
         this.uscita(h, t - ora, hap.duration / cps, cps, t);
         this.suEvento?.(h, t, s);
         if (hap.value?.cps !== undefined && hap.value.cps !== cps) this.suCps?.(hap.value.cps);

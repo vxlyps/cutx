@@ -91,8 +91,10 @@ async function valuta(codice, etichetta = {}) {
   const c = await compila(codice);
   if (c.errore) return c.errore;
   if (!LIVE) {
-    rip.pattern = c.pattern;
-    prova = { codice, nome: etichetta.nome ?? null, provenienza: etichetta.provenienza ?? null };
+    // unaVolta (▶ di un campione nel browser): un solo colpo, al prossimo ciclo, per intero.
+    // Il pattern si stira su un milione di cicli e parte dal confine: l'unico inizio è quello.
+    rip.pattern = etichetta.unaVolta ? c.pattern.slow(1e6).late(rip.prossimoConfine()) : c.pattern;
+    prova = { codice, nome: etichetta.nome ?? null, provenienza: etichetta.provenienza ?? null, unaVolta: !!etichetta.unaVolta };
     return null;
   }
   // Live, subito: un livello solo al posto di tutti (test di sfasamento, prova automatica).
@@ -182,10 +184,19 @@ function togli(id) {
   aggiornaLivelli();
 }
 
+// Cuffia: zittisce anche i suoni già partiti (un campione lungo), buttando le orbite e il loro audio.
+function tagliaSuoni() {
+  const controller = getSuperdoughAudioController();
+  controller.reset();
+  controller.output.destinationGain.gain.value = udibile ? 1 : 0;
+  if (eco) sentinella.attiva(controller.output.destinationGain);
+}
+
 function ferma() {
   paracadute = null;
   prova = { codice: '', nome: null, provenienza: null };
   rip.pattern = silence;
+  if (!LIVE) tagliaSuoni();
   if (LIVE) {
     for (const l of livelli) liberaGuadagno(l.id);
     livelli = [];
@@ -369,6 +380,8 @@ function stato() {
     eco,
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
+    eventi: rip.eventi,
+    unaVolta: !LIVE ? !!prova.unaVolta : undefined,
     giroMax,
     cps: rip.mappa?.cps ?? null,
     ciclo: rip.mappa ? rip.ciclo(ac.currentTime) : null,

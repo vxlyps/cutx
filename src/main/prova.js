@@ -718,6 +718,18 @@ async function provaBrowser({ finestre, scrivi }) {
     await aspetta(0.5);
     controlla('■ ferma la cuffia', !(await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).codice);
 
+    // un campione suona una volta sola, non a ogni ciclo; un secondo clic lo ferma
+    await js(`(() => { const c = document.getElementById('cerca'); c.value = 'cassa'; c.dispatchEvent(new Event('input')); })()`);
+    const prima = (await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).eventi;
+    await js(`document.querySelector('#elenco .voce button[data-aiuto="browser-prova"]').click()`);
+    await aspetta(7); // più di tre cicli a 120 BPM
+    const dopo = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+    controlla('▶ su un campione lo suona una volta sola', dopo.unaVolta === true && dopo.eventi - prima === 1, `eventi ${dopo.eventi - prima}`);
+    controlla('il tasto è ■ finché non lo fermo', (await js(`document.querySelector('#elenco .voce button.on')?.textContent`)) === '■');
+    await js(`document.querySelector('#elenco .voce button.on').click()`);
+    await aspetta(0.5);
+    controlla('un secondo clic lo ferma', !(await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).codice);
+
     // libreria
     await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
     await js('cutxProva.ricaricaLibreria().then(() => cutxProva.browser.vai("libreria"))');
@@ -784,6 +796,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
 
   try {
     await js('cutxProva.fermaTutto()');
+    wc().focus(); // dopo il crash dell'interfaccia la finestra può non essere quella attiva
     // --- help al passaggio ---
     await js('window.cutx.salvaPreferenze({ suggerimenti: true, riquadroHelp: true })');
     await aspetta(0.4);

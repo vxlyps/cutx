@@ -344,10 +344,10 @@ browser = new Browser(
     libreria: () => libreria,
     branoAperto: () => cue.brano?.file ?? null,
     // ▶: lo sente solo la cuffia, mai le casse
-    prova: (codice, chiave) => {
+    prova: (codice, chiave, unaVolta) => {
       if (inTest) return;
       dovaCuffia = null;
-      return manda(cuffia, codice, { nome: chiave, provenienza: 'browser' });
+      return manda(cuffia, codice, { nome: chiave, provenienza: 'browser', unaVolta });
     },
     ferma: () => {
       pezzoCuffia = null;
