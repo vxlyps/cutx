@@ -70,5 +70,5 @@ Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuff
 
 ## Stato
 - Fase 0 chiusa. AIFF non decodificabile da Chromium (solo WAV).
-- **Fase 1, passo 1 di 9 (rinomina, stash, icona, migrazione dei dati): fatto nel codice.** Repo rinominato in `vxlyps/cutx`, cartella in `~/Progetti/cutx`. Resta da fare: sostituire `~/Desktop/DANEEL.command` con `strumenti/CUTX.command`, poi Valerio verifica (avvio, gatto nel Dock, stash e dati migrati).
+- **Fase 1, passo 1 di 9 (rinomina, stash, icona, migrazione dei dati): fatto nel codice.** Repo rinominato in `vxlyps/cutx`, cartella in `~/Progetti/cutx`. Lanciatore sulla Scrivania sostituito. Resta: Valerio verifica (avvio, gatto nel Dock, stash e dati migrati).
 - Prossimo: **passo 2, motore live separato e test di robustezza** (vedi `docs/FASE-1.md`, sezioni 2 e 9).
