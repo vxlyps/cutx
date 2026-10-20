@@ -92,8 +92,6 @@ async function valuta(codice, etichetta = {}) {
   const c = await compila(codice);
   if (c.errore) return c.errore;
   if (!LIVE) {
-    // unaVolta (▶ di un campione nel browser): un solo colpo, al prossimo ciclo, per intero.
-    // Il pattern si stira su un milione di cicli e parte dal confine: l'unico inizio è quello.
     anteprimaId++;
     if (etichetta.anteprima) {
       // Anteprima (progetti Ableton): parte subito e suona una volta sola. Il pattern si sposta in modo che il suo
@@ -102,15 +100,16 @@ async function valuta(codice, etichetta = {}) {
       const { cicli, audioS = 0 } = etichetta.anteprima;
       const cps = rip.mappa?.cps ?? CPS_INIZIALE;
       const inizio = rip.ciclo(ac.currentTime) + 0.15 * cps;
-      rip.sorgenti = [{ pattern: c.pattern.late(inizio), da: inizio, a: inizio + cicli }];
+      // (la fine è un millesimo di ciclo prima: un inizio che cade sul confine, a meno di un arrotondamento, non è più dentro)
+      rip.sorgenti = [{ pattern: c.pattern.late(inizio), da: inizio, a: inizio + cicli - 0.001 }];
       const id = anteprimaId;
       setTimeout(() => {
         if (id !== anteprimaId) return;
         prova = { codice: '', nome: null, provenienza: null };
         rip.pattern = silence;
       }, (Math.max(cicli / cps, audioS) + 0.5) * 1000);
-    } else rip.pattern = etichetta.unaVolta ? c.pattern.slow(1e6).late(rip.prossimoConfine()) : c.pattern;
-    prova = { codice, nome: etichetta.nome ?? null, provenienza: etichetta.provenienza ?? null, unaVolta: !!etichetta.unaVolta };
+    } else rip.pattern = c.pattern;
+    prova = { codice, nome: etichetta.nome ?? null, provenienza: etichetta.provenienza ?? null, anteprima: !!etichetta.anteprima };
     return null;
   }
   // Live, subito: un livello solo al posto di tutti (test di sfasamento, prova automatica).
@@ -398,7 +397,7 @@ function stato() {
     errore: rip.errore ?? errore,
     tardi: rip.tardi,
     eventi: rip.eventi,
-    unaVolta: !LIVE ? !!prova.unaVolta : undefined,
+    anteprima: !LIVE ? !!prova.anteprima : undefined,
     giroMax,
     cps: rip.mappa?.cps ?? null,
     ciclo: rip.mappa ? rip.ciclo(ac.currentTime) : null,

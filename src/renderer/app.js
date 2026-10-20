@@ -336,6 +336,23 @@ const aiuto = new Aiuto({
   combo: (azione) => effettive(preferenze.scorciatoie)[azione],
 });
 
+// La durata di un suono dello stash: dall'intestazione se è un WAV, altrimenti decodificandolo (quasi sempre piccoli: mp3, ogg…).
+const durate = new Map();
+async function durataSuono(rel) {
+  if (durate.has(rel)) return durate.get(rel);
+  let d = await window.cutx.durataSuono(rel);
+  if (d === null) {
+    try {
+      const r = await fetch(`cutx://app/stash/suoni/${rel}`);
+      d = (await new OfflineAudioContext(1, 1, 44100).decodeAudioData(await r.arrayBuffer())).duration;
+    } catch {
+      d = null;
+    }
+  }
+  durate.set(rel, d);
+  return d;
+}
+
 // --- importazione da Ableton ---
 
 const importa = new Importa({
@@ -391,16 +408,19 @@ browser = new Browser(
     libreria: () => libreria,
     branoAperto: () => cue.brano?.file ?? null,
     // ▶: lo sente solo la cuffia, mai le casse
-    prova: (codice, chiave, unaVolta) => {
+    prova: (codice, chiave, anteprima) => {
       if (inTest) return;
       dovaCuffia = null;
-      return manda(cuffia, codice, { nome: chiave, provenienza: 'browser', unaVolta });
+      return manda(cuffia, codice, { nome: chiave, provenienza: 'browser', anteprima });
     },
     ferma: () => {
       pezzoCuffia = null;
       cuffia.manda({ tipo: 'ferma' });
     },
-    inAscolto: (chiave) => cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'browser' && pezzoCuffia.etichetta.nome === chiave,
+    // finché non finisce da sola (il motore svuota il suo codice): 1,5 s di tolleranza per la partenza
+    inAscolto: (chiave) =>
+      cuffia.viva && pezzoCuffia?.etichetta?.provenienza === 'browser' && pezzoCuffia.etichetta.nome === chiave && (performance.now() - pezzoCuffia.da < 1500 || !!cuffia.stato?.codice),
+    durataSuono,
     inserisci: (testo) => cue.inserisci(testo),
     apriBrano: (file) => cue.apri(file),
     cartelleAbleton: () => preferenze.cartelleAbleton ?? [],

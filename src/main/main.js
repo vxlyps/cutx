@@ -274,6 +274,16 @@ function avvisaMotori() {
 }
 
 ipcMain.handle('stash:stato', () => stash.stato());
+// La durata di un suono dello stash, se si può leggere dall'intestazione (WAV): per far tornare ▶ da solo a fine ascolto.
+ipcMain.handle('suoni:durata', async (_e, rel) => {
+  const radice = stash.radice();
+  const file = radice && dentro(path.join(radice, 'suoni'), decodeURIComponent(String(rel)));
+  try {
+    return file ? await ableton.durataWav(file) : null;
+  } catch {
+    return null;
+  }
+});
 ipcMain.handle('libreria:elenco', () => stash.elencoLibreria());
 ipcMain.handle('libreria:leggi', (_e, nome) => stash.leggiBrano(nome));
 ipcMain.handle('libreria:scrivi', (_e, nome, testo, opzioni) => stash.scriviBrano(nome, testo, opzioni));

@@ -15,26 +15,68 @@ export const nota = (midi) => `${NOMI[((midi % 12) + 12) % 12]}${Math.floor(midi
 
 // --- nomi ---
 
+// Taglia a una lunghezza massima senza spezzare una parola (se c'è uno spazio abbastanza avanti).
+function taglia(testo, max) {
+  if (testo.length <= max) return testo;
+  const t = testo.slice(0, max + 1);
+  const spazio = t.lastIndexOf(' ');
+  return (spazio > max / 2 ? t.slice(0, spazio) : testo.slice(0, max)).trim();
+}
+
 export function pulisci(nome) {
   return (
-    nome
-      .replace(/^\d+-/, '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s*\[.*?\]/g, '')
-      .replace(/[^a-z0-9àèéìòù ]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 28) || 'traccia'
+    taglia(
+      nome
+        .replace(/^\d+-/, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s*\[.*?\]/g, '')
+        .replace(/[^a-z0-9àèéìòù ]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+      28,
+    ) || 'traccia'
   );
 }
 
 const slug = (nome) => nome.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
-// Il nome di una traccia come sezione: pulito; "audio" e "midi" da soli prendono il loro numero.
+// Un nome che non dice niente: vuoto, "Audio", "Audio 0004", "MIDI 3", "Clip"…
+const GENERICO = /^(audio|midi|clip|traccia|track|take|rec|recording|sample|untitled|senza nome)(\s*\d*)?$/;
+export const eGenerico = (nome) => {
+  const x = (nome ?? '').replace(/^\d+-/, '').replace(/\s*\[.*?\]/g, '').toLowerCase().replace(/[^a-z0-9àèéìòù]+/g, ' ').trim().replace(/\s+r$/, '');
+  return !x || /^\d+$/.test(x) || GENERICO.test(x);
+};
+
+// Il nome di un file senza cartelle, estensione, data tra parentesi quadre, numero di traccia e il " R" dei file invertiti.
+export function nomeDaFile(file) {
+  const base = (file.relativo || file.assoluto || '').split('/').pop().replace(/\.[^.]+$/, '');
+  return base.replace(/\s+R$/, '');
+}
+
+// Il nome di una sezione: il nome della clip se c'è e non è generico; poi quello della traccia, poi (per l'audio) quello del file;
+// solo alla fine "audio N" / "midi N".
+export function nomeSezione(traccia, clip) {
+  const buoni = [clip?.nome, traccia.nome, clip?.tipo === 'audio' ? nomeDaFile(clip.file) : null];
+  for (const n of buoni) if (n && !eGenerico(n)) return pulisci(n);
+  return `${traccia.tipo === 'audio' ? 'audio' : 'midi'} ${traccia.numero ?? traccia.ordine + 1}`;
+}
+
+// Come si chiama la traccia a schermo: il suo nome, o se è generico quello della prima clip o del primo file.
 export function nomeTraccia(t) {
-  const nome = pulisci(t.nome);
-  return ['audio', 'midi', 'traccia'].includes(nome) && t.numero !== null ? `${nome} ${t.numero}` : nome;
+  if (!eGenerico(t.nome)) return pulisci(t.nome);
+  for (const c of t.clip) {
+    if (c.nome && !eGenerico(c.nome)) return pulisci(c.nome);
+    if (c.tipo === 'audio' && !eGenerico(nomeDaFile(c.file))) return pulisci(nomeDaFile(c.file));
+  }
+  return `${t.tipo === 'audio' ? 'audio' : 'midi'} ${t.numero ?? t.ordine + 1}`;
+}
+
+// I file audio che usa una traccia, i più usati prima: per mostrarli sotto la traccia.
+export function fileDellaTraccia(t) {
+  const usi = new Map();
+  for (const c of t.clip) if (c.tipo === 'audio') usi.set(c.file.relativo || c.file.assoluto, (usi.get(c.file.relativo || c.file.assoluto) ?? 0) + 1);
+  return [...usi].sort((a, b) => b[1] - a[1]).map(([k]) => k.split('/').pop());
 }
 
 // --- strumenti: che suono di CUTX al posto di quello di Ableton ---
@@ -224,38 +266,49 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
   const suoni = new Map(); // chiave del file → { nome, relativo, assoluto, durata }
   const provvisori = new Map(); // i suoni solo da ascoltare
   const chiaveFile = (file) => file.relativo || file.assoluto;
-  const nomeBreve = (file) => chiaveFile(file).split('/').pop().replace(/\.[^.]+$/, '').slice(0, 14);
-  // i suoni veri si numerano nell'ordine in cui compaiono; quelli solo da ascoltare hanno un nome provvisorio
-  const nomeSuono = (file, incluso) => {
+  // i suoni veri hanno un nome leggibile (titolo + nome della clip o del file); quelli solo da ascoltare un nome provvisorio
+  const nomeSuono = (file, incluso, indizi = {}) => {
     const chiave = chiaveFile(file);
     if (!incluso || anteprima) {
       if (!provvisori.has(chiave)) provvisori.set(chiave, { nome: `ant_${hash(chiave)}`, relativo: file.relativo, assoluto: file.assoluto, durata: file.durata ?? 0 });
       return provvisori.get(chiave);
     }
     if (!suoni.has(chiave)) {
-      suoni.set(chiave, { nome: slug(`${prima} ${String(suoni.size + 1).padStart(2, '0')} ${nomeBreve(file)}`).slice(0, 32), relativo: file.relativo, assoluto: file.assoluto, durata: file.durata ?? 0 });
+      const buoni = [indizi.clip, nomeDaFile(file)];
+      const dal = buoni.find((n) => n && !eGenerico(n));
+      const base = dal ? pulisci(dal) : `audio ${indizi.numero ?? suoni.size + 1}`;
+      const voluto = slug(`${prima} ${taglia(base, 28)}`).slice(0, 40);
+      let nome = voluto;
+      for (let k = 2; [...suoni.values()].some((x) => x.nome === nome); k++) nome = `${voluto}_${k}`;
+      suoni.set(chiave, { nome, relativo: file.relativo, assoluto: file.assoluto, durata: file.durata ?? 0 });
     }
     return suoni.get(chiave);
   };
 
-  // 1. cosa è incluso e come si chiama: le lettere (a, b, c) contano le varianti incluse, come nel prototipo
+  // 1. cosa è incluso e come si chiama. Il nome viene dalla clip, dalla traccia o dal file (vedi nomeSezione); le lettere
+  // (a, b, c) servono solo quando due sezioni si chiamerebbero uguale.
   const lavoro = [];
   for (const t of modello.tracce) {
     const vs = varianti(t);
     if (!vs.length) continue;
     const sc = scelte.tracce?.[t.ordine] ?? {};
-    const base = nomeTraccia(t);
     const inclusa = (v) => sc.includi !== false && sc.varianti?.[v.id]?.includi !== false;
-    const incluse = vs.filter(inclusa);
+    // la sigla (nel passo 2) non cambia se si spunta o no: lettere solo tra le varianti di questa traccia con lo stesso nome
+    const nomi = vs.map((v) => nomeSezione(t, v.clip));
     vs.forEach((v, i) => {
-      const ordine = inclusa(v) ? incluse.indexOf(v) : i;
-      const quante = inclusa(v) ? incluse.length : vs.length;
-      const auto = quante <= 1 ? base : `${base} ${LETTERE[ordine] ?? ordine + 1}`;
-      // la sigla non cambia se si spunta o no: sempre la lettera tra tutte le varianti della traccia
-      const sigla = vs.length <= 1 ? base : `${base} ${LETTERE[i] ?? i + 1}`;
-      lavoro.push({ t, v, sc, incluso: inclusa(v), auto, base, sigla });
+      const uguali = nomi.map((n, j) => (n === nomi[i] ? j : -1)).filter((j) => j >= 0);
+      const sigla = uguali.length <= 1 ? nomi[i] : `${nomi[i]} ${LETTERE[uguali.indexOf(i)] ?? uguali.indexOf(i) + 1}`;
+      lavoro.push({ t, v, sc, incluso: inclusa(v), base: nomi[i], sigla, auto: nomi[i] });
     });
   }
+  // il nome nel brano: lettere (nell'ordine dell'arrangiamento) per chi ha lo stesso nome di un'altra sezione inclusa
+  const posizione = (l) => (l.v.inizio !== null ? [0, l.v.inizio] : [1, l.v.scena ?? 0]);
+  const ordinate = lavoro.filter((l) => l.incluso).sort((a, b) => posizione(a)[0] - posizione(b)[0] || posizione(a)[1] - posizione(b)[1] || a.t.ordine - b.t.ordine);
+  for (const l of ordinate) {
+    const gruppo = ordinate.filter((x) => x.base === l.base);
+    if (gruppo.length > 1) l.auto = `${l.base} ${LETTERE[gruppo.indexOf(l)] ?? gruppo.indexOf(l) + 1}`;
+  }
+  for (const l of lavoro) if (!l.incluso) l.auto = l.sigla;
 
   // 2. il codice di ogni sezione
   const tutte = [];
@@ -278,7 +331,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
         else if (!sc.stem.file?.durata) avvisiSezione.push('di questo stem non si conosce la durata: resta il codice');
         else {
           const f = sc.stem.file;
-          const s = nomeSuono(f, incluso);
+          const s = nomeSuono(f, incluso, { clip: v.clip.nome, numero: t.numero });
           usati.push(s.nome);
           const da = ((v.inizio - ((sc.stem.battuta ?? 1) - 1) * 4) * 60) / bpm;
           const dur = (lunghezza * 60) / bpm;
@@ -299,7 +352,7 @@ export function costruisci(modello, scelte = sceltePredefinite(modello), { titol
       }
     } else {
       const c = v.clip;
-      const s = nomeSuono(c.file, incluso);
+      const s = nomeSuono(c.file, incluso, { clip: c.nome, numero: t.numero });
       usati.push(s.nome);
       const dur = c.file.durata;
       // warpato: i marcatori portano dalle battute ai secondi; altrimenti il loop è già in secondi (ipotesi)

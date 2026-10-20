@@ -79,7 +79,7 @@ export class Browser {
     return this.ascoltando === chiave && this.azioni.inAscolto(chiave);
   }
 
-  riga(nome, nota, { codice, chiave, inserisci, apri, aperto, unaVolta }) {
+  riga(nome, nota, { codice, chiave, inserisci, apri, aperto, campione }) {
     const riga = crea('div', 'voce');
     const n = crea('span', apri ? 'nome cliccabile' : 'nome', nome);
     if (apri) {
@@ -89,20 +89,23 @@ export class Browser {
     riga.append(n, crea('span', 'lbl', nota));
     const suona = this.suonaOra(chiave);
     riga.append(
-      tasto(suona ? '■' : '▶', suona ? 'browser-ferma' : 'browser-prova', () => this.suona(codice, chiave, unaVolta), suona ? 'on' : ''),
+      tasto(suona ? '■' : '▶', suona ? 'browser-ferma' : 'browser-prova', () => this.suona(codice, chiave, campione), suona ? 'on' : ''),
       tasto('+', 'browser-inserisci', () => this.azioni.inserisci(inserisci)),
     );
     if (apri) riga.dataset.aperto = aperto ? '1' : '0';
     return riga;
   }
 
-  suona(codice, chiave, unaVolta = false) {
+  // campione: { file } se è un file dello stash: la sua durata dice quando finisce da solo.
+  // Un campione parte subito, suona una volta e il ■ torna ▶ alla fine; un synth si ferma col ■.
+  async suona(codice, chiave, campione = null) {
     if (this.suonaOra(chiave)) {
       this.ascoltando = null;
       this.azioni.ferma();
     } else {
       this.ascoltando = chiave;
-      this.azioni.prova(codice, chiave, unaVolta);
+      const anteprima = campione ? { cicli: 1, audioS: (await this.azioni.durataSuono(campione.file)) ?? 0 } : undefined;
+      if (this.ascoltando === chiave) this.azioni.prova(codice, chiave, anteprima);
     }
     this.mostra();
   }
@@ -128,7 +131,7 @@ export class Browser {
         this.riga(nome, String(file.length), {
           codice: codiceProva(nome),
           chiave: nome,
-          unaVolta: !SYNTH.includes(nome),
+          campione: SYNTH.includes(nome) ? null : { file: file[0] },
           inserisci: codiceSuono(nome),
           apri: file.length > 1 ? () => (this.aperti.has(nome) ? this.aperti.delete(nome) : this.aperti.add(nome), this.mostra()) : null,
           aperto,
@@ -139,7 +142,7 @@ export class Browser {
           const r = this.riga(decodeURIComponent(f.split('/').pop()).replace(/\.[^.]+$/, ''), String(i), {
             codice: codiceProva(nome, i),
             chiave: `${nome}:${i}`,
-            unaVolta: true,
+            campione: { file: f },
             inserisci: codiceSuono(nome, i),
           });
           r.classList.add('variante');

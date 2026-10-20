@@ -2,7 +2,7 @@
 // La conversione è in ../ableton/converti.js (pura): qui si sceglie, si ascolta in cuffia e si mostrano
 // i limiti. Un progetto non si modifica mai; i file audio si copiano nello stash.
 import it from './testi/it.json';
-import { NOMI_SYNTH, converti, costruisci, sceltePredefinite } from '../ableton/converti.js';
+import { NOMI_SYNTH, converti, costruisci, fileDellaTraccia, nomeTraccia, sceltePredefinite } from '../ableton/converti.js';
 
 const T = it.importa;
 const $ = (id) => document.getElementById(id);
@@ -216,7 +216,8 @@ export class Importa {
       const riga = crea('article', `traccia${sc.includi ? '' : ' spenta'}`);
       const testa = crea('div', 'traccia-testa');
       testa.append(casella(sc.includi, (v) => ((sc.includi = v), this.disegna())));
-      testa.append(crea('span', 'traccia-nome', t.numero !== null ? `${t.numero} · ${t.nome.replace(/^\d+-/, '')}` : t.nome));
+      testa.append(crea('span', 'traccia-nome', nomeTraccia(t)));
+      if (t.numero !== null) testa.append(crea('span', 'lbl', `traccia ${t.numero}`));
       testa.append(crea('span', 'etichetta', t.drum ? 'batteria' : t.tipo === 'midi' ? 'midi' : 'audio'));
       const strumento = t.strumento ? `${t.strumento.tipo}${t.strumento.nome ? ` · ${t.strumento.nome}` : ''}` : '';
       if (strumento) testa.append(crea('span', 'lbl strumento', strumento));
@@ -240,8 +241,16 @@ export class Importa {
           sel.onchange = () => ((sc.synth = sel.value), this.disegna());
           modi.append(sel);
         }
-      } else modi.append(crea('span', 'modo on fisso', T.modoAudio));
+      } else modi.append(crea('span', 'modo-testo', T.modoAudio)); // una sola possibilità: non è un pulsante
       riga.append(modi, crea('p', 'traccia-effetto', this.effetto(t, sc)));
+      if (t.tipo === 'audio') {
+        // il nome dei file che usa: a volte è l'unica cosa che dice cos'è
+        const file = fileDellaTraccia(t);
+        const mostra = file.slice(0, 3).join(' · ') + (file.length > 3 ? ` · +${file.length - 3}` : '');
+        const f = crea('p', 'traccia-file', `file: ${mostra}`);
+        f.title = file.join('\n');
+        riga.append(f);
+      }
       if (t.tipo === 'midi' && sc.modalita === 'audio') riga.append(this.rigaStem(t, sc));
       for (const v of varianti) riga.append(this.rigaVariante(t, sc, v));
       lista.append(riga);
@@ -347,21 +356,22 @@ export class Importa {
     c.sezioni.forEach((s, i) => {
       const r = crea('div', 'sezione-riga');
       r.append(crea('span', 'lbl numero-sezione', String(i + 1)));
+      const sc = this.scelte.tracce[s.traccia];
+      // il tipo è un'etichetta, staccata dai pulsanti: non si clicca e non cambia niente
+      r.append(crea('span', 'etichetta tipo-sezione', s.tipo === 'audio' ? 'audio' : sc.modalita === 'audio' && sc.stem ? 'stem' : 'codice'));
       const nome = crea('input', 'nome-sezione');
       nome.value = s.nome;
       nome.spellcheck = false;
       nome.setAttribute('aria-label', `nome della sezione ${i + 1}`);
       nome.onchange = () => {
         const v = nome.value.trim();
-        const sc = this.scelte.tracce[s.traccia].varianti[s.id];
-        sc.nome = v && v !== s.etichetta ? v : '';
+        const sv = this.scelte.tracce[s.traccia].varianti[s.id];
+        sv.nome = v && v !== s.etichetta ? v : '';
         this.disegna();
       };
       r.append(nome);
-      const sc = this.scelte.tracce[s.traccia];
-      r.append(crea('span', 'lbl', s.tipo === 'audio' ? 'audio' : sc.modalita === 'audio' && sc.stem ? 'stem' : 'codice'));
       const aperta = this.aperte.has(s.id);
-      const apri = crea('button', 'key piccolo apri-codice', aperta ? 'codice ▴' : 'codice ▾');
+      const apri = crea('button', 'key piccolo apri-codice', aperta ? 'chiudi codice ▴' : 'vedi codice ▾');
       apri.setAttribute('aria-expanded', String(aperta));
       apri.onclick = () => (this.aperte.has(s.id) ? this.aperte.delete(s.id) : this.aperte.add(s.id), this.disegna());
       r.append(apri);

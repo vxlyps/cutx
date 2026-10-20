@@ -2021,8 +2021,40 @@ input[type='checkbox'] {
   }
 }
 
-/* nel passo 3 le righe stanno allineate: il tipo (audio/codice/stem) ha sempre la stessa larghezza */
-.sezione-riga > .lbl:not(.numero-sezione) {
-  min-width: 56px;
-  text-align: right;
+/* passo 3: il tipo è un'etichetta a bordino (non un pulsante), il pulsante "vedi codice" sta a destra, staccato */
+.sezione-riga .tipo-sezione {
+  min-width: 62px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sezione-riga .apri-codice {
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+/* passo 2: sulle tracce audio la modalità è una sola, quindi è testo e non un pulsante */
+.modo-testo {
+  font-size: 12px;
+  color: var(--secondario);
+}
+
+.importa-nome-brano {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 0 12px;
+}
+
+.importa-nome-brano input {
+  flex: 1;
+  min-width: 0;
+}
+
+.traccia-file {
+  margin: -4px 12px 10px;
+  font-size: 12px;
+  color: var(--spento);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

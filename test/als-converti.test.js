@@ -2,20 +2,42 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as B from '../src/renderer/brano.js';
 import { leggiAls } from '../src/ableton/leggi.js';
-import { battute, converti, costruisci, mini, nota, nomeTraccia, pulisci, ruoloPad, sceltePredefinite, secondiDaBattute, synthProposto, varianti } from '../src/ableton/converti.js';
+import { battute, converti, costruisci, eGenerico, fileDellaTraccia, mini, nota, nomeSezione, nomeTraccia, pulisci, ruoloPad, sceltePredefinite, secondiDaBattute, synthProposto, varianti } from '../src/ableton/converti.js';
 import { als, clipAudio, clipMidi, drumRack, note, tracciaAudio, tracciaMidi } from './als-finto.js';
 
 const modello = (opzioni) => leggiAls(als(opzioni));
 const corpoDi = (r, nome) => r.sezioni.find((s) => s.nome === nome)?.codice;
 
-test('nomi delle note e delle tracce', () => {
+test('nomi delle note e pulizia dei nomi', () => {
   assert.equal(nota(60), 'c4');
   assert.equal(nota(63), 'eb4');
   assert.equal(nota(36), 'c2');
   assert.equal(pulisci('7-MPE Airy Pad & Sub'), 'mpe airy pad sub');
   assert.equal(pulisci('3-Audio [x]'), 'audio');
-  assert.equal(nomeTraccia({ nome: '4-Audio', numero: 4 }), 'audio 4');
-  assert.equal(nomeTraccia({ nome: '8-Wonk Bass', numero: 8 }), 'wonk bass');
+  // un nome lungo si taglia tra le parole, mai a metà
+  assert.equal(pulisci('Quiet Streets Ambience Sound Library'), 'quiet streets ambience sound');
+  assert.equal(pulisci('mayia u influeced me a bit maybe'), 'mayia u influeced me a bit');
+});
+
+test('nomi generici: vuoto, "Audio", "Audio 0004", "MIDI 3", "Clip" non dicono niente', () => {
+  for (const n of ['', 'Audio', '3-Audio', 'Audio 0004', '2-Audio 0004 [2026-01-17 225746] R', 'MIDI 3', 'Clip', 'Clip 12', 'Take 2']) assert.equal(eGenerico(n), true, n);
+  for (const n of ['Break Scatty 174 bpm', 'Wonk Bass', 'Quiet Streets Ambience Sound Library', 'Voce finale', 'Kick 2 sub']) assert.equal(eGenerico(n), false, n);
+});
+
+test('il nome di una sezione: la clip se dice qualcosa, poi la traccia, poi il file, solo alla fine "audio N"', () => {
+  const audio = (nome, ordine = 3) => ({ nome, numero: ordine + 1, tipo: 'audio', ordine, clip: [] });
+  const clip = (nomeClip, file) => ({ tipo: 'audio', nome: nomeClip, file: { relativo: file, assoluto: '' } });
+  assert.equal(nomeSezione(audio('4-Audio'), clip('', 'Samples/Recorded/4-Audio 0001 [2026-01-01 1].wav')), 'audio 4');
+  assert.equal(nomeSezione(audio('4-Audio'), clip('Voce finale', 'Samples/a.wav')), 'voce finale');
+  assert.equal(nomeSezione(audio('4-Audio'), clip('', 'Samples/Loops/Break Scatty 174 bpm R.wav')), 'break scatty 174 bpm');
+  assert.equal(nomeSezione(audio('4-Chitarra'), clip('', 'Samples/Break.wav')), 'chitarra'); // la traccia batte il file
+  assert.equal(nomeSezione(audio('4-Chitarra'), clip('Intro', 'Samples/Break.wav')), 'intro'); // la clip batte la traccia
+  assert.equal(nomeSezione({ nome: '2-MIDI', numero: 2, tipo: 'midi', ordine: 1, clip: [] }, { tipo: 'midi', nome: '' }), 'midi 2');
+  // la traccia a schermo: il suo nome, o quello della prima clip o del primo file
+  const t = { ...audio('1-Audio', 0), clip: [clip('', 'Samples/Recorded/1-Audio 0004.wav'), clip('', 'Samples/Quiet Streets.mp3')] };
+  assert.equal(nomeTraccia(t), 'quiet streets');
+  assert.equal(nomeTraccia({ ...audio('7-Audio', 6), clip: [clip('', 'Samples/Recorded/7-Audio 0002.wav')] }), 'audio 7');
+  assert.deepEqual(fileDellaTraccia({ clip: [clip('', 'S/a.wav'), clip('', 'S/b.wav'), clip('', 'S/b.wav')] }), ['b.wav', 'a.wav']);
 });
 
 test('mini: una nota a battuta resta una nota a battuta, `_` prolunga, `~` è pausa, gli accordi sono [a,b]', () => {
@@ -120,10 +142,22 @@ test('audio: begin/end dai marcatori di warp, slow dalle battute del loop, nome 
   const m = modello({ bpm: 120, tracce: [tracciaAudio({ nome: '3-Audio', clip: [clip] })] });
   const r = converti(m, undefined, { titolo: 'x1', data: '2026-10-20' });
   assert.equal(r.suoni.length, 1);
-  assert.equal(r.suoni[0].nome, 'x1_01_3_audio_0004');
+  // il file si chiama "Audio 0004": non dice niente, quindi il suono e la sezione prendono il numero della traccia
+  assert.equal(r.suoni[0].nome, 'x1_audio_3');
   assert.equal(r.suoni[0].relativo, 'Samples/Recorded/3-Audio 0004 [2026].wav');
   assert.equal(r.sezioni[0].nome, 'audio 3');
-  assert.equal(r.sezioni[0].codice, 's("x1_01_3_audio_0004").begin(0.0000).end(0.8000).slow(2)\n  .gain(.8)');
+  assert.equal(r.sezioni[0].codice, 's("x1_audio_3").begin(0.0000).end(0.8000).slow(2)\n  .gain(.8)');
+  // un file con un nome vero lo dà al suono e alla sezione
+  const m2 = modello({ bpm: 120, tracce: [tracciaAudio({ nome: '3-Audio', clip: [clipAudio({ file: 'Samples/Loops/Break Scatty 174 bpm.wav' })] })] });
+  const r2 = converti(m2, undefined, { titolo: 'mayia' });
+  assert.equal(r2.suoni[0].nome, 'mayia_break_scatty_174_bpm');
+  assert.equal(r2.sezioni[0].nome, 'break scatty 174 bpm');
+  // e il nome della clip batte quello del file
+  const m3 = modello({ bpm: 120, tracce: [tracciaAudio({ nome: '3-Audio', clip: [clipAudio({ nome: 'Voce finale', file: 'Samples/Recorded/3-Audio 0004.wav' })] })] });
+  assert.equal(converti(m3, undefined, { titolo: 'x' }).suoni[0].nome, 'x_voce_finale');
+  // due file con lo stesso nome non si pestano i piedi
+  const m4 = modello({ bpm: 120, tracce: [tracciaAudio({ nome: '1-Audio', clip: [clipAudio({ inizio: 0, file: 'A/Break.wav' }), clipAudio({ inizio: 8, file: 'B/Break.wav', loop: [0, 4] })] })] });
+  assert.deepEqual(converti(m4, undefined, { titolo: 'x' }).suoni.map((s) => s.nome), ['x_break', 'x_break_2']);
 });
 
 test('audio non warpato: il loop è già in secondi', () => {
@@ -156,7 +190,7 @@ test('stem esportato da Ableton per una traccia MIDI: begin/end dalla posizione 
   s.tracce[0].stem = stem(1);
   // la clip parte al quarto 16 (4 battute, 8 s) e dura 16 quarti (8 s) su 60 s di stem
   let r = converti(m, s, { titolo: 'brano' });
-  assert.equal(r.sezioni[0].codice, 's("brano_01_stem_pad").begin(0.1333).end(0.2667).slow(4)\n  .gain(.8)');
+  assert.equal(r.sezioni[0].codice, 's("brano_stem_pad").begin(0.1333).end(0.2667).slow(4)\n  .gain(.8)');
   assert.equal(r.suoni[0].assoluto, '/tmp/stem pad.wav');
   // se lo stem parte dalla battuta 3 (quarto 8), tutto slitta di 4 s
   s.tracce[0].stem = stem(3);
@@ -184,14 +218,14 @@ test('il brano finito: testa, tempo, una sezione per variante, e si rilegge iden
   assert.equal(testa.brano, 'mayia');
   assert.equal(testa.bpm, 86);
   assert.equal(testa.origine, '/Users/x/Mayia.als');
-  assert.deepEqual(testa.suoni, ['mayia_01_loop']);
+  assert.deepEqual(testa.suoni, ['mayia_loop']);
   assert.match(b.preambolo.join('\n'), /setcpm\(86\/4\)/);
-  assert.deepEqual(b.sezioni.map((s) => s.nome), ['pad', 'audio 2']);
+  assert.deepEqual(b.sezioni.map((s) => s.nome), ['pad', 'loop']);
 });
 
-test('due sezioni con lo stesso nome restano distinte', () => {
+test('due sezioni con lo stesso nome prendono le lettere, nell\'ordine dell\'arrangiamento', () => {
   const m = modello({ tracce: [tracciaMidi({ nome: '1-Pad', clip: [BASSO(0, [60, 60, 60, 60])] }), tracciaMidi({ nome: '2-Pad', clip: [BASSO(16, [62, 62, 62, 62])] })] });
-  assert.deepEqual(converti(m, undefined, { titolo: 'x' }).sezioni.map((s) => s.nome), ['pad', 'pad 2']);
+  assert.deepEqual(converti(m, undefined, { titolo: 'x' }).sezioni.map((s) => s.nome), ['pad a', 'pad b']);
 });
 
 test('note fuori dalla griglia dei sedicesimi: avviso', () => {
@@ -202,7 +236,7 @@ test('note fuori dalla griglia dei sedicesimi: avviso', () => {
 test('anteprima: l\'audio ha nomi provvisori (ant_…), i suoni veri restano quelli del brano', () => {
   const m = modello({ tracce: [tracciaAudio({ nome: '1-Audio', clip: [clipAudio({ file: 'Samples/a.wav' })] })] });
   const vero = costruisci(m, undefined, { titolo: 'x' });
-  assert.match(vero.sezioni[0].codice, /s\("x_01_a"\)/);
+  assert.match(vero.sezioni[0].codice, /s\("x_a"\)/);
   assert.equal(vero.provvisori.length, 0);
   const ant = costruisci(m, undefined, { titolo: 'x', anteprima: true });
   assert.match(ant.sezioni[0].codice, /s\("ant_[a-z0-9]+"\)/);

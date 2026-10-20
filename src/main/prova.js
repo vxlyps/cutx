@@ -706,7 +706,7 @@ async function provaBrowser({ finestre, scrivi }) {
   const cartellaSuoni = path.join(stash.radice(), 'suoni', 'prova_cassa');
   const file = 'foto_browser.cutx';
   await mkdir(cartellaSuoni, { recursive: true });
-  await writeFile(path.join(cartellaSuoni, 'a.wav'), 'RIFF');
+  await writeFile(path.join(cartellaSuoni, 'a.wav'), wavSilenzio(3));
   await writeFile(path.join(cartellaSuoni, 'b.wav'), 'RIFF');
   await writeFile(path.join(stash.radice(), 'libreria', file), '// @brano browser\n// @bpm 100\n// @sezione uno\ns("sine")\n');
   try {
@@ -745,17 +745,35 @@ async function provaBrowser({ finestre, scrivi }) {
     await aspetta(0.5);
     controlla('■ ferma la cuffia', !(await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).codice);
 
-    // un campione suona una volta sola, non a ogni ciclo; un secondo clic lo ferma
+    // un campione parte subito, suona una volta sola, e il ■ torna ▶ da solo quando finisce (dura 3 s: la sa dall'intestazione)
     await js(`(() => { const c = document.getElementById('cerca'); c.value = 'cassa'; c.dispatchEvent(new Event('input')); })()`);
-    const prima = (await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).eventi;
+    const stato = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+    const prima = (await stato()).eventi;
+    const t0 = Date.now();
     await js(`document.querySelector('#elenco .voce button[data-aiuto="browser-prova"]').click()`);
-    await aspetta(7); // più di tre cicli a 120 BPM
-    const dopo = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
-    controlla('▶ su un campione lo suona una volta sola', dopo.unaVolta === true && dopo.eventi - prima === 1, `eventi ${dopo.eventi - prima}`);
-    controlla('il tasto è ■ finché non lo fermo', (await js(`document.querySelector('#elenco .voce button.on')?.textContent`)) === '■');
+    let partito = null;
+    for (let i = 0; i < 40 && partito === null; i++) {
+      if ((await stato()).eventi > prima) partito = Date.now() - t0;
+      else await aspetta(0.05);
+    }
+    controlla('▶ su un campione parte subito, non al ciclo dopo', partito !== null && partito < 600, `${partito} ms`);
+    await aspetta(0.6);
+    controlla('il tasto è ■ mentre suona', (await js(`document.querySelector('#elenco .voce button.on')?.textContent`)) === '■');
+    let finito = null;
+    for (let i = 0; i < 40 && finito === null; i++) {
+      if (!(await stato()).codice) finito = Date.now() - t0;
+      else await aspetta(0.25);
+    }
+    controlla('finisce da solo dopo la durata del file (3 s), non prima', finito !== null && finito >= 2500 && finito < 7000, `${finito} ms`);
+    await aspetta(0.5);
+    controlla('e il tasto torna ▶ senza che nessuno lo tocchi', (await js(`document.querySelector('#elenco .voce button.on')?.textContent ?? '▶'`)) === '▶');
+    controlla('ha suonato una volta sola', (await stato()).eventi - prima === 1, String((await stato()).eventi - prima));
+    // un secondo clic mentre suona lo ferma subito
+    await js(`document.querySelector('#elenco .voce button[data-aiuto="browser-prova"]').click()`);
+    await aspetta(0.8);
     await js(`document.querySelector('#elenco .voce button.on').click()`);
     await aspetta(0.5);
-    controlla('un secondo clic lo ferma', !(await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()')).codice);
+    controlla('un secondo clic lo ferma anche a metà', !(await stato()).codice);
 
     // libreria
     await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
@@ -1081,6 +1099,18 @@ async function provaAbleton({ finestre, scrivi }) {
     controlla('un file che non c\'è è segnalato, con il consiglio di Ableton', (await js(`!document.getElementById('importa-mancanti').hidden`)) && (await testo('#importa-mancanti')).includes('Raccogli tutto'), await testo('#importa-mancanti'));
     controlla('i limiti sono scritti nel pannello', (await testo('#importa-limiti')).includes('time-stretch'));
 
+    // chiarezza: nomi dal file, selettore solo dove si sceglie, "vedi codice" staccato, nome del brano intero
+    const nomiSezioni = await js(`[...document.querySelectorAll('#importa-sezioni .nome-sezione')].map((i) => i.value)`);
+    controlla('le sezioni audio prendono il nome del file, non "audio N"', nomiSezioni.includes('loop') && nomiSezioni.includes('manca'), JSON.stringify(nomiSezioni));
+    controlla('sotto ogni traccia audio c\'è il nome del file che usa', (await js(`[...document.querySelectorAll('#importa-tracce .traccia-file')].map((e) => e.textContent).join('|')`)).includes('file: loop.wav'));
+    controlla('sulle tracce audio la modalità è testo, non un pulsante', (await js(`(() => { const t = document.querySelectorAll('#importa-tracce .traccia')[2]; return t.querySelectorAll('.modo').length === 0 && !!t.querySelector('.modo-testo'); })()`)) === true);
+    controlla('sulle tracce MIDI il selettore ha due opzioni', (await js(`document.querySelectorAll('#importa-tracce .traccia')[0].querySelectorAll('.modo').length`)) === 2);
+    await js('cutxProva.importa.vai(3)');
+    controlla('"vedi codice" è un pulsante staccato dal tipo, che è un\'etichetta', (await js(`(() => { const r = document.querySelector('#importa-sezioni .sezione-riga'); const b = r.querySelector('button.apri-codice'); const e = r.querySelector('.tipo-sezione'); return b.textContent === 'vedi codice ▾' && e.tagName === 'SPAN' && !e.matches('button') && b.getBoundingClientRect().left - e.getBoundingClientRect().right > 100; })()`)) === true);
+    await js(`(() => { const i = document.getElementById('importa-titolo'); i.value = 'mayia u influeced me a bit maybe'; i.dispatchEvent(new Event('change')); })()`);
+    controlla('il nome del brano si legge tutto, senza tagli', (await js(`(() => { const i = document.getElementById('importa-titolo'); return i.scrollWidth <= i.clientWidth && i.value === 'mayia u influeced me a bit maybe'; })()`)) === true);
+    await js(`(() => { const i = document.getElementById('importa-titolo'); i.value = 'tre'; i.dispatchEvent(new Event('change')); })()`);
+    await js('cutxProva.importa.vai(2)');
     // sceglie: togliere una traccia, cambiare il synth, cambiare nome
     await js(`document.querySelectorAll('#importa-tracce .traccia')[1].querySelector('.casella').click()`);
     controlla('togliere una traccia toglie la sua sezione', (await conta('#importa-sezioni .sezione-riga')) === 3);
@@ -1150,18 +1180,18 @@ async function provaAbleton({ finestre, scrivi }) {
     await js(`cutxProva.importa.vai(3)`);
     // importa: il brano nella libreria, i suoni nello stash, aperto nel CUE in modalità brano
     const fileBrano = path.join(stash.radice(), 'libreria', 'tre_notti.cutx');
-    const cartellaSuono = path.join(stash.radice(), 'suoni', 'tre_01_loop');
+    const cartellaSuono = path.join(stash.radice(), 'suoni', 'tre_loop');
     await rm(fileBrano, { force: true });
     await js(`document.getElementById('importa-vai').click()`);
     for (let i = 0; i < 40 && !existsSync(fileBrano); i++) await aspetta(0.25);
     await aspetta(1);
     const scritto = existsSync(fileBrano) ? await readFile(fileBrano, 'utf8') : '';
-    controlla('importa scrive il brano nella libreria dello stash', scritto.startsWith('// @brano tre notti') && scritto.includes('// @origine ') && scritto.includes('// @suoni tre_01_loop'), scritto.slice(0, 200));
+    controlla('importa scrive il brano nella libreria dello stash', scritto.startsWith('// @brano tre notti') && scritto.includes('// @origine ') && scritto.includes('// @suoni tre_loop'), scritto.slice(0, 200));
     controlla('e copia il suono che c\'è nello stash, in una cartella sua', existsSync(path.join(cartellaSuono, 'loop.wav')));
-    controlla('il file che manca non si copia (e non rompe niente)', !existsSync(path.join(stash.radice(), 'suoni', 'tre_02_manca')));
+    controlla('il file che manca non si copia (e non rompe niente)', !existsSync(path.join(stash.radice(), 'suoni', 'tre_manca')));
     controlla('il pannello si chiude e il brano è aperto nel CUE', (await js(`document.getElementById('importa').hidden`)) && (await js('cutxProva.cue.modo')) === 'brano' && (await js('cutxProva.cue.brano?.file')) === 'tre_notti.cutx');
     controlla('le sezioni ci sono tutte', (await js('cutxProva.cue.brano.modello.sezioni.length')) === 4);
-    controlla('il browser mostra il suono nuovo e il brano nella libreria', (await js('Object.keys(cutxProva.suoniStash()).includes("tre_01_loop")')) && (await js('cutxProva.libreria().some((b) => b.file === "tre_notti.cutx")')));
+    controlla('il browser mostra il suono nuovo e il brano nella libreria', (await js('Object.keys(cutxProva.suoniStash()).includes("tre_loop")')) && (await js('cutxProva.libreria().some((b) => b.file === "tre_notti.cutx")')));
     const avviso = await js(`document.getElementById('cue-avviso').textContent`);
     controlla('l\'avviso dice chiaro cosa è stato creato', avviso.includes('creato il brano «tre notti»: 4 sezioni, 1 suono copiato, aperto nel CUE') && avviso.includes('mancant'), avviso);
 
@@ -1218,8 +1248,8 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
     await js(`window.cutx.salvaPreferenze({ cartelleAbleton: [${JSON.stringify(cartellaProgetti)}] })`);
     for (const [nome, sigla] of [['x1', 'x1'], ['Mayia u influeced me a bit maybe?', 'mayia']]) {
       const percorso = path.join(cartellaProgetti, `${nome}.als`);
-      const titolo = `prova ${sigla}`;
-      const fileBrano = path.join(radiceStash, 'libreria', `prova_${sigla}.cutx`);
+      const titolo = `prova${sigla}`; // una sola parola: i nomi dei suoni cominciano così e non si confondono con quelli di Valerio
+      const fileBrano = path.join(radiceStash, 'libreria', `prova${sigla}.cutx`);
       if (existsSync(fileBrano)) throw new Error(`${fileBrano} esiste già: non lo tocco`);
       const modello = await leggiAlsFile(percorso);
       // quello che il pannello sa dei file: quanto pesano e se si possono ritagliare
@@ -1286,7 +1316,7 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
       const codici = brano.sezioni.map((sez) => `${brano.preambolo.join('\n')}\n${sez.corpo.join('\n')}`);
       const sbagliate = await js(`(async () => { const e = []; for (const c of ${JSON.stringify(codici)}) { const r = await cutxProva.valutaCodice(c); if (r.errore) e.push(r.errore); } return e; })()`);
       controlla(`${sigla}: ogni sezione del brano scritto si valuta con Strudel`, sbagliate.length === 0, sbagliate.slice(0, 2).join(' | '));
-      controlla(`${sigla}: il brano è aperto nel CUE in modalità brano`, (await js('cutxProva.cue.modo')) === 'brano' && (await js('cutxProva.cue.brano?.file')) === `prova_${sigla}.cutx`);
+      controlla(`${sigla}: il brano è aperto nel CUE in modalità brano`, (await js('cutxProva.cue.modo')) === 'brano' && (await js('cutxProva.cue.brano?.file')) === `prova${sigla}.cutx`);
       await js(`cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero'); document.getElementById('importa').hidden = true`);
     }
   } finally {
