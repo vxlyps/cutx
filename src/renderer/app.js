@@ -704,9 +704,13 @@ const pila = new Pila($('livelli'), $('jam'), {
   },
 });
 
+// I livelli arrivano in due modi: spinti dal motore a ogni cambio (subito) e nello stato di ogni pong (ogni mezzo secondo, un po'
+// in ritardo). Vale quello più recente: un pong partito prima dell'ultimo cambio non deve riportare indietro la lista
+// (un muto o un volume appena cambiati sparivano per un attimo, e un ⇧⌘S in quel momento li salvava vecchi).
+let spintaLivelli = 0; // quando è arrivata l'ultima spinta di livelli dal motore live
 function mostraLive() {
   if (!live.viva) livelliLive = [];
-  else if (live.stato.livelli) livelliLive = live.stato.livelli;
+  else if (live.stato.livelli && live.ultimoPong > spintaLivelli) livelliLive = live.stato.livelli;
   pila.aggiorna(livelliLive);
 }
 
@@ -816,6 +820,7 @@ for (const m of [live, cuffia]) {
   m.suMessaggio = (msg) => {
     if (msg.tipo === 'mappa') mappa = msg;
     else if (msg.tipo === 'livelli') {
+      if (m === live) spintaLivelli = performance.now();
       livelliLive = msg.livelli;
       pila.aggiorna(livelliLive);
     }

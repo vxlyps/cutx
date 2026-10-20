@@ -6,6 +6,7 @@ import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
+import { Scorrimento, scegliDisposizione, trovaScala } from './scorri.js';
 import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
 import seduto from '../../design/risorse/gatti/gatto_seduto_marcio.svg';
 import lecca from '../../design/risorse/gatti/gatto_lecca_marcio.svg';
@@ -20,7 +21,6 @@ let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
 const inizioUscita = new Map();
 const blocchi = new Map(); // chiave → { el, tag, codice }
-let scala = 1;
 
 // --- canali: dal live il tempo e i livelli, dall'interfaccia le bozze ---
 
@@ -80,17 +80,25 @@ function blocco(chiave) {
   return blocchi.get(chiave);
 }
 
-function scrivi(b, testo, cursore) {
-  const chiave = `${testo}${cursore ? '▌' : ''}`;
+// Il testo che si sta scrivendo: la parte già scritta, il cursore e il resto *invisibile ma al suo posto*, così l'altezza del
+// livello è subito quella finale e il carattere non cambia mentre si scrive.
+function scrivi(b, scritto, cursore, intero = scritto) {
+  const chiave = `${scritto}|${intero}${cursore ? '▌' : ''}`;
   if (b.codice.dataset.testo === chiave) return;
   b.codice.dataset.testo = chiave;
   b.codice.dataset.evidenza = '';
-  b.codice.textContent = testo;
+  b.codice.textContent = scritto;
   if (cursore) {
     const c = document.createElement('span');
     c.className = 'cursore';
     c.textContent = '_';
     b.codice.append(c);
+  }
+  if (intero.length > scritto.length) {
+    const resto = document.createElement('span');
+    resto.className = 'nascosto';
+    resto.textContent = intero.slice(scritto.length);
+    b.codice.append(resto);
   }
 }
 
@@ -110,6 +118,7 @@ function disegna() {
 
   const visti = new Set();
   const ordine = [];
+  const firma = [];
   let suona = false;
   for (const l of livelli) {
     if (l.a !== null && livelli.some((x) => x !== l && x.nome === l.nome && x.da === l.a)) continue; // sostituito: si vede il nuovo
@@ -127,11 +136,15 @@ function disegna() {
       // sto riscrivendo questo livello: il pubblico lo vede mentre lo scrivo
       b.tag.textContent = `● ${l.nome} · in scrittura`;
       scrivi(b, bozza, true);
+      firma.push(`${chiave}|${bozza}`);
+      segnaNovita(chiave, bozza, epoca);
       suona ||= !a.arriva;
       continue;
     }
+    firma.push(`${chiave}|${a.testo}`);
+    segnaNovita(chiave, a.testo, epoca);
     b.tag.textContent = a.arriva ? `${l.nome} · tra ${Math.max(1, Math.ceil(a.mancano))} ${Math.ceil(a.mancano) > 1 ? 'cicli' : 'ciclo'}` : `● ${l.nome}${l.muto ? ' · muto' : ''}`;
-    if (a.cursore) scrivi(b, a.mostrato, true);
+    if (a.cursore) scrivi(b, a.mostrato, true, a.testo);
     else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : attivi(l.codice, ciclo), 'nota');
     suona ||= !a.arriva && !l.muto;
   }
@@ -144,6 +157,8 @@ function disegna() {
     b.el.classList.add('bozza');
     b.tag.textContent = 'jam · in scrittura';
     scrivi(b, bozze.jam, true);
+    firma.push(`jam|${bozze.jam}`);
+    segnaNovita('jam', bozze.jam, epoca);
   }
   for (const [chiave, b] of blocchi) {
     if (!visti.has(chiave)) {
@@ -151,21 +166,137 @@ function disegna() {
       blocchi.delete(chiave);
     }
   }
-  const contenitore = $('livelli');
+  const contenitore = $('scorri');
   ordine.forEach((el, i) => contenitore.children[i] !== el && contenitore.insertBefore(el, contenitore.children[i] ?? null));
   document.body.classList.toggle('suona', suona);
-  adatta(contenitore);
+  firma.push(`${innerWidth}x${innerHeight}|${[...document.body.classList].includes('senza-gatto')}`);
+  adatta(firma.join('\u0001'), epoca);
 }
 
-// Tanto codice: il carattere si stringe finché ci sta; poco codice: torna grande.
-function adatta(contenitore) {
-  const troppo = contenitore.scrollHeight > contenitore.clientHeight + 2;
-  const nuova = troppo ? Math.max(0.35, scala * 0.94) : contenitore.scrollHeight < contenitore.clientHeight * 0.75 ? Math.min(1, scala * 1.03) : scala;
-  if (nuova !== scala) {
-    scala = nuova;
-    document.documentElement.style.setProperty('--scala', scala.toFixed(3));
-  }
+// --- il codice sul proiettore: tutta l'altezza che c'è, mai sotto neon, gatto e frase, mai righe a metà ---
+// 1. L'area del codice è quella tra l'intestazione e l'angolo (neon, gatto, frase), misurata davvero: o larga fino all'angolo,
+//    o più stretta ma alta fino ai pallini delle battute. Si prende la disposizione in cui il carattere viene più grande.
+// 2. Se non ci sta si rimpicciolisce il carattere, fino a un minimo leggibile da lontano.
+// 3. Se ancora non basta si scorre piano e da soli, una riga alla volta, fermandosi sul livello appena entrato o modificato.
+const MINIMO_ALTEZZA = 0.026; // il carattere più piccolo: 2,6% dell'altezza della finestra (28 px su un proiettore 1080p)
+const scorrimento = new Scorrimento({ passoS: 1.8, pausaS: 4, tieniS: 14 });
+const novita = new Map(); // chiave → { testo, quando }: quando è entrato o cambiato
+let ultimaNovita = null; // { id, quando }
+let firmaPrecedente = '';
+let disposizione = { nome: 'ampia', scala: 1, ci: true };
+let righe = []; // le righe del codice (e i titoli dei livelli) in px dall'alto del contenuto
+let livelliGeom = new Map(); // chiave → { top, bottom }
+let scorre = { attivo: false, offset: 0, taglio: 0 };
+
+function segnaNovita(chiave, testo, epoca) {
+  const prima = novita.get(chiave);
+  if (prima?.testo === testo) return;
+  novita.set(chiave, { testo, quando: epoca });
+  ultimaNovita = { id: chiave, quando: epoca };
 }
+
+function misuraRighe() {
+  righe = [];
+  livelliGeom = new Map();
+  for (const [chiave, b] of blocchi) {
+    const top = b.el.offsetTop;
+    const lh = parseFloat(getComputedStyle(b.codice).lineHeight) || 1;
+    righe.push({ top, bottom: top + b.tag.offsetHeight });
+    const n = Math.max(1, Math.round(b.codice.offsetHeight / lh));
+    const t0 = top + b.codice.offsetTop;
+    for (let k = 0; k < n; k++) righe.push({ top: t0 + k * lh, bottom: t0 + (k + 1) * lh });
+    livelliGeom.set(chiave, { top, bottom: t0 + n * lh });
+  }
+  righe.sort((x, y) => x.top - y.top);
+}
+
+function adatta(firma, epoca) {
+  const livelli = $('livelli');
+  const radice = document.documentElement.style;
+  if (firma !== firmaPrecedente) {
+    firmaPrecedente = firma;
+    const u = innerWidth / 1440;
+    const angolo = document.querySelector('.angolo').getBoundingClientRect();
+    const battute = $('battute').getBoundingClientRect();
+    const margine = 18 * u;
+    const minima = Math.max(0.25, (MINIMO_ALTEZZA * innerHeight) / (40 * u));
+    const sotto = (basso) => innerHeight - basso;
+    const opzioni = [
+      // larga: sopra l'angolo; stretta: a sinistra dell'angolo, fino ai pallini delle battute
+      { nome: 'ampia', destra: 64 * u, basso: sotto(angolo.top - margine) },
+      { nome: 'stretta', destra: innerWidth - (angolo.left - 40 * u), basso: sotto(battute.top - margine) },
+    ].map((o) => {
+      radice.setProperty('--destra', `${o.destra}px`);
+      radice.setProperty('--basso', `${o.basso}px`);
+      // altezze frazionarie (non arrotondate) e un pixel di sicurezza: una riga a un decimo di pixel dal bordo non ci sta
+      const r = trovaScala((s) => (radice.setProperty('--scala', s.toFixed(4)), $('scorri').getBoundingClientRect().height), livelli.getBoundingClientRect().height - 1, minima);
+      return { ...o, ...r, altezza: livelli.clientHeight };
+    });
+    disposizione = scegliDisposizione(opzioni);
+    radice.setProperty('--destra', `${disposizione.destra}px`);
+    radice.setProperty('--basso', `${disposizione.basso}px`);
+    radice.setProperty('--scala', disposizione.scala.toFixed(4));
+    document.body.dataset.disposizione = disposizione.nome;
+    misuraRighe();
+  }
+  // non ci sta neanche al carattere minimo: si scorre
+  const altezza = livelli.clientHeight;
+  scorre.attivo = !disposizione.ci;
+  const stile = $('scorri').style;
+  if (!scorre.attivo) {
+    scorre = { attivo: false, offset: 0, taglio: 0 };
+    stile.transform = '';
+    livelli.style.clipPath = '';
+    return;
+  }
+  const g = ultimaNovita && livelliGeom.get(ultimaNovita.id);
+  const r = scorrimento.aggiorna(epoca / 1000, { righe, altezza, focus: g ? { id: ultimaNovita.id, quando: ultimaNovita.quando, top: g.top, bottom: g.bottom } : null });
+  scorre = { attivo: true, offset: r.offset, taglio: r.taglio };
+  stile.transform = `translateY(${-r.offset}px)`;
+  livelli.style.clipPath = r.taglio > 0 ? `inset(0 0 ${r.taglio}px 0)` : '';
+}
+
+// Per le prove: com'è il codice adesso (mai righe a metà, mai sotto l'angolo, carattere leggibile).
+function verificaCodice() {
+  const c = $('livelli').getBoundingClientRect();
+  const finestra = { top: c.top, bottom: c.top + $('livelli').clientHeight - scorre.taglio };
+  let tagliate = 0;
+  let visibili = 0;
+  for (const r of righe) {
+    const top = c.top + r.top - scorre.offset;
+    const bottom = c.top + r.bottom - scorre.offset;
+    if (bottom <= finestra.top + 0.5 || top >= finestra.bottom - 0.5) continue; // fuori dalla finestra
+    visibili++;
+    if (top < finestra.top - 0.5 || bottom > finestra.bottom + 0.5) tagliate++;
+  }
+  const a = document.querySelector('.angolo').getBoundingClientRect();
+  const area = { left: c.left, right: c.right, top: c.top, bottom: finestra.bottom };
+  const sovrappone = area.left < a.right && area.right > a.left && area.top < a.bottom && area.bottom > a.top;
+  const codice = document.querySelector('.codice');
+  const g = ultimaNovita && livelliGeom.get(ultimaNovita.id);
+  const altezza = $('livelli').clientHeight - scorre.taglio;
+  // un livello più alto della finestra si scende piano: basta che se ne veda una parte
+  const focusVisibile = !g || (g.bottom - g.top > altezza ? g.top < scorre.offset + altezza && g.bottom > scorre.offset : g.top >= scorre.offset - 0.5 && g.bottom <= scorre.offset + altezza + 0.5);
+  return {
+    focus: g ? { id: ultimaNovita.id, top: g.top, bottom: g.bottom } : null,
+    focusVisibile,
+    tagliate,
+    visibili,
+    sovrappone,
+    disposizione: disposizione.nome,
+    ci: disposizione.ci,
+    scorre: scorre.attivo,
+    offset: scorre.offset,
+    scala: disposizione.scala,
+    carattere: codice ? parseFloat(getComputedStyle(codice).fontSize) : null,
+    minimo: MINIMO_ALTEZZA * innerHeight,
+    area: { altezza: $('livelli').clientHeight, larghezza: c.width },
+    livelli: [...blocchi.keys()],
+  };
+}
+globalThis.cutxVerificaUscita = verificaCodice;
+// quando il carattere è pronto le altezze cambiano: si rimisura tutto
+document.fonts?.ready.then(() => (firmaPrecedente = ''));
 
 function giro() {
   requestAnimationFrame(giro);
@@ -192,4 +323,4 @@ window.cutx.suPreferenze(applica);
 applica(await window.cutx.preferenze());
 setInterval(disegna, 100);
 giro();
-globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala });
+globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala: disposizione.scala });

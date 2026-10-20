@@ -56,19 +56,31 @@ body {
 .livelli {
   position: absolute;
   left: calc(64 * var(--u));
-  right: calc(64 * var(--u));
+  /* destra e basso li calcola uscita.js sulla geometria vera: sopra l'angolo (neon, gatto, frase), o a sinistra di lui */
+  right: var(--destra, calc(64 * var(--u)));
   top: calc(110 * var(--u));
-  bottom: calc(290 * var(--u));
-  display: flex;
-  flex-direction: column;
-  gap: calc(30 * var(--u));
+  bottom: var(--basso, calc(290 * var(--u)));
   overflow: hidden;
 }
 
+/* il contenuto scorre (a righe intere) quando non ci sta neanche col carattere più piccolo */
+.scorri {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: calc(30 * var(--u));
+  /* si scorre a scatti di una riga, senza transizione: durante uno scorrimento morbido ci sarebbero righe a metà */
+}
+
 .livello {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: calc(6 * var(--u));
+}
+
+.codice .nascosto {
+  visibility: hidden;
 }
 
 .tag {

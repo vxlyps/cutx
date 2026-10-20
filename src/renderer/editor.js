@@ -33,9 +33,16 @@ function fasceSezioni(statoSezione) {
     const b = new RangeSetBuilder();
     let classe = null; // null = preambolo o testa: niente fascia
     let inTesta = true;
+    let haTesta = false;
     for (let n = 1; n <= doc.lines; n++) {
       const riga = doc.line(n);
       if (inTesta && TESTA_BRANO.test(riga.text)) {
+        haTesta = true;
+        b.add(riga.from, riga.from, Decoration.line({ class: 'cm-testa-brano' }));
+        continue;
+      }
+      // i commenti subito sotto la testa sono la sua descrizione (come in brano.js)
+      if (inTesta && haTesta && /^\s*\/\//.test(riga.text) && !eSezione(riga.text)) {
         b.add(riga.from, riga.from, Decoration.line({ class: 'cm-testa-brano' }));
         continue;
       }

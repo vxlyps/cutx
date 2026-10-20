@@ -5,6 +5,7 @@
 //   // @data 2026-10-20          │
 //   // @origine /percorso/x.als   │ (solo se importato da Ableton)
 //   // @suoni jungle_break, voce ┘
+//   // Una descrizione, se c'è: i commenti subito sotto la testa stanno con la testa
 //   setcpm(140/4)                ← preambolo: valutato con ogni sezione
 //   // @sezione intro            ← da qui una sezione, fino alla prossima
 //   s("bd*4")
@@ -18,6 +19,8 @@ export const NOMI_SEZIONE = ['intro', 'drum', 'basso', 'melodia', 'break', 'drop
 
 const TESTA = /^\/\/ @(brano|bpm|data|origine|suoni)(?:\s+(.*))?$/;
 const SEZIONE = /^\s*\/\/\s*@sezione\b\s*(.*)$/;
+// Un commento (anche "//" da solo): quelli subito sotto la testa sono la descrizione del brano, fanno parte della testa.
+const COMMENTO = /^\s*\/\//;
 const ORDINE_TESTA = ['brano', 'bpm', 'data', 'origine', 'suoni'];
 const SEP = ' · ';
 
@@ -51,6 +54,9 @@ export function leggi(testo) {
   let i = 0;
   const testa = [];
   while (i < righe.length && TESTA.test(righe[i])) testa.push(righe[i++]);
+  // I commenti subito sotto la testa (una descrizione del brano) stanno con la testa: non sono codice e non devono
+  // finire nel preambolo, cioè davanti a ogni sezione mandata in cuffia o live. Si fermano alla prima riga vuota o di codice.
+  if (testa.length) while (i < righe.length && COMMENTO.test(righe[i]) && !eSezione(righe[i])) testa.push(righe[i++]);
   const preambolo = [];
   while (i < righe.length && !eSezione(righe[i])) preambolo.push(righe[i++]);
   const sezioni = [];
@@ -71,7 +77,9 @@ export function scrivi(brano) {
 export function testa(brano) {
   const t = {};
   for (const r of brano.testa) {
-    const [, k, v = ''] = r.match(TESTA);
+    const m = r.match(TESTA);
+    if (!m) continue; // un commento della descrizione
+    const [, k, v = ''] = m;
     t[k] = k === 'suoni' ? v.split(',').map((x) => x.trim()).filter(Boolean) : k === 'bpm' ? Number(v) : v.trim();
   }
   return t;
@@ -83,13 +91,13 @@ export function conTesta(brano, valori) {
   const testaNuova = [...brano.testa];
   for (const k of ORDINE_TESTA) {
     if (!(k in valori)) continue;
-    const i = testaNuova.findIndex((r) => r.match(TESTA)[1] === k);
+    const i = testaNuova.findIndex((r) => r.match(TESTA)?.[1] === k);
     if (i >= 0) testaNuova[i] = riga(k, valori[k]);
     else {
       // in ordine: dopo l'ultima chiave che la precede
       const prima = ORDINE_TESTA.slice(0, ORDINE_TESTA.indexOf(k));
       let dove = 0;
-      testaNuova.forEach((r, j) => prima.includes(r.match(TESTA)[1]) && (dove = j + 1));
+      testaNuova.forEach((r, j) => prima.includes(r.match(TESTA)?.[1]) && (dove = j + 1));
       testaNuova.splice(dove, 0, riga(k, valori[k]));
     }
   }

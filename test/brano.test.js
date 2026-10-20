@@ -7,6 +7,9 @@ const NOTTE = `// @brano notte
 // @bpm 140
 // @data 2026-10-20
 // @suoni jungle_break, voce
+// Una descrizione del brano: sta con la testa, non è codice.
+//
+
 // preambolo: valutato con ogni sezione
 setcpm(140/4)
 
@@ -49,7 +52,8 @@ test('sezioni, nomi, informazioni, preambolo e testa', () => {
   );
   assert.deepEqual(b.sezioni[1].info, { volume: 0.6 });
   assert.deepEqual(b.sezioni[2].info, { volume: 0.8, muto: true });
-  assert.deepEqual(b.preambolo, ['// preambolo: valutato con ogni sezione', 'setcpm(140/4)', '']);
+  assert.deepEqual(b.preambolo, ['', '// preambolo: valutato con ogni sezione', 'setcpm(140/4)', '']);
+  assert.deepEqual(b.testa.slice(4), ['// Una descrizione del brano: sta con la testa, non è codice.', '//']);
   assert.deepEqual(b.sezioni[0].corpo, ['s("bd*4, ~ hh").bank("RolandTR909")', '// un commento dentro la sezione', '']);
   assert.deepEqual(B.testa(b), { brano: 'notte', bpm: 140, data: '2026-10-20', suoni: ['jungle_break', 'voce'] });
 });
@@ -57,7 +61,8 @@ test('sezioni, nomi, informazioni, preambolo e testa', () => {
 test('il codice di una sezione porta con sé il preambolo', () => {
   const b = B.leggi(NOTTE);
   const { codice, inizio } = B.codice(b, 1);
-  assert.ok(codice.startsWith('// preambolo'));
+  assert.ok(codice.includes('// preambolo'));
+  assert.ok(!codice.includes('descrizione'), 'i commenti della testa non vanno davanti a ogni sezione');
   assert.ok(codice.includes('setcpm(140/4)'));
   assert.equal(codice.slice(inizio), 'n("0 3 7 <10 12>").scale("C:minor").s("triangle")');
   const solo = B.codice(b, 2, ['s("jungle_break").fit().chop(16)']);
@@ -105,7 +110,7 @@ test('rinomina, unisci, dividi, sposta: niente si perde e il file resta valido',
 test('la testa si aggiorna senza toccare il resto', () => {
   const b = B.conTesta(B.leggi(NOTTE), { bpm: 150, suoni: ['voce'] });
   const t = B.scrivi(b);
-  assert.ok(t.startsWith('// @brano notte\n// @bpm 150\n// @data 2026-10-20\n// @suoni voce\n'));
+  assert.ok(t.startsWith('// @brano notte\n// @bpm 150\n// @data 2026-10-20\n// @suoni voce\n// Una descrizione'));
   assert.equal(t.slice(t.indexOf('// preambolo')), NOTTE.slice(NOTTE.indexOf('// preambolo')));
   // testa nuova su un testo senza testa: le righe vanno in cima, nell'ordine giusto
   const nuovo = B.scrivi(B.conTesta(B.leggi('s("bd")'), { suoni: [], data: '2026-01-01', brano: 'x' }));
@@ -226,4 +231,45 @@ test('senzaTempo toglie solo le righe che cambiano il tempo', () => {
 test('una sezione audio si riconosce da begin/end', () => {
   assert.equal(B.eSezioneAudio('s("x1_loop").begin(0.1).end(0.5).slow(4)'), true);
   assert.equal(B.eSezioneAudio('s("bd*4")'), false);
+});
+
+test('i commenti subito sotto la testa non finiscono nel preambolo (notte-canaglia)', () => {
+  const t = `// @brano notte canaglia
+// @bpm 170
+// @data 2026-10-20
+// @suoni prova_stem
+//
+// Jungle da officina. Tutto fatto con i synth di Strudel,
+// tranne la sezione "stem tagliato" che usa prova_stem dello stash.
+// Ordine consigliato: intro, drum, basso, melodia, break, drop, outro.
+
+setcpm(170/4)
+
+// @sezione intro
+s("bd*4")
+`;
+  const b = B.leggi(t);
+  assert.equal(b.testa.length, 8, 'quattro righe @ e quattro di descrizione');
+  assert.deepEqual(b.preambolo, ['', 'setcpm(170/4)', '']);
+  assert.ok(!B.codice(b, 0).codice.includes('Jungle'));
+  assert.deepEqual(B.testa(b), { brano: 'notte canaglia', bpm: 170, data: '2026-10-20', suoni: ['prova_stem'] });
+  assert.equal(B.bpmDelBrano(b), 170);
+  assert.equal(B.scrivi(b), t, 'riscritto è identico');
+  // una testa nuova (origine) va con le altre righe @, prima della descrizione
+  const con = B.scrivi(B.conTesta(b, { origine: '/x.als' }));
+  assert.ok(con.startsWith('// @brano notte canaglia\n// @bpm 170\n// @data 2026-10-20\n// @origine /x.als\n// @suoni prova_stem\n//\n// Jungle'));
+  // + sezione non può prendere righe della descrizione
+  assert.match(B.aggiungiSezione(t, 5, 5, 'x').errore, /testa/);
+});
+
+test('senza testa i commenti in cima restano codice del preambolo', () => {
+  const b = B.leggi('// un commento mio\nsetcpm(140/4)\n// @sezione a\ns("bd")');
+  assert.deepEqual(b.preambolo, ['// un commento mio', 'setcpm(140/4)']);
+  assert.deepEqual(b.testa, []);
+});
+
+test('una riga // @sezione dopo la testa non è una descrizione', () => {
+  const b = B.leggi('// @brano x\n// @sezione a\ns("bd")');
+  assert.equal(b.testa.length, 1);
+  assert.equal(b.sezioni.length, 1);
 });

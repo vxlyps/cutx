@@ -59,7 +59,7 @@ async function primoPiano(finestre) {
   await aspetta(0.2);
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -188,6 +188,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('neon')) ok = (await sicura('neon', provaNeon)) && ok;
   if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
   if (parti.includes('solidita')) ok = (await sicura('solidita', provaSolidita)) && ok;
+  if (parti.includes('uscita')) ok = (await sicura('uscita', provaUscita)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -1508,6 +1509,34 @@ export async function schermate({ finestre, cartella }) {
       }
     }
   }
+  // il proiettore con tanto codice: 2 livelli e 5 livelli lunghi, a 1280×720 e 1920×1080
+  {
+    const dir = path.join(cartella, 'proiettore');
+    await mkdir(dir, { recursive: true });
+    for (const [l, a] of [[1280, 720], [1920, 1080]]) {
+      for (const quanti of [2, 5]) {
+        const problemi = [];
+        const v = await provaCodiceUscita({
+          finestre,
+          scrivi: () => {},
+          controlla: (nome, vero) => !vero && problemi.push({ tipo: 'uscita', el: nome, testo: '' }),
+          js,
+          quanti,
+          righe: 11,
+          larghezza: l,
+          altezza: a,
+          etichetta: `${l}×${a} ${quanti} livelli`,
+        });
+        const nome = `uscita-${quanti}-livelli-${l}x${a}`;
+        await writeFile(path.join(dir, `${nome}.png`), (await finestre.uscita.webContents.capturePage()).toPNG());
+        riepilogo.push({ w: l, h: a, nome, problemi });
+        console.log(`[schermate] ${nome}: ${problemi.length ? problemi.length + ' problemi' : 'ok'} · carattere ${Math.round(v.carattere)} px, ${v.disposizione}, ${v.scorre ? 'scorre' : 'ci sta'}`);
+        for (const p of problemi) console.log(`     - ${p.el}`);
+      }
+    }
+    await js('cutxProva.fermaTutto()');
+    await js('window.cutx.uscitaAperta().then((a) => a && window.cutx.uscitaOnOff())');
+  }
   await js(`window.cutx.salvaPreferenze({ cartelleAbleton: ${JSON.stringify(prima)} })`);
   const totale = riepilogo.reduce((n, r) => n + r.problemi.length, 0);
   console.log(`[schermate] ${riepilogo.length} schermate, ${totale} problemi`);
@@ -1880,5 +1909,82 @@ async function provaSolidita({ finestre, scrivi }) {
   controlla('riprende il testo del CUE', (await js('cutxProva.cue.libero.codice')).includes('bozza da non perdere'), await js('cutxProva.cue.libero.codice'));
   controlla('e lo dice', (await js(`document.getElementById('cue-avviso').textContent`)).includes('ho ripreso il testo del CUE'), await js(`document.getElementById('cue-avviso').textContent`));
   await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- il codice sul proiettore: tutta l'altezza, mai sotto neon/gatto/frase, mai righe a metà; scorre se non ci sta ---
+
+// Un livello lungo e realistico: tante righe, alcune molto lunghe (vanno a capo).
+export const livelloLungo = (n, righe = 11) =>
+  `// @sezione livello ${n}\nstack(\n${Array.from({ length: righe }, (_, k) => `  s("bd*${(k % 4) + 1} hh*${(k % 8) + 2} ~ sd:${k}").bank("RolandTR909").gain(${(0.3 + (k % 5) / 10).toFixed(1)}).room(.${k % 9}).delay(.${(k + n) % 7})`).join(',\n')}\n)`;
+
+// Apre l'uscita a una certa dimensione, ci mette i livelli e controlla com'è il codice. ritorna le verifiche.
+export async function provaCodiceUscita({ finestre, scrivi, controlla, js, quanti, righe, larghezza, altezza, etichetta }) {
+  const wc = () => finestre.controllo.webContents;
+  const uscita = () => finestre.uscita;
+  const verifica = () => chiedi(uscita(), 'globalThis.cutxVerificaUscita?.()');
+  const aperta = await js('window.cutx.uscitaAperta()');
+  if (!aperta) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  finestre.uscita.setContentSize(larghezza, altezza);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scegliEntraTra(1)`);
+  for (let n = 1; n <= quanti; n++) {
+    await js(`cutxProva.scriviCue(${JSON.stringify(livelloLungo(n, righe))})`);
+    await wc().executeJavaScript('cutxProva.goLive()');
+    await aspetta(2.6);
+  }
+  await aspetta(4); // la scrittura a macchina finisce
+  const v = await verifica();
+  controlla(`${etichetta}: nessuna riga tagliata a metà (${v.visibili} righe visibili)`, v.tagliate === 0 && v.visibili > 0, JSON.stringify(v));
+  controlla(`${etichetta}: il codice non finisce sotto neon, gatto e numero di frase`, v.sovrappone === false, JSON.stringify(v));
+  controlla(`${etichetta}: il carattere è leggibile da lontano (${Math.round(v.carattere)} px, minimo ${Math.round(v.minimo)})`, v.carattere >= v.minimo - 0.6, JSON.stringify(v));
+  return v;
+}
+
+async function provaUscita({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const verifica = () => chiedi(finestre.uscita, 'globalThis.cutxVerificaUscita?.()');
+  try {
+    for (const [l, a] of [[1280, 720], [1920, 1080]]) {
+      const base = { finestre, scrivi, controlla, js, larghezza: l, altezza: a };
+      // due livelli lunghi: si rimpicciolisce il carattere, niente di tagliato
+      const due = await provaCodiceUscita({ ...base, quanti: 2, righe: 1, etichetta: `${l}×${a}, 2 livelli` });
+      controlla(`${l}×${a}, 2 livelli di codice normale: ci stanno tutti, senza scorrere`, due.ci === true && due.scorre === false, JSON.stringify(due));
+      // cinque livelli lunghi: neanche al carattere minimo ci stanno, si scorre da soli
+      const cinque = await provaCodiceUscita({ ...base, quanti: 5, righe: 11, etichetta: `${l}×${a}, 5 livelli lunghi` });
+      controlla(`${l}×${a}, 5 livelli: si scorre da soli`, cinque.scorre === true && cinque.ci === false, JSON.stringify(cinque));
+      controlla(`${l}×${a}, 5 livelli: il carattere resta al minimo leggibile, non più piccolo`, Math.abs(cinque.carattere - cinque.minimo) < 3, `${cinque.carattere} / ${cinque.minimo}`);
+      // il livello appena entrato si vede subito
+      controlla(`${l}×${a}: l'ultimo livello entrato è visibile (ci si ferma lì)`, cinque.focusVisibile === true && cinque.focus?.id !== undefined, JSON.stringify(cinque.focus));
+      // lo scorrimento si muove, e a ogni passo non c'è mai una riga a metà
+      const visti = new Set();
+      let tagliate = 0;
+      for (let i = 0; i < 40; i++) {
+        const v = await verifica();
+        visti.add(Math.round(v.offset));
+        tagliate += v.tagliate;
+        await aspetta(0.5);
+      }
+      controlla(`${l}×${a}: scorrendo non resta mai una riga a metà`, tagliate === 0, String(tagliate));
+      controlla(`${l}×${a}: scorre piano (si muove, ma di una riga alla volta)`, visti.size >= 2, JSON.stringify([...visti]));
+      // un livello nuovo: ci si ferma su di lui
+      await js(`cutxProva.scriviCue(${JSON.stringify(livelloLungo(6, 6))})`);
+      await finestre.controllo.webContents.executeJavaScript('cutxProva.goLive()');
+      await aspetta(6);
+      const nuovo = await verifica();
+      controlla(`${l}×${a}: entra un livello nuovo e si scorre fino a lui`, nuovo.focusVisibile === true && !!nuovo.focus && nuovo.livelli.includes(nuovo.focus.id), JSON.stringify(nuovo.focus));
+    }
+  } finally {
+    await js('cutxProva.fermaTutto()').catch(() => {});
+    await js('window.cutx.uscitaAperta().then((a) => a && window.cutx.uscitaOnOff())').catch(() => {});
+  }
   return ok;
 }
