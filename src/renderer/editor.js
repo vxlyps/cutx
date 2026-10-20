@@ -24,7 +24,7 @@ const noteInCuffia = StateField.define({
   },
   provide: (f) => EditorView.decorations.from(f),
 });
-const TESTA_BRANO = /^\/\/ @(brano|bpm|data|suoni)\b/;
+const TESTA_BRANO = /^\/\/ @(brano|bpm|data|origine|suoni)\b/;
 
 // statoSezione(nome) → 'live' | 'cuffia' | '' per il colore della fascia.
 function fasceSezioni(statoSezione) {

@@ -4,6 +4,11 @@
 import path from 'node:path';
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as stash from './stash.js';
+import { leggiAls, leggiAlsFile } from '../ableton/leggi.js';
+import { converti } from '../ableton/converti.js';
+import * as finto from '../../test/als-finto.js';
+import os from 'node:os';
+import { existsSync } from 'node:fs';
 
 // Lo stesso click del test di sfasamento, più piano: la prova suona dalle casse del Mac.
 const CODICE = `setcpm(120/4)
@@ -30,7 +35,7 @@ async function aspettaChe(fn, s = 30) {
   return false;
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton'] }) {
   const righe = [];
   const scrivi = (r) => {
     console.log(`[prova] ${r}`);
@@ -151,6 +156,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
   if (parti.includes('browser')) ok = (await sicura('browser', provaBrowser)) && ok;
   if (parti.includes('impostazioni')) ok = (await sicura('impostazioni', provaImpostazioni)) && ok;
+  if (parti.includes('ableton')) ok = (await sicura('ableton', provaAbleton)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -912,6 +918,56 @@ async function provaImpostazioni({ finestre, scrivi }) {
     if (prima) await js(`cutxProva.imp.dati.salvaConfig({ paracadute: ${JSON.stringify(prima)} })`);
   } finally {
     await js(`window.cutx.salvaPreferenze(${JSON.stringify({ scorciatoie: archiviaPreferenze.scorciatoie ?? {}, suggerimenti: archiviaPreferenze.suggerimenti ?? true, riquadroHelp: archiviaPreferenze.riquadroHelp ?? true, gatto: true, insegna: true, lunghezzaFrase: archiviaPreferenze.lunghezzaFrase })})`);
+  }
+  return ok;
+}
+
+// --- prova dell'importazione da Ableton ---
+
+// Un progetto finto che ha un po' di tutto: MIDI, batteria, audio con warp, Session.
+function progettoFinto() {
+  const { clipMidi, clipAudio, note, tracciaMidi, tracciaAudio, drumRack } = finto;
+  const basso = (inizio, tasti) => clipMidi({ inizio, loop: [0, 16], note: tasti.map((k, i) => note(i * 4, 4, k)) });
+  const kit = drumRack([{ nome: 'Kick', ricezione: 92 }, { nome: 'Snare', ricezione: 88 }, { nome: 'Hihat Closed', ricezione: 82 }]);
+  return finto.als({
+    bpm: 140,
+    tracce: [
+      tracciaMidi({ nome: '1-Dark Pad', clip: [basso(0, [60, 63, 67, 70]), basso(32, [58, 62, 65, 69])] }),
+      tracciaMidi({ nome: '2-Wonk Bass', clip: [basso(16, [38, 43, 36, 41])] }),
+      tracciaMidi({ nome: '3-Kit', strumento: kit, clip: [clipMidi({ inizio: 0, loop: [0, 8], note: [note(0, 0.25, 36), note(4, 0.25, 36), note(2, 0.25, 40), note(1, 0.25, 46), note(1.5, 0.25, 46)] })] }),
+      tracciaMidi({ nome: '4-Arp', clip: [clipMidi({ loop: [0, 4], note: [note(0, 0.5, 72), note(0.5, 0.5, 76), note(1, 0.5, 79), note(1.5, 0.5, 76)] })], sessione: [clipMidi({ loop: [0, 2], note: [note(0, 1, 60), note(1, 1, 67)] })] }),
+      tracciaAudio({ nome: '5-Audio', clip: [clipAudio({ inizio: 0, loop: [0, 8], marcatori: [[0, 0], [8, 3.4]], durata: 4, file: 'Samples/loop.wav' })] }),
+    ],
+  });
+}
+
+async function provaAbleton({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const progetti = [{ nome: 'progetto finto', modello: leggiAls(progettoFinto()) }];
+  // i progetti veri di Valerio, se ci sono (solo letti, mai scritti)
+  for (const f of ['x1.als', 'Mayia u influeced me a bit maybe?.als']) {
+    const p = path.join(os.homedir(), 'Desktop', 'x1 Project', f);
+    if (existsSync(p)) progetti.push({ nome: f, modello: await leggiAlsFile(p) });
+  }
+  for (const { nome, modello } of progetti) {
+    const r = converti(modello, undefined, { titolo: 'prova', data: '2026-01-01' });
+    controlla(`${nome}: produce delle sezioni`, r.sezioni.length > 0, String(r.sezioni.length));
+    // ogni sezione, col suo preambolo, si valuta con Strudel senza errori
+    const codici = r.sezioni.map((s) => `setcpm(${modello.bpm}/4)\n${s.codice}`);
+    const sbagliate = await js(`(async () => {
+      const e = [];
+      for (const codice of ${JSON.stringify(codici)}) {
+        const r = await cutxProva.valutaCodice(codice);
+        if (r.errore) e.push(r.errore + ' ← ' + codice.slice(0, 80));
+      }
+      return e;
+    })()`);
+    controlla(`${nome}: ogni sezione si valuta con Strudel (${codici.length})`, sbagliate.length === 0, sbagliate.slice(0, 3).join(' | '));
   }
   return ok;
 }

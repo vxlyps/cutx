@@ -3,6 +3,7 @@
 //   // @brano notte              ┐
 //   // @bpm 140                  │ testa: nome, BPM, data, suoni dello stash usati
 //   // @data 2026-10-20          │
+//   // @origine /percorso/x.als   │ (solo se importato da Ableton)
 //   // @suoni jungle_break, voce ┘
 //   setcpm(140/4)                ← preambolo: valutato con ogni sezione
 //   // @sezione intro            ← da qui una sezione, fino alla prossima
@@ -15,9 +16,9 @@
 
 export const NOMI_SEZIONE = ['intro', 'drum', 'basso', 'melodia', 'break', 'drop', 'outro'];
 
-const TESTA = /^\/\/ @(brano|bpm|data|suoni)(?:\s+(.*))?$/;
+const TESTA = /^\/\/ @(brano|bpm|data|origine|suoni)(?:\s+(.*))?$/;
 const SEZIONE = /^\s*\/\/\s*@sezione\b\s*(.*)$/;
-const ORDINE_TESTA = ['brano', 'bpm', 'data', 'suoni'];
+const ORDINE_TESTA = ['brano', 'bpm', 'data', 'origine', 'suoni'];
 const SEP = ' · ';
 
 export const eSezione = (riga) => SEZIONE.test(riga);
@@ -66,7 +67,7 @@ export function scrivi(brano) {
   return [...brano.testa, ...brano.preambolo, ...brano.sezioni.flatMap((s) => [s.riga, ...s.corpo])].join('\n');
 }
 
-// I valori della testa: { brano, bpm, data, suoni: [] }
+// I valori della testa: { brano, bpm, data, origine, suoni: [] }
 export function testa(brano) {
   const t = {};
   for (const r of brano.testa) {
