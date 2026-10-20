@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>CUTX postazione</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&amp;display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:'Canaglia Stencil';src:url(../risorse/font/CanagliaStencil.woff2) format('woff2')}
+.gatto{filter:drop-shadow(0 0 6px rgba(159,194,58,.55))}
+.glow{text-shadow:0 0 12px rgba(159,194,58,.6)}
+.led{background-color:#0A0D06;background-image:radial-gradient(#1A2010 1px, transparent 1.4px);background-size:4px 4px}
+body{margin:0;background:#050604}
+a{color:#D9DCCC}a:hover{color:#9FC23A}
+button{font-family:'Fragment Mono',monospace;cursor:pointer}
+.key{height:32px;padding:0 10px;background:#0B0B0B;color:#D9DCCC;border:1px solid #2A2A28;border-bottom-width:3px;border-radius:3px;font-size:12px;display:inline-flex;align-items:center;gap:8px}
+.key i{font-style:normal;color:#7A7E72;font-size:11px}
+.key.on{background:#D9DCCC;color: #0B0F03;border-color:#D9DCCC;border-bottom-color:#7A7E72}
+.key.on i{color:#3A3A38}
+.key.acid{background:#9FC23A;color: #0B0F03;border-color:#9FC23A;border-bottom-color:#4E6118;box-shadow:0 0 16px rgba(159,194,58,.35)}
+.key.acid i{color:#263008}
+.code{font-family:'Fragment Mono',monospace;font-size:14px;line-height:1.7;white-space:pre;color:#D9DCCC}
+.k{color:#7A7E72}
+.hot{background:#9FC23A;color:#0B0F03;box-shadow:0 0 10px rgba(159,194,58,.6)}
+.hw{background:#D9DCCC;color:#0B0F03}
+.sel{background:#1E1E1D;display:block}
+.lbl{font-family:'Fragment Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#7A7E72}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #050604; color: #D9DCCC; font-family: 'Fragment Mono', monospace; display: flex; flex-direction: column; position: relative; overflow: hidden">
+
+<header style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 20px; padding: 0 16px; border-bottom: 1px solid #1F1F1F">
+<div style="display: flex; align-items: center; gap: 10px">
+<div style="width: 40px; height: 44px; display: flex; align-items: flex-end; justify-content: center">
+<sc-if value="{{posa.seduto}}" hint-placeholder-val="{{ true }}"><img class="gatto" src="../risorse/gatti/gatto_seduto_logo_marcio.svg" alt="" style="height: 42px; width: auto"></sc-if>
+<sc-if value="{{posa.lecca}}" hint-placeholder-val="{{ false }}"><img class="gatto" src="../risorse/gatti/gatto_lecca_logo_marcio.svg" alt="" style="height: 34px; width: auto"></sc-if>
+<sc-if value="{{posa.dorme}}" hint-placeholder-val="{{ false }}"><img class="gatto" src="../risorse/gatti/gatto_dorme_logo_marcio.svg" alt="" style="height: 34px; width: auto"></sc-if>
+<sc-if value="{{posa.inpiedi}}" hint-placeholder-val="{{ false }}"><img class="gatto" src="../risorse/gatti/gatto_in_piedi_logo_marcio.svg" alt="" style="height: 42px; width: auto"></sc-if>
+</div>
+<img src="../risorse/logo/cutx_bianco.svg" alt="CUTX" style="height: 35px; width: auto">
+<sc-if value="{{insegna}}" hint-placeholder-val="{{ false }}"><div class="led glow" style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-size: 16px; letter-spacing: 0.06em; color: #9FC23A; padding: 6px 10px; border: 1px solid #1F2614; border-radius: 3px; white-space: nowrap">TECNOLOGIA CANAGLIA</div></sc-if>
+</div>
+<button class="key"><span class="lbl" style="color: #7A7E72">stash</span>01 <i>ssd</i></button>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: center; gap: 18px">
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-weight: 400; font-size: 30px">140</span><span class="lbl">bpm</span></div>
+<div style="display: flex; gap: 6px" aria-label="Battuta 3 di 4">
+<div style="width: 12px; height: 12px; border-radius: 6px; background: #D9DCCC"></div>
+<div style="width: 12px; height: 12px; border-radius: 6px; background: #D9DCCC"></div>
+<div style="width: 12px; height: 12px; border-radius: 6px; background: #9FC23A"></div>
+<div style="width: 12px; height: 12px; border-radius: 6px; border: 1px solid #3A3A38; box-sizing: border-box"></div>
+</div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span class="lbl">ciclo</span><span style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-weight: 400; font-size: 30px">37</span></div>
+</div>
+<div style="flex: 1"></div>
+<button class="key on">cuffia <i>on</i></button>
+<button class="key on">hydra <i>on</i></button>
+<button class="key acid">proiettore <i>on</i></button>
+<button class="key" aria-label="Impostazioni">⚙ <i>⌘,</i></button>
+</header>
+
+<div style="flex: 1; min-height: 0; display: flex">
+
+<aside style="width: 270px; flex-shrink: 0; border-right: 1px solid #1F1F1F; display: flex; flex-direction: column">
+<nav style="display: flex; gap: 6px; padding: 12px" aria-label="Pannello">
+<button class="key on" style="flex: 1; justify-content: center">suoni</button>
+<button class="key" style="flex: 1; justify-content: center">libreria</button>
+<button class="key" style="flex: 1; justify-content: center">help?</button>
+</nav>
+<div style="padding: 0 12px 10px">
+<label for="cerca" style="position: absolute; left: -9999px">Cerca nello stash</label>
+<input id="cerca" type="text" placeholder="cerca nello stash" style="width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; background: #050604; border: 1px solid #2A2A28; border-radius: 3px; color: #D9DCCC; font-family: 'Fragment Mono', monospace; font-size: 12px">
+</div>
+<div style="flex: 1; overflow: hidden; padding: 0 12px; display: flex; flex-direction: column; gap: 2px; font-size: 13px">
+<div class="lbl" style="padding: 8px 2px 6px">stem</div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 2px"><span style="flex: 1">notte_basso</span><span class="lbl">▶ +</span></div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 2px"><span style="flex: 1">notte_voce</span><span class="lbl">▶ +</span></div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 6px; background: #D9DCCC; color: #0B0F03; border-radius: 2px"><span style="flex: 1">jungle_break</span><span style="font-size: 11px">in cuffia</span></div>
+<div class="lbl" style="padding: 14px 2px 6px">drum</div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 2px"><span style="flex: 1">RolandTR909</span><span class="lbl">12</span></div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 2px"><span style="flex: 1">RolandTR808</span><span class="lbl">16</span></div>
+<div class="lbl" style="padding: 14px 2px 6px">synth</div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 2px"><span style="flex: 1">supersaw</span><span class="lbl">▶ +</span></div>
+<div style="display: flex; align-items: center; height: 30px; padding: 0 2px"><span style="flex: 1">triangle</span><span class="lbl">▶ +</span></div>
+</div>
+<sc-if value="{{help}}" hint-placeholder-val="{{ true }}">
+<section style="margin: 12px; border: 1px solid #2A2A28; border-radius: 3px; padding: 12px; display: flex; flex-direction: column; gap: 6px" aria-label="help">
+<div style="display: flex; justify-content: space-between"><span class="lbl" style="color: #9FC23A">help?</span><span class="lbl">⌘/ spegne</span></div>
+<div style="font-size: 13px; color: #D9DCCC">go live</div>
+<div style="font-size: 12px; line-height: 1.5; color: #A3A796">Manda la sezione o le righe selezionate a destra. Vengono scritte lettera per lettera ed entrano esatte al ciclo scelto.</div>
+</section>
+</sc-if>
+</aside>
+
+<section style="flex: 1; min-width: 0; border-right: 1px solid #1F1F1F; display: flex; flex-direction: column; position: relative" aria-label="CUE">
+<div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid #1F1F1F">
+<span style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-weight: 400; font-size: 24px">CUE</span>
+<span class="lbl">in cuffia</span>
+<div style="flex: 1"></div>
+<button class="key">brano <i>notte.lyps ▾</i></button>
+<button class="key">libero</button>
+</div>
+
+<div style="flex-shrink: 0; padding: 12px 16px; display: flex; gap: 4px; border-bottom: 1px solid #1F1F1F" aria-label="Mappa del brano">
+<div style="flex: 2; height: 34px; background: #9FC23A; color: #0B0F03; border-radius: 2px; display: flex; align-items: center; padding: 0 8px; font-size: 11px">1 intro</div>
+<div style="flex: 2; height: 34px; background: #9FC23A; color: #0B0F03; border-radius: 2px; display: flex; align-items: center; padding: 0 8px; font-size: 11px">2 melodia</div>
+<div style="flex: 2; height: 34px; background: #050604; color: #D9DCCC; border: 2px solid #D9DCCC; box-sizing: border-box; border-radius: 2px; display: flex; align-items: center; padding: 0 8px; font-size: 11px">3 basso ◖◗</div>
+<div style="flex: 1; height: 34px; border: 1px solid #3A3A38; box-sizing: border-box; border-radius: 2px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: #A3A796">4 break</div>
+<div style="flex: 3; height: 34px; border: 1px solid #3A3A38; box-sizing: border-box; border-radius: 2px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: #A3A796">5 drop</div>
+<div style="flex: 1; height: 34px; border: 1px solid #3A3A38; box-sizing: border-box; border-radius: 2px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: #A3A796">6 outro</div>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+
+<div style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border: 1px solid #1F1F1F; border-radius: 3px; color: #7A7E72; font-size: 12px"><span style="color: #9FC23A">●</span><span style="flex: 1">1 intro · 2 melodia</span><span>live dal ciclo 24 e 32</span></div>
+
+<article style="border: 2px solid #D9DCCC; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 13px">3 basso</span><span class="lbl" style="color: #D9DCCC">◖◗ lo stai sentendo</span>
+<div style="flex: 1"></div>
+<button class="key on">cuffia <i>⌘↵</i></button>
+<button class="key">go live <i>⌘→</i></button>
+</div>
+<div class="code"><span class="sel">note("&lt;c1 c1 <span class="hw">eb1</span> g0&gt;*8").s("supersaw")</span><span class="sel">  .lpf(sine.range(200, 900).slow(4))</span>  .decay(.2).sustain(0).gain(.8)</div>
+<div class="lbl">2 righe selezionate · go live manda solo quelle</div>
+</article>
+
+<article style="border: 1px solid #2A2A28; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 13px">5 drop</span><span class="lbl">pronta</span>
+<div style="flex: 1"></div>
+<button class="key">cuffia <i>⌘↵</i></button>
+<button class="key">go live <i>⌘→</i></button>
+</div>
+<div class="code">s("jungle_break").fit().chop(16)
+  .sometimesBy(.3, x =&gt; x.speed(2))
+  .lpf(perlin.range(800, 6000))
+stack(s("bd*4").bank("RolandTR909"))</div>
+</article>
+
+<div style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border: 1px solid #1F1F1F; border-radius: 3px; color: #7A7E72; font-size: 12px"><span>○</span><span style="flex: 1">4 break · 6 outro</span><span>pronte · apri</span></div>
+</div>
+
+<div style="flex-shrink: 0; border-top: 1px solid #1F1F1F; padding: 12px 16px; display: flex; align-items: center; gap: 10px">
+<span class="lbl">entra tra</span>
+<button class="key on">1</button><button class="key">2</button><button class="key">4</button><button class="key">8</button>
+<span class="lbl">cicli</span>
+<div style="flex: 1"></div>
+<button class="key acid" style="height: 44px; padding: 0 18px; font-size: 15px">GO LIVE <i>⌘→</i></button>
+</div>
+<sc-if value="{{help}}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; right: 16px; bottom: 74px; width: 250px; background: #D9DCCC; color: #0B0F03; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.45">
+<span style="font-size: 13px">go live</span>
+<span>Il basso entra al ciclo 38, scritto a schermo durante il 37.</span>
+</div>
+</sc-if>
+</section>
+
+<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" aria-label="LIVE">
+<div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 2px solid #9FC23A">
+<span style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-weight: 400; font-size: 24px; color: #9FC23A" class="glow">LIVE</span>
+<span class="lbl">casse + proiettore</span>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: flex-end; gap: 3px; height: 20px" aria-label="Volume master">
+<div style="width: 4px; height: 7px; background: #D9DCCC"></div><div style="width: 4px; height: 11px; background: #D9DCCC"></div><div style="width: 4px; height: 15px; background: #D9DCCC"></div><div style="width: 4px; height: 18px; background: #9FC23A"></div><div style="width: 4px; height: 20px; background: #2A2A28"></div>
+</div>
+</div>
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+
+<article style="border: 1px solid #2A2A28; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 13px; color: #9FC23A">● intro</span><span class="lbl">notte §1</span>
+<div style="flex: 1"></div>
+<div style="width: 70px; height: 3px; background: #2A2A28" aria-label="Volume 80%"><div style="width: 56px; height: 3px; background: #D9DCCC"></div></div>
+<button class="key" style="height: 26px; padding: 0 8px">m</button><button class="key" style="height: 26px; padding: 0 8px" aria-label="Togli a fine ciclo">×</button>
+</div>
+<div class="code">s("<span class="hot">bd</span>*4, ~ hh").bank("RolandTR909").gain(.9)</div>
+</article>
+
+<article style="border: 1px solid #2A2A28; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 13px; color: #9FC23A">● melodia</span><span class="lbl">notte §2</span>
+<div style="flex: 1"></div>
+<div style="width: 70px; height: 3px; background: #2A2A28" aria-label="Volume 60%"><div style="width: 42px; height: 3px; background: #D9DCCC"></div></div>
+<button class="key" style="height: 26px; padding: 0 8px">m</button><button class="key" style="height: 26px; padding: 0 8px" aria-label="Togli a fine ciclo">×</button>
+</div>
+<div class="code">n("0 3 <span class="hot">7</span> &lt;10 12&gt;").scale("C:minor")
+  .s("triangle").room(.6).delay(.4)</div>
+<div style="display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 2px" aria-hidden="true">
+<div style="height: 6px; background: #D9DCCC"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #D9DCCC"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #D9DCCC"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #9FC23A"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #3A3A38"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #3A3A38"></div><div style="height: 6px; background: #1F1F1F"></div><div style="height: 6px; background: #1F1F1F"></div>
+</div>
+</article>
+
+<article style="border: 1px dashed #9FC23A; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 13px; color: #9FC23A">basso</span><span class="lbl" style="color: #9FC23A">entra al ciclo 38 · in scrittura</span>
+<div style="flex: 1"></div>
+<span style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-weight: 400; font-size: 20px; color: #9FC23A">-1.2</span>
+</div>
+<div style="height: 3px; background: #2A2A28"><div style="width: 64%; height: 3px; background: #9FC23A"></div></div>
+<div class="code">note("&lt;c1 c1 eb1 g0&gt;*8").s("supersaw")
+  .lpf(sine.ran<span style="background: #9FC23A; color: #0B0F03"> </span></div>
+</article>
+
+<article style="border: 1px solid #2A2A28; border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-size: 13px; color: #D9DCCC">+ jam</span><span class="lbl">scrivi qui per improvvisare · ⌘↵ applica a fine ciclo</span>
+</div>
+<div class="code" style="color: #7A7E72">s("hh*16").gain(<span style="color: #D9DCCC">perlin</span><span style="background: #D9DCCC; color: #0B0F03"> </span></div>
+</article>
+
+</div>
+<div style="flex-shrink: 0; border-top: 1px solid #1F1F1F; padding: 12px 16px; display: flex; align-items: center; gap: 12px">
+<span class="lbl">ciclo 37</span>
+<div style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px" aria-label="Quarto 3 di 4">
+<div style="height: 4px; background: #D9DCCC"></div><div style="height: 4px; background: #D9DCCC"></div><div style="height: 4px; background: #9FC23A"></div><div style="height: 4px; background: #2A2A28"></div>
+</div>
+<span class="lbl">2 live · 1 in arrivo</span>
+</div>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"help":{"editor":"boolean","default":true},"animato":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { i: 0 };
+    this.seq = [['seduto', 7000], ['lecca', 3500], ['seduto', 6000], ['dorme', 5000], ['seduto', 5000], ['inpiedi', 2000]];
+  }
+  componentDidMount() { this.tick(); }
+  componentWillUnmount() { clearTimeout(this.t); }
+  tick() {
+    const step = this.seq[this.state.i];
+    this.t = setTimeout(() => {
+      this.setState({ i: (this.state.i + 1) % this.seq.length });
+      this.tick();
+    }, step[1]);
+  }
+  renderVals() {
+    const animato = this.props.animato ?? true;
+    const nome = animato ? this.seq[this.state.i][0] : 'seduto';
+    return {
+      help: this.props.help ?? true,
+      insegna: nome !== 'seduto',
+      posa: { seduto: nome === 'seduto', lecca: nome === 'lecca', dorme: nome === 'dorme', inpiedi: nome === 'inpiedi' }
+    };
+  }
+}
+</script>
+</body>
+</html>

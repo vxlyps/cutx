@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>CUTX proiettore</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&amp;display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:'Canaglia Stencil';src:url(../risorse/font/CanagliaStencil.woff2) format('woff2')}
+.gatto{filter:drop-shadow(0 0 6px rgba(159,194,58,.55))}
+.glow{text-shadow:0 0 12px rgba(159,194,58,.6)}
+.led{background-color:#0A0D06;background-image:radial-gradient(#1A2010 1px, transparent 1.4px);background-size:4px 4px}
+body{margin:0;background:#050604}
+.pc{font-family:'Fragment Mono',monospace;font-size:40px;line-height:1.3;white-space:pre;color:#D9DCCC}
+.hot{background:#9FC23A;color:#0B0F03;box-shadow:0 0 14px rgba(159,194,58,.7)}
+.tag{text-shadow:0 0 10px rgba(159,194,58,.6);font-family:'Fragment Mono',monospace;font-size:15px;letter-spacing:0.14em;text-transform:uppercase;color:#9FC23A}
+</style>
+</helmet>
+<div style="width: 1440px; height: 810px; background: #050604; position: relative; overflow: hidden; color: #D9DCCC">
+<div style="position: absolute; left: 64px; top: 40px; right: 64px; display: flex; align-items: baseline; justify-content: space-between">
+<img src="../risorse/logo/cutx_bianco.svg" alt="CUTX" style="height: 38px; width: auto">
+<span style="font-family: 'Fragment Mono', monospace; font-size: 16px; letter-spacing: 0.14em; color: #7A7E72">140 BPM · C MINOR</span>
+</div>
+<div style="position: absolute; left: 64px; top: 110px; display: flex; flex-direction: column; gap: 30px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span class="tag">● intro</span><div class="pc">s("<span class="hot">bd</span>*4, ~ hh").bank("909")</div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span class="tag">● melodia</span><div class="pc">n("0 3 <span class="hot">7</span> &lt;10 12&gt;")
+  .scale("C:minor").s("triangle")</div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span class="tag" style="color: #D9DCCC">basso · tra 1 ciclo</span><div class="pc">note("&lt;c1 c1 eb1 g0&gt;*8")
+  .s("supers<span style="background: #9FC23A; color: #9FC23A">_</span></div></div>
+</div>
+<div style="position: absolute; right: 64px; bottom: 38px; font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-weight: 400; font-size: 168px; line-height: 1; color: #9FC23A" class="glow">37</div>
+<div style="position: absolute; right: 290px; bottom: 252px"><div class="led glow" style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-size: 30px; letter-spacing: 0.06em; color: #9FC23A; padding: 10px 16px; border: 1px solid #1F2614; border-radius: 3px; white-space: nowrap">TECNOLOGIA CANAGLIA</div></div>
+<div style="position: absolute; left: 64px; bottom: 44px; display: flex; gap: 14px" aria-label="Battuta 3 di 4">
+<div style="width: 26px; height: 26px; border-radius: 13px; background: #D9DCCC"></div>
+<div style="width: 26px; height: 26px; border-radius: 13px; background: #D9DCCC"></div>
+<div style="width: 26px; height: 26px; border-radius: 13px; background: #9FC23A"></div>
+<div style="width: 26px; height: 26px; border-radius: 13px; border: 2px solid #3A3A38; box-sizing: border-box"></div>
+</div>
+<div style="position: absolute; right: 330px; bottom: 40px; width: 200px; height: 200px; display: flex; align-items: flex-end; justify-content: center" aria-hidden="true">
+<sc-if value="{{posa.seduto}}" hint-placeholder-val="{{ true }}"><img class="gatto" src="../risorse/gatti/gatto_seduto_marcio.svg" alt="" style="height: 190px; width: auto"></sc-if>
+<sc-if value="{{posa.lecca}}" hint-placeholder-val="{{ false }}"><img class="gatto" src="../risorse/gatti/gatto_lecca_marcio.svg" alt="" style="height: 150px; width: auto"></sc-if>
+<sc-if value="{{posa.dorme}}" hint-placeholder-val="{{ false }}"><img class="gatto" src="../risorse/gatti/gatto_dorme_marcio.svg" alt="" style="height: 160px; width: auto"></sc-if>
+<sc-if value="{{posa.inpiedi}}" hint-placeholder-val="{{ false }}"><img class="gatto" src="../risorse/gatti/gatto_in_piedi_marcio.svg" alt="" style="height: 196px; width: auto"></sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"animato":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { i: 0 };
+    this.seq = [['seduto', 6000], ['lecca', 3500], ['seduto', 5000], ['inpiedi', 2000], ['seduto', 6000], ['dorme', 5000]];
+  }
+  componentDidMount() { this.tick(); }
+  componentWillUnmount() { clearTimeout(this.t); }
+  tick() {
+    const step = this.seq[this.state.i];
+    this.t = setTimeout(() => {
+      this.setState({ i: (this.state.i + 1) % this.seq.length });
+      this.tick();
+    }, step[1]);
+  }
+  renderVals() {
+    const animato = this.props.animato ?? true;
+    const nome = animato ? this.seq[this.state.i][0] : 'seduto';
+    return { posa: { seduto: nome === 'seduto', lecca: nome === 'lecca', dorme: nome === 'dorme', inpiedi: nome === 'inpiedi' } };
+  }
+}
+</script>
+</body>
+</html>

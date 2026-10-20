@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>CUTX icona</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&amp;display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:'Canaglia Stencil';src:url(../risorse/font/CanagliaStencil.woff2) format('woff2')}
+.gatto{filter:drop-shadow(0 0 6px rgba(159,194,58,.55))}
+.glow{text-shadow:0 0 12px rgba(159,194,58,.6)}
+.led{background-color:#0A0D06;background-image:radial-gradient(#1A2010 1px, transparent 1.4px);background-size:4px 4px}
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1200px; height: 560px; background: #161615; color: #D9DCCC; font-family: 'Fragment Mono', monospace; display: flex; align-items: center; gap: 64px; padding: 0 80px; box-sizing: border-box">
+<div style="width: 400px; height: 400px; flex-shrink: 0; background: #050604; border-radius: 88px; display: flex; align-items: center; justify-content: center">
+<img class="gatto" src="../risorse/gatti/gatto_seduto_logo_marcio.svg" alt="Icona CUTX, il gatto seduto" style="height: 300px; width: auto">
+</div>
+<div style="display: flex; flex-direction: column; gap: 40px">
+<div style="display: flex; align-items: flex-end; gap: 28px">
+<div style="width: 128px; height: 128px; background: #050604; border-radius: 28px; display: flex; align-items: center; justify-content: center"><img class="gatto" src="../risorse/gatti/gatto_seduto_logo_marcio.svg" alt="" style="height: 96px; width: auto"></div>
+<div style="width: 64px; height: 64px; background: #050604; border-radius: 14px; display: flex; align-items: center; justify-content: center"><img class="gatto" src="../risorse/gatti/gatto_seduto_logo_marcio.svg" alt="" style="height: 48px; width: auto"></div>
+<div style="width: 32px; height: 32px; background: #050604; border-radius: 7px; display: flex; align-items: center; justify-content: center"><img class="gatto" src="../risorse/gatti/gatto_seduto_logo_marcio.svg" alt="" style="height: 25px; width: auto"></div>
+</div>
+<div style="display: flex; align-items: flex-end; gap: 16px">
+<img class="gatto" src="../risorse/gatti/gatto_seduto_logo_marcio.svg" alt="" style="height: 72px; width: auto">
+<img src="../risorse/logo/cutx_bianco.svg" alt="CUTX" style="height: 97px; width: auto">
+</div>
+<div class="led glow" style="font-family: 'Canaglia Stencil', 'Fragment Mono', monospace; font-size: 26px; letter-spacing: 0.06em; color: #9FC23A; padding: 10px 16px; border: 1px solid #1F2614; border-radius: 3px; align-self: flex-start">TECNOLOGIA CANAGLIA</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

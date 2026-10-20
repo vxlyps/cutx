@@ -22,3 +22,5 @@ npm start
 ## Licenza / License
 
 [AGPL-3.0-or-later](LICENSE), come Strudel / like Strudel.
+
+Logo, font e gatti © Michele Ciavarella (DCBstudio), design dell'interfaccia © Valerio Francini: tutti i diritti riservati, fuori dall'AGPL ([design/LICENSE](design/LICENSE)). / Logo, font and cats © Michele Ciavarella (DCBstudio), interface design © Valerio Francini: all rights reserved, not covered by the AGPL.
