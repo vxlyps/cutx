@@ -131,6 +131,11 @@ Scorciatoie predefinite:
 | help on / off | ⌘I |
 | esci dall'editor | esc |
 | impostazioni | ⌘, |
+| salva il brano | ⌘S |
+| salva il live come brano | ⇧⌘S |
+| + sezione dalle righe selezionate | ⌘E |
+| frase da capo al prossimo ciclo | ⌘0 |
+| paracadute "CUTX, scelgo te!" (e ritorno) | ⌘P due volte di fila |
 
 ---
 
@@ -159,16 +164,49 @@ Finestra del proiettore e Hydra (fase 3: le tavole `proiettore.html` e `proietto
 
 ---
 
+## 10. Aggiunte approvate dopo il passo 3
+
+Valerio ha approvato la grafica dei passi 2 e 3 ("è come il canvas"). Queste aggiunte valgono come decisioni.
+
+**Ritocchi grafici (subito).**
+- Negli editor niente barra di scorrimento orizzontale: le righe lunghe vanno a capo. Le barre verticali, se servono, scure come in DESIGN.md.
+- Insegna TECNOLOGIA CANAGLIA come un neon: sempre visibile, spenta (verde scuro, senza bagliore). A intervalli casuali tra 20 e 60 secondi si accende con un tremolio da neon, resta accesa qualche secondo e torna spenta. Discreta. Non è più legata al gatto.
+
+**Conteggio a frasi (subito: barra in alto, barra del LIVE; poi proiettore).**
+- Il ciclo interno di Strudel non si tocca mai (`<a b c>` dipende da lui).
+- Si vede la posizione nella frase: numero grande da 1 a 16 che poi ricomincia, più i quattro pallini delle battute.
+- Accanto, piccolo, il tempo del set da quando è partito il primo livello live (mm:ss, poi h:mm:ss).
+- Clic sul numero, o ⌘0 (rimappabile), fa ripartire la frase da 1 al prossimo ciclo. Azzera solo la visualizzazione.
+- Lunghezza della frase 8, 16 o 32, predefinita 16.
+
+**Il CUE come editor musicale (passo 4).** È il cuore di CUTX, va fatto curatissimo.
+- Due modi di creare le sezioni, stesso risultato: scrivere a mano `// @sezione nome`, oppure selezionare delle righe e premere "+ sezione" (⌘E, rimappabile). Compare un menu rapido con i nomi più usati (intro, drum, basso, melodia, break, drop, outro) e uno libero. Le righe selezionate diventano quella sezione e la riga `// @sezione` si inserisce da sola.
+- Le sezioni si vedono anche in modalità libero: etichetta col nome a inizio blocco e fascia sottile sul margine sinistro. Si rinominano, uniscono, dividono e riordinano trascinandole nella mappa del brano.
+- ⌘S salva come brano `.cutx` nella libreria dello stash (la prima volta chiede il nome); in modalità brano salva le modifiche fatte sulle card.
+- Il file torna indietro identico: stesse sezioni, stesso ordine, stessi nomi, commenti e preambolo; la mappa si ricostruisce da sola.
+- In testa al file: nome, BPM, data, elenco dei suoni dello stash che usa. Se lo stash non ha dei suoni del brano, lo dice subito, prima di suonare.
+- "Salva il live come brano" (⇧⌘S, rimappabile): i livelli che suonano diventano un brano nuovo, un livello per sezione, col loro nome, nell'ordine di entrata. Volume e muto si salvano come informazioni della sezione. Serve a catturare una jam fatta a casa.
+- Il brano salvato compare subito nella scheda libreria.
+- Test automatici che salvano e riaprono brani di prova e verificano che non si perda niente.
+
+**Paracadute "CUTX, scelgo te!" (comportamento al passo 6, impostazioni al passo 9).**
+- Pulsante piccolo nella barra del LIVE con il gatto in piedi (`gatto_in_piedi_logo_marcio.svg`). Solo per le emergenze: si attiva tenendolo premuto un secondo, o con ⌘P premuto due volte di fila (rimappabile).
+- Al battito successivo tutti i livelli escono ed entra il codice paracadute, subito, senza scrittura a macchina. I livelli tolti si conservano: lo stesso comando, ripetuto, li rimette com'erano al ciclo successivo.
+- Il codice paracadute si scrive nelle impostazioni, in un editor con "prova in cuffia", e si salva in `stash.json` (ogni set ha il suo). Interruttore per toglierlo del tutto (spento = il pulsante non c'è).
+- Collegato: se il codice di un livello live ha un errore, continua a suonare la versione precedente. L'errore si vede solo sul mio schermo, mai sul proiettore.
+
+**Hydra che ascolta (fase 3).** Oltre al tempo, i video reagiscono al volume reale della cassa e dei bassi, letto dal motore live.
+
 ## 9. Ordine dei passi
 
 1. Rinomina, stash, icona, migrazione dei dati.
 2. Motore live separato e test di robustezza.
-3. Struttura della postazione e base grafica (colori, font, tasti, gatto, insegna).
-4. Formato brano, CUE con mappa e sezioni, modalità libero.
+3. Struttura della postazione e base grafica (colori, font, tasti, gatto, insegna). Più i ritocchi grafici e il conteggio a frasi della sezione 10.
+4. Formato brano, CUE con mappa e sezioni, modalità libero, salvataggio ed esportazione (sezione 10).
 5. GO LIVE con entrata a tempo e scrittura a macchina.
-6. Livelli live, volume, muto, uscita, jam, note evidenziate.
+6. Livelli live, volume, muto, uscita, jam, note evidenziate, paracadute.
 7. Browser: suoni, libreria, help.
 8. Help al passaggio e riquadro help.
-9. Impostazioni e scorciatoie personalizzabili.
+9. Impostazioni e scorciatoie personalizzabili (compresi lunghezza della frase e paracadute).
 
 Daje.

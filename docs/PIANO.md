@@ -28,6 +28,12 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Livelli live con volume, muto e uscita a fine ciclo
 - [ ] Browser: suoni, libreria, help offline
 - [ ] Help al passaggio del mouse e riquadro help
+- [ ] Sezioni create a mano o con "+ sezione", visibili anche in modalità libero; rinomina, unisci, dividi, riordina dalla mappa
+- [ ] ⌘S salva il brano `.cutx` e riaprendolo torna identico; avviso se allo stash mancano dei suoni del brano
+- [ ] "Salva il live come brano" cattura una jam, con volume e muto di ogni livello
+- [ ] Conteggio a frasi (1–16) e tempo del set nella barra in alto e nel LIVE
+- [ ] Paracadute "CUTX, scelgo te!": al battito successivo entra il codice di emergenza, e si torna indietro
+- [ ] Un errore nel codice di un livello live non lo ferma: continua la versione precedente
 - [ ] Impostazioni; cambio una scorciatoia e funziona subito
 - [ ] Suono 20 minuti di fila solo da tastiera, senza buchi
 - [ ] La postazione corrisponde a `design/riferimenti/main.html`
@@ -45,6 +51,8 @@ Domanda: cuffia e casse restano a tempo?
 ## Fase 3 · Proiezione
 - [ ] Seconda finestra a schermo intero sul proiettore: codice live grande, riga che suona in verde, Hydra sotto
 - [ ] Video dello stash come sorgenti Hydra, distorti a tempo
+- [ ] Hydra ascolta: i video reagiscono al volume reale della cassa e dei bassi, letto dal motore live
+- [ ] Conteggio a frasi anche sul proiettore
 - [ ] Proiettore acceso, i video si distruggono a tempo, il pubblico vede solo il codice live
 
 ## Fase 4 · Hardware
@@ -72,3 +80,7 @@ Domanda: cuffia e casse restano a tempo?
 - [ ] Estensione AI: scorciatoia, solo sul mio schermo, scrive solo in cuffia
 - [ ] Versione 1.0 pubblica
 - [ ] Documentazione per chi fa estensioni e pacchi
+
+## Idee per dopo
+- Ogni serata diventa un film: registrazione dell'audio e di ogni modifica al codice con l'orario, per rivedere il set che si riscrive da solo ed esportare il video del proiettore.
+- Ableton Link per suonare in sync con un altro computer sulla stessa rete.
