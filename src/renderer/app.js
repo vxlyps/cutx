@@ -250,8 +250,9 @@ window.addEventListener(
       e.preventDefault();
       return window.cutx.uscitaSchermoIntero();
     }
-    // ⌥1–9: muto del livello n (⌃1–5 su questo Mac sono di Mission Control)
-    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
+    // ⌥1–9 fuori dall'editor: muto del livello n. Dentro gli editor ⌥ scrive (⌥5 è ~ sulla tastiera
+    // italiana); ⌃1–5 invece su questo Mac sono di Mission Control.
+    if (!scrivendo && e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
       e.preventDefault();
       const l = pila.attivi()[Number(e.code.slice(5)) - 1];
       if (l) live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });

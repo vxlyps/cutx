@@ -513,11 +513,24 @@ async function provaLivelli({ finestre, scrivi }) {
   await js(`cutxProva.pila.azioni.volume(${r1.livello}, 0.5)`);
   await aspetta(0.4);
   controlla('volume di un livello', (await attivi()).find((l) => l.id === r1.livello)?.volume === 0.5);
+  const gainDi = async (id) => (await live())?.guadagni?.[id];
+  controlla('il volume agisce sul guadagno del livello, subito', Math.abs((await gainDi(r1.livello)) - 0.5) < 0.02, String(await gainDi(r1.livello)));
+  controlla('un livello non toccato resta a guadagno 1', Math.abs((await gainDi(r2.livello)) - 1) < 0.02, String(await gainDi(r2.livello)));
+  // dentro l'editor ⌥ scrive (⌥5 è ~ sulla tastiera italiana): il muto non scatta
+  await js(`cutxProva.cue.focus()`);
+  await aspetta(0.3);
+  await premi('1', 'alt');
+  controlla('⌥1 dentro un editor non mette in muto', (await attivi())[0]?.muto === false, JSON.stringify((await attivi()).map((l) => [l.nome, l.muto])));
+  controlla('⌥1 dentro un editor non cambia il guadagno', Math.abs((await gainDi(r1.livello)) - 0.5) < 0.02);
   await premi('Escape');
   await premi('1', 'alt');
-  controlla('⌥1 mette in muto il primo livello', (await attivi())[0]?.muto === true, JSON.stringify((await attivi()).map((l) => [l.nome, l.muto])));
+  controlla('⌥1 fuori dall\'editor mette in muto il primo livello', (await attivi())[0]?.muto === true, JSON.stringify((await attivi()).map((l) => [l.nome, l.muto])));
+  await aspetta(0.4);
+  controlla('il muto porta il guadagno a zero, senza click', (await gainDi(r1.livello)) < 0.01, String(await gainDi(r1.livello)));
   await premi('1', 'alt');
   controlla('⌥1 di nuovo lo toglie dal muto', (await attivi())[0]?.muto === false);
+  await aspetta(0.4);
+  controlla('tolto dal muto il guadagno torna al volume', Math.abs((await gainDi(r1.livello)) - 0.5) < 0.02, String(await gainDi(r1.livello)));
 
   // note in verde e griglia
   const verde = await finche(() => js(`!!document.querySelector('#livelli .livello .codice .nota')`));

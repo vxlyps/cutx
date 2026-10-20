@@ -96,6 +96,7 @@ async function valuta(codice, etichetta = {}) {
     return null;
   }
   // Live, subito: un livello solo al posto di tutti (test di sfasamento, prova automatica).
+  for (const l of livelli) liberaGuadagno(l.id);
   livelli = codice.trim() ? [nuovoLivello(codice, c.pattern, etichetta, -Infinity)] : [];
   if (c.cps) cambiaCps(c.cps);
   iniziaSet(rip.prossimoConfine());
@@ -186,6 +187,7 @@ function ferma() {
   prova = { codice: '', nome: null, provenienza: null };
   rip.pattern = silence;
   if (LIVE) {
+    for (const l of livelli) liberaGuadagno(l.id);
     livelli = [];
     aggiornaLivelli();
   }
@@ -214,7 +216,46 @@ const descrivi = (l) => ({
   ultimo: l.ultimo ?? null,
 });
 
+// Il guadagno di ogni livello: una sua orbita di superdough con un GainNode in uscita. Volume e muto
+// agiscono subito anche sui suoni già partiti, con una sfumata breve (niente click).
+const SFUMATA_S = 0.02; // costante di tempo: a regime in circa 80 ms
+const guadagni = new Map(); // id → { orbita, gain }
+function guadagnoDi(l) {
+  if (!guadagni.has(l.id)) {
+    const controller = getSuperdoughAudioController();
+    const orbita = 1000 + l.id;
+    const o = controller.getOrbit(orbita, [0, 1]);
+    const gain = new GainNode(ac, { gain: l.muto ? 0 : l.volume });
+    o.output.disconnect();
+    o.output.connect(gain);
+    controller.output.connectToDestination(gain, [0, 1]);
+    guadagni.set(l.id, { orbita, gain });
+  }
+  return guadagni.get(l.id);
+}
+function applicaGuadagni() {
+  if (!LIVE) return;
+  for (const l of livelli) {
+    const g = guadagnoDi(l);
+    l.orbita = g.orbita;
+    g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume, ac.currentTime, SFUMATA_S);
+  }
+}
+// Un livello uscito: dopo la coda (riverbero, delay) il suo guadagno e la sua orbita si buttano.
+function liberaGuadagno(id) {
+  const g = guadagni.get(id);
+  if (!g) return;
+  guadagni.delete(id);
+  setTimeout(() => {
+    const controller = getSuperdoughAudioController();
+    controller.nodes[g.orbita]?.disconnect();
+    delete controller.nodes[g.orbita];
+    g.gain.disconnect();
+  }, 15000);
+}
+
 function aggiornaLivelli() {
+  applicaGuadagni();
   rip.sorgenti = livelli;
   const descritti = livelli.map(descrivi);
   const messaggio = { tipo: 'livelli', livelli: descritti, paracadute: !!paracadute };
@@ -228,6 +269,7 @@ function pulisci() {
   if (!LIVE || rip.fine === null) return;
   const restano = livelli.filter((l) => l.a > rip.fine);
   if (restano.length !== livelli.length) {
+    for (const l of livelli) if (!restano.includes(l)) liberaGuadagno(l.id);
     livelli = restano;
     aggiornaLivelli();
   }
@@ -323,6 +365,7 @@ function stato() {
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
     paracadute: LIVE ? !!paracadute : undefined,
+    guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     eco,
     errore: rip.errore ?? errore,
     tardi: rip.tardi,

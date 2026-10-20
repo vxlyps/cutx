@@ -14,7 +14,7 @@ export class Riproduttore {
   constructor(ac, uscita) {
     this.ac = ac;
     this.uscita = uscita;
-    // { pattern, da, a, volume, muto }: da/a in cicli (a = Infinity: finché non lo tolgo)
+    // { pattern, da, a, orbita }: da/a in cicli (a = Infinity: finché non lo tolgo)
     this.sorgenti = [];
     this.mappa = null; // { ciclo0, t0, cps }: al tempo t0 del contesto siamo al ciclo ciclo0
     this.fine = null; // fin dove i pattern sono già stati programmati, in cicli
@@ -28,7 +28,7 @@ export class Riproduttore {
 
   // Una sorgente sola che suona sempre: la cuffia, la prova.
   set pattern(p) {
-    this.sorgenti = [{ pattern: p ?? silence, da: -Infinity, a: Infinity, volume: 1, muto: false }];
+    this.sorgenti = [{ pattern: p ?? silence, da: -Infinity, a: Infinity }];
   }
 
   ciclo(t) {
@@ -89,7 +89,7 @@ export class Riproduttore {
     for (const s of this.sorgenti) {
       const inizio = Math.max(da, s.da);
       const fine = Math.min(fino, s.a);
-      if (fine <= inizio || s.muto) continue;
+      if (fine <= inizio) continue;
       let haps;
       try {
         haps = s.pattern.queryArc(inizio, fine, { _cps: cps, cyclist: 'cyclist' });
@@ -104,8 +104,10 @@ export class Riproduttore {
           this.tardi++;
           continue;
         }
-        // Il volume del livello passa dalla velocity: superdough la moltiplica nel guadagno.
-        const h = s.volume === 1 ? hap : hap.withValue((v) => ({ ...v, velocity: (v.velocity ?? 1) * s.volume }));
+        // Volume e muto stanno nel guadagno del livello (motore.js): qui suona tutto, anche da muto,
+        // così le note lunghe restano a tempo e al ritorno del volume si risente il punto giusto.
+        // Il livello ha una sua orbita, così il suo guadagno agisce anche sui suoni già partiti.
+        const h = s.orbita === undefined ? hap : hap.withValue((v) => ({ ...v, orbit: s.orbita }));
         this.uscita(h, t - ora, hap.duration / cps, cps, t);
         this.suEvento?.(h, t, s);
         if (hap.value?.cps !== undefined && hap.value.cps !== cps) this.suCps?.(hap.value.cps);
