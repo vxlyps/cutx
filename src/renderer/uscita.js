@@ -1,7 +1,8 @@
 // La finestra di uscita: quello che vede il pubblico. Legge tempo e livelli direttamente dal
 // motore live, e dall'interfaccia solo le bozze (quello che sto scrivendo, che fa parte dello
 // spettacolo). Gli errori non arrivano mai qui. Se si chiude o crasha, le casse non lo sentono.
-import { aspetto, cicloDi } from './aspetto.js';
+import { aspetto, cicloDi, epocaDi, sostituente, sostituito as sostituitoDa } from './aspetto.js';
+import { Scrittore } from './scrittura.js';
 import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
 import { avviaInsegna } from './insegna.js';
@@ -93,8 +94,8 @@ function blocco(chiave) {
 
 // Il testo che si sta scrivendo: la parte già scritta, il cursore e il resto *invisibile ma al suo posto*, così l'altezza del
 // livello è subito quella finale e il carattere non cambia mentre si scrive.
-function scrivi(b, scritto, cursore, intero = scritto) {
-  const chiave = `${scritto}|${intero}${cursore ? '▌' : ''}`;
+function scrivi(b, scritto, cursore, nascosto = '', dopo = '') {
+  const chiave = `${scritto}|${nascosto}|${dopo}${cursore ? '▌' : ''}`;
   if (b.codice.dataset.testo === chiave) return;
   b.codice.dataset.testo = chiave;
   b.codice.dataset.evidenza = '';
@@ -105,12 +106,13 @@ function scrivi(b, scritto, cursore, intero = scritto) {
     c.textContent = '_';
     b.codice.append(c);
   }
-  if (intero.length > scritto.length) {
+  if (nascosto) {
     const resto = document.createElement('span');
     resto.className = 'nascosto';
-    resto.textContent = intero.slice(scritto.length);
+    resto.textContent = nascosto;
     b.codice.append(resto);
   }
+  if (dopo) b.codice.append(dopo); // quello che c'era già dopo il punto che si sta cambiando: si vede
 }
 
 function disegna() {
@@ -128,12 +130,13 @@ function disegna() {
     d.classList.toggle('ora', i === quarto);
   });
 
+  seguito = null;
   const visti = new Set();
   const ordine = [];
   const firma = [];
   let suona = false;
   for (const l of livelli) {
-    if (l.a !== null && livelli.some((x) => x !== l && x.nome === l.nome && x.da === l.a)) continue; // sostituito: si vede il nuovo
+    if (sostituente(l, livelli)) continue; // sostituito: si vede il nuovo
     if (l.a !== null && !inizioUscita.has(l.id)) inizioUscita.set(l.id, epoca);
     const a = aspetto(l, livelli, mappa, epoca, { scrittura: preferenze.scritturaAMacchina !== false, inizioUscita: inizioUscita.get(l.id) });
     const chiave = `l${l.id}`;
@@ -156,7 +159,22 @@ function disegna() {
     firma.push(`${chiave}|${a.testo}`);
     segnaNovita(chiave, a.testo, epoca);
     b.tag.textContent = a.arriva ? `${l.nome} · tra ${Math.max(1, Math.ceil(a.mancano))} ${Math.ceil(a.mancano) > 1 ? 'cicli' : 'ciclo'}` : `● ${l.nome}${l.muto ? ' · muto' : ''}`;
-    if (a.cursore) scrivi(b, a.mostrato, true, a.testo);
+    if (a.arriva && a.cursore) {
+      // scrittura umana: da zero, o solo la differenza se sostituisce un livello (scrittura.js)
+      const vecchio = sostituitoDa(l, livelli);
+      const v = scrittore.stato(l.id, vecchio ? vecchio.codice.replace(/\s+$/, '') : '', a.testo, l.richiesto, epocaDi(mappa, l.da), epoca, vecchio?.id ?? null);
+      scrivi(b, v.prima, v.cursore, v.nascosto, v.dopo);
+      if (v.cursore) {
+        const cur = b.codice.querySelector('.cursore');
+        if (cur) {
+          const r = cur.getBoundingClientRect();
+          const s0 = $('scorri').getBoundingClientRect();
+          seguito = { top: r.top - s0.top, bottom: r.bottom - s0.top };
+        }
+        // quando una modifica cambia il numero di righe le misure vanno rifatte
+        firma.push(`${chiave}|h${Math.round(b.codice.offsetHeight)}`);
+      }
+    } else if (a.cursore) scrivi(b, a.mostrato, true, a.testo.slice(a.mostrato.length));
     else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : attivi(l.codice, ciclo), 'nota');
     suona ||= !a.arriva && !l.muto;
   }
@@ -195,6 +213,8 @@ const scorrimento = new Scorrimento({ passoS: 1.8, pausaS: 4, tieniS: 14 });
 const novita = new Map(); // chiave → { testo, quando }: quando è entrato o cambiato
 let ultimaNovita = null; // { id, quando }
 let firmaPrecedente = '';
+const scrittore = new Scrittore();
+let seguito = null; // { top, bottom } della riga dove si sta scrivendo adesso (px del contenuto)
 let disposizione = { nome: 'ampia', scala: 1, ci: true };
 let righe = []; // le righe del codice (e i titoli dei livelli) in px dall'alto del contenuto
 let livelliGeom = new Map(); // chiave → { top, bottom }
@@ -262,7 +282,7 @@ function adatta(firma, epoca) {
     return;
   }
   const g = ultimaNovita && livelliGeom.get(ultimaNovita.id);
-  const r = scorrimento.aggiorna(epoca / 1000, { righe, altezza, focus: g ? { id: ultimaNovita.id, quando: ultimaNovita.quando, top: g.top, bottom: g.bottom } : null });
+  const r = scorrimento.aggiorna(epoca / 1000, { righe, altezza, focus: g ? { id: ultimaNovita.id, quando: ultimaNovita.quando, top: g.top, bottom: g.bottom } : null, segui: seguito });
   scorre = { attivo: true, offset: r.offset, taglio: r.taglio };
   stile.transform = `translateY(${-r.offset}px)`;
   livelli.style.clipPath = r.taglio > 0 ? `inset(0 0 ${r.taglio}px 0)` : '';
@@ -343,4 +363,18 @@ applica(await window.cutx.preferenze());
 setInterval(disegna, 100);
 giro();
 globalThis.cutxSfondo = sfondo;
+// Per le prove: cosa si vede di ogni livello (senza il testo ancora invisibile) e quando entrano quelli in arrivo.
+globalThis.cutxScrittura = () => {
+  const epoca = performance.timeOrigin + performance.now();
+  return {
+    epoca,
+    blocchi: [...blocchi].map(([k, b]) => ({
+      k,
+      tag: b.tag.textContent,
+      cursore: !!b.codice.querySelector('.cursore'),
+      visibile: [...b.codice.childNodes].filter((n) => !n.classList?.contains('nascosto') && !n.classList?.contains('cursore')).map((n) => n.textContent).join(''),
+    })),
+    arrivi: mappa ? livelli.filter((l) => l.da !== null && cicloDi(mappa, epoca) < l.da).map((l) => ({ id: l.id, nome: l.nome, fine: epocaDi(mappa, l.da) })) : [],
+  };
+};
 globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala: disposizione.scala });

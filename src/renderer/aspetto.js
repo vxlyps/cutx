@@ -5,12 +5,24 @@ import { cicloDi, epocaDi } from './tempo.js';
 
 export { cicloDi, epocaDi };
 
+// Il livello che prende il posto di questo (stesso nome, entra dove questo esce, anche se questo sfuma ancora per qualche ciclo).
+export function sostituente(l, livelli) {
+  if (l.a === null) return null;
+  const da = l.sfuma?.verso === 'esce' ? l.sfuma.da : l.a;
+  return livelli.find((x) => x !== l && x.nome === l.nome && x.da === da) ?? null;
+}
+
+// Il livello che questo sostituisce (se entra al posto di uno con lo stesso nome), per scrivere solo la differenza.
+export function sostituito(l, livelli) {
+  return livelli.filter((x) => x !== l && sostituente(x, livelli) === l).at(-1) ?? null;
+}
+
 // Come si vede un livello adesso: quanto testo, se arriva o se esce. Serve anche all'uscita.
 export function aspetto(l, livelli, mappa, epoca, { scrittura = true, inizioUscita = null } = {}) {
   const ciclo = cicloDi(mappa, epoca);
   const testo = l.codice.replace(/\s+$/, '');
   const arriva = l.da !== null && ciclo < l.da;
-  const sostituito = l.a !== null && livelli.some((x) => x !== l && x.nome === l.nome && x.da === l.a);
+  const sostituito = !!sostituente(l, livelli);
   const esce = l.a !== null && !sostituito;
   const a = { testo, mostrato: testo, cursore: false, arriva, esce, sostituito, parte: 1, mancano: 0, ciclo };
   if (arriva) {

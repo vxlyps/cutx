@@ -189,6 +189,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
   if (parti.includes('solidita')) ok = (await sicura('solidita', provaSolidita)) && ok;
   if (parti.includes('uscita')) ok = (await sicura('uscita', provaUscita)) && ok;
+  if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
@@ -2264,5 +2265,113 @@ async function provaDissolvenze({ finestre, scrivi }) {
   const gv = piano ? (await live()).guadagni[piano.id] : null;
   controlla('la sezione entra al volume scritto nell\'intestazione (0,4)', piano && piano.volume === 0.4 && Math.abs(gv - 0.4) < 0.05, JSON.stringify({ piano: piano?.volume, gv }));
   await js(`cutxProva.fermaTutto()`);
+  return ok;
+}
+
+
+// --- scrittura umana sul proiettore: da zero, solo la differenza, una modifica per volta, sincronia con l'entrata ---
+async function provaScrittura({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const uscita = () => chiedi(finestre.uscita, 'globalThis.cutxScrittura?.()');
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  finestre.uscita.setContentSize(1280, 720);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const entra = (nome, codice, cicli) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli })})`);
+  const A = 's("bd*4, hh*8").gain(.01)\n  .room(.3)';
+  const B = 's("bd*16, hh*8").gain(.01)\n  .room(.3)';
+  const C = 's("bd*16, hh*8").gain(.01)\n  .room(.9)';
+
+  // 1. da zero: si scrive piano e finisce quando entra
+  await entra('batt', A, 4);
+  let campioni = [];
+  let fine = null;
+  let arrivato = false;
+  for (let i = 0; i < 300; i++) {
+    const u = await uscita();
+    const b = u?.blocchi.find((x) => x.tag.includes('batt'));
+    const arrivo = u?.arrivi.find((x) => x.nome === 'batt');
+    if (arrivo) {
+      fine = arrivo.fine;
+      arrivato = true;
+    }
+    if (b) campioni.push({ t: u.epoca, v: b.visibile, c: b.cursore });
+    if (arrivato && !arrivo) {
+      await aspetta(0.3);
+      const dopo = await uscita();
+      const bb = dopo?.blocchi.find((x) => x.tag.includes('batt'));
+      if (bb) campioni.push({ t: dopo.epoca, v: bb.visibile, c: bb.cursore });
+      break;
+    }
+    await aspetta(0.05);
+  }
+  const lung = campioni.map((x) => x.v.length);
+  controlla('da zero: il testo cresce un carattere alla volta, mai all indietro', lung.some((n) => n > 0 && n < A.length) && lung.every((n, i) => i === 0 || n >= lung[i - 1]), JSON.stringify(lung.slice(0, 40)));
+  const ultimo = campioni.find((x) => x.v === A && !x.c);
+  controlla("l'ultimo carattere arriva quando il suono entra (±250 ms)", ultimo && fine && Math.abs(ultimo.t - fine) < 250, JSON.stringify({ dt: ultimo && fine ? Math.round(ultimo.t - fine) : null, ultimi: campioni.slice(-5).map((x) => [Math.round(x.t - fine), x.v.length, x.c]) }));
+  await aspetta(0.5);
+
+  // 2. una modifica sullo stesso nome: non si riscrive tutto, il cursore sta nel punto che cambia
+  await entra('batt', B, 4);
+  campioni = [];
+  fine = null;
+  arrivato = false;
+  for (let i = 0; i < 300; i++) {
+    const u = await uscita();
+    const blocchi = u?.blocchi.filter((x) => x.tag.includes('batt')) ?? [];
+    const arrivo = u?.arrivi.find((x) => x.nome === 'batt');
+    if (arrivo) {
+      fine = arrivo.fine;
+      arrivato = true;
+    }
+    if (blocchi.length) campioni.push({ t: u.epoca, blocchi: blocchi.map((b) => b.visibile), n: blocchi.length, c: blocchi.some((b) => b.cursore) });
+    if (arrivato && !arrivo) {
+      await aspetta(0.3);
+      const dopo = await uscita();
+      const bl = dopo?.blocchi.filter((x) => x.tag.includes('batt')) ?? [];
+      campioni.push({ t: dopo.epoca, blocchi: bl.map((b) => b.visibile), n: bl.length, c: bl.some((b) => b.cursore) });
+      break;
+    }
+    await aspetta(0.05);
+  }
+  const intermedi = campioni.filter((x) => x.c && x.n === 1);
+  controlla('modifica: un solo blocco, non due (il vecchio non resta a fianco)', campioni.length > 0 && campioni.slice(0, -1).every((x) => x.n === 1), JSON.stringify(campioni.map((x) => x.n)));
+  controlla('modifica: all inizio si vede ancora il codice di prima (non si riparte da zero)', intermedi.length > 0 && intermedi[0].blocchi[0].length >= A.length - 4, JSON.stringify(intermedi[0]?.blocchi));
+  controlla('modifica: si cancella solo il tratto cambiato (la riga .room resta sempre)', intermedi.every((x) => x.blocchi[0].includes('.room(.3)')), JSON.stringify(intermedi.filter((x) => !x.blocchi[0].includes('.room(.3)')).slice(0, 2)));
+  const finito = campioni.at(-1);
+  controlla('modifica: alla fine c è il codice nuovo', finito?.blocchi[0] === B, JSON.stringify(finito));
+
+  // 3. una modifica per volta: se ne arriva un altra mentre scrive, la prima finisce di corsa
+  await entra('batt', C, 6);
+  await aspetta(1.5);
+  const D = 's("bd*16, hh*8").gain(.01)\n  .room(.9).delay(.4)';
+  await entra('batt', D, 8);
+  const t0 = Date.now();
+  let vistoC = false;
+  const vistiRush = [];
+  for (let i = 0; i < 40 && Date.now() - t0 < 1600; i++) {
+    const u = await uscita();
+    const b = u?.blocchi.find((x) => x.tag.includes('batt'));
+    vistiRush.push(b ? b.visibile : -1);
+    if (b && (b.visibile + '').includes('.room(.9)') && !(b.visibile + '').includes('.delay(.4)')) vistoC = true;
+    await aspetta(0.05);
+  }
+  controlla('una modifica per volta: la prima si finisce di corsa, poi parte la nuova', vistoC, JSON.stringify([...new Set(vistiRush)]));
+  for (let i = 0; i < 200; i++) {
+    const u = await uscita();
+    if (!u?.arrivi.length) break;
+    await aspetta(0.1);
+  }
+  await aspetta(0.5);
+  const u2 = await uscita();
+  controlla('alla fine c è il codice dell ultima modifica', u2.blocchi.find((x) => x.tag.includes('batt'))?.visibile === D, JSON.stringify(u2.blocchi.map((b) => b.visibile)));
+  await js('cutxProva.fermaTutto()');
   return ok;
 }

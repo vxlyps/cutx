@@ -92,3 +92,21 @@ test('se in nessuna disposizione ci sta, vince quella con la finestra più alta'
   assert.equal(scelta.nome, 'stretta');
   assert.equal(scegliDisposizione([{ nome: 'ampia', scala: 0.5, ci: false, altezza: 337 }, { nome: 'stretta', scala: 0.5, ci: false, altezza: 337 }]).nome, 'ampia');
 });
+
+test('la vista segue la riga dove si sta scrivendo', () => {
+  const righe = Array.from({ length: 20 }, (_, k) => ({ top: k * 10, bottom: (k + 1) * 10 }));
+  const s = new Scorrimento({ passoS: 1.8, pausaS: 4, tieniS: 14 });
+  let r = s.aggiorna(0, { righe, altezza: 50, segui: { top: 0, bottom: 10 } });
+  assert.equal(r.offset, 0);
+  r = s.aggiorna(0.1, { righe, altezza: 50, segui: { top: 60, bottom: 70 } });
+  assert.ok(r.offset + 50 >= 70, 'la riga 6 si vede');
+  r = s.aggiorna(0.2, { righe, altezza: 50, segui: { top: 150, bottom: 160 } });
+  assert.ok(r.offset + 50 >= 160 && r.offset <= 150, 'e poi la 15');
+  const giu = r.offset;
+  // mentre si scrive non scorre da solo, nemmeno dopo molto
+  r = s.aggiorna(1.5, { righe, altezza: 50, segui: { top: 150, bottom: 160 } });
+  assert.equal(r.offset, giu);
+  // se il cursore torna su (una modifica più in alto) ci si torna
+  r = s.aggiorna(1.6, { righe, altezza: 50, segui: { top: 20, bottom: 30 } });
+  assert.ok(r.offset <= 20);
+});

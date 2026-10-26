@@ -73,7 +73,8 @@ export class Scorrimento {
   }
 
   // t: secondi (qualsiasi origine, crescente). focus: { id, quando, top, bottom } del livello da mostrare, o null.
-  aggiorna(t, { righe, altezza, focus = null }) {
+  // segui: { top, bottom } della riga dove si sta scrivendo adesso, o null: finché c'è, la vista la tiene in vista
+  aggiorna(t, { righe, altezza, focus = null, segui = null }) {
     if (!this.iniziato) {
       this.iniziato = true;
       this.prossimo = t + this.pausaS; // all'inizio si resta un attimo in cima
@@ -85,6 +86,12 @@ export class Scorrimento {
       this.i = indiceDa(punti, focus.top);
       this.tieniFino = t + this.tieniS;
       this.prossimo = t + this.passoS;
+    }
+    if (segui && punti.length > 1) {
+      if (segui.top < punti[this.i] - 0.5) this.i = indiceDa(punti, segui.top);
+      else while (segui.bottom > punti[this.i] + altezza + 0.5 && this.i < punti.length - 1) this.i++;
+      this.prossimo = t + this.passoS * 2; // finché si scrive non si scorre da soli: dopo, una breve sosta
+      this.tieniFino = Math.max(this.tieniFino, t + this.passoS * 2);
     }
     if (punti.length > 1 && t >= this.prossimo) {
       if (t < this.tieniFino) {
