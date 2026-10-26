@@ -2061,3 +2061,64 @@ export async function sfondo({ finestre, cartella }) {
   console.log(ok ? '[sfondo] FATTO' : '[sfondo] CON PROBLEMI');
   return ok;
 }
+
+// Il saltino quando si salva: il click gira sul live, in mezzo si salva in vari modi e si guarda cosa si è sentito.
+// Misura digitale (la sentinella del live ascolta l'uscita del motore): npx electron . --saltino
+export async function saltino({ finestre }) {
+  const stato = (ruolo) => chiedi(finestre[ruolo], 'globalThis.cutxStato?.()');
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  await aspettaChe(async () => (await stato('live')) && (await stato('cuffia')) && (await js('!!globalThis.cutxProva')));
+  await aspetta(2);
+  await js(`cutxProva.avviaTest(${JSON.stringify(CODICE)})`);
+  await aspetta(4);
+  const rapporto = [];
+  const fase = async (nome, azione, durata = 8) => {
+    await chiedi(finestre.live, 'globalThis.cutxAzzeraMisure()');
+    const tardiPrima = (await stato('live')).tardi;
+    await aspetta(0.3);
+    await azione();
+    await aspetta(durata);
+    const live = await stato('live');
+    const s = live.sentinella;
+    const r = { nome, sentiti: s.sentiti, persi: s.mancati, fuoriTempo: s.extra, tardi: live.tardi - tardiPrima, scartoMaxMs: Number(s.scartoMaxMs.toFixed(2)), giroMaxMs: Math.round(live.giroMax) };
+    rapporto.push(r);
+    console.log(`[saltino] ${nome.padEnd(34)} sentiti ${r.sentiti}, persi ${r.persi}, fuori tempo ${r.fuoriTempo}, tardi ${r.tardi}, scarto max ${r.scartoMaxMs} ms, giro max ${r.giroMaxMs} ms`);
+  };
+  const dieci = async (fa) => {
+    for (let i = 0; i < 10; i++) {
+      await fa(i);
+      await aspetta(0.6);
+    }
+  };
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.cue.fileLibero = 'saltino_prova.cutx'; cutxProva.scriviCue('// @brano saltino\\n// @sezione uno\\ns("sine")')`);
+  const testo = (i) => JSON.stringify(`// @brano saltino\n// @bpm 120\n// @sezione uno\ns("sine*${i + 1}")\n`);
+  await fase('base (niente)', () => aspetta(6));
+  await fase('solo la scrittura del file (x10)', () => dieci((i) => js(`window.cutx.scriviBrano('saltino_prova.cutx', ${testo(i)}, { sovrascrivi: true })`)));
+  // il salvataggio non deve mandare niente ai motori (a parte i ping): si contano i messaggi
+  await js(`globalThis.__tipi = []; for (const m of [cutxProva.motori.live, cutxProva.motori.cuffia]) { const f = m.manda.bind(m); m.manda = (x) => (globalThis.__tipi.push(m.ruolo + ':' + x.tipo), f(x)); }`);
+  await fase('⌘S completo dell\'interfaccia (x10)', () => dieci(() => js('cutxProva.cue.salva()')));
+  const tipi = [...new Set((await js('globalThis.__tipi')).filter((t) => !t.endsWith(':ping')))];
+  console.log(`[saltino] ${tipi.length === 0 ? 'OK   ' : 'FALLITO'} ⌘S non manda niente ai motori (a parte i ping)${tipi.length ? ` · ${tipi.join(', ')}` : ''}`);
+  await fase('controllo: i motori rileggono lo stash', () => dieci(() => js('window.cutx.rileggiStash()')));
+  // una libreria grande: 300 brani (file finti, tolti alla fine)
+  const libreria = path.join(stash.radice(), 'libreria');
+  const finti = Array.from({ length: 300 }, (_, i) => path.join(libreria, `saltino_zz_${i}.cutx`));
+  for (const f of finti) await writeFile(f, '// @brano finto\n// @bpm 120\n// @sezione uno\ns("sine*2")\n// @sezione due\ns("hh*8")\n');
+  await js('window.cutx.rileggiStash()');
+  await aspetta(1);
+  await fase('con 300 brani: ⌘S (x10)', () => dieci(() => js('cutxProva.cue.salva()')));
+  for (const f of finti) await rm(f, { force: true });
+  // un suono nuovo nello stash: i motori lo aggiungono mentre suona
+  const cartellaSuono = path.join(stash.radice(), 'suoni', 'zz_saltino');
+  await mkdir(cartellaSuono, { recursive: true });
+  const wav = Buffer.alloc(44 + 8820 * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(44100, 24); wav.writeUInt32LE(88200, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(8820 * 2, 40);
+  await writeFile(path.join(cartellaSuono, 'uno.wav'), wav);
+  await fase('un suono nuovo nello stash (x1)', () => js('window.cutx.rileggiStash()'));
+  await rm(cartellaSuono, { recursive: true, force: true });
+  await js('window.cutx.rileggiStash()');
+  console.log(`[saltino] JSON ${JSON.stringify(rapporto)}`);
+  await rm(path.join(stash.radice(), 'libreria', 'saltino_prova.cutx'), { force: true });
+  return true;
+}

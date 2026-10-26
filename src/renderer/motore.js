@@ -17,6 +17,7 @@ import { elencoUscite, impostaUscita } from './uscite.js';
 import { Riproduttore, TICK_S } from './riproduttore.js';
 import { Sentinella, Anello } from './ascolto.js';
 import { avviaOnda } from './sfondo.js';
+import { suoniNuovi } from './suoni-nuovi.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
 const LIVE = RUOLO === 'live';
@@ -442,10 +443,11 @@ async function configura() {
   await controllaUscita(); // non lancia mai: se l'uscita non c'è si suona sulla predefinita e si dice
   errore = uscitaStato.ok ? null : uscitaStato.dettaglio;
   try {
-    const chiave = JSON.stringify(stato.suoni ?? null);
-    if (stato.suoni && chiave !== suoniCaricati) {
-      await samples(stato.suoni);
-      suoniCaricati = chiave;
+    // solo i suoni nuovi o cambiati: mentre suona non si rifà tutta la mappa
+    const nuovi = suoniNuovi(suoniCaricati, stato.suoni);
+    if (nuovi) {
+      await samples(nuovi);
+      suoniCaricati = stato.suoni;
     }
     if (!LIVE) offsetMs = Number(config.offsetCuffiaMs) || 0;
   } catch (e) {
@@ -575,6 +577,11 @@ window.cutx.suStashCambiato(configura);
 
 // Per la prova automatica di robustezza (npm run prova).
 globalThis.cutxStato = stato;
+// Per le prove: azzera i massimi e i conti della sentinella, così si misura una fase alla volta.
+globalThis.cutxAzzeraMisure = () => {
+  giroMax = 0;
+  sentinella.azzera();
+};
 globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 
 await configura();
