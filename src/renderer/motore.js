@@ -62,6 +62,7 @@ let eco = false; // per il misuratore: dico quando ho suonato ogni evento
 let mappaLive = null; // cuffia: l'ultima mappa ricevuta, in tempo assoluto
 let livelliLive = []; // cuffia: i livelli live, per il futuro mix cuffia/live
 let udibile = true;
+let inPausa = false; // cuffia: il contesto audio è sospeso (pausa dell'ascolto)
 let mix = 0; // cuffia: 0 = solo la prova; il mix col live arriva in fase 4 (fader dell'APC)
 
 // Cuffia: una prova sola. Live: una pila di livelli, ognuno con la sua finestra di cicli.
@@ -474,7 +475,7 @@ async function controllaUscita() {
         await impostaUscita(ac, uscitaVoluta);
         nuovo = { ok: true, dettaglio: uscitaVoluta ? `uscita «${uscitaVoluta}»` : 'uscita predefinita' };
       }
-      if (ac.state === 'suspended' || ac.state === 'interrupted') await ac.resume();
+      if (!inPausa && (ac.state === 'suspended' || ac.state === 'interrupted')) await ac.resume();
     } catch (e) {
       nuovo = { ok: false, dettaglio: `uscita: ${e.message ?? e}` };
     }
@@ -488,7 +489,7 @@ async function controllaUscita() {
   }
 }
 navigator.mediaDevices.addEventListener('devicechange', () => setTimeout(controllaUscita, 300));
-ac.addEventListener('statechange', () => ac.state !== 'running' && setTimeout(controllaUscita, 100));
+ac.addEventListener('statechange', () => ac.state !== 'running' && !inPausa && setTimeout(controllaUscita, 100));
 setInterval(controllaUscita, 3000);
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
@@ -541,6 +542,8 @@ function stato() {
     ciclo: rip.mappa ? rip.ciclo(ac.currentTime) : null,
     sentinella: sentinella.riepilogo(),
     udibile,
+    pausa: inPausa,
+    contesto: ac.state,
     mix,
     livelliLive: LIVE ? undefined : livelliLive.length,
   };
@@ -613,6 +616,12 @@ async function ricevi(da, m) {
     case 'onda':
       if (da === 'uscita') onda(!!m.on);
       return;
+    case 'pausa': // cuffia: ferma l'ascolto; alla ripresa si riparte dal tempo del live (la mappa si rilegge, la programmazione ricomincia da adesso)
+      if (LIVE || inPausa === !!m.on) return;
+      inPausa = !!m.on;
+      if (inPausa) return ac.suspend();
+      rip.fine = null;
+      return ac.resume();
     case 'mix':
       mix = m.valore;
       return;

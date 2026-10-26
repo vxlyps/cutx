@@ -14,6 +14,7 @@ export const AZIONI = [
   { id: 'muto', nome: 'muto livello (1–9)', predefinita: 'Alt+Digit#', cifre: true },
   { id: 'fermaTutto', nome: 'ferma tutto', predefinita: 'Meta+Period' },
   { id: 'cuffiaOnOff', nome: 'cuffia on / off', predefinita: 'Meta+KeyK' },
+  { id: 'cuffiaPausa', nome: 'pausa / riprendi la cuffia', predefinita: 'Shift+Meta+KeyK' },
   { id: 'passaCueLive', nome: 'passa da CUE a LIVE', predefinita: 'Tab', soloFuori: true },
   { id: 'help', nome: 'help on / off', predefinita: 'Meta+KeyI' },
   { id: 'esci', nome: 'esci dall\'editor', predefinita: 'Escape' },

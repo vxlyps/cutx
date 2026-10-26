@@ -189,6 +189,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
   if (parti.includes('solidita')) ok = (await sicura('solidita', provaSolidita)) && ok;
   if (parti.includes('uscita')) ok = (await sicura('uscita', provaUscita)) && ok;
+  if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
 
@@ -2372,6 +2373,45 @@ async function provaScrittura({ finestre, scrivi }) {
   await aspetta(0.5);
   const u2 = await uscita();
   controlla('alla fine c è il codice dell ultima modifica', u2.blocchi.find((x) => x.tag.includes('batt'))?.visibile === D, JSON.stringify(u2.blocchi.map((b) => b.visibile)));
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+
+// --- pausa della cuffia: si ferma, e alla ripresa è di nuovo allineata al live (npx electron . --prova=pausa) ---
+async function provaPausa({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const stato = (ruolo) => chiedi(finestre[ruolo], 'globalThis.cutxStato?.()');
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1.5);
+  await js(`cutxProva.valuta('cuffia', 's("sine*4").gain(.01)')`);
+  await aspetta(1.5);
+  controlla('la cuffia suona e non è in pausa', (await stato('cuffia')).pausa === false && (await stato('cuffia')).contesto === 'running');
+  await js('cutxProva.pausaCuffia(true)');
+  await aspetta(0.8);
+  const ferma = await stato('cuffia');
+  controlla('in pausa il contesto della cuffia è sospeso (il live continua)', ferma?.pausa === true && ferma.contesto === 'suspended' && (await stato('live')).contesto === 'running', JSON.stringify({ p: ferma?.pausa, c: ferma?.contesto }));
+  await js('document.getElementById("cuffia-pausa").textContent').then((t) => controlla('il pulsante dice «riprendi»', /riprendi/.test(t), t));
+  await aspetta(3.5); // la pausa dura: il live va avanti di quasi due cicli
+  await js('cutxProva.pausaCuffia(false)');
+  await aspetta(1.5);
+  const dopo = await stato('cuffia');
+  const live = await stato('live');
+  const differenza = Math.abs(dopo.ciclo - live.ciclo);
+  controlla('alla ripresa suona di nuovo, allineata al tempo del live (meno di 0,15 cicli)', dopo.pausa === false && dopo.contesto === 'running' && differenza < 0.15, JSON.stringify({ cuffia: dopo.ciclo, live: live.ciclo, differenza }));
+  controlla('e non ha perso colpi per recuperare (tardi invariato o quasi)', dopo.tardi < 20, String(dopo.tardi));
+  // mandare qualcosa in cuffia durante la pausa la riprende
+  await js('cutxProva.pausaCuffia(true)');
+  await aspetta(0.5);
+  await js(`cutxProva.valuta('cuffia', 's("sine*2").gain(.01)')`);
+  await aspetta(0.8);
+  const ripresa = await stato('cuffia');
+  controlla('mandare un codice in cuffia durante la pausa la riprende', ripresa.pausa === false && ripresa.contesto === 'running');
   await js('cutxProva.fermaTutto()');
   return ok;
 }

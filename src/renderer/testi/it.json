@@ -5,6 +5,11 @@
       "nome": "stash",
       "testo": "La cartella del set: suoni, libreria dei brani, video. Di solito sta sull'SSD."
     },
+    "cuffia-pausa": {
+      "nome": "pausa cuffia",
+      "testo": "Ferma l'ascolto in cuffia. Riprendendo, la cuffia si riallinea da sola al tempo del live. Mandare qualcosa in cuffia la riprende.",
+      "azione": "cuffiaPausa"
+    },
     "cuffia-onoff": {
       "nome": "cuffia on / off",
       "testo": "Spegne o riaccende l'ascolto in cuffia. Il motore continua a girare: si spegne solo l'uscita.",

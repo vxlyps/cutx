@@ -99,6 +99,7 @@ try {
 
 // Gli errori si vedono solo qui, nel CUE: mai sull'uscita.
 async function manda(motore, codice, etichetta = {}) {
+  if (motore === cuffia && cuffiaInPausa) pausaCuffia(false); // chi manda qualcosa in cuffia vuole sentirlo
   if (motore === cuffia) pezzoCuffia = { codice, etichetta, da: performance.now() };
   const errore = await motore.valuta(codice, etichetta);
   mostraErrore(errore, motore.ruolo);
@@ -249,6 +250,20 @@ function fermaTutto() {
   cuffia.manda({ tipo: 'ferma' });
 }
 
+// Pausa dell'ascolto in cuffia: il contesto si ferma, e alla ripresa la cuffia si riallinea al tempo del live.
+let cuffiaInPausa = false;
+function pausaCuffia(pausa = !cuffiaInPausa) {
+  if (inTest || !cuffia.viva || pausa === cuffiaInPausa) return;
+  cuffiaInPausa = pausa;
+  cuffia.manda({ tipo: 'pausa', on: pausa });
+  mostraPausaCuffia();
+}
+function mostraPausaCuffia() {
+  const b = $('cuffia-pausa');
+  b.classList.toggle('on', cuffiaInPausa);
+  b.firstChild.textContent = cuffiaInPausa ? 'riprendi ' : 'pausa ';
+}
+
 function cuffiaOnOff(on = !cuffiaUdibile) {
   cuffiaUdibile = on;
   cuffia.manda({ tipo: 'udibile', on });
@@ -303,6 +318,7 @@ const FA = {
   },
   fermaTutto,
   cuffiaOnOff: () => cuffiaOnOff(),
+  cuffiaPausa: () => pausaCuffia(),
   // dal CUE al LIVE (il jam) e ritorno
   passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
   help: helpOnOff,
@@ -854,6 +870,8 @@ live.suCollegato = () => {
 cuffia.suCollegato = async () => {
   if (!ripreso) return;
   window.cutx.logEvento('avviso', 'cuffia', 'ricollegata (riavviata): le ridò il suo codice');
+  cuffiaInPausa = false; // una cuffia rinata non è in pausa
+  mostraPausaCuffia();
   // aspetto che abbia finito di caricarsi: risponde ai ping molto prima di poter valutare il codice (5 s di attesa non bastano sempre)
   const nuova = cuffia.collegatoDa;
   for (let i = 0; i < 400 && !(cuffia.ultimoPong > nuova && cuffia.stato.pronto === true); i++) await new Promise((r) => setTimeout(r, 100));
@@ -873,6 +891,7 @@ const insegna = avviaInsegna($('insegna'));
 $('stash').onclick = async () => apriStash(await window.cutx.scegliStash());
 $('avviso-stash-cambia').onclick = async () => apriStash(await window.cutx.scegliStash());
 $('cuffia-onoff').onclick = () => cuffiaOnOff();
+$('cuffia-pausa').onclick = () => pausaCuffia();
 $('apri-impostazioni').onclick = () => impostazioni(true);
 $('chiudi-impostazioni').onclick = () => impostazioni(false);
 $('manda-cuffia').onclick = provaInCuffia;
@@ -902,6 +921,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   motori: { live, cuffia },
+  pausaCuffia,
   // per capire un fallimento: cosa vede l'interfaccia in questo momento
   diagnosi: () => ({ inTest, ripreso, avviso: $('cue-avviso').textContent, livelli: livelliLive.map((l) => `${l.nome}:${l.da}-${l.a}`), liveViva: live.viva, cuffiaViva: cuffia.viva, bpm: bpmSet(), ripristinando, haFuoco: document.hasFocus() }),
   avviaTest,
