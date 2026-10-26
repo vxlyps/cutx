@@ -189,6 +189,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
   if (parti.includes('solidita')) ok = (await sicura('solidita', provaSolidita)) && ok;
   if (parti.includes('uscita')) ok = (await sicura('uscita', provaUscita)) && ok;
+  if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
@@ -913,7 +914,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     // --- scorciatoie rimappabili ---
     await vai('scorciatoie');
     const righe = await js(`document.querySelectorAll('#scorciatoie-elenco .imp-riga').length`);
-    controlla('l\'elenco ha tutte le azioni', righe === 20, String(righe));
+    controlla('l\'elenco ha tutte le azioni', righe === 24, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set)
     const cap = (id) => `#scorciatoie-elenco [data-azione="${id}"] .cap-gruppo`;
     await js(`document.querySelector('${cap('goLive')}').click()`);
     controlla('un clic sul tasto aspetta la combinazione nuova', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('premi un tasto'));
@@ -956,7 +957,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     await premi(',', 'meta');
     await vai('proiezione');
     const interruttori = await js(`document.querySelectorAll('#imp-proiezione .imp-riga').length`);
-    controlla('la proiezione ha i suoi cinque interruttori', interruttori === 5, String(interruttori));
+    controlla('la proiezione ha i suoi cinque interruttori e la scelta dello sfondo', interruttori === 6, String(interruttori));
     await js(`document.querySelectorAll('#imp-proiezione .imp-riga')[2].querySelectorAll('button')[1].click()`); // gatto off
     await aspetta(0.5);
     controlla('gatto off: sparisce dalla barra', (await prefs()).gatto === false && (await js(`getComputedStyle(document.querySelector('.barra .gatto-posto')).display`)) === 'none');
@@ -2412,6 +2413,96 @@ async function provaPausa({ finestre, scrivi }) {
   await aspetta(0.8);
   const ripresa = await stato('cuffia');
   controlla('mandare un codice in cuffia durante la pausa la riprende', ripresa.pausa === false && ripresa.contesto === 'running');
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+
+// --- ⌘Z fuori dagli editor: livello tolto, volume, muto, modifica live, brano chiuso; mai il live (npx electron . --prova=annulla) ---
+async function provaAnnulla({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const livello = async (nome) => (await live()).livelli.filter((l) => l.nome === nome).at(-1);
+  const entra = (nome, codice) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1 })})`);
+  const tasto = (modifiers) => {
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Z', modifiers });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'Z', modifiers });
+  };
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue('// @sezione base\\ns("sine").gain(.0001)\\n'); document.activeElement?.blur()`);
+  await js('cutxProva.cronologia.svuota()');
+  await aspetta(1.5);
+
+  // volume: un trascinamento è un passo solo; ⌘Z lo riporta subito, ⇧⌘Z lo rifà
+  await entra('basso', 's("sine*2").gain(.02)');
+  await aspetta(1.5);
+  const id = (await livello('basso')).id;
+  await js(`(() => { const a = cutxProva.pila.azioni; a.volumeInizio(${id}); for (const v of [0.8, 0.6, 0.4]) cutxProva.motori.live.manda({ tipo: 'livello', livello: ${id}, volume: v }); })()`);
+  await aspetta(0.6);
+  await js(`cutxProva.pila.azioni.volumeFine(${id})`);
+  controlla('un trascinamento del volume è un passo solo', (await js('cutxProva.cronologia.conta')) === 1);
+  tasto(['meta']);
+  await aspetta(0.8);
+  controlla('⌘Z (la tastiera vera) rimette subito il volume di prima', Math.abs((await livello('basso')).volume - 1) < 0.01, String((await livello('basso')).volume));
+  tasto(['shift', 'meta']);
+  await aspetta(0.8);
+  controlla('⇧⌘Z lo rifà', Math.abs((await livello('basso')).volume - 0.4) < 0.01, String((await livello('basso')).volume));
+  tasto(['meta']);
+  await aspetta(0.5);
+
+  // muto
+  await js(`cutxProva.pila.azioni.muto(${id}, true)`);
+  await aspetta(0.6);
+  controlla('il muto si annulla subito', (await livello('basso')).muto === true && ((await js('cutxProva.annullaSet()')), await aspetta(0.6), (await livello('basso')).muto === false));
+
+  // modifica live sbagliata: ⌘Z non la cambia, mette la versione di prima nell'editor
+  const vecchio = 's("sine*2").gain(.02)';
+  const nuovo = 's("sine*8").gain(.02)';
+  const livelloUi = await js(`cutxProva.pila.livelli.find((l) => l.nome === 'basso' && l.a === null)`);
+  await js(`cutxProva.pila.azioni.applica(${JSON.stringify(livelloUi)}, ${JSON.stringify(nuovo)})`);
+  await aspetta(2);
+  const dopoModifica = await livello('basso');
+  await js('cutxProva.annullaSet()');
+  await aspetta(0.6);
+  const inEditor = await js(`(() => { const m = cutxProva.pila.modifiche.get('basso'); return m ? m.editor.codice : null; })()`);
+  const ancora = await livello('basso');
+  controlla('modifica live: ⌘Z mette la versione di prima nell\'editor, senza applicarla', inEditor === vecchio && ancora.codice === dopoModifica.codice && ancora.codice.includes('sine*8'), JSON.stringify({ inEditor, live: ancora.codice }));
+  await js(`cutxProva.pila.chiudiModifica('basso')`);
+
+  // livello tolto: torna nel CUE, e il live non riceve niente
+  const prima = (await live()).livelli.length;
+  const idAttuale = (await livello('basso')).id; // la modifica ha sostituito il livello: ora è un altro
+  await js(`cutxProva.togli(${idAttuale})`);
+  await aspetta(1.5);
+  await js(`cutxProva.motori.live.manda = ((f) => (m) => ((globalThis.__inviati ??= []).push(m.tipo), f(m)))(cutxProva.motori.live.manda.bind(cutxProva.motori.live))`);
+  await js('cutxProva.annullaSet()');
+  await aspetta(0.6);
+  const testoCue = await js('cutxProva.cue.libero.codice');
+  const inviati = await js('globalThis.__inviati ?? []');
+  controlla('livello tolto: ⌘Z lo riporta nel CUE come sezione', /@sezione basso/.test(testoCue) && testoCue.includes('sine*8'), testoCue);
+  controlla('e non manda niente al live (a parte i ping): lo rimanda chi suona', inviati.filter((t) => t !== 'ping').length === 0 && !(await live()).livelli.some((l) => l.nome === 'basso' && l.a === Infinity), JSON.stringify(inviati));
+
+  // brano chiuso: aprirne un altro lo chiude; ⌘Z lo riapre com'era
+  await js(`cutxProva.cue.apriModello('uno.cutx', '// @brano uno\\n// @bpm 120\\n// @sezione a\\ns("sine")\\n')`);
+  await js(`cutxProva.cue.apriModello('due.cutx', '// @brano due\\n// @bpm 120\\n// @sezione b\\ns("sine")\\n')`);
+  await js('cutxProva.annullaSet()');
+  await aspetta(0.3);
+  controlla('brano chiuso: ⌘Z lo riapre', (await js('cutxProva.cue.brano.file')) === 'uno.cutx');
+
+  // dentro un editor ⌘Z è solo del testo: la cronologia non si muove
+  await js('cutxProva.cronologia.svuota()');
+  await js(`cutxProva.pila.azioni.muto(${idAttuale}, true)`);
+  const conta = await js('cutxProva.cronologia.conta');
+  await js('cutxProva.cue.libero.focus()');
+  tasto(['meta']);
+  await aspetta(0.4);
+  controlla('dentro un editor ⌘Z non tocca il set', (await js('cutxProva.cronologia.conta')) === conta);
   await js('cutxProva.fermaTutto()');
   return ok;
 }

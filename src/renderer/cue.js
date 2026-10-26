@@ -37,6 +37,8 @@ export class Cue {
     this.stati = { live: [], cuffia: null }; // cosa suona: [{ nome, provenienza }]
     this.fileLibero = null; // il brano in cui è stato salvato il testo libero
     this.brano = null; // { file, modello, sporco }
+    this.versione = 0; // cresce a ogni modifica del brano: una voce di ⌘Z vale solo se il brano non è cambiato dopo di lei
+    this.registra = null; // (voce) => {}: la cronologia di ⌘Z (app.js)
     this.carte = []; // { i, editor, el } (i = -1 per il preambolo)
     this.cartaAttiva = null;
     this.mostraLive = false; // le sezioni già live, aperte o richiuse in una riga
@@ -204,7 +206,28 @@ export class Cue {
   // --- brano: mappa e card ---
 
   apriModello(file, testo) {
+    const prima = this.brano;
+    const modoPrima = this.modo;
     this.brano = { file, modello: B.leggi(testo), sporco: false };
+    this.versione++;
+    // aprire un altro brano chiude quello di prima, con le sue modifiche: ⌘Z lo riporta com'era
+    if (prima) {
+      const nuovo = this.brano;
+      this.registra?.({
+        etichetta: `brano «${prima.file ?? 'senza nome'}» chiuso`,
+        annulla: () => {
+          if (this.brano !== nuovo) return false;
+          this.brano = prima;
+          this.versione++;
+          this.cartaAttiva = null;
+          this.modo = modoPrima;
+          this.mostraBrano(true);
+          this.mostraModo();
+          return `riapro ${prima.file ?? 'il brano'}`;
+        },
+        rifai: () => false,
+      });
+    }
     this.cartaAttiva = null;
     this.modo = 'brano';
     this.mostraBrano(true);
@@ -224,11 +247,61 @@ export class Cue {
     } else this.avviso('');
   }
 
-  modifica(modello, ridisegna = true) {
+  // etichetta: se c'è, l'azione si può annullare con ⌘Z (unisci, dividi, rinomina, sezione nuova…); le modifiche al testo no: sono dell'editor.
+  modifica(modello, ridisegna = true, etichetta = null) {
+    const prima = this.brano.modello;
+    const sporcoPrima = this.brano.sporco;
     this.brano.modello = modello;
     this.brano.sporco = true;
+    this.versione++;
+    const versione = this.versione;
+    if (etichetta) {
+      const torna = (m, sporco, v) => () => {
+        if (this.versione !== v) return false; // dopo è stato scritto altro: tornare indietro lo perderebbe
+        this.brano.modello = m;
+        this.brano.sporco = sporco;
+        this.versione++;
+        this.mostraBrano(true);
+        this.mostraModo();
+        return `${etichetta}: annullato`;
+      };
+      const vDopo = versione;
+      this.registra?.({
+        etichetta,
+        annulla: torna(prima, sporcoPrima, vDopo),
+        rifai: () => {
+          if (this.brano.modello !== prima) return false;
+          this.brano.modello = modello;
+          this.brano.sporco = true;
+          this.versione++;
+          this.mostraBrano(true);
+          this.mostraModo();
+        },
+      });
+    }
     if (ridisegna) this.mostraBrano(true);
     this.mostraModo();
+  }
+
+  // Un livello tolto dal live torna nel CUE, pronto: in fondo al testo libero o al brano aperto. Non tocca il live.
+  reinserisci({ nome, codice, volume, muto }) {
+    const info = {};
+    if (volume !== undefined && volume !== 1) info.volume = volume;
+    if (muto) info.muto = true;
+    if (this.modo === 'brano' && this.brano) {
+      const m = this.brano.modello;
+      const preambolo = m.preambolo.join('\n');
+      const pulito = preambolo.trim() && codice.startsWith(preambolo) ? codice.slice(preambolo.length) : codice;
+      this.brano.modello = B.conSezioneInFondo(m, nome, info, pulito.replace(/^\n+/, ''));
+      this.brano.sporco = true;
+      this.versione++;
+      this.mostraBrano(true);
+      this.mostraModo();
+    } else {
+      const testo = this.libero.codice.replace(/\s+$/, '');
+      this.libero.codice = `${testo}${testo ? '\n\n' : ''}${B.rigaSezione(nome, info)}\n${codice.replace(/\s+$/, '')}\n`;
+    }
+    return `«${nome}» è tornato nel CUE: lo rimandi tu col go live`;
   }
 
   // ricrea = rifà anche le card (cambiata la struttura); altrimenti solo mappa e stati.
@@ -351,7 +424,7 @@ export class Cue {
       nome.onclick = () => this.rinomina(i);
       const unisci = tasto('unisci', '', 'Unisci con la sezione successiva');
       unisci.disabled = i >= m.sezioni.length - 1;
-      unisci.onclick = () => this.modifica(B.unisci(this.brano.modello, i));
+      unisci.onclick = () => this.modifica(B.unisci(this.brano.modello, i), true, `sezioni «${m.sezioni[i].nome}» e «${m.sezioni[i + 1]?.nome}» unite`);
       const dividi = tasto('dividi', '', 'Dividi dalla riga del cursore in giù');
       dividi.onclick = () => this.dividi(carta);
       const cuffia = tasto('cuffia', '⌘↵');
@@ -378,12 +451,32 @@ export class Cue {
         this.modifica(B.conInfo(m2, i, v === 1 ? resto : { ...resto, volume: v }), false);
         mostraVolume();
       };
+      let prima = null; // il modello com'era all'inizio del trascinamento: un trascinamento è un passo solo di ⌘Z
       volume.onpointerdown = (e) => {
         volume.setPointerCapture(e.pointerId);
+        prima = { modello: this.brano.modello, sporco: this.brano.sporco, versione: this.versione };
         imposta(e);
         volume.onpointermove = imposta;
       };
-      volume.onpointerup = () => (volume.onpointermove = null);
+      volume.onpointerup = () => {
+        volume.onpointermove = null;
+        if (!prima || prima.modello === this.brano.modello) return;
+        const { modello, sporco } = prima;
+        const dopo = this.brano.modello;
+        const v = this.versione;
+        prima = null;
+        this.registra?.({
+          etichetta: `volume della sezione «${dopo.sezioni[i]?.nome ?? i + 1}»`,
+          annulla: () => {
+            if (this.versione !== v) return false;
+            this.brano.modello = modello;
+            this.brano.sporco = sporco;
+            this.versione++;
+            this.mostraBrano(true);
+            this.mostraModo();
+          },
+        });
+      };
       mostraVolume();
       testa.append(unisci, dividi, volume, cuffia, live);
     }
@@ -399,7 +492,7 @@ export class Cue {
   async rinomina(i) {
     const m = this.brano.modello;
     const nome = await chiediNome({ titolo: 'rinomina la sezione', valore: m.sezioni[i].nome, suggerimenti: B.NOMI_SEZIONE });
-    if (nome && nome !== m.sezioni[i].nome) this.modifica(B.rinomina(m, i, nome));
+    if (nome && nome !== m.sezioni[i].nome) this.modifica(B.rinomina(m, i, nome), true, `sezione «${m.sezioni[i].nome}» rinominata`);
   }
 
   async dividi(carta) {
@@ -407,7 +500,7 @@ export class Cue {
     const m = this.brano.modello;
     if (da === 0) return this.avviso('metti il cursore sulla prima riga della nuova sezione');
     const nome = await chiediNome({ titolo: 'nome della nuova sezione', suggerimenti: B.NOMI_SEZIONE });
-    if (nome) this.modifica(B.dividi(m, carta.i, da, nome));
+    if (nome) this.modifica(B.dividi(m, carta.i, da, nome), true, `sezione «${m.sezioni[carta.i].nome}» divisa`);
   }
 
   // --- + sezione dalle righe selezionate ---
@@ -437,7 +530,7 @@ export class Cue {
       this.libero.codice = r.testo;
       this.libero.vaiAllaRiga(r.riga + 1);
     } else {
-      this.modifica(B.leggi(r.testo));
+      this.modifica(B.leggi(r.testo), true, `sezione «${nome}» aggiunta`);
       const nuova = B.leggi(r.testo).sezioni.findIndex((s) => s.riga === B.rigaSezione(nome) || s.nome === nome);
       this.carte.find((c) => c.i === nuova)?.editor.focus();
     }

@@ -155,6 +155,12 @@ export function conInfo(brano, i, info) {
   );
 }
 
+// Una sezione nuova in fondo al brano (un livello tolto che torna nel CUE).
+export function conSezioneInFondo(brano, nome, info, codice) {
+  const corpo = codice.replace(/\s+$/, '').split('\n');
+  return conSezioni(brano, [...brano.sezioni, { riga: rigaSezione(nome, info), nome, info, corpo }]);
+}
+
 // La sezione i si prende il corpo della successiva.
 export function unisci(brano, i) {
   if (i < 0 || i >= brano.sezioni.length - 1) return brano;

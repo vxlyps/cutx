@@ -8,6 +8,7 @@ import { Impostazioni } from './impostazioni.js';
 import { Importa } from './importa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
+import { Cronologia } from './cronologia.js';
 import { ControlloBpm } from './bpm.js';
 import { arrotondaBpm, bpmDi, cicloDi, cpsAl, fraseDi, tempoInArrivo } from './tempo.js';
 import { Pila } from './pila.js';
@@ -57,6 +58,8 @@ let ripreso = false; // ho già preso lo stato dai motori? (dopo un crash dell'i
 
 let libreria = [];
 let browser = null; // il browser a sinistra (più sotto): serve già al CUE che si costruisce prima
+// ⌘Z fuori dagli editor (cronologia.js): un annulla non cambia mai direttamente il live
+const cronologia = new Cronologia(20);
 const cue = new Cue(CODICE_INIZIALE, {
   provaInCuffia: () => provaInCuffia(),
   goLive: () => goLive(),
@@ -69,6 +72,7 @@ const cue = new Cue(CODICE_INIZIALE, {
   bozza: () => salvaBozza(),
   mostraLibreria: () => scegliScheda('libreria'),
 });
+cue.registra = (voce) => cronologia.registra(voce);
 
 // La bozza del CUE: il testo dell'editor libero si salva mentre scrivo. Se l'interfaccia crasha e il guardiano la ricarica
 // (la pagina riparte vuota) il testo torna com'era; a un avvio normale non si tocca.
@@ -169,7 +173,37 @@ function togliLivello(id) {
   if (inTest) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   const l = id !== undefined ? livelliLive.find((x) => x.id === id) : attivi.at(-1);
-  if (l) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(preferenze.dissolvenzaUscita ?? 0) });
+  if (!l) return;
+  // un livello che sta già sfumando: il secondo togli lo salva, e non c'è niente da annullare
+  if (l.a === null) {
+    const copia = { nome: l.nome, codice: l.codice, volume: l.volume, muto: l.muto };
+    // ⌘Z lo riporta nel CUE, pronto: lo rimanda chi suona col go live (il live non si tocca)
+    cronologia.registra({ etichetta: `livello «${l.nome}» tolto`, annulla: () => cue.reinserisci(copia) });
+  }
+  live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(preferenze.dissolvenzaUscita ?? 0) });
+}
+
+// Volume e muto di un livello si annullano subito (sono innocui): un trascinamento del volume è un passo solo.
+const livelloVivo = (id) => livelliLive.find((x) => x.id === id && x.a === null);
+function registraVolume(id, prima, dopo) {
+  if (prima === undefined || dopo === undefined || Math.abs(prima - dopo) < 0.005) return;
+  const nome = livelloVivo(id)?.nome ?? '';
+  const imposta = (v) => () => (livelloVivo(id) ? void live.manda({ tipo: 'livello', livello: id, volume: v }) : false);
+  cronologia.registra({ etichetta: `volume di «${nome}»`, annulla: imposta(prima), rifai: imposta(dopo) });
+}
+function registraMuto(id, dopo) {
+  const l = livelloVivo(id);
+  if (!l) return;
+  const imposta = (m) => () => (livelloVivo(id) ? void live.manda({ tipo: 'livello', livello: id, muto: m }) : false);
+  cronologia.registra({ etichetta: `muto di «${l.nome}»`, annulla: imposta(!dopo), rifai: imposta(dopo) });
+}
+async function annullaSet(verso = 'annulla') {
+  if (inTest) return;
+  const r = await (verso === 'annulla' ? cronologia.annulla() : cronologia.rifai());
+  if (!r) return cue.avviso(verso === 'annulla' ? 'niente da annullare' : 'niente da rifare');
+  const salti = r.saltate.length ? ` · non si poteva più: ${r.saltate.join(', ')}` : '';
+  if (!r.etichetta) return cue.avviso(`non si può più annullare${salti}`);
+  cue.avviso(`${verso === 'annulla' ? 'annullato' : 'rifatto'}: ${r.etichetta}${r.messaggio ? ` · ${r.messaggio}` : ''}${salti}`);
 }
 
 // --- paracadute "CUTX, scelgo te!" ---
@@ -314,11 +348,16 @@ const FA = {
   // muto del livello n: la cifra arriva dal tasto premuto
   muto: (n) => {
     const l = pila.attivi()[n - 1];
-    if (l) live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });
+    if (l) {
+      registraMuto(l.id, !l.muto);
+      live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });
+    }
   },
   fermaTutto,
   cuffiaOnOff: () => cuffiaOnOff(),
   cuffiaPausa: () => pausaCuffia(),
+  annullaSet: () => annullaSet('annulla'),
+  rifaiSet: () => annullaSet('rifai'),
   // dal CUE al LIVE (il jam) e ritorno
   passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
   help: helpOnOff,
@@ -385,7 +424,10 @@ function mostraAvvisoStash(stato) {
 }
 setInterval(async () => stashMancante && apriStash(await window.cutx.stash()), 3000);
 
+let percorsoStash = null;
 async function apriStash(stato) {
+  if (stato.percorso !== percorsoStash) cronologia.svuota(); // un altro stash: la storia di prima non vale più
+  percorsoStash = stato.percorso;
   haStash = !!stato.config;
   suoni = {};
   if (!stato.percorso) {
@@ -714,13 +756,23 @@ function mostraUscita(aperta) {
 }
 
 // Il LIVE: la pila dei livelli, dallo stato del motore live, e il jam in fondo.
+let volumePrima = null; // { id, v }: il volume com'era all'inizio del trascinamento
 const pila = new Pila($('livelli'), $('jam'), {
   togli: (id) => togliLivello(id),
   salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
   volume: (id, volume) => live.manda({ tipo: 'livello', livello: id, volume }),
-  muto: (id, muto) => live.manda({ tipo: 'livello', livello: id, muto }),
+  volumeInizio: (id) => (volumePrima = { id, v: livelloVivo(id)?.volume }),
+  volumeFine: (id) => {
+    if (volumePrima?.id === id) registraVolume(id, volumePrima.v, livelloVivo(id)?.volume);
+    volumePrima = null;
+  },
+  muto: (id, muto) => {
+    registraMuto(id, muto);
+    live.manda({ tipo: 'livello', livello: id, muto });
+  },
   // jam o livello modificato: entra al prossimo ciclo, già scritto. Un errore lascia la versione di prima.
   applica: async (livello, codice) => {
+    const prima = livello ? livelloVivo(livello.id)?.codice : null;
     const r = await live.richiesta({
       tipo: 'entra',
       codice,
@@ -729,6 +781,10 @@ const pila = new Pila($('livelli'), $('jam'), {
       cicli: 1,
       scritto: true,
     });
+    if (!r.errore && prima && livello) {
+      // una modifica live sbagliata: ⌘Z carica la versione di prima nell'editor del livello, e la applico io
+      cronologia.registra({ etichetta: `modifica di «${livello.nome}»`, annulla: () => pila.proponi(livello.nome, prima) });
+    }
     return r.errore ?? null;
   },
   bozze: (bozze) => {
@@ -922,6 +978,8 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 globalThis.cutxProva = {
   motori: { live, cuffia },
   pausaCuffia,
+  cronologia,
+  annullaSet,
   // per capire un fallimento: cosa vede l'interfaccia in questo momento
   diagnosi: () => ({ inTest, ripreso, avviso: $('cue-avviso').textContent, livelli: livelliLive.map((l) => `${l.nome}:${l.da}-${l.a}`), liveViva: live.viva, cuffiaViva: cuffia.viva, bpm: bpmSet(), ripristinando, haFuoco: document.hasFocus() }),
   avviaTest,

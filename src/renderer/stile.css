@@ -2152,3 +2152,22 @@ input[type='checkbox'] {
 .card.livello.sfuma .barra-arrivo > div {
   background: var(--spento);
 }
+
+/* il piede del CUE: «entra tra» e GO LIVE in una riga, la dissolvenza sotto */
+.cue .piede {
+  flex-wrap: wrap;
+  row-gap: 8px;
+  min-height: 0;
+}
+
+.gruppo-diss {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* i due piedi (CUE e LIVE) alla stessa altezza, così la linea sopra di loro è una sola */
+.live .piede {
+  min-height: 108px;
+}

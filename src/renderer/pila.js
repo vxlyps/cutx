@@ -81,6 +81,19 @@ export class Pila {
     if (!this.livelli.length) this.contenitore.append(el('div', 'vuoto', 'niente live · scegli una sezione nel CUE e premi go live ⇧⌘↵, o scrivi nel jam'));
   }
 
+  // ⌘Z su una modifica live: la versione di prima va nell'editor del livello, non applicata. La applica chi suona.
+  proponi(nome, codice) {
+    const l = this.attivoDi(nome);
+    const c = l && this.carte.get(l.id);
+    if (!c) return false;
+    this.apriModifica(c);
+    const m = this.modifiche.get(nome);
+    if (!m) return false;
+    m.editor.codice = codice.replace(/\s+$/, '');
+    this.segna(c);
+    return 'la versione di prima è nell\'editor del livello: ⌘↵ per applicarla';
+  }
+
   attivoDi(nome) {
     return this.livelli.filter((l) => l.nome === nome && l.a === null).at(-1);
   }
@@ -135,10 +148,14 @@ export class Pila {
     };
     volume.onpointerdown = (e) => {
       volume.setPointerCapture(e.pointerId);
+      this.azioni.volumeInizio?.(c.livello.id);
       imposta(e);
       volume.onpointermove = imposta;
     };
-    volume.onpointerup = () => (volume.onpointermove = null);
+    volume.onpointerup = () => {
+      volume.onpointermove = null;
+      this.azioni.volumeFine?.(c.livello.id);
+    };
     codice.onclick = () => (c.livello.sfuma?.verso === 'esce' && c.livello.a !== null ? null : this.apriModifica(c));
     return c;
   }
