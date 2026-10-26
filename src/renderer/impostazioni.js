@@ -4,6 +4,7 @@
 import it from './testi/it.json';
 import { AZIONI, caps, comboCifra, comboDa, conflitto, effettive, eRiservata } from './scorciatoie.js';
 import { creaEditor } from './editor.js';
+import { MODI, modoValido } from './sfondo.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -103,6 +104,18 @@ export class Impostazioni {
     const gruppo = (id, voci) => $(id).replaceChildren(...voci.map((v) => rigaInterruttore(v, p[v.chiave] !== false, (x) => this.dati.salvaPreferenze({ [v.chiave]: x }))));
     gruppo('imp-help', it.impostazioni.help);
     gruppo('imp-proiezione', it.impostazioni.proiezione);
+    const sfondo = modoValido(p.sfondoProiettore);
+    const riga = crea('div', 'imp-riga');
+    const testo = crea('div', 'imp-testo');
+    testo.append(crea('span', '', it.impostazioni.sfondo.nome), crea('span', 'imp-nota', it.impostazioni.sfondo.testo));
+    const scelta = crea('div', 'segmenti');
+    for (const modo of MODI) {
+      const b = crea('button', `key${modo === sfondo ? ' on' : ''}`, modo);
+      b.onclick = () => this.dati.salvaPreferenze({ sfondoProiettore: modo });
+      scelta.append(b);
+    }
+    riga.append(testo, scelta);
+    $('imp-proiezione').append(riga);
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
     this.disegnaScorciatoie();
     this.disegnaAbleton();

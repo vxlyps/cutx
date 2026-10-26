@@ -24,6 +24,7 @@ export const AZIONI = [
   { id: 'fraseDaCapo', nome: 'frase da capo al prossimo ciclo', predefinita: 'Meta+Digit0' },
   { id: 'paracadute', nome: 'paracadute (due volte di fila)', predefinita: 'Meta+KeyP' },
   { id: 'uscitaIntera', nome: 'uscita a schermo intero', predefinita: 'Ctrl+Meta+KeyF' },
+  { id: 'sfondo', nome: 'sfondo del proiettore (niente, note, oscilloscopio)', predefinita: 'Ctrl+Meta+KeyB' },
 ];
 
 // Quelle di macOS e dell'editor che non si toccano.

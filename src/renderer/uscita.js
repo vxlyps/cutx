@@ -7,6 +7,7 @@ import { attivi, riempi } from './evidenzia.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
 import { Scorrimento, scegliDisposizione, trovaScala } from './scorri.js';
+import { Sfondo, modoDopo, modoValido } from './sfondo.js';
 import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
 import seduto from '../../design/risorse/gatti/gatto_seduto_marcio.svg';
 import lecca from '../../design/risorse/gatti/gatto_lecca_marcio.svg';
@@ -24,11 +25,21 @@ const blocchi = new Map(); // chiave → { el, tag, codice }
 
 // --- canali: dal live il tempo e i livelli, dall'interfaccia le bozze ---
 
+const sfondo = new Sfondo($('sfondo'));
+let portaLive = null;
+// il live manda l'onda solo se lo sfondo è l'oscilloscopio
+const chiediOnda = () => portaLive?.postMessage({ tipo: 'onda', on: sfondo.modo === 'oscilloscopio' });
+
 window.addEventListener('message', (e) => {
   const con = e.data?.porta;
   if (!con || !e.ports[0]) return;
+  if (con === 'live') {
+    portaLive = e.ports[0];
+    chiediOnda();
+  }
   e.ports[0].onmessage = ({ data }) => {
-    if (data.tipo === 'mappa') mappa = data;
+    if (data.tipo === 'onda') sfondo.suOnda(data.dati);
+    else if (data.tipo === 'mappa') mappa = data;
     else if (data.tipo === 'livelli') livelli = data.livelli;
     else if (data.tipo === 'bozze') bozze = data;
   };
@@ -109,6 +120,7 @@ function disegna() {
   const intero = Math.floor(ciclo);
   const quarto = Math.floor((ciclo - intero) * 4);
   const lunghezza = preferenze.lunghezzaFrase ?? 16;
+  sfondo.disegna(ciclo, livelli);
   $('bpm').textContent = `${arrotondaBpm(bpmDi(cpsAl(mappa, epoca)))} BPM`;
   $('frase').textContent = fraseDi(mappa, epoca, lunghezza);
   [...$('battute').children].forEach((d, i) => {
@@ -309,6 +321,10 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     window.cutx.uscitaSchermoIntero();
   }
+  if (corrisponde(e, AZIONI.find((a) => a.id === 'sfondo'), effettive(preferenze.scorciatoie).sfondo)) {
+    e.preventDefault();
+    window.cutx.salvaPreferenze({ sfondoProiettore: modoDopo(modoValido(preferenze.sfondoProiettore)) });
+  }
 });
 
 $('wordmark').src = wordmark;
@@ -316,6 +332,9 @@ avviaGatto();
 globalThis.cutxInsegna = avviaInsegna($('insegna'));
 function applica(p) {
   preferenze = p;
+  const prima = sfondo.modo;
+  sfondo.imposta(p.sfondoProiettore);
+  if (sfondo.modo !== prima) chiediOnda();
   document.body.classList.toggle('senza-gatto', p.gatto === false);
   document.body.classList.toggle('senza-insegna', p.insegna === false);
 }
@@ -323,4 +342,5 @@ window.cutx.suPreferenze(applica);
 applica(await window.cutx.preferenze());
 setInterval(disegna, 100);
 giro();
+globalThis.cutxSfondo = sfondo;
 globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala: disposizione.scala });

@@ -7,6 +7,7 @@ import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
 import { Importa } from './importa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
+import { modoDopo, modoValido } from './sfondo.js';
 import { ControlloBpm } from './bpm.js';
 import { arrotondaBpm, bpmDi, cicloDi, cpsAl, fraseDi, tempoInArrivo } from './tempo.js';
 import { Pila } from './pila.js';
@@ -306,6 +307,7 @@ const FA = {
   fraseDaCapo,
   paracadute: paracaduteDoppio,
   uscitaIntera: () => window.cutx.uscitaSchermoIntero(),
+  sfondo: () => window.cutx.salvaPreferenze({ sfondoProiettore: modoDopo(modoValido(preferenze.sfondoProiettore)) }),
 };
 
 // Le scorciatoie valgono anche dentro l'editor (le prendo prima di lui), tranne quelle che scrivono

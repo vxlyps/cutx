@@ -181,6 +181,10 @@
     "frase": {
       "nome": "lunghezza della frase"
     },
+    "sfondo": {
+      "nome": "sfondo del proiettore",
+      "testo": "dietro al codice: niente, le note che suonano o l'onda in uscita. ⌃⌘B li cambia al volo, anche dal proiettore"
+    },
     "proiezione": [
       {
         "chiave": "hydra",

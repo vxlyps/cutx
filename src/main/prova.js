@@ -1993,3 +1993,71 @@ async function provaUscita({ finestre, scrivi }) {
   }
   return ok;
 }
+
+// Le foto dello sfondo del proiettore (note e oscilloscopio) con qualche controllo: npx electron . --sfondo=<cartella>
+export async function sfondo({ finestre, cartella }) {
+  await mkdir(cartella, { recursive: true });
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const uscita = (codice) => chiedi(finestre.uscita, codice);
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    console.log(`[sfondo] ${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  await aspettaChe(async () => (await chiedi(finestre.live, 'globalThis.cutxStato?.()')) && (await js('!!globalThis.cutxProva')));
+  await aspetta(1);
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  finestre.uscita.setContentSize(1280, 720);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(124/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scegliEntraTra(1)`);
+  const livelli = [
+    '// @sezione batteria\ns("bd*4, ~ cp ~ cp, hh*8").gain(.06)',
+    '// @sezione basso\nnote("<c2 c2 eb2 g1>*4").s("sawtooth").lpf(500).gain(.06)',
+    '// @sezione melodia\nn("0 3 7 <10 12> 7 3").scale("C:minor").s("triangle").room(.4).gain(.05)',
+  ];
+  for (const codice of livelli) {
+    await js(`cutxProva.scriviCue(${JSON.stringify(codice)})`);
+    await finestre.controllo.webContents.executeJavaScript('cutxProva.goLive()');
+    await aspetta(2.8);
+  }
+  await aspetta(3);
+  const foto = async (nome) => writeFile(path.join(cartella, `${nome}.png`), (await finestre.uscita.webContents.capturePage()).toPNG());
+  const pixel = () => uscita(`(() => { const c = document.getElementById('sfondo'); if (c.hidden) return -1; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; })()`);
+
+  await js(`window.cutx.salvaPreferenze({ sfondoProiettore: 'niente' })`);
+  await aspetta(1);
+  controlla('niente: il canvas è nascosto, nessun costo', (await pixel()) === -1);
+  await foto('sfondo-niente');
+
+  await js(`window.cutx.salvaPreferenze({ sfondoProiettore: 'note' })`);
+  await aspetta(3);
+  const note = await pixel();
+  controlla('note: il pianoroll disegna', note > 500, String(note));
+  await foto('sfondo-note');
+
+  await js(`window.cutx.salvaPreferenze({ sfondoProiettore: 'oscilloscopio' })`);
+  await aspetta(3);
+  const onda = await pixel();
+  const arrivata = await uscita('!!globalThis.cutxSfondo.onda');
+  controlla("oscilloscopio: l'onda arriva dal live e si disegna", arrivata && onda > 500, `${arrivata} ${onda}`);
+  await foto('sfondo-oscilloscopio');
+
+  // costo del disegno, a 30 fotogrammi al secondo
+  const ms = await uscita(`(() => { const s = globalThis.cutxSfondo; const t = performance.now(); for (let i = 0; i < 60; i++) { s.ultimo = 0; s.disegna(0, [], performance.now() + i * 40); } return (performance.now() - t) / 60; })()`);
+  controlla(`oscilloscopio: il disegno costa ${ms.toFixed(2)} ms a fotogramma`, ms < 4, String(ms));
+
+  // ⌃⌘B dal proiettore cambia lo sfondo: oscilloscopio → niente → note
+  finestre.uscita.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'B', modifiers: ['control', 'meta'] });
+  finestre.uscita.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'B', modifiers: ['control', 'meta'] });
+  await aspetta(1.2);
+  controlla('⌃⌘B dal proiettore: oscilloscopio → niente', (await js('window.cutx.preferenze()')).sfondoProiettore === 'niente');
+  // e il live non manda più l'onda
+  await aspetta(1);
+  controlla("senza oscilloscopio il live non manda più l'onda", (await uscita('performance.now() - globalThis.cutxSfondo.ondaAl')) > 800);
+  await js(`window.cutx.salvaPreferenze({ sfondoProiettore: 'niente' })`);
+  console.log(ok ? '[sfondo] FATTO' : '[sfondo] CON PROBLEMI');
+  return ok;
+}

@@ -20,6 +20,7 @@ const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton,neon,tempo,solidita,uscita' : null);
 const SCHERMATE = process.argv.find((a) => a.startsWith('--schermate='))?.slice('--schermate='.length); // giro di tutti i pannelli a più dimensioni
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
+const SFONDO = process.argv.find((a) => a.startsWith('--sfondo='))?.slice('--sfondo='.length); // foto dello sfondo del proiettore
 const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('--chiusura='.length); // prova: si apre e si chiude in un certo modo
 
 // Prova e foto girano con dati a parte, accanto a una CUTX eventualmente aperta e senza toccarne le impostazioni.
@@ -51,7 +52,7 @@ function migraDaDaneel() {
 if (!PROVA && !FOTO && !SCHERMATE && !CHIUSURA) migraDaDaneel();
 
 // Il registro: errori e avvisi di tutti i processi, in ~/Library/Logs/CUTX (nelle prove, in una cartella a parte).
-const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || CHIUSURA);
+const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || SFONDO || CHIUSURA);
 log.inizia(PER_PROVE ? path.join(app.getPath('userData'), 'log') : app.getPath('logs'));
 // Un evento del guardiano o dell'app: nel terminale e nel registro.
 const ev = (livello, fonte, testo) => {
@@ -521,6 +522,7 @@ app.whenReady().then(async () => {
   // le prove stanno a parte e non entrano nel pacchetto: si caricano solo se le chiedi
   if (PROVA) import('./prova.js').then((m) => m.prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') })).then((ok) => app.exit(ok ? 0 : 1));
   if (FOTO) import('./prova.js').then((m) => m.foto({ finestre, file: FOTO })).then(() => app.exit(0));
+  if (SFONDO) import('./prova.js').then((m) => m.sfondo({ finestre, cartella: path.resolve(SFONDO) })).then((ok) => app.exit(ok ? 0 : 1));
   if (SCHERMATE) import('./prova.js').then((m) => m.schermate({ finestre, cartella: path.resolve(SCHERMATE) })).then((n) => app.exit(n ? 1 : 0));
   if (CHIUSURA) provaChiusura(CHIUSURA);
 });

@@ -13,6 +13,7 @@ export const PREDEFINITE = {
   riquadroHelp: true,
   gatto: true,
   insegna: true,
+  sfondoProiettore: 'niente', // dietro al codice sul proiettore: niente, note, oscilloscopio
   hydra: true,
   logoSopraHydra: true,
   cartelleAbleton: [], // dove tengo i progetti Ableton (solo letti)

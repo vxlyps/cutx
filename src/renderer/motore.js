@@ -16,6 +16,7 @@ import { Orologio, cpsDi, risolvi } from './tempo.js';
 import { elencoUscite, impostaUscita } from './uscite.js';
 import { Riproduttore, TICK_S } from './riproduttore.js';
 import { Sentinella, Anello } from './ascolto.js';
+import { avviaOnda } from './sfondo.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
 const LIVE = RUOLO === 'live';
@@ -39,6 +40,19 @@ const pronto = (async () => {
 
 const porte = {}; // controllo, live o cuffia → MessagePort
 const manda = (a, m) => porte[a]?.postMessage(m);
+
+// L'onda per lo sfondo «oscilloscopio» del proiettore: l'analizzatore esiste solo finché la finestra dell'uscita lo chiede
+// (spento non costa niente) e sta in derivazione dall'uscita: non tocca il suono.
+let fermaOnda = null;
+function onda(accesa) {
+  if (!LIVE || !!fermaOnda === accesa) return;
+  if (!accesa) {
+    fermaOnda();
+    fermaOnda = null;
+    return;
+  }
+  fermaOnda = avviaOnda({ ac, sorgente: getSuperdoughAudioController().output.destinationGain, invia: (dati) => manda('uscita', { tipo: 'onda', dati }) });
+}
 
 let errore = null; // della configurazione
 let offsetMs = 0;
@@ -532,6 +546,9 @@ async function ricevi(da, m) {
       if (!rip.mappa) return;
       ancoraFrase = Math.ceil(rip.ciclo(ac.currentTime));
       return pubblicaMappa();
+    case 'onda':
+      if (da === 'uscita') onda(!!m.on);
+      return;
     case 'mix':
       mix = m.valore;
       return;
@@ -545,6 +562,7 @@ async function ricevi(da, m) {
 window.addEventListener('message', (e) => {
   const con = e.data?.porta;
   if (!con || !e.ports[0]) return;
+  if (con === 'uscita') onda(false); // un'uscita nuova (o riaperta) riparte da capo: l'onda la richiede lei
   porte[con] = e.ports[0];
   porte[con].onmessage = ({ data }) => ricevi(con, data);
   // Chi arriva riceve subito il tempo e i livelli live.
