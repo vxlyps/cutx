@@ -1,7 +1,7 @@
 {
   "name": "cutx",
   "productName": "CUTX",
-  "version": "0.1.0-beta.1",
+  "version": "0.2.0-beta.2",
   "description": "Live coding musicale come un CDJ, basato su Strudel",
   "license": "AGPL-3.0-or-later",
   "private": true,
