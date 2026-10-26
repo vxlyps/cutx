@@ -47,6 +47,7 @@ let pezzoCuffia = null; // { codice, etichetta }: per ridarlo alla cuffia se rin
 let cuffiaUdibile = true;
 let mappa = null;
 let livelliLive = []; // i livelli del motore live: { id, nome, provenienza, codice, da, a, … }
+let dissEntra = 0; // dissolvenza dell'entrata (cicli), scelta nel CUE: parte dal valore delle impostazioni
 let entraTra = 1; // GO LIVE entra al confine tra 1, 2, 4 o 8 cicli // la mappa del tempo del live, in tempo assoluto
 let config = { uscite: {}, offsetCuffiaMs: 0 };
 let suoni = {};
@@ -151,18 +152,23 @@ async function goLive() {
     messaggi.push(`il set resta a ${set} bpm (il brano è a ${p.bpmBrano})`);
     if (B.eSezioneAudio(codice.slice(p.inizio))) messaggi.push('questa sezione suona un file audio: va al suo tempo originale');
   }
-  const r = await live.richiesta({ tipo: 'entra', codice, nome: p.nome, provenienza: p.provenienza, cicli: entraTra });
+  const r = await live.richiesta({ tipo: 'entra', codice, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;
 }
+
+// Le dissolvenze (dissolvenza.js): quanti cicli, e se solo volume o anche filtro (impostazioni).
+const dissolvenza = (cicli) => ({ cicli, tipo: preferenze.dissolvenzaTipo ?? 'volume', filtroUscita: preferenze.dissolvenzaFiltroUscita ?? 'hp' });
+// il paracadute è sempre una transizione vera: quello che suona sale col passa-alto, lui entra aprendo il passa-basso
+const dissolvenzaParacadute = () => ({ cicli: preferenze.paracaduteCicli ?? 2, tipo: 'filtro', filtroUscita: 'hp' });
 
 // Toglie a fine ciclo l'ultimo livello entrato (al passo 6: quello scelto nel LIVE).
 function togliLivello(id) {
   if (inTest) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   const l = id !== undefined ? livelliLive.find((x) => x.id === id) : attivi.at(-1);
-  if (l) live.manda({ tipo: 'togli', livello: l.id });
+  if (l) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(preferenze.dissolvenzaUscita ?? 0) });
 }
 
 // --- paracadute "CUTX, scelgo te!" ---
@@ -176,7 +182,7 @@ stack(
 
 async function lanciaParacadute() {
   if (inTest || preferenze.paracadute === false) return;
-  const r = await live.richiesta({ tipo: 'paracadute', codice: config.paracadute || PARACADUTE });
+  const r = await live.richiesta({ tipo: 'paracadute', codice: config.paracadute || PARACADUTE, dissolvenza: dissolvenzaParacadute() });
   if (r.errore) cue.avviso(`paracadute: ${r.errore}`, { persistente: true });
   else cue.avviso(r.paracadute ? 'paracadute aperto · di nuovo per tornare com\'eri' : 'si torna com\'eri al prossimo ciclo');
 }
@@ -224,6 +230,11 @@ async function salvaLiveComeBrano() {
   await aggiornaLibreria();
   cue.avviso(`live salvato come ${r.file}: ${livelli.length} sezioni`);
   return r.file;
+}
+
+function scegliDiss(n) {
+  dissEntra = n;
+  for (const b of document.querySelectorAll('[data-diss]')) b.classList.toggle('on', Number(b.dataset.diss) === n);
 }
 
 function scegliEntraTra(n) {
@@ -689,6 +700,7 @@ function mostraUscita(aperta) {
 // Il LIVE: la pila dei livelli, dallo stato del motore live, e il jam in fondo.
 const pila = new Pila($('livelli'), $('jam'), {
   togli: (id) => togliLivello(id),
+  salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
   volume: (id, volume) => live.manda({ tipo: 'livello', livello: id, volume }),
   muto: (id, muto) => live.manda({ tipo: 'livello', livello: id, muto }),
   // jam o livello modificato: entra al prossimo ciclo, già scritto. Un errore lascia la versione di prima.
@@ -871,6 +883,7 @@ $('uscita-onoff').onclick = async () => mostraUscita(await window.cutx.uscitaOnO
 window.cutx.suUscita(mostraUscita);
 window.cutx.uscitaAperta().then(mostraUscita);
 for (const b of document.querySelectorAll('[data-entra]')) b.onclick = () => scegliEntraTra(Number(b.dataset.entra));
+for (const b of document.querySelectorAll('[data-diss]')) b.onclick = () => scegliDiss(Number(b.dataset.diss));
 
 $('uscita-live').onchange = (e) => salva({ uscite: { ...config.uscite, live: e.target.value } });
 $('uscita-cuffia').onchange = (e) => salva({ uscite: { ...config.uscite, cuffia: e.target.value } });
@@ -929,7 +942,9 @@ setInterval(mostra, 100);
 mostra();
 mostraTempo();
 function applicaPreferenze(p) {
+  const dissPrima = preferenze.dissolvenzaEntrata;
   preferenze = p;
+  if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   $('paracadute').hidden = p.paracadute === false;
   document.body.classList.toggle('senza-gatto', p.gatto === false);

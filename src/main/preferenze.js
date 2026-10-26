@@ -13,6 +13,11 @@ export const PREDEFINITE = {
   riquadroHelp: true,
   gatto: true,
   insegna: true,
+  dissolvenzaEntrata: 0, // cicli di sfumata di un livello che entra (0 = di botto)
+  dissolvenzaUscita: 0,
+  dissolvenzaTipo: 'volume', // 'volume' | 'filtro'
+  dissolvenzaFiltroUscita: 'hp', // 'hp' (passa-alto che sale) | 'lp' (passa-basso che chiude)
+  paracaduteCicli: 2, // la transizione del paracadute
   sfondoProiettore: 'niente', // dietro al codice sul proiettore: niente, note, oscilloscopio
   hydra: true,
   logoSopraHydra: true,

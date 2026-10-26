@@ -8,6 +8,7 @@
 import { creaEditor } from './editor.js';
 import { attivi, griglia, riempi } from './evidenzia.js';
 import { aspetto, epocaDi } from './aspetto.js';
+import { resta } from './dissolvenza.js';
 
 const PASSI = 16;
 
@@ -121,6 +122,10 @@ export class Pila {
     const c = { el: art, livello: l, nome, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, celle, piede, errore, pienoVolume, muto };
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
+    // un clic sulla card che sta sfumando la salva: l'uscita si annulla e il livello torna al suo volume
+    art.addEventListener('click', (e) => {
+      if (c.livello.a !== null && c.livello.sfuma?.verso === 'esce' && !e.target.closest('button, .volume')) this.azioni.salvaLivello(c.livello.id);
+    });
     muto.onclick = () => this.azioni.muto(c.livello.id, !c.livello.muto);
     const imposta = (e) => {
       const r = volume.getBoundingClientRect();
@@ -134,7 +139,7 @@ export class Pila {
       volume.onpointermove = imposta;
     };
     volume.onpointerup = () => (volume.onpointermove = null);
-    codice.onclick = () => this.apriModifica(c);
+    codice.onclick = () => (c.livello.sfuma?.verso === 'esce' && c.livello.a !== null ? null : this.apriModifica(c));
     return c;
   }
 
@@ -237,7 +242,23 @@ export class Pila {
     for (const c of this.carte.values()) {
       const l = c.livello;
       if (l.a !== null && !this.inizioUscita.has(l.id)) this.inizioUscita.set(l.id, Math.min(epoca, epocaDi(mappa, l.a)));
-      const a = aspetto(l, this.livelli, mappa, epoca, { scrittura: this.scritturaAMacchina, inizioUscita: this.inizioUscita.get(l.id) });
+      let a = aspetto(l, this.livelli, mappa, epoca, { scrittura: this.scritturaAMacchina, inizioUscita: this.inizioUscita.get(l.id) });
+      // una dissolvenza in uscita: la card resta com'è, attenuata, con la barra che dice quanto manca (sul proiettore il codice si cancella)
+      const sfuma = l.a !== null && l.sfuma?.verso === 'esce' ? l.sfuma : null;
+      if (sfuma) a = { ...a, mostrato: a.testo, cursore: false };
+      c.el.classList.toggle('sfuma', !!sfuma);
+      if (sfuma) {
+        suonano++;
+        c.pieno.style.width = `${(resta(sfuma, a.ciclo) * 100).toFixed(1)}%`;
+        c.conto.textContent = `-${Math.max(0, sfuma.a - a.ciclo).toFixed(1)}`;
+        c.stato.textContent = a.ciclo < sfuma.da ? 'sfuma a fine ciclo · clic per tenerlo' : 'sfuma · clic per tenerlo';
+        c.el.classList.remove('in-arrivo');
+        c.el.classList.add('in-uscita');
+        c.barra.hidden = false;
+        this.disegnaCodice(c, a);
+        this.disegnaGriglia(c, a);
+        continue;
+      }
       if (a.arriva) {
         inArrivo++;
         c.pieno.style.width = `${(a.parte * 100).toFixed(1)}%`;

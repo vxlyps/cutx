@@ -189,6 +189,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('tempo')) ok = (await sicura('tempo', provaTempo)) && ok;
   if (parti.includes('solidita')) ok = (await sicura('solidita', provaSolidita)) && ok;
   if (parti.includes('uscita')) ok = (await sicura('uscita', provaUscita)) && ok;
+  if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
 
@@ -2121,4 +2122,147 @@ export async function saltino({ finestre }) {
   console.log(`[saltino] JSON ${JSON.stringify(rapporto)}`);
   await rm(path.join(stash.radice(), 'libreria', 'saltino_prova.cutx'), { force: true });
   return true;
+}
+
+
+// --- dissolvenze: entrata, uscita, annullo, paracadute, panico, volume della sezione (npx electron . --prova=dissolvenze) ---
+async function provaDissolvenze({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const livello = async (nome) => (await live()).livelli.filter((l) => l.nome === nome).at(-1);
+  const fade = async (nome) => {
+    const s = await live();
+    const l = s.livelli.filter((x) => x.nome === nome).at(-1);
+    return l ? s.dissolvenze[l.id] : null;
+  };
+  const entra = (nome, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*4").gain(.03)', nome, provenienza: 'prova', cicli: 1, ...extra })})`);
+  const tipo = 'filtro';
+
+  // 1. i filtri aperti sono l'identità: rumore dentro, lo stesso rumore fuori
+  const identita = await js(`(async () => {
+    const sr = 48000, n = 48000;
+    const off = new OfflineAudioContext(1, n, sr);
+    const buf = off.createBuffer(1, n, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = new AudioBufferSourceNode(off, { buffer: buf });
+    const lp = new BiquadFilterNode(off, { type: 'lowpass', frequency: sr / 2, Q: 0.707 });
+    const hp = new BiquadFilterNode(off, { type: 'highpass', frequency: 0, Q: 0.707 });
+    src.connect(lp).connect(hp).connect(off.destination);
+    src.start();
+    const out = (await off.startRendering()).getChannelData(0);
+    let max = 0;
+    for (let i = 0; i < n; i++) max = Math.max(max, Math.abs(out[i] - d[i]));
+    return max;
+  })()`);
+  controlla('i filtri aperti sono l\'identità (passa-basso a Nyquist, passa-alto a 0 Hz)', identita !== null && identita < 1e-6, String(identita));
+
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(480/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1.5);
+
+  // 2. entra con una dissolvenza di 2 cicli (1 s a questo tempo): volume 0 → 1 e passa-basso che si apre
+  const d2 = { cicli: 2, tipo, filtroUscita: 'hp' };
+  await entra('basso', { dissolvenza: d2 });
+  let visto = [];
+  for (let i = 0; i < 40; i++) {
+    const f = await fade('basso');
+    if (f) visto.push(f);
+    await aspetta(0.06);
+  }
+  const fadeVisti = visto.map((f) => f.fade);
+  controlla('entra: il volume sale piano da 0 a 1', Math.min(...fadeVisti) < 0.2 && Math.max(...fadeVisti) > 0.97 && fadeVisti.some((v) => v > 0.2 && v < 0.9), JSON.stringify(fadeVisti.map((v) => +v.toFixed(2))));
+  const lpVisti = visto.map((f) => f.lp);
+  controlla('entra: il passa-basso si apre (poi è aperto del tutto)', Math.min(...lpVisti) < 1500 && lpVisti.at(-1) > 20000, JSON.stringify(lpVisti.map(Math.round)));
+  const a = await fade('basso');
+  controlla('finita l\'entrata il livello è com\'è sempre (volume 1, filtri aperti)', a && a.fade > 0.99 && a.lp > 20000 && a.hp < 1, JSON.stringify(a));
+
+  // 3. togli con 2 cicli: continua a suonare e sfuma; la card si attenua; poi sparisce
+  await js(`cutxProva.motori.live.manda({ tipo: 'togli', livello: ${(await livello('basso')).id}, dissolvenza: ${JSON.stringify(d2)} })`);
+  await aspetta(0.2);
+  const l1 = await livello('basso');
+  controlla('togli con dissolvenza: il livello non esce di botto (a = confine + 2 cicli)', l1.a !== null && l1.sfuma?.verso === 'esce' && l1.sfuma.a - l1.sfuma.da === 2, JSON.stringify(l1));
+  await aspetta(0.4);
+  controlla('la card resta, attenuata, con la barra di quanto manca', await js(`(() => { const c = document.querySelector('#livelli .card.livello.sfuma'); return !!c && !c.querySelector('.barra-arrivo').hidden && c.querySelector('.barra-arrivo > div').style.width !== '' && Number(getComputedStyle(c).opacity) < 0.9; })()`));
+  // un secondo togli la salva
+  await js(`cutxProva.motori.live.manda({ tipo: 'togli', livello: ${l1.id}, dissolvenza: ${JSON.stringify(d2)} })`);
+  await aspetta(0.5);
+  const l2 = await livello('basso');
+  const f2 = await fade('basso');
+  controlla('un secondo togli annulla l\'uscita: torna al suo volume', l2.a === null && l2.sfuma === null && f2.fade > 0.97 && f2.hp < 5, JSON.stringify({ l2, f2 }));
+  // un clic sulla card che sfuma la salva
+  await js(`cutxProva.motori.live.manda({ tipo: 'togli', livello: ${l1.id}, dissolvenza: ${JSON.stringify(d2)} })`);
+  await aspetta(0.5);
+  await js(`document.querySelector('#livelli .card.livello.sfuma .barra-arrivo')?.click()`);
+  await aspetta(0.5);
+  controlla('un clic sulla card che sfuma salva il livello', (await livello('basso')).a === null);
+  // lasciato sfumare, esce del tutto
+  await js(`cutxProva.motori.live.manda({ tipo: 'togli', livello: ${l1.id}, dissolvenza: ${JSON.stringify(d2)} })`);
+  let minimo = 1;
+  let sparito = false;
+  for (let i = 0; i < 50 && !sparito; i++) {
+    const f = await fade('basso');
+    if (f) minimo = Math.min(minimo, f.fade);
+    sparito = !(await livello('basso'));
+    await aspetta(0.1);
+  }
+  controlla('lasciato sfumare, il volume scende a 0 e il livello esce', sparito && minimo < 0.5, `minimo ${minimo}`); // (il livello se ne va dalla lista un attimo prima della fine: ha già programmato l'ultimo colpo)
+
+  // 4. senza dissolvenza tutto è come prima: di botto, a fine ciclo
+  await entra('secco');
+  await aspetta(1.2);
+  await js(`cutxProva.motori.live.manda({ tipo: 'togli', livello: ${(await livello('secco')).id}, dissolvenza: { cicli: 0, tipo: 'volume', filtroUscita: 'hp' } })`);
+  await aspetta(0.03);
+  const secco = await livello('secco');
+  controlla('dissolvenza 0: esce di botto a fine ciclo, senza sfumata', !!secco && secco.sfuma === null && secco.a !== null && secco.a - (await live()).ciclo < 1.01);
+
+  // 5. sostituire un livello con uno dello stesso nome: i due si scambiano
+  await entra('scambio');
+  await aspetta(1.2);
+  await entra('scambio', { dissolvenza: { cicli: 1, tipo: 'volume' } });
+  await aspetta(0.3);
+  const livelliScambio = (await live()).livelli.filter((l) => l.nome === 'scambio');
+  const vecchio = livelliScambio[0];
+  const nuovo = livelliScambio.at(-1);
+  controlla('sostituzione con dissolvenza: il vecchio sfuma mentre entra il nuovo', livelliScambio.length === 2 && vecchio.sfuma?.verso === 'esce' && nuovo.sfuma?.verso === 'entra' && vecchio.a === nuovo.da + 1, JSON.stringify(livelliScambio.map((l) => [l.da, l.a, l.sfuma])));
+
+  // 6. il paracadute è una transizione: quello che suona sfuma col passa-alto, lui entra col passa-basso
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.5);
+  await entra('uno');
+  await entra('due');
+  await aspetta(1.5);
+  await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'paracadute', codice: 's("sine*2").gain(.02)', dissolvenza: { cicli: 2, tipo: 'filtro', filtroUscita: 'hp' } })})`);
+  await aspetta(0.15);
+  const sp = (await live()).livelli;
+  const paracaduteL = sp.find((l) => l.nome === 'paracadute');
+  const usciti = sp.filter((l) => l.nome !== 'paracadute');
+  controlla('paracadute: tutti i livelli escono sfumando e lui entra sfumando, agganciati', paracaduteL?.sfuma?.verso === 'entra' && usciti.length === 2 && usciti.every((l) => l.sfuma?.verso === 'esce' && l.a === paracaduteL.da + 2 && l.sfuma.da === paracaduteL.da), JSON.stringify(sp.map((l) => [l.nome, l.da, l.a, l.sfuma])));
+  let hpMax = 0;
+  for (let i = 0; i < 20; i++) {
+    const s = await live();
+    for (const l of s.livelli.filter((x) => x.nome !== 'paracadute')) hpMax = Math.max(hpMax, s.dissolvenze[l.id]?.hp ?? 0);
+    await aspetta(0.08);
+  }
+  controlla('paracadute: il passa-alto di quello che esce sale', hpMax > 100, String(hpMax));
+
+  // 7. ⌘. è il panico: niente dissolvenza, tutto si zittisce subito
+  await js(`cutxProva.motori.live.manda({ tipo: 'ferma' })`);
+  await aspetta(0.2);
+  controlla('⌘. ferma tutto subito, senza dissolvenza', (await live()).livelli.length === 0);
+
+  // 8. il volume scritto nella sezione: nel file, nell'intestazione, e il livello entra a quel volume
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue(${JSON.stringify('// @brano volume\n// @sezione piano · volume 0.4\ns("sine*2").gain(.02)\n')})`);
+  await aspetta(0.3);
+  await js(`cutxProva.scegliEntraTra(1); cutxProva.goLive()`);
+  await aspetta(1.5);
+  const piano = await livello('piano');
+  const gv = piano ? (await live()).guadagni[piano.id] : null;
+  controlla('la sezione entra al volume scritto nell\'intestazione (0,4)', piano && piano.volume === 0.4 && Math.abs(gv - 0.4) < 0.05, JSON.stringify({ piano: piano?.volume, gv }));
+  await js(`cutxProva.fermaTutto()`);
+  return ok;
 }

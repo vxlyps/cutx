@@ -18,6 +18,7 @@ import { Riproduttore, TICK_S } from './riproduttore.js';
 import { Sentinella, Anello } from './ascolto.js';
 import { avviaOnda } from './sfondo.js';
 import { suoniNuovi } from './suoni-nuovi.js';
+import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
 const LIVE = RUOLO === 'live';
@@ -150,25 +151,48 @@ function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = 
     richiesto: orologio.epoca(ac.currentTime),
     volume: 1,
     muto: false,
+    sfuma: null, // { verso: 'entra' | 'esce', da, a, filtro } finché dura una dissolvenza
   };
 }
 
+// Una dissolvenza di un livello, da un ciclo e per tot cicli (dissolvenza.js). Senza cicli non fa niente: di botto, come sempre.
+function dissolvi(l, verso, da, cicli, filtro) {
+  if (!LIVE || !(cicli > 0) || !Number.isFinite(da) || !rip.mappa) return;
+  const g = guadagnoDi(l);
+  programma({ ac, fade: g.fade, lp: g.lp, hp: g.hp }, { verso, da: rip.tempo(da), fine: rip.tempo(da + cicli), filtro });
+  l.sfuma = { verso, da, a: da + cicli, filtro };
+}
+// Una dissolvenza che non serve più (il livello rientra, o è sparito): i nodi tornano aperti.
+function annullaDissolvi(l) {
+  const g = guadagni.get(l.id);
+  if (g) annulla({ ac, fade: g.fade, lp: g.lp, hp: g.hp });
+  l.sfuma = null;
+}
+const dissolvenzaDi = (d) => ({ cicli: Math.max(0, Math.round(Number(d?.cicli) || 0)), entra: filtroEntra(d?.tipo), esce: filtroEsce(d?.tipo, d?.filtroUscita) });
+
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   const da = rip.prossimoConfine() + Math.max(1, cicli) - 1;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
+  const d = dissolvenzaDi(dissolvenza);
+  const scambi = [];
   for (const vecchio of livelli) {
     if (vecchio.nome !== l.nome || vecchio.a <= da) continue;
-    vecchio.a = Math.max(vecchio.da, da);
+    // con una dissolvenza i due livelli si scambiano: il vecchio continua e sfuma mentre il nuovo entra
+    vecchio.a = Math.max(vecchio.da, da) + d.cicli;
+    scambi.push(vecchio);
     l.volume = vecchio.volume;
     l.muto = vecchio.muto;
   }
+  if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
   livelli.push(l);
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
   iniziaSet(da);
   aggiornaLivelli();
+  dissolvi(l, 'entra', da, d.cicli, d.entra);
+  for (const vecchio of scambi) dissolvi(vecchio, 'esce', da, d.cicli, d.esce);
   return { da, livello: l.id };
 }
 
@@ -177,24 +201,32 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false }) 
 // conservano: la seconda volta escono il paracadute e rientrano loro, al ciclo successivo.
 let paracadute = null; // { id, salvati: [livelli] } quando è aperto
 
-async function lanciaParacadute(codice) {
-  if (paracadute) return riprendiDalParacadute();
+async function lanciaParacadute(codice, dissolvenza) {
+  if (paracadute) return riprendiDalParacadute(dissolvenza);
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   const battito = Math.ceil((rip.fine ?? rip.ciclo(ac.currentTime)) * 4) / 4;
+  const d = dissolvenzaDi(dissolvenza);
   const salvati = livelli.filter((l) => l.a === Infinity);
-  for (const l of salvati) l.a = Math.max(l.da, battito);
+  for (const l of salvati) l.a = Math.max(l.da, battito) + d.cicli;
   const p = nuovoLivello(codice, c.pattern, { nome: 'paracadute', provenienza: 'cutx, scelgo te!', scritto: true }, battito);
   livelli.push(p);
   paracadute = { id: p.id, salvati };
   aggiornaLivelli();
+  // quello che suona esce (passa-alto che sale) mentre il paracadute entra (passa-basso che si apre), agganciati al battito
+  dissolvi(p, 'entra', battito, d.cicli, d.entra);
+  for (const l of salvati) dissolvi(l, 'esce', Math.max(l.da, battito), d.cicli, d.esce);
   return { da: battito, paracadute: true };
 }
 
-function riprendiDalParacadute() {
+function riprendiDalParacadute(dissolvenza) {
+  const d = dissolvenzaDi(dissolvenza);
   const confine = rip.prossimoConfine();
   const p = livelli.find((l) => l.id === paracadute.id);
-  if (p && p.a === Infinity) p.a = Math.max(p.da, confine);
+  if (p && p.a === Infinity) {
+    p.a = Math.max(p.da, confine) + d.cicli;
+    dissolvi(p, 'esce', Math.max(p.da, confine), d.cicli, d.esce);
+  }
   for (const s of paracadute.salvati) {
     const l = nuovoLivello(s.codice, s.pattern, { nome: s.nome, provenienza: s.provenienza, scritto: true }, confine);
     l.volume = s.volume;
@@ -203,14 +235,30 @@ function riprendiDalParacadute() {
   }
   paracadute = null;
   aggiornaLivelli();
+  for (const l of livelli) if (l.da === confine && l.a === Infinity) dissolvi(l, 'entra', confine, d.cicli, d.entra);
   return { da: confine, paracadute: false };
 }
 
 // Esce alla fine del ciclo in corso.
-function togli(id) {
+// Con una dissolvenza il livello continua a suonare e sfuma per tot cicli; un secondo togli (o un clic sulla card) lo salva.
+function togli(id, dissolvenza) {
   const l = livelli.find((x) => x.id === id);
-  if (!l || l.a !== Infinity) return;
-  l.a = Math.max(l.da, rip.prossimoConfine());
+  if (!l) return;
+  if (l.sfuma?.verso === 'esce' && l.a !== Infinity) return salva(l);
+  if (l.a !== Infinity) return;
+  const d = dissolvenzaDi(dissolvenza);
+  const fine = Math.max(l.da, rip.prossimoConfine());
+  const parte = l.da > rip.ciclo(ac.currentTime) ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
+  l.a = fine + parte;
+  aggiornaLivelli();
+  dissolvi(l, 'esce', fine, parte, d.esce);
+}
+
+// L'uscita si annulla: il livello torna al suo volume e resta.
+function salva(l) {
+  if (!l || l.a === Infinity || l.sfuma?.verso !== 'esce') return;
+  l.a = Infinity;
+  annullaDissolvi(l);
   aggiornaLivelli();
 }
 
@@ -229,6 +277,8 @@ function ferma() {
   rip.pattern = silence;
   if (!LIVE) tagliaSuoni();
   if (LIVE) {
+    // ⌘. è il panico: niente dissolvenza, i livelli si zittiscono subito (con 30 ms per non fare click)
+    for (const g of guadagni.values()) taglia({ ac, fade: g.fade });
     for (const l of livelli) liberaGuadagno(l.id);
     livelli = [];
     aggiornaLivelli();
@@ -254,6 +304,7 @@ const descrivi = (l) => ({
   volume: l.volume,
   muto: l.muto,
   scritto: l.scritto,
+  sfuma: l.sfuma,
   primo: l.primo ?? null,
   ultimo: l.ultimo ?? null,
 });
@@ -268,10 +319,17 @@ function guadagnoDi(l) {
     const orbita = 1000 + l.id;
     const o = controller.getOrbit(orbita, [0, 1]);
     const gain = new GainNode(ac, { gain: l.muto ? 0 : l.volume });
+    // orbita → passa-basso → passa-alto → volume → dissolvenza → casse (vedi dissolvenza.js): aperti, i filtri sono l'identità
+    const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
+    const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 0, Q: 0.707 });
+    const fade = new GainNode(ac, { gain: 1 });
     o.output.disconnect();
-    o.output.connect(gain);
-    controller.output.connectToDestination(gain, [0, 1]);
-    guadagni.set(l.id, { orbita, gain });
+    o.output.connect(lp);
+    lp.connect(hp);
+    hp.connect(gain);
+    gain.connect(fade);
+    controller.output.connectToDestination(fade, [0, 1]);
+    guadagni.set(l.id, { orbita, gain, lp, hp, fade });
   }
   return guadagni.get(l.id);
 }
@@ -292,6 +350,7 @@ function liberaGuadagno(id) {
     const controller = getSuperdoughAudioController();
     controller.nodes[g.orbita]?.disconnect();
     delete controller.nodes[g.orbita];
+    for (const n of [g.lp, g.hp, g.fade]) n.disconnect();
     g.gain.disconnect();
   }, 15000);
 }
@@ -468,6 +527,7 @@ function stato() {
     livelli: LIVE ? livelli.map(descrivi) : undefined,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
+    dissolvenze: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, { fade: g.fade.gain.value, lp: g.lp.frequency.value, hp: g.hp.frequency.value }])) : undefined,
     eco,
     uscita: uscitaStato,
     pronto: !!rip.mappa, // ha finito di caricarsi: da qui accetta livelli e cambi di tempo
@@ -497,11 +557,13 @@ async function ricevi(da, m) {
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'paracadute': {
-      const r = LIVE ? await lanciaParacadute(m.codice) : { errore: 'solo il live ha il paracadute' };
+      const r = LIVE ? await lanciaParacadute(m.codice, m.dissolvenza) : { errore: 'solo il live ha il paracadute' };
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'togli':
-      return togli(m.livello);
+      return togli(m.livello, m.dissolvenza);
+    case 'salva-livello': // un clic sulla card che sta sfumando
+      return salva(livelli.find((x) => x.id === m.livello));
     case 'livello': {
       // volume e muto di un livello, subito
       const l = livelli.find((x) => x.id === m.livello);

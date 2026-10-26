@@ -2142,3 +2142,13 @@ input[type='checkbox'] {
   flex: 1;
   min-width: 0;
 }
+
+/* un livello che sta sfumando via: la card resta, attenuata, con la barra di quanto manca */
+.card.livello.sfuma {
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.card.livello.sfuma .barra-arrivo > div {
+  background: var(--spento);
+}

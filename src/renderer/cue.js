@@ -128,7 +128,7 @@ export class Cue {
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
     const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
     const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
-    return { nome: blocco.nome, provenienza: 'libero', ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
+    return { nome: blocco.nome, provenienza: 'libero', volume: blocco.info?.volume, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
   }
 
   pezzoBrano() {
@@ -141,6 +141,7 @@ export class Cue {
     return {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
+      volume: m.sezioni[carta.i].info?.volume,
       ...B.codice(m, carta.i, righe),
       bpmBrano: B.bpmDelBrano(m),
       dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },
@@ -363,7 +364,28 @@ export class Cue {
         this.attiva(carta);
         this.azioni.goLive();
       };
-      testa.append(unisci, dividi, cuffia, live);
+      // il volume con cui la sezione entra: lo stesso controllo delle card del LIVE, scritto nell'intestazione @sezione
+      const volume = el('div', 'volume');
+      volume.dataset.aiuto = 'sezione-volume';
+      const pieno = el('div');
+      volume.append(pieno);
+      const mostraVolume = () => (pieno.style.width = `${Math.min(1, this.brano.modello.sezioni[i]?.info?.volume ?? 1) * 100}%`);
+      const imposta = (e) => {
+        const r = volume.getBoundingClientRect();
+        const v = Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 100) / 100;
+        const m2 = this.brano.modello;
+        const { volume: _vecchio, ...resto } = m2.sezioni[i].info ?? {};
+        this.modifica(B.conInfo(m2, i, v === 1 ? resto : { ...resto, volume: v }), false);
+        mostraVolume();
+      };
+      volume.onpointerdown = (e) => {
+        volume.setPointerCapture(e.pointerId);
+        imposta(e);
+        volume.onpointermove = imposta;
+      };
+      volume.onpointerup = () => (volume.onpointermove = null);
+      mostraVolume();
+      testa.append(unisci, dividi, volume, cuffia, live);
     }
     this.carte.push(carta);
     return art;

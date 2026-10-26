@@ -97,6 +97,14 @@
       "testo": "Il codice entra nel live al confine di ciclo scelto, scritto a macchina nel LIVE. Se ha un errore, il live non cambia.",
       "azione": "goLive"
     },
+    "dissolvenza": {
+      "nome": "dissolvenza",
+      "testo": "Quanti cicli ci mette il prossimo GO LIVE a salire di volume (0: entra di botto). Il valore di partenza e il tipo (solo volume, o volume più filtro) stanno nelle impostazioni. Per togliere un livello con la sfumata, le impostazioni hanno la dissolvenza in uscita."
+    },
+    "sezione-volume": {
+      "nome": "volume d'ingresso",
+      "testo": "Il volume con cui la sezione entra nel live: clic o trascina. Si scrive nell'intestazione @sezione, quindi resta nel brano."
+    },
     "entra-1": {
       "nome": "entra tra 1 ciclo",
       "testo": "Il prossimo GO LIVE entra al prossimo ciclo.",

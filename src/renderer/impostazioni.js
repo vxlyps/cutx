@@ -103,6 +103,28 @@ export class Impostazioni {
     );
     const gruppo = (id, voci) => $(id).replaceChildren(...voci.map((v) => rigaInterruttore(v, p[v.chiave] !== false, (x) => this.dati.salvaPreferenze({ [v.chiave]: x }))));
     gruppo('imp-help', it.impostazioni.help);
+    // le dissolvenze: cicli (0 = di botto), se solo volume o anche filtro, il filtro dell'uscita, il paracadute
+    const sceltaPref = (nome, testo, valori, chiave, predefinito) => {
+      const riga = crea('div', 'imp-riga');
+      const t = crea('div', 'imp-testo');
+      t.append(crea('span', '', nome), crea('span', 'imp-nota', testo));
+      const gruppoBottoni = crea('div', 'segmenti');
+      for (const [valore, etichetta] of valori) {
+        const b = crea('button', `key${(p[chiave] ?? predefinito) === valore ? ' on' : ''}`, etichetta);
+        b.onclick = () => this.dati.salvaPreferenze({ [chiave]: valore });
+        gruppoBottoni.append(b);
+      }
+      riga.append(t, gruppoBottoni);
+      return riga;
+    };
+    const cicli = [[0, '0'], [1, '1'], [2, '2'], [4, '4']];
+    $('imp-dissolvenze').replaceChildren(
+      sceltaPref('dissolvenza in entrata', 'cicli di sfumata di un livello che entra (0: di botto). Nel CUE si cambia al volo', cicli, 'dissolvenzaEntrata', 0),
+      sceltaPref('dissolvenza in uscita', 'quanto sfuma un livello che togli: resta nella pila, attenuato, e un clic lo salva', cicli, 'dissolvenzaUscita', 0),
+      sceltaPref('tipo', 'solo volume, oppure volume più filtro (entra aprendo un passa-basso, esce con un filtro)', [['volume', 'volume'], ['filtro', 'volume + filtro']], 'dissolvenzaTipo', 'volume'),
+      sceltaPref('filtro in uscita', 'come si chiude un livello che esce con il filtro', [['hp', 'passa-alto che sale'], ['lp', 'passa-basso che chiude']], 'dissolvenzaFiltroUscita', 'hp'),
+      sceltaPref('transizione del paracadute', 'cicli in cui il paracadute sostituisce quello che suona (esce col passa-alto, lui entra aprendo il filtro). 0: di botto', [[0, '0'], [1, '1'], [2, '2'], [4, '4']], 'paracaduteCicli', 2),
+    );
     gruppo('imp-proiezione', it.impostazioni.proiezione);
     const sfondo = modoValido(p.sfondoProiettore);
     const riga = crea('div', 'imp-riga');
