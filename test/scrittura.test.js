@@ -47,7 +47,7 @@ test('una modifica non riscrive tutto: cursore al punto, cancella il vecchio, sc
   const subito = vedi(p, 0);
   assert.equal(subito.prima + subito.dopo, base, 'all\'inizio si vede il codice di prima, col cursore al punto');
   assert.equal(subito.prima, 's("bd*');
-  const dopoSalto = vedi(p, p.salto + p.cancella * 0.5);
+  const dopoSalto = vedi(p, p.salto + p.cancella - 1e-6);
   assert.equal(dopoSalto.prima, 's("bd*');
   assert.equal(dopoSalto.dopo, '").gain(.5)');
   const finito = vedi(p, p.salto + p.cancella + p.battitura * 0.5);
@@ -146,4 +146,70 @@ test('le pause lunghe fanno lampeggiare il cursore, e la velocità cambia la dur
   for (let x = 0; x < p.totale; x += 0.05) lampeggia ||= vedi(p, x).lampeggia === true;
   assert.ok(lampeggia, 'ogni tanto lampeggia');
   assert.ok(durataNaturaleMs(piano('', LUNGO, { velocita: 2 })) < durataNaturaleMs(piano('', LUNGO, { velocita: 1 })) * 0.6);
+});
+
+import { pianoCancella, unitaCancella, vediCancella } from '../src/renderer/scrittura.js';
+
+const CODICE = 'stack(\n  s("bd*4, hh*8").gain(.8).room(.3),\n  note("c3 e3 g3 b3").s("sawtooth").lpf(900).delay(.25)\n)';
+
+test('cancellare da umano: sempre lo stesso dallo stesso testo, parte intero e finisce vuoto, mai a salti all\'indietro', () => {
+  const a = pianoCancella(CODICE, undefined);
+  const b = pianoCancella(CODICE, undefined);
+  assert.equal(a, b);
+  assert.equal(vediCancella(a, 0).resta, CODICE.length, 'all\'inizio c\'è tutto');
+  let prima = CODICE.length;
+  for (let x = 0; x < a.totale; x += a.totale / 400) {
+    const v = vediCancella(a, x);
+    assert.ok(v.resta <= prima, 'il testo non ricresce');
+    prima = v.resta;
+  }
+  assert.equal(vediCancella(a, a.totale).resta, 0);
+  assert.equal(vediCancella(a, a.totale).fatto, true);
+});
+
+test('cancellare è più svelto che scrivere, e ogni tanto toglie una parola intera', () => {
+  const lunga = CODICE.repeat(3);
+  const c = pianoCancella(lunga, { imperfezione: 1 });
+  const scrittura = piano('', lunga, { imperfezione: 1 });
+  assert.ok(c.totale < scrittura.totale * 0.5, `${c.totale} contro ${scrittura.totale}`);
+  const parole = c.passi.filter((p, i) => i > 0 && c.passi[i - 1].resta - p.resta > 1).length;
+  assert.ok(parole >= 3, `parole intere: ${parole}`);
+  const regolare = pianoCancella(lunga, { imperfezione: 0 });
+  assert.ok(regolare.passi.filter((p, i) => i > 0 && regolare.passi[i - 1].resta - p.resta > 1).length < parole + 1);
+});
+
+test('quando esce un livello intero a volte si seleziona un blocco: evidenziato un attimo e via in un colpo', () => {
+  let viste = 0;
+  for (let k = 0; k < 40; k++) {
+    const testo = `${CODICE}\n// ${k}`;
+    const pc = pianoCancella(testo, { imperfezione: 1 }, { blocco: true });
+    const sel = pc.passi.findIndex((p) => p.selezione);
+    if (sel < 0) continue;
+    viste++;
+    assert.deepEqual(pc.passi[sel].selezione, [0, testo.length]);
+    assert.equal(pc.passi[sel].resta, testo.length, 'durante la selezione c\'è ancora tutto');
+    assert.equal(pc.passi[sel + 1].resta, 0, 'poi via tutto in un colpo');
+    assert.equal(vediCancella(pc, pc.cum[sel] + 0.1).selezione?.[1], testo.length);
+  }
+  assert.ok(viste >= 10 && viste < 40, `selezioni: ${viste}/40`);
+  // senza blocco (una modifica che toglie testo) non si seleziona mai
+  assert.ok(pianoCancella(CODICE, { imperfezione: 1 }, { blocco: false }).passi.every((p) => !p.selezione));
+});
+
+test('sincronia: la cancellazione finisce esattamente quando il suono esce; con tempo di sobra parte più tardi, con poco accelera', () => {
+  const pc = pianoCancella(CODICE, undefined);
+  const naturale = pc.totale * pc.msPerUnita;
+  const fine = 100000;
+  assert.equal(unitaCancella(pc, 0, fine, fine - naturale - 1), 0, 'tanto tempo: parte più tardi, prima c\'è tutto');
+  assert.ok(Math.abs(unitaCancella(pc, 0, fine, fine) - pc.totale) < 1e-9);
+  assert.equal(vediCancella(pc, unitaCancella(pc, 0, fine, fine)).resta, 0);
+  const poco = naturale / 4;
+  assert.ok(Math.abs(unitaCancella(pc, 0, poco, poco / 2) - pc.totale / 2) < 1e-6, 'poco tempo: parte subito e accelera');
+  assert.equal(unitaCancella(pc, 0, poco, poco * 2), pc.totale);
+});
+
+test('la velocità della scrittura vale anche per la cancellazione', () => {
+  const lenta = pianoCancella(CODICE, { velocita: 0.5 });
+  const svelta = pianoCancella(CODICE, { velocita: 2 });
+  assert.ok(lenta.msPerUnita > svelta.msPerUnita * 3);
 });

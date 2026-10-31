@@ -146,6 +146,11 @@ body {
   box-shadow: 0 0 calc(14 * var(--u)) rgba(159, 194, 58, 0.7);
 }
 
+.codice .sel {
+  background: rgba(217, 220, 204, 0.3);
+  color: var(--testo);
+}
+
 .codice .cursore {
   background: var(--marcio);
   color: var(--marcio);

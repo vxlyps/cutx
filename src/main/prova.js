@@ -2325,7 +2325,10 @@ async function provaScrittura({ finestre, scrivi }) {
   const lung = campioni.map((x) => x.v.length);
   controlla('da zero: il testo cresce un carattere alla volta, mai all indietro', lung.some((n) => n > 0 && n < A.length) && lung.every((n, i) => i === 0 || n >= lung[i - 1]), JSON.stringify(lung.slice(0, 40)));
   const ultimo = campioni.find((x) => x.v === A && !x.c);
-  controlla("l'ultimo carattere arriva quando il suono entra (±250 ms)", ultimo && fine && Math.abs(ultimo.t - fine) < 250, JSON.stringify({ dt: ultimo && fine ? Math.round(ultimo.t - fine) : null, ultimi: campioni.slice(-5).map((x) => [Math.round(x.t - fine), x.v.length, x.c]) }));
+  // (se il campionamento si ferma proprio sull'entrata — la pagina rimisura tutto — conta il campione prima: ancora quasi finito, a meno di 250 ms)
+  const prima = ultimo ? campioni[campioni.indexOf(ultimo) - 1] : null;
+  const fermo = ultimo && prima && ultimo.t - prima.t > 250 && Math.abs(prima.t - fine) < 250 && prima.v.length >= A.length - 2;
+  controlla("l'ultimo carattere arriva quando il suono entra (±250 ms)", ultimo && fine && (Math.abs(ultimo.t - fine) < 250 || fermo), JSON.stringify({ dt: ultimo && fine ? Math.round(ultimo.t - fine) : null, ultimi: campioni.slice(-5).map((x) => [Math.round(x.t - fine), x.v.length, x.c]) }));
   await aspetta(0.5);
 
   // 2. una modifica sullo stesso nome: non si riscrive tutto, il cursore sta nel punto che cambia
@@ -2383,6 +2386,43 @@ async function provaScrittura({ finestre, scrivi }) {
   const u2 = await uscita();
   controlla('alla fine c è il codice dell ultima modifica', u2.blocchi.find((x) => x.tag.includes('batt'))?.visibile === D, JSON.stringify(u2.blocchi.map((b) => b.visibile)));
   await js('cutxProva.fermaTutto()');
+  // 4. cancellare da umano: quando un livello esce il codice sparisce a ritroso (mai ricresce) e finisce quando il suono esce davvero
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const lungoTesto = 's("bd*16, hh*8, cp*4").gain(.01)\n  .room(.3).delay(.2).lpf(900)\n  .sometimes(x => x.speed(2))\n  .every(4, x => x.fast(2))';
+  const fuoriL = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: lungoTesto, nome: 'esce', provenienza: 'prova', cicli: 1, scritto: true })})`);
+  await aspetta(3);
+  await js(`cutxProva.motori.live.manda({ tipo: 'togli', livello: ${fuoriL.livello}, dissolvenza: { cicli: 4, tipo: 'volume' } })`);
+  const camp = [];
+  const tz = Date.now();
+  for (let i = 0; i < 80; i++) {
+    const u = await uscita();
+    const blocco = u?.blocchi?.find((x) => x.tag.includes('esce'));
+    camp.push([Date.now() - tz, blocco ? blocco.visibile.length : null, !!blocco?.selezione]);
+    if (blocco === undefined && i > 3) break;
+    await aspetta(0.1);
+  }
+  const lung2 = camp.filter((c) => c[1] !== null).map((c) => c[1]);
+  const ultPieno = [...camp].reverse().find((c) => c[1] !== null && c[1] > 0);
+  const sparito2 = camp.find((c, k) => c[1] === null && k > 3);
+  controlla('esce: il codice sparisce da umano (a ritroso, o un blocco selezionato e via), senza mai ricrescere', lung2.length > 3 && lung2.every((n, k) => k === 0 || n <= lung2[k - 1]) && (lung2.at(-1) < lung2[0] || camp.some((c) => c[2])), JSON.stringify(lung2.filter((n, k) => k === 0 || n !== lung2[k - 1])));
+  controlla('e finisce quando il livello esce (non prima di tanto)', ultPieno && sparito2 && sparito2[0] - ultPieno[0] < 700, JSON.stringify({ ultPieno, sparito2 }));
+  // 5. una coda che si pulisce si cancella da umano sul proiettore (non sparisce di colpo)
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const conCoda = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*4").gain(.0001)', nome: 'pulita', provenienza: 'prova', cicli: 1, scritto: true, coda: ['.lpf(900)', '.delay(.4)', '.room(.3)', '.shape(.2)'] })})`);
+  await aspetta(3);
+  const testoCoda = () => chiedi(finestre.uscita, `(() => { const b = [...document.querySelectorAll('.livello')].find((x) => x.querySelector('.tag').textContent.includes('pulita')); return b ? b.querySelector('.coda').textContent : null; })()`);
+  const pieno = await testoCoda();
+  await js(`cutxProva.motori.live.manda({ tipo: 'coda', livello: ${conCoda.livello}, pulisci: true })`);
+  const code = [];
+  for (let k = 0; k < 40; k++) {
+    code.push(await testoCoda());
+    if (code.at(-1) === '' && k > 2) break;
+    await aspetta(0.1);
+  }
+  const lunghe = code.map((x) => (x ?? '').length);
+  controlla('coda pulita: sul proiettore si cancella da umano (passa per valori intermedi, mai ricresce, finisce vuota)', pieno.length > 20 && lunghe.some((n) => n > 0 && n < pieno.length) && lunghe.every((n, k) => k === 0 || n <= lunghe[k - 1]) && lunghe.at(-1) === 0, JSON.stringify(lunghe));
   return ok;
 }
 

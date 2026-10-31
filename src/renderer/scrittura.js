@@ -5,13 +5,15 @@
 //    più lunghe a fine riga; ogni tanto si ferma a metà parola col cursore che lampeggia; i refusi (rari, spenti di default) si
 //    scrivono sbagliati, si vedono un attimo e si correggono: è tutto solo visivo, al motore arriva sempre il codice giusto;
 //  - velocità, imperfezione e refusi si regolano nelle impostazioni (`opz`);
+//  - il codice che sparisce si cancella da umano: di solito a ritroso a raffica (più svelto di come si scrive), ogni tanto una parola intera
+//    (⌥⌫), e quando esce un livello intero a volte si seleziona un blocco (evidenziato un attimo) e va via in un colpo; con le stesse
+//    regolazioni e la stessa sincronia: la cancellazione finisce quando il suono esce davvero;
 //  - l'ultimo carattere arriva esattamente quando il suono entra: se c'è tempo si parte più tardi, se ce n'è poco si va più svelti;
 //  - una modifica per volta: se ne arriva un'altra mentre sta ancora scrivendo, la prima si finisce di corsa e poi parte la nuova.
 // Tutto è solo visivo: la musica non dipende mai da questo.
 
 export const MS_PER_UNITA = 70; // un carattere medio, a velocità naturale (circa 14 al secondo)
 const SALTO = 5; // il cursore va al punto cambiato
-const CANCELLA = 0.3; // un carattere cancellato
 export const RUSH_MS = 450; // la scrittura che stava finendo, quando ne arriva un'altra
 
 // un generatore di numeri a caso che, dallo stesso testo, dà sempre gli stessi numeri (i ridisegni coincidono)
@@ -118,6 +120,83 @@ export function diffTesto(vecchio, nuovo) {
   };
 }
 
+// --- cancellare da umano ---
+const SELEZIONE_UNITA = 8; // un blocco selezionato resta evidenziato circa mezzo secondo
+
+// Il piano di una cancellazione: una lista di passi { resta, selezione?, durata }. A ogni passo il testo rimasto è `resta` caratteri
+// (ci si arriva all'inizio del passo, poi si aspetta `durata`). Sempre lo stesso dallo stesso testo.
+//  - a ritroso a raffica, più veloce della scrittura, con qualche esitazione;
+//  - ogni tanto una parola intera alla volta (come ⌥⌫);
+//  - con `blocco` (esce un livello intero) a volte si seleziona tutto e via in un colpo.
+const memoriaCanc = new Map();
+export function pianoCancella(testo, opz, { blocco = false } = {}) {
+  const o = norma(opz);
+  const chiave = `${o.velocita}|${o.imperfezione}|${blocco}|${testo}`;
+  if (memoriaCanc.has(chiave)) return memoriaCanc.get(chiave);
+  const n = testo.length;
+  const caso = mulberry32(seme(testo) ^ 0x9e3779b9);
+  const imp = o.imperfezione;
+  const passi = [];
+  let resta = n;
+  if (blocco && n > 12 && caso() < 0.15 + 0.55 * imp) {
+    passi.push({ resta: n, selezione: null, durata: 1.5 + caso() * 2 });
+    passi.push({ resta: n, selezione: [0, n], durata: SELEZIONE_UNITA });
+    passi.push({ resta: 0, selezione: null, durata: 0.2 });
+  } else {
+    passi.push({ resta: n, selezione: null, durata: 0.6 + caso() * 2 * imp }); // il cursore decide, un attimo
+    let veloce = false;
+    let raffica = 0;
+    while (resta > 0) {
+      if (resta > 2 && caso() < 0.06 + 0.2 * imp) {
+        // una parola intera (come ⌥⌫): via gli spazi, poi una parola o un gruppo di segni
+        let i = resta;
+        while (i > 0 && /\s/.test(testo[i - 1])) i--;
+        if (i > 0 && /\w/.test(testo[i - 1])) while (i > 0 && /\w/.test(testo[i - 1])) i--;
+        else while (i > 0 && /[^\w\s]/.test(testo[i - 1])) i--;
+        resta = Math.max(0, Math.min(resta - 1, i));
+        passi.push({ resta, selezione: null, durata: 0.7 + caso() * 0.5 });
+        continue;
+      }
+      if (raffica <= 0) {
+        veloce = caso() < 0.55 + 0.25 * imp;
+        raffica = veloce ? 6 + Math.floor(caso() * 14) : 2 + Math.floor(caso() * 4);
+      }
+      raffica--;
+      resta--;
+      passi.push({ resta, selezione: null, durata: (veloce ? 0.12 : 0.3) * (0.7 + caso() * 0.6) });
+      if (imp > 0 && resta > 0 && caso() < 0.008 + 0.02 * imp) passi.push({ resta, selezione: null, durata: 1.5 + caso() * 2.5 }); // un'esitazione
+    }
+  }
+  const cum = new Float64Array(passi.length + 1);
+  passi.forEach((p, i) => (cum[i + 1] = cum[i] + p.durata));
+  const r = { n, passi, cum, totale: cum[passi.length], msPerUnita: MS_PER_UNITA / o.velocita };
+  memoriaCanc.set(chiave, r);
+  if (memoriaCanc.size > 120) memoriaCanc.delete(memoriaCanc.keys().next().value);
+  return r;
+}
+
+// Cosa resta dopo `x` unità: { resta, selezione: [da, a] | null, lampeggia, fatto }.
+export function vediCancella(pc, x) {
+  if (pc.n === 0 || x >= pc.totale) return { resta: 0, selezione: null, lampeggia: false, fatto: true };
+  let basso = 0;
+  let alto = pc.passi.length - 1;
+  while (basso < alto) {
+    const m = (basso + alto + 1) >> 1;
+    if (pc.cum[m] <= x) basso = m;
+    else alto = m - 1;
+  }
+  const p = pc.passi[basso];
+  return { resta: p.resta, selezione: p.selezione, lampeggia: p.durata >= LAMPEGGIA && !p.selezione, fatto: false };
+}
+
+// A che punto è una cancellazione che deve finire a `fine`: parte da `inizio` (o più tardi, se c'è tempo di sobra) e arriva comunque.
+export function unitaCancella(pc, inizio, fine, epoca) {
+  const parte = Math.max(inizio, fine - pc.totale * pc.msPerUnita);
+  if (epoca <= parte) return 0;
+  if (epoca >= fine) return pc.totale;
+  return ((epoca - parte) / Math.max(1, fine - parte)) * pc.totale;
+}
+
 const memoria = new Map();
 // Il piano di una scrittura da `base` a `testo`: le fasi e quanto durano, in unità.
 export function piano(base, testo, opz) {
@@ -129,9 +208,10 @@ export function piano(base, testo, opz) {
   const cum = new Float64Array(d.aggiunti.length + 1); // quando comincia ogni carattere (la sua attesa compresa)
   for (let i = 0; i < d.aggiunti.length; i++) cum[i + 1] = cum[i] + det.attesa[i] + det.refuso[i] + det.tocco[i];
   const salto = base && (d.tolti || d.pre < base.length) ? SALTO : 0;
-  const cancella = d.tolti.length * CANCELLA;
+  const canc = d.tolti ? pianoCancella(d.tolti, o) : null;
+  const cancella = canc ? canc.totale : 0;
   const battitura = cum[d.aggiunti.length];
-  const p = { base, testo, ...d, salto, cancella, battitura, cum, det, msPerUnita: MS_PER_UNITA / o.velocita, totale: salto + cancella + battitura };
+  const p = { base, testo, ...d, salto, cancella, canc, battitura, cum, det, msPerUnita: MS_PER_UNITA / o.velocita, totale: salto + cancella + battitura };
   memoria.set(chiave, p);
   if (memoria.size > 120) memoria.delete(memoria.keys().next().value);
   return p;
@@ -148,8 +228,8 @@ export function vedi(p, x) {
   if (x < p.salto) return { prima: p.base.slice(0, p.pre), nascosto: '', dopo: p.base.slice(p.pre), cursore: true, fatto: false, lampeggia: false };
   const y = x - p.salto;
   if (y < p.cancella) {
-    const cancellati = Math.ceil(y / CANCELLA);
-    return { prima: pre + p.tolti.slice(0, p.tolti.length - cancellati), nascosto: '', dopo: suf, cursore: true, fatto: false, lampeggia: false };
+    const c = vediCancella(p.canc, y);
+    return { prima: pre + p.tolti.slice(0, c.resta), nascosto: '', dopo: suf, cursore: true, fatto: false, lampeggia: c.lampeggia };
   }
   const z = y - p.cancella;
   // quanti caratteri sono già stati battuti: l'ultimo cum[n] <= z
@@ -221,6 +301,12 @@ export class Scrittore {
       richiesto = Math.max(richiesto, s.rush.finoA);
     }
     return { ...vedi(s.piano, unitaA(s.piano, richiesto, fine, epoca)), rush: false };
+  }
+
+  // Il codice di un livello che sta uscendo: la cancellazione finisce a `fine` (quando il suono esce davvero). { resta, selezione, lampeggia, fatto }
+  cancella(testo, inizio, fine, epoca, opz, blocco = true) {
+    const pc = pianoCancella(testo, opz, { blocco });
+    return vediCancella(pc, unitaCancella(pc, inizio, fine, epoca));
   }
 
   dimentica(id) {

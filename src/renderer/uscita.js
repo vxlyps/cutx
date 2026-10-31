@@ -2,7 +2,7 @@
 // motore live, e dall'interfaccia solo le bozze (quello che sto scrivendo, che fa parte dello
 // spettacolo). Gli errori non arrivano mai qui. Se si chiude o crasha, le casse non lo sentono.
 import { aspetto, cicloDi, epocaDi, sostituente, sostituito as sostituitoDa } from './aspetto.js';
-import { Scrittore } from './scrittura.js';
+import { Scrittore, piano as pianoScrittura, vedi as vediScrittura } from './scrittura.js';
 import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
 import { righeScorrevoli, righeVisibili } from './coda.js';
@@ -108,12 +108,19 @@ function blocco(chiave) {
 
 // Il testo che si sta scrivendo: la parte già scritta, il cursore e il resto *invisibile ma al suo posto*, così l'altezza del
 // livello è subito quella finale e il carattere non cambia mentre si scrive.
-function scrivi(b, scritto, cursore, nascosto = '', dopo = '', lampeggia = false) {
-  const chiave = `${scritto}|${nascosto}|${dopo}${cursore ? (lampeggia ? '▌▌' : '▌') : ''}`;
+function scrivi(b, scritto, cursore, nascosto = '', dopo = '', lampeggia = false, selezione = null) {
+  const chiave = `${scritto}|${nascosto}|${dopo}${cursore ? (lampeggia ? '▌▌' : '▌') : ''}${selezione ? `|s${selezione}` : ''}`;
   if (b.codice.dataset.testo === chiave) return;
   b.codice.dataset.testo = chiave;
   b.codice.dataset.evidenza = '';
-  b.codice.textContent = scritto;
+  if (selezione) {
+    // un blocco selezionato: evidenziato un attimo, prima di sparire in un colpo
+    b.codice.textContent = scritto.slice(0, selezione[0]);
+    const sel = document.createElement('span');
+    sel.className = 'sel';
+    sel.textContent = scritto.slice(selezione[0], selezione[1]);
+    b.codice.append(sel, scritto.slice(selezione[1]));
+  } else b.codice.textContent = scritto;
   if (cursore) {
     const c = document.createElement('span');
     c.className = lampeggia ? 'cursore lampeggia' : 'cursore';
@@ -141,11 +148,23 @@ function vistaCodice(codice, inizio = 0) {
 }
 
 // La coda sotto il codice: se cambia solo un numero si cambia il testo e basta; se cambia il numero di righe si rimisura tutto.
-function mostraCoda(b, righe, chiave, firma) {
+// Una coda che si pulisce (righe tolte) si cancella da umano come il resto del codice; un numero che cambia no.
+function mostraCoda(b, righe, chiave, firma, epoca, anima = false) {
   const testo = righe.join('\n');
-  b.coda.hidden = !righe.length;
-  if (b.coda.textContent !== testo) b.coda.textContent = testo;
-  firma.push(`${chiave}|c${righe.length}`);
+  if (anima && b.codaPrec && righe.length < b.codaPrecRighe && preferenze.scritturaAMacchina !== false) b.codaAnim = { da: b.codaPrec, a: testo, t0: epoca };
+  if (!anima) b.codaAnim = null;
+  b.codaPrec = testo;
+  b.codaPrecRighe = righe.length;
+  let mostrato = testo;
+  if (b.codaAnim) {
+    const p = pianoScrittura(b.codaAnim.da, b.codaAnim.a, preferenze.scrittura);
+    const v = vediScrittura(p, (epoca - b.codaAnim.t0) / p.msPerUnita);
+    if (v.fatto) b.codaAnim = null;
+    else mostrato = v.prima + v.dopo;
+  }
+  b.coda.hidden = !mostrato;
+  if (b.coda.textContent !== mostrato) b.coda.textContent = mostrato;
+  firma.push(`${chiave}|c${mostrato.split('\n').length}${mostrato ? '' : 'v'}`);
 }
 
 // L'etichetta di un livello: se non c'è testo (nascosta, o «paracadute») non si vede.
@@ -203,7 +222,7 @@ function disegna() {
       scrivi(b, bozza, true);
       firma.push(`${chiave}|${bozza}`);
       segnaNovita(chiave, bozza, epoca);
-      mostraCoda(b, [], chiave, firma);
+      mostraCoda(b, [], chiave, firma, epoca);
       suona ||= !a.arriva;
       continue;
     }
@@ -225,9 +244,13 @@ function disegna() {
         // quando una modifica cambia il numero di righe le misure vanno rifatte
         firma.push(`${chiave}|h${Math.round(b.codice.offsetHeight)}`);
       }
+    } else if (a.cursore && a.esce && !a.arriva) {
+      // esce: si cancella da umano (a ritroso, a volte una parola, a volte un blocco selezionato) e finisce quando il suono esce davvero
+      const v = scrittore.cancella(a.testo, inizioUscita.get(l.id) ?? epoca, epocaDi(mappa, l.a), epoca, preferenze.scrittura);
+      scrivi(b, a.testo.slice(0, v.resta), true, a.testo.slice(v.resta), '', v.lampeggia, v.selezione);
     } else if (a.cursore) scrivi(b, a.mostrato, true, a.testo.slice(a.mostrato.length));
     else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : convertiIntervalli(attivi(l.originale, ciclo), l.inv), 'nota');
-    mostraCoda(b, a.arriva || !testi.coda.acceso ? [] : righeScorrevoli(righeVisibili(l.coda, l.volume), l.scivola, ciclo), chiave, firma);
+    mostraCoda(b, a.arriva || !testi.coda.acceso ? [] : righeScorrevoli(righeVisibili(l.coda, l.volume), l.scivola, ciclo), chiave, firma, epoca, !a.arriva && testi.coda.acceso);
     suona ||= !a.arriva && !l.muto;
   }
   // il jam che sto scrivendo, prima che entri
@@ -457,6 +480,7 @@ globalThis.cutxScrittura = () => {
       k,
       tag: b.tag.textContent,
       cursore: !!b.codice.querySelector('.cursore'),
+      selezione: !!b.codice.querySelector('.sel'),
       visibile: [...b.codice.childNodes].filter((n) => !n.classList?.contains('nascosto') && !n.classList?.contains('cursore')).map((n) => n.textContent).join(''),
     })),
     arrivi: mappa ? livelli.filter((l) => l.da !== null && cicloDi(mappa, epoca) < l.da).map((l) => ({ id: l.id, nome: l.nome, fine: epocaDi(mappa, l.da) })) : [],
