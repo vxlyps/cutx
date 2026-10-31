@@ -917,7 +917,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     // --- scorciatoie rimappabili ---
     await vai('scorciatoie');
     const righe = await js(`document.querySelectorAll('#scorciatoie-elenco .imp-riga').length`);
-    controlla('l\'elenco ha tutte le azioni', righe === 24, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set)
+    controlla('l\'elenco ha tutte le azioni', righe === 25, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set, scelta del livello)
     const cap = (id) => `#scorciatoie-elenco [data-azione="${id}"] .cap-gruppo`;
     await js(`document.querySelector('${cap('goLive')}').click()`);
     controlla('un clic sul tasto aspetta la combinazione nuova', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('premi un tasto'));
@@ -2401,7 +2401,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1.5);
   finestre.uscita.setContentSize(1280, 720);
   await prefs({}, { insegna: true });
-  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 's("sine*2").gain(.0001)'); cutxProva.motori.live.manda({ tipo: 'tempo', bpm: 120 })`);
   await aspetta(1);
   const pre = '// brano di prova\nsetcpm(120/4)\n\n';
   const codice = `${pre}// la cassa\ns("sine*2").gain(.0001) // piano piano`;
@@ -2412,12 +2412,15 @@ async function provaTesti({ finestre, scrivi }) {
   const t0 = await testo();
   controlla('predefiniti: il codice c\'è, commenti e preambolo no', /s\("sine\*2"\)/.test(t0) && !/\/\//.test(t0) && !/setcpm|brano di prova/.test(t0), JSON.stringify(t0));
   controlla('predefiniti: l\'etichetta del livello c\'è', /basso/i.test(t0), JSON.stringify(t0));
+  await entra('gesto', { codice: 'setcpm(120/4)\ns("sine*2").gain(.0001)', inizio: 0 });
+  await aspetta(2.2);
+  controlla('un setcpm scritto dal vivo (nel livello) si vede anche con il preambolo nascosto', /setcpm\(120\/4\)/.test(await testo()) && !/brano di prova/.test(await testo()), JSON.stringify(await testo()));
   await prefs({ commenti: { acceso: true }, preambolo: { acceso: true } });
   const t1 = await testo();
   controlla('commenti e preambolo accesi: si vedono', /la cassa/.test(t1) && /piano piano/.test(t1) && /setcpm/.test(t1) && /brano di prova/.test(t1), JSON.stringify(t1));
   await prefs({ commenti: { acceso: true } });
   const t2 = await testo();
-  controlla('solo commenti accesi: il preambolo resta nascosto', /la cassa/.test(t2) && !/setcpm|brano di prova/.test(t2), JSON.stringify(t2));
+  controlla('solo commenti accesi: il preambolo del brano resta nascosto (resta solo il setcpm del gesto)', /la cassa/.test(t2) && !/brano di prova/.test(t2) && (t2.match(/setcpm/g) ?? []).length === 1, JSON.stringify(t2));
   await prefs({});
   controlla('BPM: «120 BPM» di default', /120 BPM/.test(await uscita(`document.getElementById('bpm').textContent`)));
   await prefs({ bpm: { testo: 'tempo {bpm}' } });
@@ -2531,7 +2534,7 @@ async function provaCoda({ finestre, scrivi }) {
     ok &&= !!vero;
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
-  const CODA_CARTA = `[...document.querySelectorAll('#livelli .card.livello')].filter((c) => c.querySelector('.nome').textContent === 'cima').at(-1)?.querySelector('.coda')?.textContent`;
+  const CODA_CARTA = `[...document.querySelectorAll('#livelli .card.livello')].filter((c) => c.querySelector('.nome').textContent === 'cima').at(-1) && [...[...document.querySelectorAll('#livelli .card.livello')].filter((c) => c.querySelector('.nome').textContent === 'cima').at(-1).querySelectorAll('.coda-testo')].map((x) => x.textContent).join('\\n')`;
   const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
   const coda = (id, m) => js(`cutxProva.motori.live.manda(${JSON.stringify({ tipo: 'coda', livello: id, ...m })})`);
   const attivo = async () => (await live()).livelli.filter((l) => l.a === null).at(-1);
@@ -2699,6 +2702,42 @@ async function provaCoda({ finestre, scrivi }) {
   await aspetta(1.5);
   const avvisoSuoni = await js(`document.getElementById('cue-avviso').textContent`);
   controlla('suono che non esiste: avviso con i nomi', /bd, sd/.test(avvisoSuoni) && /nello stash/.test(avvisoSuoni), JSON.stringify(avvisoSuoni));
+
+  // 11. una funzione già in coda si aggiorna (una riga sola); togliere una sola riga; ⌘Z la rimette
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.8);
+  const unico = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*4").gain(.0001)', nome: 'cima', provenienza: 'prova', cicli: 1, coda: ['.lpf(600)', '.delay(.4)'] })})`);
+  await aspetta(2.5);
+  await coda(unico.livello, { imposta: ['.lpf(900)'] });
+  await aspetta(0.4);
+  controlla('una riga con una funzione già in coda la aggiorna (non ne aggiunge un\'altra)', (await attivo()).coda?.join('|') === '.lpf(900)|.delay(.4)', JSON.stringify((await attivo()).coda));
+  await js(`cutxProva.togliRigaCoda(${unico.livello}, 'lpf')`);
+  await aspetta(0.4);
+  controlla('togliere una sola riga: l\'altra resta', (await attivo()).coda?.join('|') === '.delay(.4)', JSON.stringify((await attivo()).coda));
+  await js(`cutxProva.annullaSet()`);
+  await aspetta(0.5);
+  controlla('⌘Z rimette la riga tolta', (await attivo()).coda?.join('|') === '.lpf(900)|.delay(.4)', JSON.stringify((await attivo()).coda));
+  const righeCarta = await js(`document.querySelectorAll('#livelli .card.livello:not(.in-uscita) .coda-x').length`);
+  controlla('ogni riga della coda ha la sua ×', righeCarta === 2, String(righeCarta));
+
+  // 12. ⌃1–9 sceglie il livello (⌥ resta il muto); esc toglie la scelta
+  await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*4").gain(.0001)', nome: 'due', provenienza: 'prova', cicli: 1 })})`);
+  await aspetta(2.5);
+  const attiviOra = (await live()).livelli.filter((l) => l.a === null);
+  const tasto = async (keyCode, modificatori) => {
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'keyDown', keyCode, modifiers: modificatori });
+    wc.sendInputEvent({ type: 'keyUp', keyCode, modifiers: modificatori });
+    await aspetta(0.5);
+  };
+  await js(`cutxProva.pila.selezionato = null`);
+  await tasto('2', ['control']);
+  controlla('⌃2 sceglie il secondo livello', (await js(`cutxProva.pila.selezionato`)) === attiviOra[1]?.id && (await js(`document.querySelectorAll('#livelli .card.livello.selezionato').length`)) === 1, JSON.stringify([attiviOra.map((l) => l.id), await js(`cutxProva.pila.selezionato`)]));
+  await tasto('1', ['control']);
+  controlla('⌃1 passa al primo', (await js(`cutxProva.pila.selezionato`)) === attiviOra[0]?.id);
+  controlla('⌥ non cambia la scelta (resta il muto)', await (async () => { await tasto('2', ['alt']); return (await js(`cutxProva.pila.selezionato`)) === attiviOra[0]?.id; })());
+  await tasto('Escape', []);
+  controlla('esc toglie la scelta', (await js(`cutxProva.pila.selezionato`)) === null && (await js(`document.querySelectorAll('#livelli .card.livello.selezionato').length`)) === 0);
 
   await js('cutxProva.fermaTutto()');
   return ok;

@@ -9,7 +9,7 @@ import { creaEditor } from './editor.js';
 import { attivi, griglia, riempi } from './evidenzia.js';
 import { aspetto, epocaDi } from './aspetto.js';
 import { resta } from './dissolvenza.js';
-import { righeVisibili } from './coda.js';
+import { leggiVoce, righeVisibili } from './coda.js';
 
 const PASSI = 16;
 
@@ -72,8 +72,7 @@ export class Pila {
       c.muto.classList.toggle('on', l.muto);
       // la coda cambia mentre si gira: solo il testo, sul posto
       const righe = righeVisibili(l.coda, l.volume);
-      const chiaveCoda = righe.join('\n');
-      if (c.codaTesto.textContent !== chiaveCoda) c.codaTesto.textContent = chiaveCoda;
+      this.disegnaRigheCoda(c, righe, l.coda?.length ?? 0);
       c.righeCoda = righe;
       c.coda.classList.toggle('con-errore', !!l.codaErrore);
       c.codaTesto.title = l.codaErrore ?? '';
@@ -188,6 +187,33 @@ export class Pila {
   mostraSelezione() {
     if (this.selezionato !== null && !this.livelli.some((l) => l.id === this.selezionato && l.a === null)) this.selezionato = null;
     for (const [id, c] of this.carte) c.el.classList.toggle('selezionato', id === this.selezionato);
+  }
+
+  // Le righe della coda, una per riga con la sua × (le righe vere, non il volume). Se le righe sono le stesse cambia solo il testo.
+  disegnaRigheCoda(c, righe, vere) {
+    const chiavi = righe.map((r, i) => (i < vere ? leggiVoce(r)?.chiave ?? '' : '·volume'));
+    const struttura = chiavi.join('|');
+    if (c.codaStruttura !== struttura) {
+      c.codaStruttura = struttura;
+      c.codaTesto.replaceChildren(
+        ...righe.map((r, i) => {
+          const riga = el('div', 'coda-riga');
+          riga.append(el('span', 'coda-testo', r));
+          if (i < vere) {
+            const x = el('button', 'coda-x', '×');
+            x.title = `togli solo la riga .${chiavi[i]}`;
+            x.onclick = () => this.azioni.togliRigaCoda?.(c.livello.id, chiavi[i]);
+            riga.append(x);
+          }
+          return riga;
+        }),
+      );
+      return;
+    }
+    righe.forEach((r, i) => {
+      const t = c.codaTesto.children[i].firstChild;
+      if (t.textContent !== r) t.textContent = r;
+    });
   }
 
   // --- modificare sul posto ---

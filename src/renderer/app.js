@@ -226,6 +226,19 @@ function pulisciCoda(id) {
   });
 }
 
+// Toglie una sola riga della coda (la × accanto alla riga): ⌘Z la rimette.
+function togliRigaCoda(id, chiave) {
+  const l = livelloVivo(id);
+  if (inTest || !l?.coda?.length) return;
+  const prima = [...l.coda];
+  live.manda({ tipo: 'coda', livello: id, togli: [chiave] });
+  cronologia.registra({
+    etichetta: `riga .${chiave} di «${l.nome}»`,
+    annulla: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true, imposta: prima }) : false),
+    rifai: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, togli: [chiave] }) : false),
+  });
+}
+
 // Volume e muto di un livello si annullano subito (sono innocui): un trascinamento del volume è un passo solo.
 const livelloVivo = (id) => livelliLive.find((x) => x.id === id && x.a === null);
 function registraVolume(id, prima, dopo) {
@@ -396,6 +409,11 @@ const FA = {
       live.manda({ tipo: 'livello', livello: l.id, muto: 'inverti' });
     }
   },
+  // scelta del livello n (stesso ordine del muto): a lui vanno le code da sole. Resta finché non ne scelgo un altro o premo esc
+  selezionaLivello: (n) => {
+    const l = pila.attivi()[n - 1];
+    if (l) pila.seleziona(l.id);
+  },
   fermaTutto,
   cuffiaOnOff: () => cuffiaOnOff(),
   cuffiaPausa: () => pausaCuffia(),
@@ -407,7 +425,10 @@ const FA = {
   esci: () => {
     if (importa.aperto) importa.chiudi();
     else if (!$('impostazioni').hidden) impostazioni(false);
-    else if (!pila.annulla()) document.activeElement?.blur();
+    else if (!pila.annulla()) {
+      if (pila.selezionato !== null) pila.seleziona(null); // esc toglie la scelta del livello
+      else document.activeElement?.blur();
+    }
   },
   impostazioni: () => impostazioni(),
   salva: () => cue.salva(),
@@ -804,6 +825,7 @@ const pila = new Pila($('livelli'), $('jam'), {
   togli: (id) => togliLivello(id),
   salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
   pulisciCoda: (id) => pulisciCoda(id),
+  togliRigaCoda: (id, chiave) => togliRigaCoda(id, chiave),
   volume: (id, volume) => live.manda({ tipo: 'livello', livello: id, volume }),
   volumeInizio: (id) => (volumePrima = { id, v: livelloVivo(id)?.volume }),
   volumeFine: (id) => {
@@ -1033,6 +1055,7 @@ globalThis.cutxProva = {
   motori: { live, cuffia },
   pausaCuffia,
   pulisciCoda,
+  togliRigaCoda,
   cronologia,
   annullaSet,
   // per capire un fallimento: cosa vede l'interfaccia in questo momento

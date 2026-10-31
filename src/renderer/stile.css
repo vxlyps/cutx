@@ -2271,3 +2271,30 @@ input[type='checkbox'] {
   width: 180px;
   accent-color: var(--marcio);
 }
+
+.coda-riga {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.coda-x {
+  border: 0;
+  background: transparent;
+  color: var(--marcio-scuro);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.coda-riga:hover .coda-x,
+.coda-x:focus-visible {
+  opacity: 1;
+}
+
+.coda-x:hover {
+  color: var(--errore, #e0674f);
+}

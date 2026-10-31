@@ -12,6 +12,7 @@ export const AZIONI = [
   { id: 'entra4', nome: 'entra tra 4 cicli', predefinita: 'Digit4' },
   { id: 'entra8', nome: 'entra tra 8 cicli', predefinita: 'Digit8' },
   { id: 'muto', nome: 'muto livello (1–9)', predefinita: 'Alt+Digit#', cifre: true },
+  { id: 'selezionaLivello', nome: 'sceglie il livello (1–9): a lui vanno le code da sole', predefinita: 'Ctrl+Digit#', cifre: true },
   { id: 'fermaTutto', nome: 'ferma tutto', predefinita: 'Meta+Period' },
   { id: 'cuffiaOnOff', nome: 'cuffia on / off', predefinita: 'Meta+KeyK' },
   { id: 'cuffiaPausa', nome: 'pausa / riprendi la cuffia', predefinita: 'Shift+Meta+KeyK' },

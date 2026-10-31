@@ -15,7 +15,7 @@ export const PREDEFINITI = {
   scrittura: { acceso: true, testo: 'in scrittura' },
   coda: { acceso: true },
   commenti: { acceso: false }, // le righe // del codice
-  preambolo: { acceso: false }, // il preambolo del brano (setcpm…) e le righe setcpm
+  preambolo: { acceso: false }, // il preambolo del brano (setcpm…): un setcpm scritto io dal vivo è un gesto e si vede
   controller: { acceso: false, testo: '{pezzo} · {parametro} {valore}' }, // fase 4: la scritta grande di quello che tocco
   momento: { acceso: false, testo: '{momento}' }, // fase 4: il nome del momento della spina
 };
@@ -71,8 +71,6 @@ export function testoEtichetta({ nome, stato = 'normale', muto = false, mancano 
 
 // --- il codice come lo vede il pubblico ---
 
-const RIGA_TEMPO = /^\s*setcp[ms]\s*\(.*\)\s*;?\s*(\/\/.*)?$/;
-
 // Dove inizia un commento // fuori da stringhe, in una riga (o -1).
 function inizioCommento(riga) {
   let q = null;
@@ -87,7 +85,8 @@ function inizioCommento(riga) {
   return -1;
 }
 
-// Il codice senza quello che il pubblico non deve leggere: commenti e/o preambolo (le righe prima di `inizio`, e le righe setcpm).
+// Il codice senza quello che il pubblico non deve leggere: commenti e/o il preambolo del brano (le righe prima di `inizio`; un setcpm
+// scritto dentro il livello, dal CUE, dalla card o dal jam, è un gesto e resta).
 // Ritorna { testo, inv }: inv[i] = dove sta nel testo nuovo il carattere i del vecchio (-1 se non c'è più), per riportare le note evidenziate.
 export function filtraCodice(codice, { commenti = true, preambolo = true, inizio = 0 } = {}) {
   if (commenti && preambolo) return { testo: codice, inv: null };
@@ -99,7 +98,7 @@ export function filtraCodice(codice, { commenti = true, preambolo = true, inizio
     const fine = s + riga.length;
     let tieni = riga;
     let via = false;
-    if (!preambolo && (s < inizio || RIGA_TEMPO.test(riga))) via = true;
+    if (!preambolo && s < inizio) via = true;
     else if (!commenti) {
       const c = inizioCommento(riga);
       if (c === 0 || (c > 0 && riga.slice(0, c).trim() === '')) via = true; // riga di solo commento

@@ -53,11 +53,13 @@ test('filtra i commenti: righe intere e code, ma non dentro le stringhe', () => 
   assert.equal(testo, 's("bd*4")\n.lpf(800)\ns("http://x")');
 });
 
-test('filtra il preambolo: le righe prima dell\'inizio e le righe setcpm', () => {
+test('filtra il preambolo del brano (le righe prima dell\'inizio); un setcpm scritto io dal vivo resta', () => {
   const pre = '// brano\nsetcpm(120/4)\n\n';
   const codice = `${pre}s("bd*4")\nsetcpm(130/4)\n.lpf(800)`;
   const { testo } = filtraCodice(codice, { commenti: true, preambolo: false, inizio: pre.length });
-  assert.equal(testo, 's("bd*4")\n.lpf(800)');
+  assert.equal(testo, 's("bd*4")\nsetcpm(130/4)\n.lpf(800)');
+  // senza preambolo (inizio 0: CUE libero, jam, card) niente si nasconde
+  assert.equal(filtraCodice('setcpm(130/4)\ns("bd")', { commenti: true, preambolo: false, inizio: 0 }).testo, 'setcpm(130/4)\ns("bd")');
   assert.equal(filtraCodice(codice, { commenti: true, preambolo: true }).testo, codice);
 });
 

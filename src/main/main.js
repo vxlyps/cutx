@@ -26,8 +26,10 @@ const SALTINO = process.argv.includes('--saltino'); // misura del saltino al sal
 const SFONDO = process.argv.find((a) => a.startsWith('--sfondo='))?.slice('--sfondo='.length); // foto dello sfondo del proiettore
 const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('--chiusura='.length); // prova: si apre e si chiude in un certo modo
 
-// Prova e foto girano con dati a parte, accanto a una CUTX eventualmente aperta e senza toccarne le impostazioni.
-if (PROVA || FOTO || SCHERMATE || CHIUSURA) {
+// OGNI flag di prova, foto o misura gira con dati a parte (CUTX-prova, CUTX-chiusura), accanto a una CUTX eventualmente aperta e senza
+// toccarne le preferenze vere. Un flag nuovo si aggiunge QUI: se la cartella dati non è quella separata l'app non parte (guardia sotto).
+const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
+if (PER_PROVE) {
   const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : 'CUTX-prova');
   app.setPath('userData', dati);
   const impostazioni = path.join(dati, 'impostazioni.json');
@@ -39,7 +41,7 @@ if (PROVA || FOTO || SCHERMATE || CHIUSURA) {
 
 // CUTX dev (lo lancia il CUTX.command del Desktop con CUTX_DEV=1): gira accanto a quella installata dal .dmg, con nome, dati e
 // registro a parte, e nel titolo DEV più il commit. Dello stash prende solo il percorso della prima volta (si lavora sugli stessi suoni).
-const DEV = process.env.CUTX_DEV === '1' && !(PROVA || FOTO || SCHERMATE || CHIUSURA);
+const DEV = process.env.CUTX_DEV === '1' && !PER_PROVE;
 const TITOLO = DEV ? `CUTX DEV ${process.env.CUTX_COMMIT ?? ''}`.trim() : 'CUTX';
 if (DEV) {
   const vera = path.join(app.getPath('appData'), 'CUTX');
@@ -72,10 +74,14 @@ function migraDaDaneel() {
   const vecchiLog = path.join(path.dirname(app.getPath('logs')), 'DANEEL', 'avvio.log');
   sposta(vecchiLog, path.join(app.getPath('logs'), 'avvio-daneel.log'));
 }
-if (!PROVA && !FOTO && !SCHERMATE && !CHIUSURA) migraDaDaneel();
+if (!PER_PROVE) migraDaDaneel();
 
 // Il registro: errori e avvisi di tutti i processi, in ~/Library/Logs/CUTX (nelle prove, in una cartella a parte).
-const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
+// La guardia: una prova che non sta nella cartella dati separata si ferma prima di toccare qualsiasi cosa.
+if (PER_PROVE && !/CUTX-(prova|chiusura)$/.test(app.getPath('userData'))) {
+  console.error(`prova con la cartella dati vera (${app.getPath('userData')}): mi fermo`);
+  app.exit(3);
+}
 log.inizia(PER_PROVE ? path.join(app.getPath('userData'), 'log') : app.getPath('logs'));
 // Un evento del guardiano o dell'app: nel terminale e nel registro.
 const ev = (livello, fonte, testo) => {
