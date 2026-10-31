@@ -29,6 +29,7 @@ let mappa = null;
 let livelli = [];
 let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
+let righeGlobali = []; // le righe globali del fader e dei colpi «su tutto»: all(x => x.lpf(1920))
 const strisceU = new Map(); // id del livello → { ciclo: eventi }: le note vere, dal motore live
 const misureU = new Map(); // id → { pk, quando }; lo stato del misuratore sta in statiU
 const statiU = new Map();
@@ -63,6 +64,7 @@ window.addEventListener('message', (e) => {
     else if (data.tipo === 'mappa') mappa = data;
     else if (data.tipo === 'livelli') livelli = data.livelli;
     else if (data.tipo === 'bozze') bozze = data;
+    else if (data.tipo === 'globali') righeGlobali = data.righe;
     else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
     else if (data.tipo === 'strisce') {
       for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { ...(strisceU.get(Number(id)) ?? {}), [data.ciclo]: ev, [data.ciclo - 2]: undefined });
@@ -308,6 +310,18 @@ function disegna() {
     scrivi(b, jamBozza, true);
     firma.push(`jam|${jamBozza}`);
     segnaNovita('jam', jamBozza, epoca);
+  }
+  // le righe globali: codice come il resto, in fondo ai livelli
+  if (testi.globale.acceso && righeGlobali.length) {
+    const b = blocco('globale');
+    b.el.classList.add('globale');
+    visti.add('globale');
+    ordine.push(b.el);
+    mostraTag(b, 'globale');
+    const t = righeGlobali.join('\n');
+    if (b.codice.textContent !== t) b.codice.textContent = t;
+    firma.push(`globale|${t}`);
+    suona ||= true;
   }
   for (const [chiave, b] of blocchi) {
     if (!visti.has(chiave)) {

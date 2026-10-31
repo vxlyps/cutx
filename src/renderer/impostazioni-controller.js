@@ -8,6 +8,8 @@ const crea = (tag, classe, testo) => {
   return e;
 };
 
+import { EFFETTI_FADER } from './controller-mappa.js';
+
 const RIGHE = 14; // quante righe tiene il monitor
 
 export class PaginaController {
@@ -88,6 +90,27 @@ export class PaginaController {
     prova.onclick = () => c.passaAMC();
     voci.push(prova);
     stato.replaceChildren(...voci);
+
+    // l'effetto del fader, separato per pagina
+    const fader = $('ctl-fader');
+    fader.replaceChildren(
+      ...['A', 'B'].map((pagina) => {
+        const riga = crea('div', 'imp-riga');
+        const testo = crea('div', 'imp-testo');
+        testo.append(crea('span', '', `fader · pagina ${pagina}${pagina === 'A' ? ' (suona)' : ' (scolpisci)'}`), crea('span', 'imp-nota', EFFETTI_FADER[c.effettoFader(pagina)].descrizione));
+        const scelta = crea('select');
+        scelta.dataset.pagina = pagina;
+        for (const [chiave, e] of Object.entries(EFFETTI_FADER)) {
+          const o = crea('option', '', e.nome.toLowerCase());
+          o.value = chiave;
+          o.selected = chiave === c.effettoFader(pagina);
+          scelta.append(o);
+        }
+        scelta.onchange = () => c.azioni.faderScegli?.(pagina, scelta.value);
+        riga.append(testo, scelta);
+        return riga;
+      }),
+    );
 
     const luci = $('ctl-luci');
     const stampa = crea('span', 'lbl', this.stato);

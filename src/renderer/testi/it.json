@@ -87,6 +87,10 @@
       "nome": "scratch",
       "testo": "Un editor libero per scrivere da zero. Le righe // @sezione lo dividono in sezioni."
     },
+    "globali": {
+      "nome": "righe globali",
+      "testo": "Le righe all(x => …) scritte dal fader e dai colpi su tutto: valgono per ogni livello."
+    },
     "striscia-cuffia": {
       "nome": "in cuffia",
       "testo": "Cosa stai ascoltando in cuffia. Il ■ accanto ferma quella voce."

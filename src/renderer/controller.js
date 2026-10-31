@@ -2,7 +2,7 @@
 // e accende anelli e tasti con i valori veri. Ogni cosa che tocco diventa codice: le manopole scrivono nella coda del livello.
 // Non suona niente da solo e non decide niente: gira quello che giro io. Se il controller sparisce, CUTX va avanti uguale.
 import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioAnello, messaggioTasto, noteTasti, parole, tabella } from './controller-mc.js';
-import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, frequenzaMaster, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
+import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, calcolaFader, EFFETTI_FADER, FADER_PREDEFINITO, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
@@ -142,18 +142,48 @@ export class Controller {
     }
   }
 
-  // Il fader: il filtro del drop su tutto il live (in alto aperto, scendendo si chiude).
-  muoviFader(x) {
-    this.fader = x;
-    this.azioni.filtroMaster?.(x);
-    const f = frequenzaMaster(x);
-    const testo = `FADER · FILTRO ${f === null ? 'APERTO' : `${Math.round(f)} Hz`}`;
-    this.toccata = { n: null, quando: this.ora(), testo };
-    this.azioni.scritta?.(testo);
+  // L'effetto del fader per la pagina in cui sono (scelto nelle impostazioni, separato per A e B).
+  effettoFader(pagina = this.pagina) {
+    const scelto = this.azioni.faderEffetto?.(pagina);
+    return Object.hasOwn(EFFETTI_FADER, scelto) ? scelto : FADER_PREDEFINITO[pagina];
   }
 
-  vaiA(pagina) {
+  // Il fader: un effetto su tutto il live, scritto come riga globale (all(x => …)); in fondo (o tutto aperto) la riga sparisce.
+  // Il riscontro (lo specchio, il proiettore) è subito; le righe partono al massimo ~30 volte al secondo.
+  muoviFader(x) {
+    this.fader = x;
+    const effetto = this.effettoFader();
+    if (this.faderEffetto && this.faderEffetto !== effetto) this.rilasciaFader();
+    this.faderEffetto = effetto;
+    const r = calcolaFader(effetto, x);
+    const testo = `FADER · ${EFFETTI_FADER[effetto].nome} ${r.testo}`;
+    this.toccata = { n: null, quando: this.ora(), testo };
+    this.azioni.scritta?.(testo);
+    this.faderDa = { effetto, r };
+    if (this.faderTimer) return;
+    this.faderTimer = this.imposta(() => {
+      this.faderTimer = null;
+      const { effetto: e, r: ultimo } = this.faderDa;
+      if (this.faderEffetto !== e) return; // nel frattempo l'ho rilasciato
+      this.azioni.globale?.('fader', ultimo.riga);
+      this.azioni.breakTutti?.(e === 'break' ? (ultimo.fattore ?? 1) : 1);
+      this.azioni.riser?.(e === 'riser' ? ultimo.riser ?? null : null);
+    }, CODA_OGNI_MS);
+  }
+
+  // Cambio pagina o effetto: quello di prima si ferma (la riga, il break, il rumore) e il nuovo parte dal prossimo movimento del fader.
+  rilasciaFader() {
+    if (!this.faderEffetto) return;
+    this.faderEffetto = null;
+    this.faderDa = null;
+    this.azioni.globale?.('fader', null);
+    this.azioni.breakTutti?.(1);
+    this.azioni.riser?.(null);
+  }
+
+    vaiA(pagina) {
     if (pagina === this.pagina) return;
+    this.rilasciaFader();
     this.pagina = pagina;
     this.toccata = null;
     this.ultime.clear();

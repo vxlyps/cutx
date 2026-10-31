@@ -37,10 +37,66 @@ export const ALTEZZA_MIN = -12;
 export const ALTEZZA_MAX = 12;
 export const etichettaAltezza = (n) => `${n > 0 ? '+' : ''}${n} st`;
 
-// Il fader: il filtro del drop su tutto il live. In alto = aperto; scendendo, un passa-basso si chiude (150 Hz in fondo).
+// Il fader: un effetto a scelta (separato per la pagina A e per la B) su tutto il live. Scrive righe globali con la funzione all di Strudel,
+// per esempio all(x => x.lpf(1920)), che si aggiornano mentre lo muovo; a zero (o tutto aperto per il filtro) la riga sparisce.
 export const FILTRO_MASTER_MIN = 150;
 export const FILTRO_MASTER_MAX = 16000;
-export const frequenzaMaster = (x) => (x >= 0.985 ? null : FILTRO_MASTER_MIN * (FILTRO_MASTER_MAX / FILTRO_MASTER_MIN) ** Math.max(0, x)); // null = aperto
+
+export const EFFETTI_FADER = {
+  filtro: { nome: 'FILTRO', descrizione: 'passa-basso su tutto (in alto aperto, scendendo si chiude)' },
+  lavaggio: { nome: 'LAVAGGIO', descrizione: 'passa-alto su tutto, sempre più sottile' },
+  break: { nome: 'BREAK', descrizione: 'abbassa tutti i pezzi tranne la spina (finché non c\'è, tutti tranne il livello 1)' },
+  riser: { nome: 'RISER', descrizione: 'rumore + passa-alto che sale' },
+  eco: { nome: 'ECO', descrizione: 'lancio nel delay sempre più forte' },
+  cattedrale: { nome: 'CATTEDRALE', descrizione: 'un riverbero che affoga tutto' },
+  rottame: { nome: 'ROTTAME', descrizione: 'crush e coarse sempre più forti' },
+};
+export const FADER_PREDEFINITO = { A: 'filtro', B: 'riser' };
+export const eEffettoFader = (e) => Object.hasOwn(EFFETTI_FADER, e);
+
+const log = (min, max, a) => min * (max / min) ** a;
+const n2 = (v) => String(Math.round(v * 100) / 100);
+export const SOGLIA_FADER = 0.015; // sotto (o sopra, per il filtro) l'effetto non c'è
+
+// Cosa fa l'effetto con il fader a x (0 in basso, 1 in alto): { attivo, riga (all(x => …) o null), testo, fattore (break), riser: { hpf, gain } }.
+export function calcolaFader(effetto, x) {
+  const v = Math.max(0, Math.min(1, x));
+  const spento = (testo = 'OFF') => ({ attivo: false, riga: null, testo });
+  switch (effetto) {
+    case 'filtro': {
+      if (v >= 1 - SOGLIA_FADER) return spento('APERTO');
+      const f = Math.round(log(FILTRO_MASTER_MIN, FILTRO_MASTER_MAX, v));
+      return { attivo: true, riga: `all(x => x.lpf(${f}))`, testo: `${f} Hz` };
+    }
+    case 'lavaggio': {
+      if (v <= SOGLIA_FADER) return spento();
+      const f = Math.round(log(40, 8000, v));
+      return { attivo: true, riga: `all(x => x.hpf(${f}))`, testo: `${f} Hz` };
+    }
+    case 'break': {
+      if (v <= SOGLIA_FADER) return spento();
+      const fattore = Math.round((1 - 0.85 * v) * 100) / 100;
+      return { attivo: true, riga: `// break · tutti tranne la spina a ${Math.round(fattore * 100)}%`, fattore, testo: `${Math.round(fattore * 100)}%` };
+    }
+    case 'riser': {
+      if (v <= SOGLIA_FADER) return spento();
+      const f = Math.round(log(200, 9000, v));
+      return { attivo: true, riga: `all(x => x.hpf(${f}))`, testo: `${f} Hz`, riser: { hpf: f, gain: Math.round((0.04 + 0.26 * v) * 100) / 100 } };
+    }
+    case 'eco':
+      return v <= SOGLIA_FADER ? spento() : { attivo: true, riga: `all(x => x.delay(${n2(v)}).delaytime(.375).delayfeedback(.5))`, testo: `${Math.round(v * 100)}%` };
+    case 'cattedrale':
+      return v <= SOGLIA_FADER ? spento() : { attivo: true, riga: `all(x => x.room(${n2(v)}).roomsize(${n2(2 + 8 * v)}))`, testo: `${Math.round(v * 100)}%` };
+    case 'rottame': {
+      if (v <= SOGLIA_FADER) return spento();
+      const bit = Math.round(16 - 12 * v);
+      const coarse = 1 + Math.round(7 * v);
+      return { attivo: true, riga: `all(x => x.crush(${bit}).coarse(${coarse}))`, testo: `crush ${bit}` };
+    }
+    default:
+      return spento();
+  }
+}
 
 // Il valore come si legge (con l'unità dove serve): «800 Hz», «0.40».
 export function valoreTesto(p, x) {

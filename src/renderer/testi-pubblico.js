@@ -14,6 +14,7 @@ export const PREDEFINITI = {
   conto: { acceso: true, testo: 'tra {n} {cicli}' },
   scrittura: { acceso: true, testo: 'in scrittura' },
   coda: { acceso: true },
+  globale: { acceso: true }, // le righe globali (fader, colpi «su tutto»): all(x => x.lpf(1920))
   striscia: { acceso: true }, // le note vere del ciclo sotto ogni livello, con la testina che scorre
   misuratore: { acceso: false }, // il suono vero del livello (a destra della striscia): spento di default
   commenti: { acceso: false }, // le righe // del codice

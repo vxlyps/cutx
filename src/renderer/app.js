@@ -10,6 +10,7 @@ import { Importa } from './importa.js';
 import { Controller } from './controller.js';
 import { PaginaController } from './impostazioni-controller.js';
 import { Specchio } from './specchio.js';
+import { FADER_PREDEFINITO } from './controller-mappa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
 import { Cronologia } from './cronologia.js';
@@ -892,6 +893,13 @@ const pila = new Pila($('livelli'), $('jam'), {
 // I livelli arrivano in due modi: spinti dal motore a ogni cambio (subito) e nello stato di ogni pong (ogni mezzo secondo, un po'
 // in ritardo). Vale quello più recente: un pong partito prima dell'ultimo cambio non deve riportare indietro la lista
 // (un muto o un volume appena cambiati sparivano per un attimo, e un ⇧⌘S in quel momento li salvava vecchi).
+// Le righe globali (fader, colpi «su tutto»): visibili sotto i livelli, come codice.
+function mostraGlobali(righe) {
+  const e = $('globali');
+  e.hidden = !righe.length;
+  const testo = righe.join('\n');
+  if (e.textContent !== testo) e.textContent = testo;
+}
 let paracaduteAperto = false; // dal motore live: il paracadute è aperto
 let spintaLivelli = 0; // quando è arrivata l'ultima spinta di livelli dal motore live
 function mostraLive() {
@@ -1041,6 +1049,7 @@ for (const m of [live, cuffia]) {
       paracaduteAperto = !!msg.paracadute;
       pila.aggiorna(livelliLive);
     }
+    else if (msg.tipo === 'globali') mostraGlobali(msg.righe);
     else if (msg.tipo === 'strisce') pila.suStrisce(msg);
     else if (msg.tipo === 'misure') pila.suMisure(msg, performance.now(), mappa?.cps ? 1000 / mappa.cps : 2000);
     else if (msg.tipo === 'suoni-mancanti' && !inTest) {
@@ -1157,6 +1166,29 @@ globalThis.cutxProva = {
   misure: () => ({ stima: misuratore.stima.riepilogo(), live: live.stato, cuffia: cuffia.stato }),
 };
 
+// Il riser del fader: un livello di rumore con un passa-alto che sale; entra subito (non al ciclo dopo) ed esce subito quando il fader torna giù.
+let riserId = null;
+let riserCreando = false;
+let riserUltimo = null;
+async function gestisciRiser(r) {
+  riserUltimo = r;
+  const righe = () => [`.hpf(${riserUltimo.hpf})`, `.gain(${riserUltimo.gain})`];
+  if (!r) {
+    if (riserId !== null) live.manda({ tipo: 'togli', livello: riserId, subito: true });
+    riserId = null;
+    return;
+  }
+  if (riserId !== null) return live.manda({ tipo: 'coda', livello: riserId, imposta: righe(), origine: 'manopola' });
+  if (riserCreando) return;
+  riserCreando = true;
+  const risposta = await live.richiesta({ tipo: 'entra', codice: 's("white*16").decay(.12).sustain(0)', nome: 'riser', provenienza: 'fader', cicli: 1, scritto: true, subito: true, coda: righe() });
+  riserCreando = false;
+  if (!risposta.livello) return;
+  riserId = risposta.livello;
+  if (!riserUltimo) gestisciRiser(null); // nel frattempo il fader era già tornato giù
+  else live.manda({ tipo: 'coda', livello: riserId, imposta: righe(), origine: 'manopola' });
+}
+
 // --- il controller (X-Touch Mini in MC): le stesse azioni della tastiera e del mouse, gli anelli con i valori veri ---
 let rigaTimer = null;
 function mostraRiga(testo) {
@@ -1205,7 +1237,11 @@ const controllerMidi = new Controller({
   },
   seleziona: (id) => pila.seleziona(id),
   togliRiga: (id, chiave) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }),
-  filtroMaster: (x) => live.manda({ tipo: 'filtro-master', x }),
+  // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
+  faderEffetto: (pagina) => preferenze.controller?.fader?.[pagina],
+  globale: (chiave, riga) => live.manda({ tipo: 'globale', chiave, riga }),
+  breakTutti: (fattore) => live.manda({ tipo: 'break', fattore }),
+  riser: (r) => gestisciRiser(r),
   coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
   master: (volume) => live.manda({ tipo: 'master', volume }),
   tempo: (bpm) => live.manda({ tipo: 'tempo', bpm }),
@@ -1222,7 +1258,8 @@ const controllerMidi = new Controller({
   paracaduteAperto: () => paracaduteAperto,
   avviso: (testo) => cue.avviso(testo, { persistente: true }),
   calibrazione: () => preferenze.controller,
-  salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: c }),
+  salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, ...c } }),
+  faderScegli: (pagina, effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: { ...FADER_PREDEFINITO, ...preferenze.controller?.fader, [pagina]: effetto } } }),
 });
 const paginaController = new PaginaController(controllerMidi);
 const specchio = new Specchio($('specchio'));

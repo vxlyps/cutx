@@ -365,3 +365,9 @@ body {
 .livello.muto .striscia-viva {
   opacity: 0.4;
 }
+
+/* le righe globali (fader, colpi «su tutto») sul proiettore */
+.livello.globale .codice {
+  color: var(--marcio);
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(159, 194, 58, 0.4);
+}

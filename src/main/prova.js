@@ -2892,14 +2892,60 @@ async function provaController({ finestre, scrivi }) {
   await aspetta(1.6);
   const dopoAltezza = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === melodia.livello && e[3] !== null);
   controlla('altezza: +2 semitoni nella coda (.transpose(2)) e le note cambiano', ((await attivi()).find((l) => l.id === melodia.livello)?.coda ?? []).includes('.transpose(2)') && dopoAltezza.length > 0 && JSON.stringify(dopoAltezza.at(-1)[3]) !== JSON.stringify(noteBase.at(-1)?.[3]), JSON.stringify([noteBase.at(-1)?.slice(3), dopoAltezza.at(-1)?.slice(3)]));
+  // il fader: una riga globale all(x => …) su tutti i livelli (filtro in pagina A di default)
+  await midi(0x90, 84, 127); // pagina A
+  await js(`window.cutx.salvaPreferenze({ controller: null })`);
+  await aspetta(0.3);
+  await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0xe8, 0x00, 0x40); // il fader a metà
+  await aspetta(1.8);
+  const filtrati = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[2] !== null);
+  const globali = (await live()).globali;
+  controlla('fader a metà: una riga globale all(x => x.lpf(…)) su tutto il live', globali.length === 1 && /^all\(x => x\.lpf\(\d+\)\)$/.test(globali[0]), JSON.stringify(globali));
+  const f = Number(globali[0]?.match(/\d+/)?.[0]);
+  controlla('e tutti i livelli la suonano (il cutoff degli eventi è quello della riga)', filtrati.length > 3 && filtrati.slice(-6).every((e) => e[2] === f), JSON.stringify([f, filtrati.slice(-3).map((e) => e[2])]));
+  controlla('la riga si vede sotto i livelli (LIVE) e nello specchio «FADER · FILTRO … Hz»', /all\(x => x\.lpf/.test(await js(`document.getElementById('globali').textContent`)) && /FADER · FILTRO \d+ Hz/.test(await js(`document.querySelector('#specchio .spec-info')?.textContent ?? ''`)), await js(`document.querySelector('#specchio .spec-info')?.textContent`));
+  await midi(0xe8, 0x7f, 0x7f);
+  await aspetta(0.8);
+  controlla('fader in alto (aperto): la riga sparisce', (await live()).globali.length === 0 && (await js(`document.getElementById('globali').hidden`)) === true);
+  // lavaggio scelto per la pagina A, riser in pagina B, break
+  await js(`window.cutx.salvaPreferenze({ controller: { fader: { A: 'lavaggio', B: 'riser' } } })`);
   await aspetta(0.5);
-  const meta = (await live()).filtroMaster;
-  controlla('fader a metà: il filtro del drop si chiude su tutto il live', meta > 150 && meta < 16000, String(meta));
+  await midi(0xe8, 0x00, 0x30);
+  await aspetta(0.6);
+  controlla('effetto scelto nelle impostazioni (lavaggio): all(x => x.hpf(…))', /^all\(x => x\.hpf\(\d+\)\)$/.test((await live()).globali[0] ?? ''), JSON.stringify((await live()).globali));
+  controlla('e nello specchio «FADER · LAVAGGIO … Hz»', /FADER · LAVAGGIO \d+ Hz/.test(await js(`document.querySelector('#specchio .spec-info')?.textContent ?? ''`)));
+  await midi(0xe8, 0x00, 0x00);
+  await aspetta(0.5);
+  await js(`window.cutx.salvaPreferenze({ controller: { fader: { A: 'break', B: 'riser' } } })`);
+  await aspetta(0.4);
+  await midi(0xe8, 0x00, 0x60);
+  await aspetta(0.6);
+  const rotto = (await live()).breakFattore;
+  controlla('break: i pezzi (tranne la spina) scendono, la riga lo dice come commento', rotto < 0.7 && /\/\/ break/.test((await live()).globali[0] ?? ''), JSON.stringify([rotto, (await live()).globali]));
+  await midi(0xe8, 0x00, 0x00);
+  await aspetta(0.5);
+  controlla('break a zero: tutto torna al volume di prima, niente riga', (await live()).breakFattore === 1 && (await live()).globali.length === 0);
+  await midi(0x90, 85, 127); // pagina B: riser
+  await midi(0xe8, 0x00, 0x70);
+  await aspetta(2.5);
+  const riser = (await attivi()).find((l) => l.nome === 'riser');
+  controlla('riser (pagina B): un livello di rumore entra subito, col passa-alto in coda, e la riga globale hpf', !!riser && riser.coda.some((r) => r.startsWith('.hpf')) && /x\.hpf/.test((await live()).globali[0] ?? ''), JSON.stringify([riser?.coda, (await live()).globali]));
+  await midi(0xe8, 0x00, 0x00);
+  await aspetta(1);
+  controlla('riser: il fader giù, il rumore se ne va subito e la riga sparisce', !(await attivi()).some((l) => l.nome === 'riser') && (await live()).globali.length === 0);
+  // il proiettore: la riga globale è codice
+  await midi(0x90, 84, 127);
+  await js(`window.cutx.salvaPreferenze({ controller: null })`);
+  await aspetta(0.3);
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(2);
+  await midi(0xe8, 0x00, 0x40);
+  await aspetta(1.2);
+  controlla('proiettore: la riga globale all(x => …) si vede come codice', /all\(x => x\.lpf\(\d+\)\)/.test(await chiedi(finestre.uscita, `document.getElementById('livelli').innerText`)), await chiedi(finestre.uscita, `document.getElementById('livelli').innerText.slice(-120)`));
   await midi(0xe8, 0x7f, 0x7f);
   await aspetta(0.6);
-  const aperto = (await live()).filtroMaster;
-  controlla('fader in alto: il filtro è aperto (identità)', aperto > 20000, String(aperto));
   await midi(0x90, 84, 127);
   controlla('il tasto layer A torna alla pagina A', (await js('cutxProva.controllerMidi.pagina')) === 'A');
 
@@ -3144,7 +3190,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1);
   controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
   const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
-  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 17, String(righeTesti));
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 18, String(righeTesti));
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');

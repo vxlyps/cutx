@@ -155,3 +155,26 @@ export function soloCoda(testo) {
   const voci = righe.map(leggiVoce);
   return voci.every(Boolean) ? voci.map((v) => v.testo) : null;
 }
+
+// --- le righe globali: all(x => x.lpf(1920)) ---
+// Il fader del controller e i colpi «su tutto» scrivono righe globali con la funzione all di Strudel; il motore le mette su OGNI livello,
+// dopo la sua coda. Qui si legge una riga e la si applica a un pattern.
+const GLOBALE = /^\s*all\(\s*x\s*=>\s*(x\.[\s\S]+?)\s*\)\s*;?\s*$/;
+
+// L'espressione di una riga globale (x.lpf(1920)), o null se non è una riga globale.
+export const leggiGlobale = (riga) => GLOBALE.exec(String(riga))?.[1] ?? null;
+
+// { pattern } con tutte le righe globali messe sopra, oppure { errore } (e allora chi chiama tiene il pattern senza).
+export function applicaGlobali(pattern, righe) {
+  const espressioni = (righe ?? []).map(leggiGlobale).filter(Boolean);
+  if (!espressioni.length) return { pattern };
+  try {
+    let p = pattern;
+    for (const e of espressioni) p = new Function('x', `return ${e}`)(p);
+    if (typeof p?.queryArc !== 'function') throw new Error('la riga globale non dà un pattern');
+    p.queryArc(0, 0.001);
+    return { pattern: p };
+  } catch (e) {
+    return { errore: String(e.message ?? e) };
+  }
+}

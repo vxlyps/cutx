@@ -251,6 +251,7 @@ export class Impostazioni {
       voce('conto', 'conto alla rovescia', 'prima che il livello entri'),
       voce('scrittura', 'in scrittura', 'mentre riscrivo un livello o il jam'),
       voce('coda', 'coda', 'le righe .lpf(…), .fast(…) sotto il codice e il volume', { testo: false }),
+      voce('globale', 'righe globali', 'le righe all(x => …) scritte dal fader e dai colpi «su tutto», in fondo ai livelli', { testo: false }),
       voce('striscia', 'striscia delle note', 'sotto ogni livello: le note vere del ciclo e la testina che scorre', { testo: false }),
       voce('misuratore', 'misuratore del suono', 'a destra della striscia: il suono vero del livello in dB (spento di default)', { testo: false }),
       voce('commenti', 'commenti // nel codice', 'acceso: il pubblico legge anche le righe di commento', { testo: false }),

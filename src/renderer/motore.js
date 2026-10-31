@@ -2,9 +2,8 @@
 // - live: comanda il tempo, suona sulle casse, pubblica la mappa del tempo alla cuffia;
 // - cuffia: segue la mappa del live e suona sul jack, allo stesso istante.
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
-import { frequenzaMaster } from './controller-mappa.js';
 import { eventiDaHap } from './striscia.js';
-import { applica as applicaCoda, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
+import { applica as applicaCoda, applicaGlobali, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
@@ -223,10 +222,25 @@ function micro(l, ciclo) {
   param.linearRampToValueAtTime(1, t - 0.0005);
 }
 
+// Le righe globali (il fader, i colpi «su tutto»): all(x => x.lpf(1920)). Il motore le mette su ogni livello, dopo la sua coda.
+const globali = new Map(); // chiave → riga
+let breakFattore = 1; // il «break» del fader: tutti i pezzi tranne la spina (per ora il primo livello) a questa frazione del volume
+function mandaGlobali() {
+  const m = { tipo: 'globali', righe: [...globali.values()] };
+  manda('controllo', m);
+  manda('uscita', m);
+}
+const idSpina = () => livelli.find((x) => x.a === Infinity)?.id ?? null;
+
 function metteCoda(l) {
-  const r = applicaCoda(l.base, l.coda, { scivolate: l.scivolate, segnale: signal });
+  const r0 = applicaCoda(l.base, l.coda, { scivolate: l.scivolate, segnale: signal });
+  if (r0.errore) {
+    l.codaErrore = r0.errore; // continua la versione di prima
+    return;
+  }
+  const r = globali.size ? applicaGlobali(r0.pattern, [...globali.values()]) : r0;
   if (r.errore) {
-    l.codaErrore = r.errore; // continua la versione di prima
+    l.codaErrore = `riga globale: ${r.errore}`;
     return;
   }
   l.codaErrore = null;
@@ -316,11 +330,12 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   avvisaSuoniMancanti(c.pattern, nome);
-  const da = rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
+  const da = subito ? rip.fine ?? rip.ciclo(ac.currentTime) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
@@ -337,7 +352,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   }
   if (Number.isFinite(inizio)) l.inizio = Math.max(0, Math.min(codice.length, inizio));
   if (Array.isArray(coda)) l.coda = coda.filter((t) => leggiVoce(t)).map((t) => leggiVoce(t).testo); // quella scritta nella sezione vince
-  if (l.coda.length) metteCoda(l);
+  if (l.coda.length || globali.size) metteCoda(l);
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
   livelli.push(l);
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
@@ -393,9 +408,13 @@ function riprendiDalParacadute(dissolvenza) {
 
 // Esce alla fine del ciclo in corso.
 // Con una dissolvenza il livello continua a suonare e sfuma per tot cicli; un secondo togli (o un clic sulla card) lo salva.
-function togli(id, dissolvenza) {
+function togli(id, dissolvenza, subito = false) {
   const l = livelli.find((x) => x.id === id);
   if (!l) return;
+  if (subito && l.a === Infinity) {
+    l.a = rip.fine ?? rip.ciclo(ac.currentTime); // smette di essere programmato adesso (il fader che torna giù)
+    return aggiornaLivelli();
+  }
   if (l.sfuma?.verso === 'esce' && l.a !== Infinity) return salva(l);
   if (l.a !== Infinity) return;
   const d = dissolvenzaDi(dissolvenza);
@@ -499,7 +518,8 @@ function applicaGuadagni() {
   for (const l of livelli) {
     const g = guadagnoDi(l);
     l.orbita = g.orbita;
-    g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume, ac.currentTime, SFUMATA_S);
+    const rompi = breakFattore < 1 && l.id !== idSpina() ? breakFattore : 1;
+    g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume * rompi, ac.currentTime, SFUMATA_S);
   }
 }
 // Un livello uscito: dopo la coda (riverbero, delay) il suo guadagno e la sua orbita si buttano.
@@ -514,22 +534,6 @@ function liberaGuadagno(id) {
     for (const n of [g.lp, g.hp, g.fade, g.micro, g.analisi]) n.disconnect();
     g.gain.disconnect();
   }, 15000);
-}
-
-// Il filtro del drop su tutto il live: un passa-basso fra il volume generale e le casse, creato la prima volta che si tocca il fader.
-// Aperto (frequenza a Nyquist) è l'identità. Tutto il live ci passa; le prese di misura (onda, sentinella) restano prima.
-let filtroMaster = null;
-function filtroMasterA(x) {
-  if (!Number.isFinite(x)) return;
-  if (!filtroMaster) {
-    const g = getSuperdoughAudioController().output.destinationGain;
-    filtroMaster = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
-    g.disconnect(ac.destination);
-    g.connect(filtroMaster);
-    filtroMaster.connect(ac.destination);
-  }
-  const f = frequenzaMaster(x);
-  filtroMaster.frequency.setTargetAtTime(f === null ? ac.sampleRate / 2 : f, ac.currentTime, SFUMATA_S);
 }
 
 function aggiornaLivelli() {
@@ -754,7 +758,8 @@ function stato() {
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
     ricostruzioni,
-    filtroMaster: filtroMaster ? filtroMaster.frequency.value : null,
+    globali: [...globali.values()],
+    breakFattore,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     dissolvenze: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, { fade: g.fade.gain.value, lp: g.lp.frequency.value, hp: g.hp.frequency.value }])) : undefined,
@@ -793,7 +798,19 @@ async function ricevi(da, m) {
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'togli':
-      return togli(m.livello, m.dissolvenza);
+      return togli(m.livello, m.dissolvenza, m.subito);
+    case 'globale': // una riga globale (all(x => …)) del fader o di un colpo; riga null la toglie
+      if (typeof m.riga === 'string' && m.riga.trim()) globali.set(String(m.chiave), m.riga.trim());
+      else globali.delete(String(m.chiave));
+      for (const l of livelli) {
+        l.codaSporca = true;
+        l.strisciaCiclo = null;
+      }
+      pianificaCoda();
+      return mandaGlobali();
+    case 'break': // il break del fader: i pezzi (tranne la spina) a una frazione del volume
+      breakFattore = Math.max(0, Math.min(1, Number(m.fattore)));
+      return applicaGuadagni();
     case 'salva-livello': // un clic sulla card che sta sfumando
       return salva(livelli.find((x) => x.id === m.livello));
     case 'livello': {
@@ -812,9 +829,6 @@ async function ricevi(da, m) {
       return;
     case 'misure-uscita': // il proiettore vuole il misuratore (spento di default)
       if (da === 'uscita') misureUscita = !!m.on;
-      return;
-    case 'filtro-master': // il fader del controller: un passa-basso su tutta l'uscita live (in alto = aperto, identità)
-      if (LIVE) filtroMasterA(Number(m.x));
       return;
     case 'master': // il volume generale del live (la manopola 8 del controller): lineare, con una sfumata breve
       if (LIVE) getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(Math.max(0, Math.min(1.5, Number(m.volume))), ac.currentTime, SFUMATA_S);
@@ -886,6 +900,7 @@ window.addEventListener('message', (e) => {
   if (LIVE) {
     pubblicaMappa();
     aggiornaLivelli();
+    mandaGlobali();
   }
 });
 window.cutx.suStashCambiato(configura);

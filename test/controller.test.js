@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Controller } from '../src/renderer/controller.js';
+import { calcolaFader } from '../src/renderer/controller-mappa.js';
+import { applicaGlobali, leggiGlobale } from '../src/renderer/coda.js';
 
 // Un controller con azioni finte e tempo a mano: nessun MIDI vero.
 function prova(livelli = []) {
@@ -252,16 +254,48 @@ test('altezza in semitoni: .transpose(n) fra -12 e +12, a 0 la riga sparisce', (
   assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /ALTEZZA 0 st/);
 });
 
-test('il fader è il filtro del drop su tutto il live: in alto aperto, scendendo si chiude', () => {
-  const { c, log, azioni } = prova([]);
-  const fader = [];
-  azioni.filtroMaster = (x) => fader.push(x);
-  c.riceve([0xe8, 0x7f, 0x7f]); // in alto
-  c.riceve([0xe8, 0x00, 0x20]); // a un quarto circa
-  assert.equal(fader[0], 1);
-  assert.ok(fader[1] > 0.2 && fader[1] < 0.3);
-  assert.match(log.filter((x) => x[0] === 'scritta').at(0)[1], /FILTRO APERTO/);
-  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FILTRO \d+ Hz/);
+test('il fader scrive righe globali all(x => …): filtro di default in pagina A, riser in B; a fondo corsa la riga sparisce', () => {
+  const { c, log, avanza, azioni } = prova([]);
+  azioni.globale = (chiave, riga) => log.push(['globale', chiave, riga]);
+  azioni.breakTutti = (f) => log.push(['break', f]);
+  azioni.riser = (r) => log.push(['riser', r]);
+  c.riceve([0xe8, 0x00, 0x40]); // a metà
+  avanza(100);
+  const g = log.filter((x) => x[0] === 'globale').at(-1);
+  assert.equal(g[1], 'fader');
+  assert.match(g[2], /^all\(x => x\.lpf\(\d+\)\)$/);
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FADER · FILTRO \d+ Hz/);
+  c.riceve([0xe8, 0x7f, 0x7f]); // in alto = aperto
+  avanza(100);
+  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], null, 'tutto aperto: la riga sparisce');
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /APERTO/);
+  // pagina B: riser (riga globale + rumore); cambiando pagina l'effetto di prima si ferma
+  c.riceve([0xe8, 0x00, 0x20]);
+  avanza(100);
+  c.riceve([0x90, c.tab.layer.B, 127]);
+  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], null, 'cambio pagina: la riga di prima si toglie');
+  c.riceve([0xe8, 0x7f, 0x40]); // alto
+  avanza(100);
+  assert.match(log.filter((x) => x[0] === 'globale').at(-1)[2], /^all\(x => x\.hpf\(\d+\)\)$/);
+  assert.ok(log.filter((x) => x[0] === 'riser').at(-1)[1].hpf > 1000, 'il rumore sale col passa-alto');
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FADER · RISER \d+ Hz/);
+  c.riceve([0xe8, 0x00, 0x00]); // in basso: sparisce tutto
+  avanza(100);
+  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], null);
+  assert.equal(log.filter((x) => x[0] === 'riser').at(-1)[1], null);
+});
+
+test('l\'effetto del fader si sceglie per pagina nelle impostazioni', () => {
+  const { c, log, avanza, azioni } = prova([]);
+  azioni.faderEffetto = (pagina) => (pagina === 'A' ? 'lavaggio' : 'cattedrale');
+  azioni.globale = (chiave, riga) => log.push(['globale', chiave, riga]);
+  c.riceve([0xe8, 0x7f, 0x40]);
+  avanza(100);
+  assert.match(log.filter((x) => x[0] === 'globale').at(-1)[2], /^all\(x => x\.hpf\(/);
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FADER · LAVAGGIO \d+ Hz/);
+  assert.equal(c.effettoFader('B'), 'cattedrale');
+  assert.equal(prova([]).c.effettoFader('B'), 'riser', 'predefiniti: A filtro, B riser');
+  assert.equal(prova([]).c.effettoFader('A'), 'filtro');
 });
 
 test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo va in cuffia; al rilascio niente toggle', () => {
@@ -319,4 +353,32 @@ test('«cuffia» tenuto + ◀ ▶ momento: brano precedente e successivo della l
   // senza «cuffia» tenuto, ◀ ▶ restano «arriva presto» (i momenti vengono col passo 5)
   c.riceve(tasto(c.tab.tasti[1], true));
   assert.ok(log.some((x) => x[0] === 'scritta' && /ARRIVA PRESTO/i.test(x[1])));
+});
+
+test('gli effetti del fader: righe all(x => …), a zero (o aperto, per il filtro) niente', () => {
+  assert.equal(calcolaFader('filtro', 1).riga, null);
+  assert.match(calcolaFader('filtro', 0.5).riga, /^all\(x => x\.lpf\(\d+\)\)$/);
+  assert.equal(calcolaFader('filtro', 0).testo, '150 Hz');
+  for (const e of ['lavaggio', 'riser', 'eco', 'cattedrale', 'rottame', 'break']) {
+    assert.equal(calcolaFader(e, 0).attivo, false, `${e}: a zero niente`);
+    assert.equal(calcolaFader(e, 0.7).attivo, true, `${e}: attivo`);
+  }
+  assert.match(calcolaFader('lavaggio', 0.5).riga, /x\.hpf\(\d+\)/);
+  assert.match(calcolaFader('eco', 0.6).riga, /x\.delay\(0\.6\)\.delaytime/);
+  assert.match(calcolaFader('cattedrale', 0.6).riga, /x\.room\(0\.6\)\.roomsize/);
+  assert.match(calcolaFader('rottame', 1).riga, /x\.crush\(4\)\.coarse\(8\)/);
+  assert.ok(calcolaFader('break', 1).fattore < 0.2 && calcolaFader('break', 0.5).fattore > 0.5);
+  assert.ok(calcolaFader('riser', 1).riser.hpf > calcolaFader('riser', 0.2).riser.hpf, 'più sale, più il rumore si assottiglia');
+});
+
+test('le righe globali: si leggono e si applicano a un pattern, una dopo l\'altra', () => {
+  assert.equal(leggiGlobale('all(x => x.lpf(1920))'), 'x.lpf(1920)');
+  assert.equal(leggiGlobale('all(x => x.delay(.5).delayfeedback(.5))'), 'x.delay(.5).delayfeedback(.5)');
+  assert.equal(leggiGlobale('// break'), null);
+  const log = [];
+  const p = { queryArc: () => [], lpf: (v) => (log.push(`lpf${v}`), p), hpf: (v) => (log.push(`hpf${v}`), p) };
+  assert.ok(applicaGlobali(p, ['all(x => x.lpf(900))', 'all(x => x.hpf(100))', '// niente']).pattern);
+  assert.deepEqual(log, ['lpf900', 'hpf100']);
+  assert.ok(applicaGlobali(p, ['all(x => x.nonEsiste(1))']).errore);
+  assert.equal(applicaGlobali(p, []).pattern, p);
 });

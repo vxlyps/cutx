@@ -2869,3 +2869,20 @@ input[type='checkbox'] {
   border-color: var(--testo);
   box-shadow: inset 3px 0 0 var(--testo);
 }
+
+/* le righe globali (fader, colpi su tutto): codice in fondo ai livelli */
+.globali {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--marcio-scuro);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--marcio);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.globali[hidden] {
+  display: none;
+}
