@@ -76,7 +76,10 @@ export class Specchio {
     manopole.forEach((m, i) => {
       const e = document.createElement('div');
       e.className = `spec-m${m ? '' : ' libera'}${m?.muto ? ' muta' : ''}${toccata === i + 1 ? ' toccata' : ''}`;
-      e.append(disegnaAnello(m));
+      const num = document.createElement('span');
+      num.className = 'n';
+      num.textContent = String(i + 1);
+      e.append(num, disegnaAnello(m));
       const nm = document.createElement('span');
       nm.className = 'nm';
       nm.textContent = m ? m.corto : '–';

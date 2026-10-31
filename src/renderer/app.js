@@ -5,7 +5,7 @@ import { Cue } from './cue.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
-import { separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
+import { leggiVoce, separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
 import { Importa } from './importa.js';
 import { Controller } from './controller.js';
 import { PaginaController } from './impostazioni-controller.js';
@@ -1237,6 +1237,18 @@ const controllerMidi = new Controller({
   },
   seleziona: (id) => pila.seleziona(id),
   togliRiga: (id, chiave) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }),
+  // il reset di una manopola (pagina B): la riga esce dalla coda; ⌘Z la rimette
+  resetRiga: (id, chiave) => {
+    const l = livelloVivo(id);
+    const prima = l?.coda?.find((r) => leggiVoce(r)?.chiave === chiave);
+    if (!prima) return;
+    live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' });
+    cronologia.registra({
+      etichetta: `reset ${chiave} di «${l.nome}»`,
+      annulla: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, imposta: [prima], origine: 'manopola' }) : false),
+      rifai: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }) : false),
+    });
+  },
   // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
   faderEffetto: (pagina) => preferenze.controller?.fader?.[pagina],
   globale: (chiave, riga) => live.manda({ tipo: 'globale', chiave, riga }),

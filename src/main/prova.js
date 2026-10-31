@@ -2946,6 +2946,23 @@ async function provaController({ finestre, scrivi }) {
   controlla('proiettore: la riga globale all(x => …) si vede come codice', /all\(x => x\.lpf\(\d+\)\)/.test(await chiedi(finestre.uscita, `document.getElementById('livelli').innerText`)), await chiedi(finestre.uscita, `document.getElementById('livelli').innerText.slice(-120)`));
   await midi(0xe8, 0x7f, 0x7f);
   await aspetta(0.6);
+  // reset (pagina B): premere la manopola toglie la riga dalla coda; ⌘Z la rimette
+  await midi(0x90, 85, 127);
+  await midi(0x90, await tasto(posto), 127);
+  await midi(0x90, await tasto(posto), 0);
+  await giro(3, 4); // risonanza
+  await aspetta(0.6);
+  const conRiga = (await attivi()).find((l) => l.id === melodia.livello)?.coda ?? [];
+  await midi(0x90, 32 + 2, 127); // push della manopola 3
+  await midi(0x90, 32 + 2, 0);
+  await aspetta(0.6);
+  const senzaRiga = (await attivi()).find((l) => l.id === melodia.livello)?.coda ?? [];
+  controlla('pagina B: premere la manopola toglie la riga dalla coda (reset)', conRiga.some((r) => r.startsWith('.lpq')) && !senzaRiga.some((r) => r.startsWith('.lpq')), JSON.stringify([conRiga, senzaRiga]));
+  await js('cutxProva.annullaSet()');
+  await aspetta(0.6);
+  controlla('⌘Z rimette la riga', ((await attivi()).find((l) => l.id === melodia.livello)?.coda ?? []).some((r) => r.startsWith('.lpq')));
+  const numeri = await js(`[...document.querySelectorAll('#specchio .spec-m .n')].map((x) => x.textContent).join('')`);
+  controlla('lo specchio ha il numero 1–8 sopra ogni anello', numeri === '12345678', numeri);
   await midi(0x90, 84, 127);
   controlla('il tasto layer A torna alla pagina A', (await js('cutxProva.controllerMidi.pagina')) === 'A');
 

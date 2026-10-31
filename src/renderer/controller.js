@@ -7,6 +7,7 @@ import { valoreDi, valoreLetterale } from './coda.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
 const PARACADUTE_MS = 1000;
+const X_VALIDO_MS = 1500; // il valore che sto girando vale finché giro (e un attimo dopo); poi torna a valere la coda, che è la verità
 const FERMO_MS = 500; // fermo così a lungo, la sezione scelta va in cuffia
 const LUCI_MS = 150;
 const CODA_OGNI_MS = 33; // le righe di coda partono al massimo 30 volte al secondo
@@ -27,6 +28,7 @@ export class Controller {
     this.master = 1; // volume generale, 0..1
     this.push = new Map(); // n → { giu, tenuta, timer }
     this.x = new Map(); // `${id}|${parametro}` → 0..1, finché la coda non lo dice
+    this.xT = new Map(); // quando l'ho fissato
     this.codaDa = new Map(); // id|chiave → riga in attesa di partire
     this.codaTimer = null;
     this.ultime = new Map(); // luci già mandate
@@ -257,7 +259,8 @@ export class Controller {
   // Il valore di partenza di un parametro: quello della coda, o letterale nel codice, o il predefinito.
   xDi(l, chiave) {
     const k = `${l.id}|${chiave}`;
-    if (this.x.has(k)) return this.x.get(k);
+    if (this.x.has(k) && this.ora() - (this.xT.get(k) ?? 0) < X_VALIDO_MS) return this.x.get(k);
+    this.x.delete(k);
     if (chiave === 'velocita') {
       const v = valoreDi(l.coda ?? [], 'fast');
       const i = v === null ? -1 : SCATTI_VELOCITA.indexOf(v);
@@ -268,6 +271,11 @@ export class Controller {
     const v = valoreDi(l.coda ?? [], p.chiave) ?? valoreLetterale(l.codice ?? '', p.chiave);
     const x = v === null ? p.predefinito : normalizzato(p, v);
     return x;
+  }
+
+  fissaX(k, x) {
+    this.x.set(k, x);
+    this.xT.set(k, this.ora());
   }
 
   // La manopola n ha toccato il livello l: la card si illumina un attimo, lo specchio la mette in evidenza, il proiettore (se acceso) la scritta.
@@ -283,13 +291,52 @@ export class Controller {
     this.azioni.scritta?.(testo.toUpperCase());
   }
 
+  // Pagina B, push di una manopola: reset di quel parametro. La riga esce dalla coda, così torna il valore scritto nel mio codice o il predefinito;
+  // l'anello e lo specchio si aggiornano subito; ⌘Z lo annulla.
+  resetParametro(n) {
+    const chiave = PAGINA_B[n - 1];
+    if (!chiave) return this.riga(`manopola ${n}: arriva presto`);
+    if (this.bersaglio === 'globale') {
+      if (chiave !== 'eco' && chiave !== 'riverbero') return this.riga('globale: niente da rimettere qui');
+      for (const l of this.azioni.livelli()) this.azioni.resetRiga?.(l.id, PARAMETRI[chiave].chiave);
+      this.fissaX(`globale|${chiave}`, 0);
+      this.toccata = { n, quando: this.ora(), testo: `GLOBALE · ${PARAMETRI[chiave].nome} RESET` };
+      this.azioni.scritta?.(this.toccata.testo);
+      return;
+    }
+    const l = this.livello(this.bersaglio);
+    if (!l) return this.riga('nessun livello scelto');
+    const k = `${l.id}|${chiave}`;
+    let nome = chiave.toUpperCase();
+    if (chiave === 'volume') this.azioni.volume(l.id, 1);
+    else {
+      const chiaveCoda = chiave === 'velocita' ? 'fast' : chiave === 'altezza' ? 'transpose' : PARAMETRI[chiave].chiave;
+      this.azioni.resetRiga?.(l.id, chiaveCoda);
+      this.ultimoDiscreto.delete(k);
+      nome = (PARAMETRI[chiave]?.nome ?? (chiave === 'velocita' ? 'VELOCITÀ' : 'ALTEZZA'));
+      this.fissaX(k, this.xBase(l, chiave));
+    }
+    this.toccata = { n, quando: this.ora(), testo: `${l.nome.toUpperCase()} · ${nome} RESET` };
+    this.azioni.tocca?.(l.id);
+    this.azioni.scritta?.(this.toccata.testo);
+  }
+
+  // Il valore di un parametro senza la coda: quello scritto nel mio codice, o il predefinito.
+  xBase(l, chiave) {
+    if (chiave === 'velocita') return SCATTO_NORMALE;
+    if (chiave === 'altezza') return 0;
+    const p = PARAMETRI[chiave];
+    const v = valoreLetterale(l.codice ?? '', p.chiave);
+    return v === null ? p.predefinito : normalizzato(p, v);
+  }
+
   // Velocità (scatti al battito) e altezza (semitoni): valori discreti, scritti in coda come .fast(n) e .transpose(n); al valore neutro la riga sparisce.
   cambiaDiscreto(l, chiave, passi, n) {
     const k = `${l.id}|${chiave}`;
     let testo;
     if (chiave === 'velocita') {
       const indice = Math.max(0, Math.min(SCATTI_VELOCITA.length - 1, this.xDi(l, chiave) + passi / PASSI_PER_SCATTO));
-      this.x.set(k, indice);
+      this.fissaX(k, indice);
       const v = SCATTI_VELOCITA[Math.round(indice)];
       if (this.ultimoDiscreto.get(k) !== v) {
         this.ultimoDiscreto.set(k, v);
@@ -299,7 +346,7 @@ export class Controller {
       testo = `${l.nome.toUpperCase()} · VELOCITÀ ${etichettaVelocita(v)}`;
     } else {
       const semitoni = Math.max(ALTEZZA_MIN, Math.min(ALTEZZA_MAX, Math.round(this.xDi(l, chiave) + passi)));
-      this.x.set(k, semitoni);
+      this.fissaX(k, semitoni);
       if (this.ultimoDiscreto.get(k) !== semitoni) {
         this.ultimoDiscreto.set(k, semitoni);
         if (semitoni === 0) this.azioni.togliRiga?.(l.id, 'transpose');
@@ -314,7 +361,7 @@ export class Controller {
     if (chiave === 'velocita' || chiave === 'altezza') return this.cambiaDiscreto(l, chiave, passi, n);
     const p = PARAMETRI[chiave];
     const x = clamp01(this.xDi(l, chiave) + passi * PASSO_X);
-    this.x.set(`${l.id}|${chiave}`, x);
+    this.fissaX(`${l.id}|${chiave}`, x);
     this.mandaCoda(l.id, rigaCoda(p, x));
     this.tocca(l, chiave, `${l.nome.toUpperCase()} · ${p.nome} ${valoreTesto(p, x)}`, n);
   }
@@ -333,7 +380,7 @@ export class Controller {
     const p = PARAMETRI[chiave];
     const k = `globale|${chiave}`;
     const x = clamp01((this.x.get(k) ?? 0) + passi * PASSO_X);
-    this.x.set(k, x);
+    this.fissaX(k, x);
     for (const l of this.azioni.livelli()) this.mandaCoda(l.id, rigaCoda(p, x));
     this.toccata = { n, quando: this.ora(), testo: `GLOBALE · ${p.nome} ${x.toFixed(2)}` };
     this.azioni.scritta?.(`GLOBALE · ${p.nome} ${x.toFixed(2)}`);
@@ -373,6 +420,7 @@ export class Controller {
     stato.giu = false;
     stato.tenuta = false;
     if (eraTenuta) return; // il muto non scatta se tenevo premuto per scegliere
+    if (this.pagina === 'B') return this.resetParametro(n); // pagina B: premere = rimettere quel parametro com'era
     if (this.pagina !== 'A') return;
     if (n === 8) {
       this.riga('generale: niente muto (usa il volume)');

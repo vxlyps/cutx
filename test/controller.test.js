@@ -382,3 +382,36 @@ test('le righe globali: si leggono e si applicano a un pattern, una dopo l\'altr
   assert.ok(applicaGlobali(p, ['all(x => x.nonEsiste(1))']).errore);
   assert.equal(applicaGlobali(p, []).pattern, p);
 });
+
+test('pagina B: premere una manopola rimette quel parametro (toglie la riga dalla coda) e l\'anello torna al valore del mio codice', () => {
+  const { c, log, avanza, azioni } = prova([L(1, 'drum', 0.4, false, ['.lpf(3000)'], 's("bd").lpf(800)')]);
+  azioni.resetRiga = (id, chiave) => log.push(['resetRiga', id, chiave]);
+  c.riceve([0x90, c.tab.layer.B, 127]);
+  c.riceve(tasto(c.tab.tasti[0], true)); // bersaglio: livello 1
+  c.riceve(giro(2, 4)); // filtro
+  avanza(100);
+  assert.ok(c.manopole()[1].valore > 0.5, 'filtro girato in alto');
+  c.riceve(push(2, true));
+  avanza(100);
+  c.riceve(push(2, false)); // un tocco: reset
+  assert.deepEqual(log.filter((x) => x[0] === 'resetRiga').at(-1), ['resetRiga', 1, 'lpf']);
+  const x = c.manopole()[1].valore;
+  assert.ok(x > 0.3 && x < 0.4, `torna a 800 Hz del codice: ${x}`);
+  assert.match(log.filter((x2) => x2[0] === 'scritta').at(-1)[1], /DRUM · FILTRO RESET/);
+  // volume: torna a 1
+  c.riceve(push(1, true));
+  c.riceve(push(1, false));
+  assert.deepEqual(log.filter((x2) => x2[0] === 'volume').at(-1), ['volume', 1, 1]);
+  // velocità e altezza: tolgono fast e transpose
+  c.riceve(push(6, true));
+  c.riceve(push(6, false));
+  c.riceve(push(8, true));
+  c.riceve(push(8, false));
+  const reset = log.filter((x2) => x2[0] === 'resetRiga').map((x2) => x2[2]);
+  assert.ok(reset.includes('fast') && reset.includes('transpose'));
+  // la pagina A: lo stesso tocco resta il muto
+  c.riceve([0x90, c.tab.layer.A, 127]);
+  c.riceve(push(1, true));
+  c.riceve(push(1, false));
+  assert.ok(log.some((x2) => x2[0] === 'muto'));
+});

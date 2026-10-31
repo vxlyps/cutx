@@ -2886,3 +2886,22 @@ input[type='checkbox'] {
 .globali[hidden] {
   display: none;
 }
+
+/* il numero della manopola sopra ogni anello dello specchio */
+.specchio .spec-m .n {
+  font-size: 8px;
+  line-height: 1;
+  color: var(--secondario);
+  opacity: 0.8;
+  letter-spacing: 0;
+}
+
+.specchio .spec-m.toccata .n {
+  color: var(--marcio);
+  opacity: 1;
+}
+
+.specchio {
+  height: 102px;
+  min-height: 102px;
+}
