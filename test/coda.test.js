@@ -65,3 +65,14 @@ test('daLivelli scrive la coda in fondo alla sezione, e si rilegge', () => {
   assert.deepEqual(separa(b.sezioni[0].corpo.join('\n')), { codice: 's("sine")', coda: ['.lpf(900)'] });
   assert.equal(b.sezioni[0].info.volume, 0.6);
 });
+
+import { soloCoda } from '../src/renderer/coda.js';
+
+test('soloCoda: righe di coda con o senza // @coda sono una coda, il resto no', () => {
+  assert.deepEqual(soloCoda('.lpf(600)'), ['.lpf(600)']);
+  assert.deepEqual(soloCoda('// @coda\n.fast(2)\n\n.lpf(600)\n'), ['.fast(2)', '.lpf(600)']);
+  assert.equal(soloCoda('s("bd")\n// @coda\n.lpf(600)'), null);
+  assert.equal(soloCoda('// solo un commento'), null);
+  assert.equal(soloCoda('   '), null);
+  assert.equal(soloCoda('.lpf(600)\nqualcosa'), null);
+});

@@ -5,7 +5,7 @@ import { Cue } from './cue.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
-import { separa as separaCoda, unisci as unisciCoda } from './coda.js';
+import { separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
 import { Importa } from './importa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
@@ -141,11 +141,34 @@ function evidenziaCuffia(ciclo) {
   for (const e of cue.editors()) e.evidenzia(e === d?.editor ? intervalli : []);
 }
 
+// Una coda da sola va al livello scelto (card cliccata; col controller, la manopola tenuta premuta). Niente livello scelto: avviso, niente cambia.
+// Ritorna un messaggio da mostrare, o null.
+function aggiungiCoda(voci) {
+  const l = livelloVivo(pila.selezionato);
+  if (!l) {
+    cue.avviso('c\'è solo una coda ma nessun livello scelto: clicca la card del livello a cui aggiungerla');
+    return 'nessun livello scelto';
+  }
+  const prima = [...(l.coda ?? [])];
+  live.manda({ tipo: 'coda', livello: l.id, imposta: voci });
+  const id = l.id;
+  cronologia.registra({
+    etichetta: `coda di «${l.nome}»`,
+    annulla: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true, imposta: prima }) : false),
+    rifai: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, imposta: voci }) : false),
+  });
+  cue.avviso(`${voci.length === 1 ? 'riga' : 'righe'} in coda a «${l.nome}»: ${voci.join(' ')}`);
+  return null;
+}
+
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
 async function goLive() {
   if (inTest) return;
   const p = cue.pezzo();
   if (p.errore) return cue.avviso(p.errore);
+  // solo righe di coda (.lpf(600)…): non è un livello, si aggiunge alla coda di quello scelto con un clic sulla sua card
+  const voci = soloCoda(p.codice.slice(p.inizio ?? 0));
+  if (voci) return aggiungiCoda(voci);
   let codice = p.codice;
   // Un brano a un altro BPM che entra in un live che sta già suonando NON cambia il tempo del set: si tolgono dal suo preambolo
   // le righe setcpm (un setcpm scritto dentro la sezione, o in un livello, continua a funzionare). Con il live vuoto il brano
@@ -160,8 +183,6 @@ async function goLive() {
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  // la coda da sola non suona niente: di solito è una selezione che parte da `// @coda` e lascia fuori il codice sopra
-  if (coda.length && !senzaCoda.replace(/^\s*setcp[ms]\(.*$/gm, '').trim()) return cue.avviso('c\'è solo la coda, senza il codice a cui si applica: seleziona anche le righe sopra `// @coda`, o niente');
   const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
@@ -791,11 +812,17 @@ const pila = new Pila($('livelli'), $('jam'), {
     live.manda({ tipo: 'livello', livello: id, muto });
   },
   // jam o livello modificato: entra al prossimo ciclo, già scritto. Un errore lascia la versione di prima.
-  applica: async (livello, codice) => {
+  applica: async (livello, testo) => {
+    // una coda da sola (nel jam o in una card) non crea né sostituisce un livello: va a quello scelto
+    const soloVoci = soloCoda(testo);
+    if (soloVoci) return aggiungiCoda(soloVoci);
+    // la coda scritta sotto il codice (// @coda) sostituisce quella del livello; senza, la coda resta
+    const { codice, coda } = separaCoda(testo);
     const prima = livello ? livelloVivo(livello.id)?.codice : null;
     const r = await live.richiesta({
       tipo: 'entra',
       codice,
+      ...(coda.length ? { coda } : {}),
       nome: livello?.nome ?? 'jam',
       provenienza: livello?.provenienza ?? 'jam',
       cicli: 1,

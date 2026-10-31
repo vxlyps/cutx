@@ -80,3 +80,12 @@ export function applica(pattern, coda) {
     return { errore: String(e.message ?? e) };
   }
 }
+
+// Un testo fatto solo di voci (con o senza `// @coda`, righe vuote e commenti a parte): è una coda da aggiungere a un livello, non un livello.
+// Ritorna le voci, o null se c'è qualsiasi altra cosa.
+export function soloCoda(testo) {
+  const righe = String(testo).split('\n').filter((r) => r.trim() !== '' && !/^\s*\/\//.test(r));
+  if (!righe.length) return null;
+  const voci = righe.map(leggiVoce);
+  return voci.every(Boolean) ? voci.map((v) => v.testo) : null;
+}

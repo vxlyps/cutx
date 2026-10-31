@@ -2546,12 +2546,43 @@ async function provaCoda({ finestre, scrivi }) {
   const cartaLibera = await js(`[...document.querySelectorAll('#livelli .card.livello')].at(-1)?.querySelector('.codice')?.textContent`);
   controlla('CUE libero: la card mostra il codice', /note\("c3 e3 g3 b3"\)/.test(cartaLibera ?? ''), JSON.stringify(cartaLibera));
 
-  // 9. una selezione che parte da `// @coda` lascia fuori il codice: non entra niente, e si dice perché
-  const prima = (await live()).livelli.length;
-  await js(`(() => { const v = cutxProva.cue.libero.vista; v.dispatch({ selection: { anchor: v.state.doc.line(2).from, head: v.state.doc.length } }); })()`);
+  // 9. a) la card LIVE: codice + // @coda + righe, applico: la coda si applica (prima suonavano solo le note)
+  const vivo = await attivo();
+  const nLivelli = async () => (await live()).livelli.filter((l) => l.a === null).length;
+  const errA = await js(`cutxProva.pila.azioni.applica(${JSON.stringify({ id: vivo.id, nome: vivo.nome, provenienza: vivo.provenienza })}, 'note("c3 e3 g3 b3").s("triangle").gain(.0001)\\n// @coda\\n.lpf(300)')`);
+  await aspetta(2.5);
+  const daCard = await attivo();
+  controlla('card LIVE: codice + // @coda + righe, la coda si applica', errA === null && daCard.coda?.join('|') === '.lpf(300)' && !daCard.codice.includes('@coda'), JSON.stringify({ errA, coda: daCard.coda, codice: daCard.codice }));
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await aspetta(1.5);
+  const cardEv = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === daCard.id);
+  controlla('card LIVE: le note suonano col filtro della coda', cardEv.length > 4 && cardEv.every((e) => e[2] === 300), JSON.stringify(cardEv.slice(-2)));
+
+  // 9. b) una coda da sola non crea né sostituisce un livello: va a quello scelto
+  const prima = await nLivelli();
+  await js(`cutxProva.pila.selezionato = null`);
+  await js(`cutxProva.scriviCue('.lpf(700)')`);
   await js(`cutxProva.goLive()`);
   await aspetta(1);
-  controlla('solo la coda selezionata: non entra un livello vuoto, e l\'avviso lo dice', (await live()).livelli.length === prima && /solo la coda/.test(await js(`document.getElementById('cue-avviso').textContent`)));
+  const senza = await attivo();
+  controlla('coda sola dal CUE, nessun livello scelto: avviso e non cambia niente', (await nLivelli()) === prima && senza.coda?.join('|') === '.lpf(300)' && /nessun livello scelto/.test(await js(`document.getElementById('cue-avviso').textContent`)));
+  await js(`cutxProva.pila.seleziona(${daCard.id})`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(1);
+  const scelto = await attivo();
+  controlla('coda sola dal CUE, livello scelto: si aggiunge alla sua coda (senza nuovo livello)', (await nLivelli()) === prima && scelto.id === daCard.id && scelto.coda?.join('|') === '.lpf(700)', JSON.stringify({ n: await nLivelli(), coda: scelto.coda }));
+  await js(`cutxProva.scriviCue('// @coda\\n.delay(.5)\\n.fast(2)')`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(1);
+  controlla('anche con // @coda e più righe', (await attivo()).coda?.join('|') === '.lpf(700)|.delay(.5)|.fast(2)' && (await nLivelli()) === prima);
+  const errJam = await js(`cutxProva.pila.azioni.applica(null, '.room(.3)')`);
+  await aspetta(1);
+  const dopoJam = await live();
+  controlla('jam con una coda sola: non crea un livello muto, va al livello scelto', errJam === null && (await nLivelli()) === prima && !dopoJam.livelli.some((l) => l.nome === 'jam') && (await attivo()).coda.includes('.room(.3)'), JSON.stringify(errJam));
+  await js(`cutxProva.pila.selezionato = null`);
+  const errJam2 = await js(`cutxProva.pila.azioni.applica(null, '.room(.9)')`);
+  await aspetta(0.5);
+  controlla('jam con una coda sola e nessun livello scelto: non crea niente e lo dice', typeof errJam2 === 'string' && (await nLivelli()) === prima && !(await live()).livelli.some((l) => l.nome === 'jam'), JSON.stringify(errJam2));
 
   // 10. un campione che non c'è nello stash (bd, sd): avviso chiaro, non silenzio
   await js(`cutxProva.fermaTutto()`);

@@ -1244,6 +1244,10 @@ input[type='checkbox'] {
   background: var(--marcio);
 }
 
+.card.livello.selezionato {
+  box-shadow: inset 3px 0 0 var(--marcio);
+}
+
 .livello.in-modifica {
   border-color: var(--spento);
 }

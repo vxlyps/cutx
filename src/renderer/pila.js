@@ -29,6 +29,7 @@ export class Pila {
     this.carte = new Map(); // id → carta
     this.inizioUscita = new Map(); // id → epoca in cui ho visto partire l'uscita
     this.scritturaAMacchina = true;
+    this.selezionato = null; // id del livello scelto con un clic sulla card: a lui vanno le code da sole (e, col controller, i colpi)
     this.modifiche = new Map(); // nome del livello → { editor, carta } mentre lo modifico
     this.creaJam(jam);
   }
@@ -80,6 +81,7 @@ export class Pila {
       // solo se è fuori posto: spostare la carta toglierebbe il fuoco a chi ci sta scrivendo
       if (this.contenitore.children[this.livelli.indexOf(l)] !== c.el) this.contenitore.append(c.el);
     }
+    this.mostraSelezione();
     // una modifica aperta passa al livello nuovo con lo stesso nome (quello appena applicato)
     for (const [nome, m] of this.modifiche) {
       const ora = this.attivoDi(nome);
@@ -151,6 +153,7 @@ export class Pila {
     pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
+    art.addEventListener('pointerdown', () => this.seleziona(c.livello.id));
     // un clic sulla card che sta sfumando la salva: l'uscita si annulla e il livello torna al suo volume
     art.addEventListener('click', (e) => {
       if (c.livello.a !== null && c.livello.sfuma?.verso === 'esce' && !e.target.closest('button, .volume')) this.azioni.salvaLivello(c.livello.id);
@@ -174,6 +177,17 @@ export class Pila {
     };
     codice.onclick = () => (c.livello.sfuma?.verso === 'esce' && c.livello.a !== null ? null : this.apriModifica(c));
     return c;
+  }
+
+  // Un clic su una card la sceglie; un secondo clic non la toglie (si cambia scegliendone un'altra).
+  seleziona(id) {
+    this.selezionato = id;
+    this.mostraSelezione();
+  }
+
+  mostraSelezione() {
+    if (this.selezionato !== null && !this.livelli.some((l) => l.id === this.selezionato && l.a === null)) this.selezionato = null;
+    for (const [id, c] of this.carte) c.el.classList.toggle('selezionato', id === this.selezionato);
   }
 
   // --- modificare sul posto ---
