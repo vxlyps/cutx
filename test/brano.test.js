@@ -273,3 +273,75 @@ test('una riga // @sezione dopo la testa non è una descrizione', () => {
   assert.equal(b.testa.length, 1);
   assert.equal(b.sezioni.length, 1);
 });
+
+// --- la spina e i momenti ---
+const CON_SPINA = `// @brano notte
+// @bpm 120
+
+setcpm(120/4)
+
+// @spina
+// @momento intro
+s("bd*2")
+// @momento drop
+s("bd*4, hh*8")
+// @pezzo reese · volume 0.6
+note("c2").s("sawtooth")
+// @sezione pad
+note("c3").s("sine")
+`;
+
+test('un brano con spina: i momenti si leggono e si riscrivono identici', () => {
+  const b = B.leggi(CON_SPINA);
+  assert.equal(b.spina.momenti.length, 2);
+  assert.deepEqual(b.spina.momenti.map((m) => m.nome), ['intro', 'drop']);
+  assert.deepEqual(b.spina.momenti[1].corpo, ['s("bd*4, hh*8")']);
+  assert.deepEqual(b.sezioni.map((s) => s.nome), ['reese', 'pad'], '@pezzo e @sezione sono la stessa cosa');
+  assert.equal(b.sezioni[0].info.volume, 0.6);
+  assert.equal(B.scrivi(b), CON_SPINA);
+  assert.ok(B.haSpina(b));
+});
+
+test('un brano senza spina va come sempre (tutto è un pezzo)', () => {
+  const b = B.leggi('// @brano x\nsetcpm(120/4)\n// @sezione uno\ns("bd")\n');
+  assert.equal(b.spina, null);
+  assert.equal(b.sezioni.length, 1);
+  assert.equal(B.haSpina(b), false);
+  assert.equal(B.scrivi(b), '// @brano x\nsetcpm(120/4)\n// @sezione uno\ns("bd")\n');
+});
+
+test('il codice di un momento è preambolo + le sue righe, e i blocchi del testo includono la spina', () => {
+  const b = B.leggi(CON_SPINA);
+  const c = B.codiceMomento(b, 1);
+  assert.equal(c.codice, `${b.preambolo.join('\n')}\ns("bd*4, hh*8")`);
+  assert.equal(c.codice.slice(c.inizio), 's("bd*4, hh*8")');
+  const { blocchi } = B.blocchi(CON_SPINA);
+  assert.deepEqual(blocchi.map((x) => [x.sezione, x.momento ?? null, x.nome]), [[-1, null, null], [-3, null, null], [-2, 0, 'intro'], [-2, 1, 'drop'], [0, null, 'reese'], [1, null, 'pad']]);
+  const righe = CON_SPINA.split('\n');
+  const dropRiga = righe.indexOf('s("bd*4, hh*8")');
+  assert.equal(B.bloccoDellaRiga(CON_SPINA, dropRiga).momento, 1);
+  assert.equal(B.bloccoDellaRiga(CON_SPINA, righe.indexOf('note("c2").s("sawtooth")')).sezione, 0);
+});
+
+test('aggiungere, rinominare, cambiare e togliere momenti (e la spina nasce se manca)', () => {
+  let b = B.leggi('// @brano x\n// @sezione uno\ns("bd")\n');
+  b = B.aggiungiMomento(b, 'intro', ['s("bd*2")']);
+  assert.equal(B.scrivi(b), '// @brano x\n// @spina\n// @momento intro\ns("bd*2")\n// @sezione uno\ns("bd")\n');
+  b = B.aggiungiMomento(b, 'drop', ['s("bd*4")']);
+  b = B.rinominaMomento(b, 0, 'inizio');
+  b = B.conCorpoMomento(b, 1, ['s("bd*8")']);
+  assert.match(B.scrivi(b), /@momento inizio\ns\("bd\*2"\)\n\/\/ @momento drop\ns\("bd\*8"\)\n\/\/ @sezione uno/);
+  b = B.togliMomento(B.togliMomento(b, 0), 0);
+  assert.equal(b.spina, null, 'senza momenti la spina sparisce');
+});
+
+test('salvare il live con una spina: @spina col momento che suona adesso, e i pezzi', () => {
+  const testo = B.daLivelli(
+    [{ nome: 'spina', spina: true, momento: { nome: 'drop' }, codice: 's("bd*4")', coda: ['.lpf(900)'], volume: 1 }, { nome: 'reese', codice: 'note("c2")', coda: [], volume: 0.6 }],
+    { nome: 'live', bpm: 120, data: '2026-11-01' },
+  );
+  const b = B.leggi(testo);
+  assert.deepEqual(b.spina.momenti.map((m) => m.nome), ['drop']);
+  assert.match(b.spina.momenti[0].corpo.join('\n'), /s\("bd\*4"\)\n\/\/ @coda\n\.lpf\(900\)/);
+  assert.deepEqual(b.sezioni.map((s) => s.nome), ['reese']);
+});
