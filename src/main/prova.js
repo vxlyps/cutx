@@ -2698,8 +2698,7 @@ async function provaController({ finestre, scrivi }) {
 
   // pagina A: volume, muto, filtro
   await js(`cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  await giro(2, 5);
-  controlla('la card della manopola si illumina un attimo', (await js(`document.querySelectorAll('#livelli .card.livello.toccata').length`)) === 1);
+  controlla('la card della manopola si illumina un attimo', (await js(`(() => { cutxProva.controllerMidi.riceve([0xb0, 17, 5]); return document.querySelectorAll('#livelli .card.livello.toccata').length; })()`)) === 1);
   await aspetta(0.6);
   const v = (await attivi()).find((l) => l.id === due.livello)?.volume;
   controlla('manopola 2: il volume del secondo livello sale (0,5 → 0,6)', Math.abs(v - 0.6) < 0.011, String(v));
