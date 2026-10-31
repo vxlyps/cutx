@@ -289,7 +289,7 @@ body {
   display: flex;
   align-items: center;
   gap: calc(14 * var(--u));
-  height: calc(26 * var(--u));
+  height: calc(30 * var(--u));
   margin-top: calc(4 * var(--u));
 }
 
@@ -329,8 +329,8 @@ body {
 }
 
 .sv-misura {
-  flex: none;
-  width: calc(230 * var(--u));
+  flex: 0 0 22%;
+  min-width: calc(150 * var(--u));
   display: flex;
   align-items: center;
   gap: calc(10 * var(--u));
