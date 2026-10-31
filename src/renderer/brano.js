@@ -30,6 +30,7 @@ const TESTA = /^\/\/ @(brano|bpm|data|origine|suoni)(?:\s+(.*))?$/;
 const SEZIONE = /^\s*\/\/\s*@(?:clip|sezione|pezzo)\b\s*(.*)$/;
 const BEAT = /^\s*\/\/\s*@(?:beat|spina)\b\s*(.*)$/;
 const SCENA = /^\s*\/\/\s*@(?:scena|momento)\b\s*(.*)$/;
+const APERTURA = /^\s*\/\/\s*@apertura\b\s*(.*)$/; // il codice con cui comincia il brano, scritto dal vivo (testo fantasma nel CUE)
 // Un commento (anche "//" da solo): quelli subito sotto la testa sono la descrizione del brano, fanno parte della testa.
 const COMMENTO = /^\s*\/\//;
 const ORDINE_TESTA = ['brano', 'bpm', 'data', 'origine', 'suoni'];
@@ -38,8 +39,9 @@ const SEP = ' · ';
 export const eSezione = (riga) => SEZIONE.test(riga);
 export const eBeat = (riga) => BEAT.test(riga);
 export const eScena = (riga) => SCENA.test(riga);
+export const eApertura = (riga) => APERTURA.test(riga);
 // l'inizio di qualsiasi blocco del brano dopo il preambolo
-const eInizioBlocco = (riga) => eSezione(riga) || eBeat(riga);
+const eInizioBlocco = (riga) => eSezione(riga) || eBeat(riga) || eApertura(riga);
 
 // "intro · volume 0.8 · muto" → { nome: 'intro', info: { volume: 0.8, muto: true } }
 export function leggiRigaSezione(riga) {
@@ -74,6 +76,12 @@ export function leggi(testo) {
   if (testa.length) while (i < righe.length && COMMENTO.test(righe[i]) && !eSezione(righe[i])) testa.push(righe[i++]);
   const preambolo = [];
   while (i < righe.length && !eInizioBlocco(righe[i])) preambolo.push(righe[i++]);
+  // l'apertura (opzionale, prima del beat): il codice che scrivo dal vivo per cominciare il brano
+  let apertura = null;
+  if (i < righe.length && eApertura(righe[i])) {
+    apertura = { riga: righe[i++], corpo: [] };
+    while (i < righe.length && !eSezione(righe[i]) && !eBeat(righe[i])) apertura.corpo.push(righe[i++]);
+  }
   // il beat: la base ritmica con le sue scene (opzionale)
   let beat = null;
   if (i < righe.length && eBeat(righe[i])) {
@@ -93,12 +101,13 @@ export function leggi(testo) {
     while (i < righe.length && !eSezione(righe[i])) corpo.push(righe[i++]);
     sezioni.push({ riga, ...leggiRigaSezione(riga), corpo });
   }
-  return { testa, preambolo, beat, sezioni };
+  return { testa, preambolo, apertura, beat, sezioni };
 }
 
 export function scrivi(brano) {
   const beat = brano.beat ? [brano.beat.riga, ...brano.beat.intro, ...brano.beat.scene.flatMap((m) => [m.riga, ...m.corpo])] : [];
-  return [...brano.testa, ...brano.preambolo, ...beat, ...brano.sezioni.flatMap((s) => [s.riga, ...s.corpo])].join('\n');
+  const apertura = brano.apertura ? [brano.apertura.riga, ...brano.apertura.corpo] : [];
+  return [...brano.testa, ...brano.preambolo, ...apertura, ...beat, ...brano.sezioni.flatMap((s) => [s.riga, ...s.corpo])].join('\n');
 }
 
 // Un testo con i tag vecchi → gli stessi con i nomi nuovi (@spina → @beat, @momento → @scena, @pezzo e @sezione → @clip); il resto non si tocca.
@@ -172,6 +181,24 @@ export function codice(brano, i, righe = null) {
   const inizio = pre ? pre.length + 1 : 0;
   return { codice: pre ? `${pre}\n${corpo}` : corpo, inizio };
 }
+
+// --- l'apertura ---
+
+export const haApertura = (brano) => !!brano.apertura;
+
+// Il codice dell'apertura (testo): le righe del corpo.
+export const testoApertura = (brano) => (brano.apertura ? brano.apertura.corpo.join('\n').replace(/^\n+|\n+$/g, '') : '');
+
+// Il codice da mandare dell'apertura (quello che ho scritto io, o solo le righe scelte): preambolo + righe, come per una clip.
+export function codiceApertura(brano, righe) {
+  const pre = brano.preambolo.join('\n');
+  const corpo = righe.join('\n');
+  return { codice: pre.trim() ? `${pre}\n${corpo}` : corpo, inizio: pre.trim() ? pre.length + 1 : 0 };
+}
+
+export const conCorpoApertura = (brano, corpo) => ({ ...brano, apertura: { ...(brano.apertura ?? { riga: '// @apertura' }), corpo } });
+export const conApertura = (brano, corpo = []) => conCorpoApertura(brano.apertura ? brano : { ...brano, apertura: { riga: '// @apertura', corpo: [] } }, corpo);
+export const senzaApertura = (brano) => ({ ...brano, apertura: null });
 
 // --- il beat e le sue scene ---
 
@@ -270,6 +297,10 @@ export function blocchi(testo) {
   let riga = b.testa.length;
   out.push({ sezione: -1, nome: null, testa: null, da: riga, a: riga + b.preambolo.length });
   riga += b.preambolo.length;
+  if (b.apertura) {
+    out.push({ sezione: -4, nome: 'apertura', testa: riga, da: riga + 1, a: riga + 1 + b.apertura.corpo.length });
+    riga += 1 + b.apertura.corpo.length;
+  }
   if (b.beat) {
     // il beat: l'intestazione (sezione −3) e ogni scena (sezione −2, con `scena` = il suo indice)
     out.push({ sezione: -3, nome: null, testa: riga, da: riga + 1, a: riga + 1 + b.beat.intro.length });
@@ -332,7 +363,9 @@ export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
         scene: [{ riga: rigaScena(laBeat.scena?.nome ?? 'scena'), nome: laBeat.scena?.nome ?? 'scena', info: {}, corpo: unisciCoda((bpm ? senzaTempo(laBeat.codice) : laBeat.codice).replace(/\n+$/, ''), laBeat.coda).split('\n') }],
       }
     : null;
-  const sezioni = livelli.filter((l) => !l.beat).map((l) => {
+  const laApertura = livelli.find((l) => l.nome === 'apertura');
+  const apertura = laApertura ? { riga: '// @apertura', corpo: unisciCoda((bpm ? senzaTempo(laApertura.codice) : laApertura.codice).replace(/\n+$/, ''), laApertura.coda).split('\n') } : null;
+  const sezioni = livelli.filter((l) => !l.beat && l !== laApertura).map((l) => {
     // due livelli con lo stesso nome restano distinti: basso, basso 2…
     visti.set(l.nome, (visti.get(l.nome) ?? 0) + 1);
     const n = visti.get(l.nome) > 1 ? `${l.nome} ${visti.get(l.nome)}` : l.nome;
@@ -341,7 +374,7 @@ export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
     if (l.muto) info.muto = true;
     return { riga: rigaSezione(n, info), nome: n, info, corpo: unisciCoda((bpm ? senzaTempo(l.codice) : l.codice).replace(/\n+$/, ''), l.coda).split('\n') };
   });
-  const vuoto = { testa: [], preambolo: bpm ? ['', `setcpm(${bpm}/4)`, ''] : [], beat, sezioni };
+  const vuoto = { testa: [], preambolo: bpm ? ['', `setcpm(${bpm}/4)`, ''] : [], apertura, beat, sezioni };
   return scrivi(conTesta(vuoto, { brano: nome, bpm, data, suoni })) + '\n';
 }
 

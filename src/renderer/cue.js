@@ -230,6 +230,7 @@ export class Cue {
       const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
       return { ...this.pezzoScena(b, blocco.scena, 'scratch', righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
     }
+    if (blocco.sezione === -4) return { errore: 'l\'apertura si scrive nella sua card, aprendo il brano (non nello scratch)' };
     if (blocco.sezione === -3) return { errore: 'il cursore è sull\'intestazione del beat: mettilo in una scena' };
     if (blocco.sezione < 0) return { errore: 'il cursore è nel preambolo: mettilo in una clip' };
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
@@ -254,9 +255,27 @@ export class Cue {
     };
   }
 
+  // L'apertura: SOLO quello che ho scritto io (mai il fantasma), tutto o le righe scelte, come livello «apertura».
+  pezzoApertura(carta) {
+    const m = this.brano.modello;
+    const testo = carta.editor.codice;
+    if (!testo.trim()) return { errore: 'l\'apertura è vuota: scrivi (Tab completa dal fantasma) e poi go live' };
+    const { da, a, vuota } = carta.editor.righeScelte();
+    const righe = vuota ? testo.split('\n') : testo.split('\n').slice(da, a + 1);
+    return {
+      nome: 'apertura',
+      provenienza: `${this.nomeBrano} ◇`,
+      scritto: true, // è già scrittura vera: il proiettore non la rifà a macchina
+      ...B.codiceApertura(m, righe),
+      bpmBrano: B.bpmDelBrano(m),
+      dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },
+    };
+  }
+
   pezzoBrano() {
     const carta = this.cartaAttiva;
     if (!this.brano || !carta) return { errore: 'scegli una clip: clic nella sua card' };
+    if (carta.apertura) return this.pezzoApertura(carta);
     if (carta.scena !== undefined) {
       const { da, a, vuota } = carta.editor.righeScelte();
       const righe = vuota ? null : this.brano.modello.beat.scene[carta.scena].corpo.slice(da, a + 1);
@@ -450,15 +469,18 @@ export class Cue {
     const stati = m.sezioni.map((s) => this.statoSezione(this.nomeBrano, s.nome));
     this.mostraMappa(stati);
     if (ricrea) this.creaCarte();
-    // le sezioni già live si richiudono in una riga in alto
-    const live = m.sezioni.filter((_, i) => stati[i] === 'live');
-    const riga = $('riga-live');
-    riga.hidden = !live.length;
-    riga.replaceChildren(
-      el('span', 'punto-live', '●'),
-      el('span', 'spazio', live.map((s) => s.nome).join(' · ')),
-      el('span', '', this.mostraLive ? 'live · richiudi' : 'live · apri'),
-    );
+    // tutte le clip del brano restano SEMPRE visibili nel CUE: quelle che suonano sono solo segnate come live
+    $('riga-live').hidden = true;
+    const apertura = this.carte.find((c) => c.apertura);
+    if (apertura) {
+      const prov = `${this.nomeBrano} ◇`;
+      const live = this.stati.live.some((x) => x.nome === 'apertura' && x.provenienza === prov);
+      const cuffia = this.stati.cuffia?.nome === 'apertura' && this.stati.cuffia.provenienza === prov;
+      apertura.el.classList.toggle('e-live', live);
+      apertura.el.classList.toggle('in-cuffia', cuffia);
+      apertura.cuffia?.classList.toggle('on', cuffia);
+      apertura.stato.textContent = cuffia ? '◖◗ in cuffia' : live ? '● l\'apertura suona' : 'scrivi sopra il fantasma';
+    }
     // le scene del beat: mai richiuse, il live si vede dalla pillola e dalla card
     const scelta = this.scenaScelta();
     const inLive = this.stati.live;
@@ -483,7 +505,7 @@ export class Cue {
     for (const c of this.carte) {
       if (c.i < 0) continue;
       const stato = stati[c.i];
-      c.el.hidden = stato === 'live' && !this.mostraLive;
+      c.el.hidden = false;
       c.el.classList.toggle('in-cuffia', stato === 'cuffia');
       c.cuffia?.classList.toggle('on', stato === 'cuffia');
       c.el.classList.toggle('e-live', stato === 'live');
@@ -571,10 +593,12 @@ export class Cue {
     const m = this.brano.modello;
     const indiceAttivo = this.cartaAttiva?.i;
     const scenaAttivo = this.cartaAttiva?.scena;
+    const aperturaAttiva = !!this.cartaAttiva?.apertura;
+    contenitore.append(this.cartaApertura());
     contenitore.append(this.cartaBeat());
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
     m.sezioni.forEach((_, i) => contenitore.append(this.carta(i)));
-    this.cartaAttiva = scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
+    this.cartaAttiva = aperturaAttiva ? this.carte.find((c) => c.apertura) ?? null : scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
     $('riga-live').onclick = () => {
       this.mostraLive = !this.mostraLive;
       this.mostraBrano(false);
@@ -682,6 +706,80 @@ export class Cue {
       mostraVolume();
       testa.append(unisci, dividi, volume, cuffia, live);
     }
+    this.carte.push(carta);
+    return art;
+  }
+
+  // La card dell'APERTURA: un editor dove scrivo io, con il codice dell'apertura come testo fantasma (grigio) da seguire; Tab completa la
+  // parola successiva, Tab tenuto la riga. Quello che scrivo resta nell'editor (non nel brano); «script» fa modificare il codice dell'apertura.
+  cartaApertura() {
+    const m = this.brano.modello;
+    const ap = m.apertura;
+    const art = el('article', `card apertura-card${ap ? '' : ' senza-apertura'}`);
+    art.dataset.aiuto = 'apertura';
+    const testa = el('div', 'card-testa');
+    const stato = el('span', 'lbl', ap ? 'scrivi sopra il fantasma' : 'nessuna apertura in questo brano');
+    testa.append(el('span', 'nome nome-apertura', 'APERTURA'), stato, el('div', 'spazio'));
+    art.append(testa);
+    const carta = { i: -4, apertura: true, el: art, stato };
+    if (!ap) {
+      const aggiungi = tasto('+ apertura', '', 'Aggiungi al brano il codice dell\'apertura (// @apertura)');
+      aggiungi.onclick = () => {
+        this.brano.aperturaModo = 'script';
+        this.modifica(B.conApertura(this.brano.modello, ['']), true, 'apertura aggiunta');
+      };
+      testa.append(aggiungi);
+      return art; // senza editor: non entra in this.carte
+    }
+    const script = this.brano.aperturaModo === 'script';
+    const fantasma = this.azioni.fantasma?.() !== false;
+    const corpo = el('div', 'editor editor-carta apertura-codice');
+    art.append(corpo);
+    carta.editor = creaEditor({
+      root: corpo,
+      codice: script ? B.testoApertura(m) : this.brano.aperturaScritta ?? '',
+      fantasma: !script,
+      suValuta: this.azioni.provaInCuffia,
+      suFerma: this.azioni.fermaTutto,
+      suFuoco: () => this.attiva(carta),
+      suCambio: () => {
+        if (this.brano.aperturaModo === 'script') this.modifica(B.conCorpoApertura(this.brano.modello, carta.editor.codice.split('\n')), false);
+        else this.brano.aperturaScritta = carta.editor.codice;
+      },
+    });
+    if (!script) carta.editor.impostaFantasma(B.testoApertura(m), fantasma);
+    const bFantasma = tasto(fantasma ? 'fantasma on' : 'fantasma off', '', 'Mostra o nasconde il testo fantasma (quando la so a memoria)');
+    bFantasma.onclick = () => {
+      const acceso = this.azioni.fantasma?.() === false;
+      this.azioni.fantasmaScegli?.(acceso);
+      carta.editor.impostaFantasma(B.testoApertura(this.brano.modello), acceso);
+      bFantasma.firstChild.textContent = acceso ? 'fantasma on' : 'fantasma off';
+    };
+    const bScript = tasto(script ? 'scrivo io' : 'script', '', script ? 'Torna a scrivere sopra il fantasma' : 'Modifica il codice dell\'apertura (il fantasma)');
+    bScript.onclick = () => {
+      this.brano.aperturaModo = script ? 'scrittura' : 'script';
+      this.mostraBrano(true);
+    };
+    const bDaCapo = tasto('da capo', '', 'Cancella quello che ho scritto e riparte dal fantasma');
+    bDaCapo.onclick = () => {
+      this.brano.aperturaScritta = '';
+      carta.editor.codice = '';
+    };
+    const cuffia = tasto('cuffia', '⌘↵', 'Ascolta in cuffia quello che hai scritto (o le righe scelte)');
+    carta.cuffia = cuffia;
+    cuffia.onclick = () => {
+      if (art.classList.contains('in-cuffia')) return this.azioni.fermaCuffia();
+      this.attiva(carta);
+      this.azioni.provaInCuffia();
+    };
+    const live = tasto('go live', '⇧⌘↵', 'Manda live quello che hai scritto (mai il fantasma): puoi rifarlo mentre scrivi, riga per riga');
+    live.onclick = () => {
+      this.attiva(carta);
+      this.azioni.goLive();
+    };
+    testa.append(bFantasma, bScript);
+    if (!script) testa.append(bDaCapo);
+    testa.append(cuffia, live);
     this.carte.push(carta);
     return art;
   }

@@ -43,3 +43,29 @@ export async function misuraLimiter(ampiezza, frequenza = 220) {
   const picco = d.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
   return { ampiezza, picco, guadagnoDb: 20 * Math.log10(picco / ampiezza) };
 }
+
+// La micro-dissolvenza dell'entrata di un livello (guardiano): il guadagno `param` scende a zero 1,5 ms prima del primo suono (al tempo `t`)
+// e risale in 4,5 ms, così nessun attacco parte a metà onda. Un attacco vero (una cassa) si sente intatto.
+export function microEntrata(param, t) {
+  param.setValueAtTime(0, t - 0.0015);
+  param.linearRampToValueAtTime(1, t + 0.003);
+}
+
+// Fuori linea: un segnale costante che comincia a t = 0,5 s passa dalla micro-dissolvenza; si leggono i campioni intorno all'attacco.
+export async function misuraMicroEntrata() {
+  const sr = 48000;
+  const ctx = new OfflineAudioContext(1, sr, sr);
+  const sorgente = new ConstantSourceNode(ctx, { offset: 1 });
+  const g = new GainNode(ctx, { gain: 1 });
+  sorgente.connect(g).connect(ctx.destination);
+  microEntrata(g.gain, 0.5);
+  sorgente.start(0.5);
+  const d = (await ctx.startRendering()).getChannelData(0);
+  const a = Math.round(0.5 * sr);
+  return {
+    primo: d[a], // il primo campione dell'attacco: quasi zero
+    aMetà: d[a + Math.round(0.0015 * sr)],
+    dopo: d[a + Math.round(0.006 * sr)], // a regime: 1
+    salto: Math.max(...Array.from({ length: Math.round(0.006 * sr) }, (_, i) => Math.abs(d[a + i + 1] - d[a + i]))), // il più grande scalino fra due campioni
+  };
+}

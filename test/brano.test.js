@@ -358,3 +358,32 @@ test('i tag vecchi si leggono (@spina, @momento, @pezzo, @sezione) e aggiornaTag
   assert.equal(B.scrivi(B.leggi(nuovo)), nuovo);
   assert.equal(B.aggiornaTag(nuovo), nuovo, 'già nuovo: non cambia');
 });
+
+test('l\'apertura: una sezione prima del beat, che si legge e si riscrive identica', () => {
+  const t = '// @brano x\nsetcpm(120/4)\n// @apertura\nnote("a3 c4")\n  .s("sawtooth")\n\n// @beat\n// @scena intro\ns("bd*4")\n// @clip basso\nnote("c2")\n';
+  const b = B.leggi(t);
+  assert.deepEqual(b.apertura.corpo, ['note("a3 c4")', '  .s("sawtooth")', '']);
+  assert.equal(B.testoApertura(b), 'note("a3 c4")\n  .s("sawtooth")');
+  assert.deepEqual(b.beat.scene.map((s) => s.nome), ['intro']);
+  assert.deepEqual(b.sezioni.map((s) => s.nome), ['basso']);
+  assert.equal(B.scrivi(b), t);
+  assert.equal(B.leggi('// @brano y\n// @clip a\ns("bd")\n').apertura, null, 'senza apertura: com\'era');
+  const { blocchi } = B.blocchi(t);
+  assert.deepEqual(blocchi.map((x) => x.sezione), [-1, -4, -3, -2, 0]);
+});
+
+test('il codice dell\'apertura da mandare è preambolo + quello che ho scritto; aggiungere e togliere l\'apertura', () => {
+  const b = B.leggi('// @brano x\nsetcpm(120/4)\n// @apertura\nnote("a3")\n');
+  assert.deepEqual(B.codiceApertura(b, ['note("a3 c4")']), { codice: 'setcpm(120/4)\nnote("a3 c4")', inizio: 'setcpm(120/4)'.length + 1 });
+  assert.equal(B.scrivi(B.conCorpoApertura(b, ['note("e3")'])), '// @brano x\nsetcpm(120/4)\n// @apertura\nnote("e3")');
+  const nuovo = B.conApertura(B.leggi('// @brano x\n// @clip a\ns("bd")\n'), ['s("hh*8")']);
+  assert.equal(B.scrivi(nuovo), '// @brano x\n// @apertura\ns("hh*8")\n// @clip a\ns("bd")\n');
+  assert.equal(B.leggi(B.scrivi(B.senzaApertura(b))).apertura, null);
+});
+
+test('salvare il live: il livello «apertura» torna come // @apertura', () => {
+  const testo = B.daLivelli([{ nome: 'apertura', codice: 'note("a3")', coda: [], volume: 1 }, { nome: 'basso', codice: 'note("c2")', coda: [], volume: 1 }], { nome: 'live', bpm: 120, data: '2026-11-01' });
+  const b = B.leggi(testo);
+  assert.equal(B.testoApertura(b), 'note("a3")');
+  assert.deepEqual(b.sezioni.map((s) => s.nome), ['basso']);
+});

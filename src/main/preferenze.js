@@ -25,6 +25,7 @@ export const PREDEFINITE = {
   sfondoProiettore: 'niente', // dietro al codice sul proiettore: niente, note, oscilloscopio
   hydra: true,
   logoSopraHydra: true,
+  aperturaFantasma: true, // il testo fantasma dell'apertura (il codice scritto a casa, in grigio sotto quello che scrivo)
   usaCopiaStash: true, // se l'SSD non c'è all'avvio, si usa la copia dello stash sul Mac (Impostazioni → stash)
   cartelleAbleton: [], // dove tengo i progetti Ableton (solo letti)
   scorciatoie: {}, // solo quelle cambiate: id → combinazione (vedi scorciatoie.js)

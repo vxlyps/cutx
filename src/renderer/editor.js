@@ -3,7 +3,8 @@
 import { codemirrorSettings, initEditor } from '@strudel/codemirror';
 import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin } from '@codemirror/view';
-import { eSezione, eBeat, eScena, leggiRigaSezione } from './brano.js';
+import { eSezione, eBeat, eScena, eApertura, leggiRigaSezione } from './brano.js';
+import { estensioneFantasma, impostaFantasma } from './fantasma-cm.js';
 
 const ridisegna = StateEffect.define();
 
@@ -44,14 +45,14 @@ function fasceSezioni(statoSezione) {
         continue;
       }
       // i commenti subito sotto la testa sono la sua descrizione (come in brano.js)
-      if (inTesta && haTesta && /^\s*\/\//.test(riga.text) && !eSezione(riga.text) && !eBeat(riga.text) && !eScena(riga.text)) {
+      if (inTesta && haTesta && /^\s*\/\//.test(riga.text) && !eSezione(riga.text) && !eBeat(riga.text) && !eScena(riga.text) && !eApertura(riga.text)) {
         b.add(riga.from, riga.from, Decoration.line({ class: 'cm-testa-brano' }));
         continue;
       }
       inTesta = false;
-      if (eSezione(riga.text) || eScena(riga.text) || eBeat(riga.text)) inCoda = false;
+      if (eSezione(riga.text) || eScena(riga.text) || eBeat(riga.text) || eApertura(riga.text)) inCoda = false;
       else if (/^\s*\/\/\s*@coda\s*$/.test(riga.text)) inCoda = true;
-      if (eBeat(riga.text)) {
+      if (eBeat(riga.text) || eApertura(riga.text)) {
         classe = 'cm-sez cm-beat';
         b.add(riga.from, riga.from, Decoration.line({ class: `${classe} cm-sez-testa` }));
       } else if (eSezione(riga.text) || eScena(riga.text)) {
@@ -85,7 +86,7 @@ function fasceSezioni(statoSezione) {
   );
 }
 
-export function creaEditor({ root, codice, suValuta, suFerma, suCambio, suFuoco, statoSezione = () => '' }) {
+export function creaEditor({ root, codice, suValuta, suFerma, suCambio, suFuoco, statoSezione = () => '', fantasma = false }) {
   // Le righe lunghe vanno a capo: niente scorrimento orizzontale.
   codemirrorSettings.set({ ...codemirrorSettings.get(), theme: 'blackscreen', isLineWrappingEnabled: true });
   const vista = initEditor({
@@ -95,11 +96,15 @@ export function creaEditor({ root, codice, suValuta, suFerma, suCambio, suFuoco,
     onEvaluate: () => (suValuta?.(), true),
     onStop: () => (suFerma?.(), true),
   });
-  vista.dispatch({ effects: StateEffect.appendConfig.of([fasceSezioni(statoSezione), noteInCuffia]) });
+  vista.dispatch({ effects: StateEffect.appendConfig.of([fasceSezioni(statoSezione), noteInCuffia, ...(fantasma ? estensioneFantasma : [])]) });
   let noteSegnate = '';
   vista.contentDOM.addEventListener('focus', () => suFuoco?.());
   return {
     vista,
+    // Il testo fantasma (apertura): { testo, acceso }; senza `fantasma: true` non fa niente.
+    impostaFantasma(testo, acceso = true) {
+      if (fantasma) vista.dispatch({ effects: impostaFantasma.of({ testo, acceso }) });
+    },
     get codice() {
       return vista.state.doc.toString();
     },

@@ -3208,3 +3208,28 @@ input[type='checkbox'] {
   border-radius: 8px;
   color: var(--secondario);
 }
+
+/* --- l'apertura fantasma --- */
+.cm-fantasma {
+  color: rgba(217, 220, 204, 0.27);
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+.apertura-card {
+  border-left: 3px solid var(--marcio-scuro);
+}
+.apertura-card.e-live {
+  border-left-color: var(--marcio);
+}
+.apertura-card .nome-apertura {
+  font-family: var(--stencil);
+  letter-spacing: 0.1em;
+  color: var(--marcio);
+}
+.apertura-card.senza-apertura {
+  opacity: 0.6;
+}
+.apertura-codice {
+  min-height: 5.5em;
+  border-radius: 6px;
+}

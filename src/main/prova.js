@@ -3,7 +3,7 @@
 // che la sentinella del live ha sentito davvero in uscita: le casse non devono perderne uno.
 import path from 'node:path';
 import { app } from 'electron';
-import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import * as stash from './stash.js';
 import { leggiAls, leggiAlsFile } from '../ableton/leggi.js';
 import { converti } from '../ableton/converti.js';
@@ -195,6 +195,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
+  if (parti.includes('apertura')) ok = (await sicura('apertura', provaApertura)) && ok;
+  if (parti.includes('clip-visibili')) ok = (await sicura('clip-visibili', provaClipVisibili)) && ok;
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
@@ -2651,6 +2653,104 @@ async function provaCueController({ finestre, scrivi }) {
   return ok;
 }
 
+// --- tutte le clip del brano restano sempre visibili nel CUE, anche quelle live (brano_1: melodia, sub, reese, pad, mandate live una alla volta) ---
+async function provaClipVisibili({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const radice = stash.radice();
+  const file = path.join(radice, 'libreria', 'brano_1.cutx');
+  const testo = existsSync(file) ? await readFile(file, 'utf8') : '// @brano b\n// @clip melodia\ns("sine").gain(.0001)\n// @clip sub\ns("sine").gain(.0001)\n// @clip reese\ns("sine").gain(.0001)\n// @clip pad\ns("sine").gain(.0001)\n';
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  try {
+    await js(`cutxProva.cue.apriModello('brano_1.cutx', ${JSON.stringify(testo)}, 'prossimo', { fuoco: false })`);
+    await aspetta(0.8);
+    const nomi = await js(`cutxProva.cue.sezioniNav().filter((n) => !['intro', 'build', 'drop', 'break', 'outro'].includes(n))`);
+    const visibili = () => js(`[...document.querySelectorAll('#carte .card.sezione:not(.beat-card):not(.preambolo):not(.apertura-card)')].map((c) => [c.querySelector('.nome-sezione')?.textContent, c.hidden, getComputedStyle(c).display !== 'none', c.classList.contains('e-live')])`);
+    let v = await visibili();
+    controlla('prima del live le quattro clip si vedono', v.length === 4 && v.every((c) => !c[1] && c[2]), JSON.stringify(v));
+    for (const [k, nome] of nomi.entries()) {
+      await js(`cutxProva.cue.scegliSezione(cutxProva.cue.sezioniNav().indexOf(${JSON.stringify(nome)}))`);
+      await js(`document.getElementById('go-live').click()`);
+      await aspetta(3.2);
+      for (let i = 0; i < 20 && (await js('cutxProva.cue.stati.live.length')) < k + 1; i++) await aspetta(0.25);
+      v = await visibili();
+      controlla(`«${nome}» live: tutte e quattro le clip restano visibili (${k + 1} live)`, v.length === 4 && v.every((c) => !c[1] && c[2]), JSON.stringify(v));
+      controlla(`«${nome}» è solo segnata come live (${k + 1} segnate)`, v.filter((c) => c[3]).length === k + 1, JSON.stringify([v.map((c) => c[3]), await js('JSON.stringify([cutxProva.cue.stati, cutxProva.diagnosi().inTest, cutxProva.diagnosi().livelli])')]));
+    }
+    controlla('nessuna barra «live · apri» che le nasconde', (await js(`document.getElementById('riga-live').hidden`)) === true);
+  } finally {
+    await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto(); cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
+  }
+  return ok;
+}
+
+// --- l'apertura fantasma: la card, il testo grigio, Tab, go live solo del mio testo, il livello «apertura» (npx electron . --prova=apertura) ---
+async function provaApertura({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const brano = '// @brano ouverture\n// @bpm 120\nsetcpm(120/4)\n// @apertura\nnote("a3 ~ c4")\n  .s("sine").gain(.0001)\n  // SOLOFANTASMA\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2").s("sine").gain(.0001)\n';
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 }); window.cutx.salvaPreferenze({ aperturaFantasma: true })`);
+  const editor = `cutxProva.cue.carte.find((c) => c.apertura).editor`;
+  const scrive = (testo) => js(`(() => { const v = ${editor}.vista; v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: ${JSON.stringify(testo)} }, selection: { anchor: ${JSON.stringify(testo)}.length } }); })()`);
+  const grigio = () => js(`document.querySelector('#carte .apertura-card .cm-fantasma')?.textContent ?? null`);
+  const tab = (repeat = false) => js(`(() => { const c = ${editor}.vista.contentDOM; c.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true, repeat: ${repeat} })); c.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', bubbles: true })); })()`);
+  try {
+    await js(`cutxProva.cue.apriModello('ouverture.cutx', ${JSON.stringify(brano)}, 'prossimo', { fuoco: false })`);
+    await aspetta(0.8);
+    controlla('in cima al brano c\'è la card «apertura», prima del beat', (await js(`[...document.querySelectorAll('#carte > article')].slice(0, 2).map((a) => a.classList.contains('apertura-card') ? 'apertura' : a.classList.contains('beat-card') ? 'beat' : '?').join()`)) === 'apertura,beat');
+    controlla('l\'editor è vuoto e il codice dell\'apertura compare come testo fantasma', (await js(`${editor}.codice`)) === '' && /note\("a3 ~ c4"\)/.test((await grigio()) ?? ''), String(await grigio()));
+    await scrive('note("a3');
+    controlla('scrivendo sopra, i caratteri uguali diventano miei (il fantasma si accorcia)', (await grigio())?.startsWith(' ~ c4")'), String(await grigio()));
+    await tab();
+    controlla('Tab completa la parola successiva del fantasma', (await js(`${editor}.codice`)) === 'note("a3 ~', await js(`${editor}.codice`));
+    await tab(true);
+    controlla('Tab tenuto completa la riga', (await js(`${editor}.codice`)) === 'note("a3 ~ c4")', await js(`${editor}.codice`));
+    await scrive('note("a3 ~ c4")\n  .s("saw');
+    controlla('se scrivo qualcosa di diverso («saw» invece di «sine») il fantasma si riallinea e non rompe niente', typeof (await grigio()) === 'string' || (await grigio()) === null);
+    await scrive('note("a3 ~ c4").s("sine").gain(.0001)');
+    controlla('il fantasma non finisce nel testo (l\'editor ha solo quello che ho scritto)', !(await js(`${editor}.codice`)).includes('SOLOFANTASMA'));
+    // go live: solo il mio testo, livello «apertura», già scritto (niente macchina da scrivere sul proiettore)
+    await js(`document.querySelector('#carte .apertura-card .card-testa').querySelectorAll('button')[4].click()`);
+    await aspetta(3.2);
+    let vivi = (await live()).livelli.filter((l) => l.a === null);
+    const ap = vivi.find((l) => l.nome === 'apertura');
+    controlla('go live: il livello si chiama «apertura» e ha solo quello che ho scritto', !!ap && ap.codice.includes('note("a3 ~ c4").s("sine")') && !ap.codice.includes('SOLOFANTASMA'), JSON.stringify(vivi.map((l) => [l.nome, l.codice.slice(0, 60)])));
+    controlla('è marcato come già scritto (il proiettore non lo riscrive a macchina)', ap?.scritto === true);
+    controlla('la card dell\'apertura è segnata live', await js(`document.querySelector('#carte .apertura-card')?.classList.contains('e-live') ?? false`));
+    // si può rimandare mentre scrivo: la versione nuova sostituisce la vecchia
+    await scrive('note("a3 ~ c4").s("sine").gain(.0001)\n  .room(.2)');
+    await js(`document.querySelector('#carte .apertura-card .card-testa').querySelectorAll('button')[4].click()`);
+    await aspetta(3.2);
+    vivi = (await live()).livelli.filter((l) => l.a === null && l.nome === 'apertura');
+    controlla('rimandato mentre scrivo: ancora un solo livello «apertura», con la riga nuova', vivi.length === 1 && vivi[0].codice.includes('.room(.2)'), JSON.stringify(vivi.map((l) => l.codice.slice(-40))));
+    // quello che ho scritto resta se il CUE si ridisegna; il brano (file) non cambia
+    await js(`cutxProva.cue.mostraBrano(true)`);
+    controlla('il mio testo resta dopo un ridisegno del CUE', (await js(`${editor}.codice`)).includes('.room(.2)'));
+    controlla('il brano non è stato toccato (niente • di modifica, apertura intatta)', !(await js(`cutxProva.cue.brano.sporco`)) && (await js(`cutxProva.cue.testoBrano()`)) === brano);
+    // nascondere il fantasma
+    await scrive('');
+    controlla('prima: il fantasma si vede', !!(await grigio()));
+    await js(`document.querySelector('#carte .apertura-card .card-testa').querySelectorAll('button')[0].click()`);
+    await aspetta(0.3);
+    controlla('«fantasma off» lo nasconde (la preferenza si ricorda)', (await grigio()) === null && (await js(`window.cutx.preferenze()`)).aperturaFantasma === false);
+    await js(`document.querySelector('#carte .apertura-card .card-testa').querySelectorAll('button')[0].click()`);
+    await aspetta(0.3);
+    controlla('e «fantasma on» lo rimette', !!(await grigio()));
+  } finally {
+    await js(`window.cutx.salvaPreferenze({ aperturaFantasma: true }); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto(); cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
+  }
+  return ok;
+}
+
 // --- il guardiano: il limiter, l'errore pigro che non entra, il livello che si rompe mentre suona e la versione di prima che torna (npx electron . --prova=guardiano) ---
 async function provaGuardiano({ finestre, scrivi }) {
   let ok = true;
@@ -2667,6 +2767,8 @@ async function provaGuardiano({ finestre, scrivi }) {
   controlla('limiter: sotto la soglia è trasparente (±0,4 dB)', sotto.every((m) => Math.abs(m.guadagnoDb) < 0.4), JSON.stringify(sotto.map((m) => +m.guadagnoDb.toFixed(2))));
   controlla('limiter: niente esce sopra il tetto (−0,25 dBFS), nemmeno con +18 dB in ingresso', misure.every((m) => m.picco <= 0.9721), JSON.stringify(misure.map((m) => +m.picco.toFixed(3))));
   controlla('limiter: più entra, più si limita (il picco non cresce di molto)', misure.at(-1).picco - misure.find((m) => m.ampiezza === 1).picco < 0.15, JSON.stringify(misure.map((m) => +m.picco.toFixed(3))));
+  const micro = await js('cutxProva.misuraMicroEntrata()');
+  controlla('micro-dissolvenza in entrata: l\'attacco parte da zero, sale in pochi millisecondi e arriva a 1 senza scalini', micro.primo < 0.4 && micro.aMetà > 0.4 && micro.aMetà < 0.9 && Math.abs(micro.dopo - 1) < 1e-3 && micro.salto < 0.05, JSON.stringify(micro));
   const st = await live();
   controlla('il live ha il limiter acceso (e a riposo non riduce)', st.limiter !== null && st.limiter.riduzioneDb > -0.5, JSON.stringify(st.limiter));
   // un errore pigro (si rompe dopo il primo ciclo ma entro i 16 controllati) non entra e quello che suona continua
@@ -2714,10 +2816,20 @@ async function provaPassaggio({ finestre, scrivi }) {
   const bpm = async () => (await js('cutxProva.diagnosi()')).bpm;
   const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
   const radice = stash.radice();
-  if (!existsSync(path.join(radice, 'set.cutx'))) {
-    scrivi('INFO  nello stash di prova non c\'è set.cutx: la prova del passaggio non si fa');
+  const brani3 = ['brano_1.cutx', 'brano_2.cutx', 'brano_3.cutx'];
+  if (!brani3.every((f) => existsSync(path.join(radice, 'libreria', f)))) {
+    scrivi('INFO  nello stash di prova non ci sono brano_1, brano_2 e brano_3: la prova del passaggio non si fa');
     return true;
   }
+  // uno stash temporaneo con il set di prova esatto (i tre brani veri, copiati; i suoni collegati in sola lettura): il set vero di Valerio non si tocca
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-passaggio-'));
+  await mkdir(path.join(tmp, 'libreria'), { recursive: true });
+  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), await readFile(path.join(radice, 'libreria', f), 'utf8'));
+  await writeFile(path.join(tmp, 'set.cutx'), '// @set prova serata\n\nbrano_1.cutx · apre\nbrano_2.cutx\nbrano_3.cutx · chiude\n');
+  if (existsSync(path.join(radice, 'suoni'))) await symlink(path.join(radice, 'suoni'), path.join(tmp, 'suoni'));
+  const vero = stash._percorsoPerProva(tmp);
+  await js('cutxProva.ricaricaStash()');
+  await aspetta(1);
   await js(`window.cutx.salvaPreferenze({ controller: null, rampaCicli: 2 })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
   await chiedi(finestre.live, `undefined`).catch(() => null);
@@ -2788,6 +2900,9 @@ async function provaPassaggio({ finestre, scrivi }) {
   } finally {
     await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ rampaCicli: 8 })`);
     await js(`cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
+    stash._percorsoPerProva(vero);
+    await js('cutxProva.ricaricaStash()').catch(() => null);
+    await rm(tmp, { recursive: true, force: true });
   }
   return ok;
 }

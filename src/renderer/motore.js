@@ -4,7 +4,7 @@
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
 import { eventiDaHap } from './striscia.js';
 import { eNomeBeat } from './nomi.js';
-import { CEILING, creaLimiter } from './limiter.js';
+import { CEILING, creaLimiter, microEntrata } from './limiter.js';
 import { CICLI_RAMPA, gradiniRampa } from './passaggio.js';
 import { applica as applicaCoda, applicaGlobali, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, State, TimeSpan } from '@strudel/core';
@@ -618,9 +618,7 @@ function entraMorbido(l, ciclo) {
   if (!g?.micro || !rip.mappa || !Number.isFinite(ciclo)) return;
   const t = rip.tempo(ciclo);
   if (!(t > ac.currentTime + 0.01)) return;
-  const p = g.micro.gain;
-  p.setValueAtTime(0, t - 0.0015);
-  p.linearRampToValueAtTime(1, t + 0.003);
+  microEntrata(g.micro.gain, t);
 }
 
 // queryArc di Strudel inghiotte gli errori (li scrive nel registro e risponde «niente»): il guardiano li vuole vedere, quindi si usa query().

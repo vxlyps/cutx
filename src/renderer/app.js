@@ -4,7 +4,7 @@
 import { Cue } from './cue.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
-import { misuraLimiter } from './limiter.js';
+import { misuraLimiter, misuraMicroEntrata } from './limiter.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
@@ -82,6 +82,8 @@ const cue = new Cue(CODICE_INIZIALE, {
   bozza: () => salvaBozza(),
   mostraLibreria: () => scegliScheda('libreria'),
   suBrani: () => browser?.scheda === 'set' && browser.mostra(),
+  fantasma: () => preferenze.aperturaFantasma !== false,
+  fantasmaScegli: (acceso) => window.cutx.salvaPreferenze({ aperturaFantasma: acceso }),
   suPromosso: (file) => caricaProssimoDopo(file),
 });
 cue.registra = (voce) => cronologia.registra(voce);
@@ -227,7 +229,7 @@ async function goLive(pezzo = null) {
   // una scena del beat: se il beat suona già, la coda e il volume dei suoi livelli restano com'erano (le manopole contano)
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
-  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   if (!r.errore && daCue) cue.dopoGoLive(); // il primo brano mandato live diventa il brano attivo
@@ -1355,6 +1357,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 globalThis.cutxProva = {
   motori: { live, cuffia },
   misuraLimiter,
+  misuraMicroEntrata,
   passaBrano,
   caricaSerata,
   serata,

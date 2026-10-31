@@ -53,6 +53,10 @@ La manopola 1 resta il BEAT. Le scene con ◀ ▶. I colpi vanno sul selezionato
 2. **CUE a due linguette**: fatto (31/10/2026). Tab alterna; sul controller il **tasto 3** (tocco = cambia linguetta, tenuto 1 s = passa al prossimo brano, dal passo 4) al posto di CUFFIA + GO LIVE (che resta «manda la clip»). «Passa da CUE a LIVE» è ora Shift+Tab.
 3. **SET e KIT**: fatto (31/10/2026). 4. **Passa al prossimo brano**: fatto (31/10/2026). 5. **Controller** (CUFFIA tenuto + ◀ ▶ = scelgo il prossimo del SET; tasto 3 tenuto = passa): fatto.
 
+## APERTURA FANTASMA (31/10/2026)
+
+Ogni brano comincia con me che scrivo codice dal vivo. `// @apertura` nel `.cutx` (prima del `// @beat`) tiene il codice dell'apertura; nel CUE, in cima al brano, la card «apertura» è un editor vuoto con quel codice come testo fantasma grigio: scrivo sopra, i caratteri uguali diventano miei, uno diverso va bene (il fantasma si riallinea). Tab = parola successiva, Tab tenuto = la riga. Go live manda solo quello che ho scritto (livello «apertura», anche più volte mentre scrivo); sul proiettore compare solo il mio testo, senza scrittura simulata. «fantasma off» lo nasconde. «script» modifica il codice dell'apertura.
+
 ## ORDINE DEI LAVORI
 
 Dopo questo: passo 7 (guardiano con il limiter), poi modalità piano (si progetta prima insieme), poi Pocket Operator.
