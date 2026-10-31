@@ -2729,6 +2729,13 @@ async function provaController({ finestre, scrivi }) {
   })()`);
   controlla('lo specchio: otto manopole in una riga sola, nomi di al massimo 6 lettere', spec.visibile && spec.n === 8 && spec.righe === 1 && spec.nomi.every((n) => n.length <= 6), JSON.stringify(spec));
   controlla('lo specchio: in testata il nome intero e il valore dell\'ultima toccata (volume), la pagina A accesa, la manopola 2 in evidenza', /^DUE · VOLUME|^DUE · FILTRO \d+ Hz/.test(spec.info) && spec.a === 'A' && spec.toccata === 2, JSON.stringify(spec));
+  // i suggerimenti hanno altezza fissa: passando su comandi con testi diversi lo specchio non si muove
+  const posizioni = [];
+  for (const sel of ['#go-live', '#cuffia-onoff', '#manda-live', '#uscita-onoff']) {
+    posizioni.push(await js(`(() => { const e = document.querySelector('${sel}'); if (e) e.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); const r = document.getElementById('specchio').getBoundingClientRect(); const h = document.getElementById('riquadro-help').getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height), Math.round(h.height)]; })()`));
+    await aspetta(0.2);
+  }
+  controlla('suggerimenti e specchio: niente si muove al passaggio del mouse', new Set(posizioni.map((x) => x.join())).size === 1, JSON.stringify(posizioni));
   try {
     const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'controller');
     await mkdir(cartella, { recursive: true });
@@ -2748,7 +2755,8 @@ async function provaController({ finestre, scrivi }) {
   controlla('pagina B: il tasto 1 sceglie il livello 1 e la manopola 4 scrive l\'eco nella sua coda', /^\.delay\(0\.\d+\)$/.test(l1?.coda?.find((x) => x.startsWith('.delay')) ?? ''), JSON.stringify(l1?.coda));
   // passo 3: velocità a scatti, altezza in semitoni, fader
   const melodia = await entra('melodia', { codice: 'note("c3 e3 g3 b3").s("sine*1").gain(.0001)' });
-  await aspetta(2.8);
+  await aspettaChe(async () => (await js('cutxProva.pila.livelli.some((l) => l.id === ' + melodia.livello + ' && l.a === null)')) === true, 12);
+  await aspetta(0.8);
   const posto = (await attivi()).findIndex((l) => l.id === melodia.livello) + 1;
   await midi(0x90, await tasto(posto), 127);
   await midi(0x90, await tasto(posto), 0);

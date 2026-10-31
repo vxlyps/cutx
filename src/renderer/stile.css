@@ -2557,9 +2557,32 @@ input[type='checkbox'] {
   color: var(--spento);
 }
 
-/* con lo specchio il suggerimento si fa più basso */
-.browser.con-specchio .riquadro-help {
-  min-height: 56px;
+/* i suggerimenti hanno un'altezza fissa (tre righe, il resto troncato): niente si muove, né l'elenco né lo specchio sotto */
+.browser .riquadro-help {
+  height: 84px;
+  min-height: 84px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.browser .riquadro-help > * {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.browser .riquadro-help > strong {
+  -webkit-line-clamp: 1;
+}
+
+/* lo specchio sta fisso in fondo, nel suo riquadro */
+.specchio {
+  height: 92px;
+  min-height: 92px;
+  overflow: hidden;
 }
 
 /* la striscia viva sotto ogni card live: bassa, trattini sottili, il misuratore sempre su una riga */
