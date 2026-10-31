@@ -223,6 +223,11 @@
         "chiave": "logoSopraHydra",
         "nome": "logo sopra hydra",
         "testo": "gatto, CUTX e insegna anche quando girano i video (fase 3)"
+      },
+      {
+        "chiave": "uscitaApriAvvio",
+        "nome": "apri l'uscita all'avvio",
+        "testo": "spento: la finestra del pubblico si apre solo col tasto «uscita» in alto o con ⌃⌘F, sul secondo schermo se c'è"
       }
     ],
     "help": [

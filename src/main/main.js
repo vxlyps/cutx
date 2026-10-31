@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
+import { doveApre } from './dove-uscita.js';
 import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
@@ -267,9 +268,10 @@ function creaUscita() {
   if (chiudendo) return;
   if (viva(finestre.uscita)) return finestre.uscita.focus();
   const ricordo = preferenze.leggi().uscita ?? {};
-  const bordi = bordiValidi(ricordo.bordi);
+  const { schermo, intero: apriIntera, bordi } = doveApre({ schermi: screen.getAllDisplays(), primarioId: screen.getPrimaryDisplay().id, ricordo, bordiValidi });
+  const b = schermo.bounds;
   const finestra = new BrowserWindow({
-    ...(bordi ?? { width: 1280, height: 720 }),
+    ...(bordi ?? { width: 1280, height: 720, x: b.x + Math.round((b.width - 1280) / 2), y: b.y + Math.round((b.height - 720) / 2) }),
     backgroundColor: '#050604',
     title: DEV ? `${TITOLO} · uscita` : 'CUTX · uscita',
     show: false,
@@ -289,7 +291,7 @@ function creaUscita() {
       if (finestra.isDestroyed()) return;
       const intero = finestra.isFullScreen();
       if (!intero) bordiNormali = finestra.getBounds();
-      preferenze.salva({ uscita: { aperta: true, bordi: bordiNormali, schermoIntero: intero } });
+      preferenze.salva({ uscita: { bordi: bordiNormali, schermoIntero: intero, schermo: screen.getDisplayMatching(finestra.getBounds()).id } });
     }, 400);
   };
   for (const evento of ['move', 'resize', 'enter-full-screen', 'leave-full-screen']) finestra.on(evento, ricorda);
@@ -302,13 +304,10 @@ function creaUscita() {
     if (finestre.uscita === finestra) finestre.uscita = null;
     pronte.uscita = false;
     clearTimeout(timer);
-    // chiudere CUTX con l'uscita aperta la ricorda aperta
-    if (!chiudendo) preferenze.salva({ uscita: { ...preferenze.leggi().uscita, aperta: false } });
     avvisaUscita();
   });
-  if (ricordo.schermoIntero) finestra.once('ready-to-show', () => finestra.setFullScreen(true));
+  if (apriIntera) finestra.once('ready-to-show', () => finestra.setFullScreen(true));
   finestra.loadURL(`${ORIGINE}/uscita.html`);
-  preferenze.salva({ uscita: { ...ricordo, aperta: true } });
   avvisaUscita();
 }
 
@@ -317,12 +316,11 @@ ipcMain.handle('uscita:onoff', () => {
   else creaUscita();
   return viva(finestre.uscita);
 });
+// ⌃⌘F come il tasto «uscita»: apre (dov'era, o sul secondo schermo a tutto schermo) o chiude
 ipcMain.handle('uscita:schermo-intero', () => {
-  if (!viva(finestre.uscita)) creaUscita();
-  const f = finestre.uscita;
-  if (!viva(f)) return;
-  if (f.webContents.isLoading()) f.once('ready-to-show', () => f.setFullScreen(true));
-  else f.setFullScreen(!f.isFullScreen());
+  if (viva(finestre.uscita)) finestre.uscita.close();
+  else creaUscita();
+  return viva(finestre.uscita);
 });
 ipcMain.handle('uscita:aperta', () => viva(finestre.uscita));
 // Solo per i test.
@@ -542,7 +540,8 @@ app.whenReady().then(async () => {
   creaMotore('live');
   creaMotore('cuffia');
   creaControllo();
-  if (preferenze.leggi().uscita?.aperta) creaUscita();
+  // l'uscita non si apre mai da sola: solo se l'ho chiesto nelle impostazioni («apri all'avvio»)
+  if (preferenze.leggi().uscitaApriAvvio === true) creaUscita();
   // le prove stanno a parte e non entrano nel pacchetto: si caricano solo se le chiedi
   if (PROVA) import('./prova.js').then((m) => m.prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') })).then((ok) => app.exit(ok ? 0 : 1));
   if (FOTO) import('./prova.js').then((m) => m.foto({ finestre, file: FOTO })).then(() => app.exit(0));

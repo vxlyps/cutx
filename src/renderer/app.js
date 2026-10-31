@@ -771,7 +771,7 @@ window.addEventListener('message', (e) => {
 
 function mostraUscita(aperta) {
   $('uscita-onoff').classList.toggle('on', aperta);
-  $('uscita-onoff').querySelector('i').textContent = aperta ? 'on' : 'off';
+  $('uscita-onoff').querySelector('i').textContent = aperta ? 'aperta' : 'chiusa';
 }
 
 // Il LIVE: la pila dei livelli, dallo stato del motore live, e il jam in fondo.

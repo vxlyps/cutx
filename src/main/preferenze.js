@@ -23,7 +23,8 @@ export const PREDEFINITE = {
   logoSopraHydra: true,
   cartelleAbleton: [], // dove tengo i progetti Ableton (solo letti)
   scorciatoie: {}, // solo quelle cambiate: id → combinazione (vedi scorciatoie.js)
-  uscita: { aperta: false, bordi: null, schermoIntero: false },
+  uscitaApriAvvio: false, // l'uscita si apre all'avvio solo se lo chiedo; il resto del tempo solo col tasto «uscita» o ⌃⌘F
+  uscita: { bordi: null, schermoIntero: false, schermo: null }, // dove stava l'ultima volta
 };
 
 const file = () => path.join(app.getPath('userData'), 'preferenze.json');

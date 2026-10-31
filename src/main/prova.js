@@ -192,6 +192,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('finestra')) ok = (await sicura('finestra', provaFinestra)) && ok;
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
 
@@ -958,7 +959,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     await premi(',', 'meta');
     await vai('proiezione');
     const interruttori = await js(`document.querySelectorAll('#imp-proiezione .imp-riga').length`);
-    controlla('la proiezione ha i suoi cinque interruttori e la scelta dello sfondo', interruttori === 6, String(interruttori));
+    controlla('la proiezione ha i suoi interruttori (con «apri all\'avvio») e la scelta dello sfondo', interruttori === 7, String(interruttori));
     await js(`document.querySelectorAll('#imp-proiezione .imp-riga')[2].querySelectorAll('button')[1].click()`); // gatto off
     await aspetta(0.5);
     controlla('gatto off: sparisce dalla barra', (await prefs()).gatto === false && (await js(`getComputedStyle(document.querySelector('.barra .gatto-posto')).display`)) === 'none');
@@ -2379,6 +2380,41 @@ async function provaScrittura({ finestre, scrivi }) {
   return ok;
 }
 
+
+// --- la finestra del pubblico: mai da sola, si apre e si chiude solo col tasto «uscita» o ⌃⌘F (npx electron . --prova=finestra) ---
+async function provaFinestra({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const aperta = () => js('window.cutx.uscitaAperta()');
+  const bottone = () => js(`(() => { const b = document.getElementById('uscita-onoff'); return { testo: b.querySelector('i').textContent, acceso: b.classList.contains('on') }; })()`);
+  const premi = async (tasto, ...modificatori) => {
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(1.5);
+  };
+  controlla('all\'avvio l\'uscita non è aperta', (await aperta()) === false && !finestre.uscita);
+  const preferenze = await js('window.cutx.preferenze()');
+  controlla('«apri all\'avvio» è spento di default', preferenze.uscitaApriAvvio === false, JSON.stringify(preferenze.uscitaApriAvvio));
+  const chiuso = await bottone();
+  controlla('il tasto dice «chiusa» e non è acceso', chiuso.testo === 'chiusa' && !chiuso.acceso, JSON.stringify(chiuso));
+  await js('document.getElementById("uscita-onoff").click()');
+  await aspetta(1.5);
+  const aperto = await bottone();
+  controlla('col tasto «uscita» si apre, e il tasto dice «aperta» ed è acceso', (await aperta()) === true && aperto.testo === 'aperta' && aperto.acceso, JSON.stringify(aperto));
+  await premi('F', 'control', 'meta');
+  controlla('⌃⌘F la chiude', (await aperta()) === false && (await bottone()).testo === 'chiusa');
+  await premi('F', 'control', 'meta');
+  controlla('⌃⌘F la riapre', (await aperta()) === true && (await bottone()).testo === 'aperta');
+  await js('document.getElementById("uscita-onoff").click()');
+  await aspetta(1);
+  controlla('e il tasto la chiude', (await aperta()) === false && (await bottone()).testo === 'chiusa');
+  return ok;
+}
 
 // --- la coda: righe sotto il codice, girate a raffica senza perdere né raddoppiare eventi (npx electron . --prova=coda) ---
 async function provaCoda({ finestre, scrivi }) {
