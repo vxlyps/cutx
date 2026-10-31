@@ -2,10 +2,11 @@
 import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, screen, session, shell, MessageChannelMain } from 'electron';
 import path from 'node:path';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { appendFile, mkdir } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
 import { doveApre } from './dove-uscita.js';
+import { risolvi as risolviTesti } from '../renderer/testi-pubblico.js';
 import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
@@ -273,14 +274,14 @@ function creaUscita() {
   const finestra = new BrowserWindow({
     ...(bordi ?? { width: 1280, height: 720, x: b.x + Math.round((b.width - 1280) / 2), y: b.y + Math.round((b.height - 720) / 2) }),
     backgroundColor: '#050604',
-    title: DEV ? `${TITOLO} · uscita` : 'CUTX · uscita',
+    title: titoloUscita(),
     show: false,
     webPreferences,
   });
   // Si apre senza prendere il fuoco: le mani restano sulla postazione.
   finestra.once('ready-to-show', () => finestra.showInactive());
   finestre.uscita = finestra;
-  if (DEV) finestra.on('page-title-updated', (e) => e.preventDefault());
+  finestra.on('page-title-updated', (e) => e.preventDefault()); // il titolo lo decidono i testi per il pubblico
   pronte.uscita = false;
   seguiCaricamento('uscita', finestra);
   let bordiNormali = finestra.getBounds();
@@ -347,15 +348,41 @@ ipcMain.handle('libreria:elenco', () => stash.elencoLibreria());
 ipcMain.handle('libreria:leggi', (_e, nome) => stash.leggiBrano(nome));
 ipcMain.handle('libreria:scrivi', (_e, nome, testo, opzioni) => stash.scriviBrano(nome, testo, opzioni));
 ipcMain.handle('preferenze:leggi', () => preferenze.leggi());
-ipcMain.handle('preferenze:salva', async (_e, modifiche) => {
-  const nuove = await preferenze.salva(modifiche);
-  for (const f of Object.values(finestre)) if (f && !f.isDestroyed()) f.webContents.send('preferenze-cambiate', nuove);
-  return nuove;
+ipcMain.handle('preferenze:salva', (_e, modifiche) => salvaPreferenze(modifiche));
+
+// Il titolo della finestra del pubblico segue i testi per il pubblico (si vede solo se non è a tutto schermo).
+function titoloUscita() {
+  const t = risolviTesti(preferenze.leggi()).titolo;
+  const testo = t.acceso ? t.testo : ' ';
+  return DEV ? `${TITOLO} · ${testo}` : testo;
+}
+function aggiornaTitoloUscita() {
+  if (viva(finestre.uscita)) finestre.uscita.setTitle(titoloUscita());
+}
+
+// Un'immagine mia (svg/png/jpg/webp) per il logo sul proiettore: la scelgo (si parte dallo stash) e la finestra la legge come dato.
+const IMMAGINI = { '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
+ipcMain.handle('immagine:scegli', async () => {
+  const r = await dialog.showOpenDialog(padre(), {
+    title: 'Scegli il logo per il proiettore',
+    defaultPath: stash.radice() ?? undefined,
+    properties: ['openFile'],
+    filters: [{ name: 'Immagini', extensions: ['svg', 'png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+  });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('immagine:leggi', async (_e, percorso) => {
+  const tipo = IMMAGINI[path.extname(String(percorso)).toLowerCase()];
+  if (!tipo) return null;
+  const dati = await readFile(percorso);
+  if (dati.length > 5_000_000) return null;
+  return `data:${tipo};base64,${dati.toString('base64')}`;
 });
 // --- Ableton: le cartelle dei progetti (solo lette) ---
 async function salvaPreferenze(modifiche) {
   const nuove = await preferenze.salva(modifiche);
   for (const f of Object.values(finestre)) if (f && !f.isDestroyed()) f.webContents.send('preferenze-cambiate', nuove);
+  aggiornaTitoloUscita();
   return nuove;
 }
 ipcMain.handle('ableton:aggiungi-cartella', async () => {

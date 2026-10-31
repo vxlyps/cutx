@@ -168,6 +168,7 @@ function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = 
     pattern, // quello che suona: la base con la coda sopra
     base: pattern, // il codice compilato, senza coda
     coda: [], // ['.lpf(1200)', …]: coda.js
+    inizio: 0, // dove finisce il preambolo del brano nel codice (il proiettore può nasconderlo)
     codaErrore: null,
     codaSporca: false,
     da,
@@ -240,7 +241,7 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   avvisaSuoniMancanti(c.pattern, nome);
@@ -256,7 +257,10 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     l.volume = vecchio.volume;
     l.muto = vecchio.muto;
     l.coda = vecchio.coda; // una modifica al codice non butta via la coda
+    // il preambolo (che il proiettore può nascondere) resta quello di prima finché il codice comincia uguale
+    if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
   }
+  if (Number.isFinite(inizio)) l.inizio = Math.max(0, Math.min(codice.length, inizio));
   if (Array.isArray(coda)) l.coda = coda.filter((t) => leggiVoce(t)).map((t) => leggiVoce(t).testo); // quella scritta nella sezione vince
   if (l.coda.length) metteCoda(l);
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
@@ -372,6 +376,7 @@ const descrivi = (l) => ({
   provenienza: l.provenienza,
   codice: l.codice,
   coda: l.coda,
+  inizio: l.inizio,
   codaErrore: l.codaErrore,
   da: l.da === -Infinity ? null : l.da,
   a: l.a === Infinity ? null : l.a,

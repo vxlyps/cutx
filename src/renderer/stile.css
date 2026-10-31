@@ -2209,3 +2209,57 @@ input[type='checkbox'] {
 .live .piede {
   min-height: 108px;
 }
+
+/* anteprima del proiettore nelle impostazioni */
+.anteprima {
+  width: 100%;
+  max-width: 640px;
+  margin: 8px 0 14px;
+  border: 1px solid var(--linea);
+  background: #050604;
+}
+
+.anteprima-quadro {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.anteprima-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.imp-testi-riga .imp-controlli {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.imp-testi-riga input[type='text'] {
+  height: 30px;
+  width: 220px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--testo);
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  padding: 0 8px;
+}
+
+.imp-testi-riga input[type='text'].corto {
+  width: 110px;
+}
+
+.imp-testi-riga .segnaposto {
+  font-family: var(--mono);
+}

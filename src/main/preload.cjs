@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('cutx', {
   scegliFileAbleton: (titolo) => ipcRenderer.invoke('ableton:scegli-file', titolo),
   importaAbleton: (richiesta) => ipcRenderer.invoke('ableton:importa', richiesta),
   progettiAbleton: () => ipcRenderer.invoke('ableton:progetti'),
+  scegliImmagine: () => ipcRenderer.invoke('immagine:scegli'),
+  leggiImmagine: (percorso) => ipcRenderer.invoke('immagine:leggi', percorso),
   crasha: (chi) => ipcRenderer.send('crasha', chi),
   uscitaOnOff: () => ipcRenderer.invoke('uscita:onoff'),
   uscitaSchermoIntero: () => ipcRenderer.invoke('uscita:schermo-intero'),

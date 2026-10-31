@@ -170,6 +170,7 @@ async function goLive() {
   const voci = soloCoda(p.codice.slice(p.inizio ?? 0));
   if (voci) return aggiungiCoda(voci);
   let codice = p.codice;
+  let inizio = p.inizio ?? 0;
   // Un brano a un altro BPM che entra in un live che sta già suonando NON cambia il tempo del set: si tolgono dal suo preambolo
   // le righe setcpm (un setcpm scritto dentro la sezione, o in un livello, continua a funzionare). Con il live vuoto il brano
   // porta il suo tempo, come sempre.
@@ -177,13 +178,15 @@ async function goLive() {
   const diverso = p.bpmBrano && set !== null && livelliLive.some((l) => l.a === null) && Math.abs(p.bpmBrano - set) > 0.05;
   const messaggi = [];
   if (diverso) {
-    codice = B.senzaTempo(codice.slice(0, p.inizio)) + codice.slice(p.inizio);
+    const preambolo = B.senzaTempo(codice.slice(0, p.inizio));
+    codice = preambolo + codice.slice(p.inizio);
+    inizio = preambolo.length;
     messaggi.push(`il set resta a ${set} bpm (il brano è a ${p.bpmBrano})`);
     if (B.eSezioneAudio(codice.slice(p.inizio))) messaggi.push('questa sezione suona un file audio: va al suo tempo originale');
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, inizio, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;
@@ -715,7 +718,7 @@ function aggiornaIstantanea() {
   if (!ripreso || !live.viva || ripristinando) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   istantaneaLive = attivi.length
-    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ codice: l.codice, coda: l.coda, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
     : null;
 }
 
@@ -734,7 +737,7 @@ async function ripristinaLive() {
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, nome: l.nome, provenienza: l.provenienza, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });

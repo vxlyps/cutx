@@ -6,6 +6,7 @@ import { Scrittore } from './scrittura.js';
 import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
 import { righeVisibili } from './coda.js';
+import { convertiIntervalli, filtraCodice, riempi as riempiTesto, risolvi as risolviTesti, testoEtichetta } from './testi-pubblico.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
 import { Scorrimento, scegliDisposizione, trovaScala } from './scorri.js';
@@ -17,11 +18,16 @@ import dorme from '../../design/risorse/gatti/gatto_dorme_marcio.svg';
 import inPiedi from '../../design/risorse/gatti/gatto_in_piedi_marcio.svg';
 
 const $ = (id) => document.getElementById(id);
+// Nelle impostazioni la stessa pagina gira dentro un riquadro (anteprima): dati e preferenze le arrivano dalla porta, dalla finestra madre
+// l'unica cosa che prende è l'accesso al disco per l'immagine del logo. Niente tasti, niente onda, niente chiusure.
+const ANTEPRIMA = new URLSearchParams(location.search).has('anteprima');
+const cutx = ANTEPRIMA ? window.parent.cutx : window.cutx;
 
 let mappa = null;
 let livelli = [];
 let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
+let testi = risolviTesti({}); // i testi per il pubblico (testi-pubblico.js): cosa si vede e con quali parole
 const inizioUscita = new Map();
 const blocchi = new Map(); // chiave → { el, tag, codice }
 
@@ -30,7 +36,7 @@ const blocchi = new Map(); // chiave → { el, tag, codice }
 const sfondo = new Sfondo($('sfondo'));
 let portaLive = null;
 // il live manda l'onda solo se lo sfondo è l'oscilloscopio
-const chiediOnda = () => portaLive?.postMessage({ tipo: 'onda', on: sfondo.modo === 'oscilloscopio' });
+const chiediOnda = () => !ANTEPRIMA && portaLive?.postMessage({ tipo: 'onda', on: sfondo.modo === 'oscilloscopio' });
 
 window.addEventListener('message', (e) => {
   const con = e.data?.porta;
@@ -44,6 +50,7 @@ window.addEventListener('message', (e) => {
     else if (data.tipo === 'mappa') mappa = data;
     else if (data.tipo === 'livelli') livelli = data.livelli;
     else if (data.tipo === 'bozze') bozze = data;
+    else if (data.tipo === 'preferenze' && ANTEPRIMA) applica(data.p);
   };
   if (con === 'controllo') bozze = { livelli: {}, jam: null };
 });
@@ -120,12 +127,29 @@ function scrivi(b, scritto, cursore, nascosto = '', dopo = '') {
   if (dopo) b.codice.append(dopo); // quello che c'era già dopo il punto che si sta cambiando: si vede
 }
 
+// Il codice come lo vede il pubblico: senza commenti e/o preambolo se così ho scelto. Si ricalcola solo quando cambia il codice o la scelta.
+const cacheViste = new Map();
+function vistaCodice(codice, inizio = 0) {
+  const chiave = `${testi.commenti.acceso}|${testi.preambolo.acceso}|${inizio}|${codice}`;
+  if (!cacheViste.has(chiave)) {
+    cacheViste.set(chiave, filtraCodice(codice, { commenti: testi.commenti.acceso, preambolo: testi.preambolo.acceso, inizio }));
+    if (cacheViste.size > 200) cacheViste.delete(cacheViste.keys().next().value);
+  }
+  return cacheViste.get(chiave);
+}
+
 // La coda sotto il codice: se cambia solo un numero si cambia il testo e basta; se cambia il numero di righe si rimisura tutto.
 function mostraCoda(b, righe, chiave, firma) {
   const testo = righe.join('\n');
   b.coda.hidden = !righe.length;
   if (b.coda.textContent !== testo) b.coda.textContent = testo;
   firma.push(`${chiave}|c${righe.length}`);
+}
+
+// L'etichetta di un livello: se non c'è testo (nascosta, o «paracadute») non si vede.
+function mostraTag(b, testo) {
+  b.tag.hidden = !testo;
+  if (testo && b.tag.textContent !== testo) b.tag.textContent = testo;
 }
 
 function disegna() {
@@ -136,8 +160,10 @@ function disegna() {
   const quarto = Math.floor((ciclo - intero) * 4);
   const lunghezza = preferenze.lunghezzaFrase ?? 16;
   sfondo.disegna(ciclo, livelli);
-  $('bpm').textContent = `${arrotondaBpm(bpmDi(cpsAl(mappa, epoca)))} BPM`;
-  $('frase').textContent = fraseDi(mappa, epoca, lunghezza);
+  $('bpm').hidden = !testi.bpm.acceso;
+  $('bpm').textContent = riempiTesto(testi.bpm.testo, { bpm: arrotondaBpm(bpmDi(cpsAl(mappa, epoca))) });
+  $('frase').hidden = !testi.frase.acceso;
+  $('frase').textContent = riempiTesto(testi.frase.testo, { n: fraseDi(mappa, epoca, lunghezza) });
   [...$('battute').children].forEach((d, i) => {
     d.classList.toggle('passata', i < quarto);
     d.classList.toggle('ora', i === quarto);
@@ -148,21 +174,26 @@ function disegna() {
   const ordine = [];
   const firma = [];
   let suona = false;
-  for (const l of livelli) {
-    if (sostituente(l, livelli)) continue; // sostituito: si vede il nuovo
+  // i livelli come li vede il pubblico (senza commenti/preambolo, se così ho scelto); le note evidenziate si riportano con `inv`
+  const viste = livelli.map((l) => {
+    const v = vistaCodice(l.codice, l.inizio);
+    return { ...l, codice: v.testo, inv: v.inv, originale: l.codice };
+  });
+  for (const l of viste) {
+    if (sostituente(l, viste)) continue; // sostituito: si vede il nuovo
     if (l.a !== null && !inizioUscita.has(l.id)) inizioUscita.set(l.id, epoca);
-    const a = aspetto(l, livelli, mappa, epoca, { scrittura: preferenze.scritturaAMacchina !== false, inizioUscita: inizioUscita.get(l.id) });
+    const a = aspetto(l, viste, mappa, epoca, { scrittura: preferenze.scritturaAMacchina !== false, inizioUscita: inizioUscita.get(l.id) });
     const chiave = `l${l.id}`;
     const b = blocco(chiave);
     visti.add(chiave);
     ordine.push(b.el);
-    const bozza = bozze.livelli?.[l.id];
+    const bozza = bozze.livelli?.[l.id] === undefined ? undefined : vistaCodice(bozze.livelli[l.id], l.inizio).testo;
     b.el.classList.toggle('arriva', a.arriva);
     b.el.classList.toggle('muto', l.muto);
     b.el.classList.toggle('bozza', bozza !== undefined && bozza !== a.testo);
     if (bozza !== undefined && bozza !== a.testo) {
       // sto riscrivendo questo livello: il pubblico lo vede mentre lo scrivo
-      b.tag.textContent = `● ${l.nome} · in scrittura`;
+      mostraTag(b, testoEtichetta({ nome: l.nome, stato: 'scrittura' }, testi));
       scrivi(b, bozza, true);
       firma.push(`${chiave}|${bozza}`);
       segnaNovita(chiave, bozza, epoca);
@@ -172,10 +203,10 @@ function disegna() {
     }
     firma.push(`${chiave}|${a.testo}`);
     segnaNovita(chiave, a.testo, epoca);
-    b.tag.textContent = a.arriva ? `${l.nome} · tra ${Math.max(1, Math.ceil(a.mancano))} ${Math.ceil(a.mancano) > 1 ? 'cicli' : 'ciclo'}` : `● ${l.nome}${l.muto ? ' · muto' : ''}`;
+    mostraTag(b, testoEtichetta({ nome: l.nome, stato: a.arriva ? 'arriva' : 'normale', muto: l.muto, mancano: a.mancano }, testi));
     if (a.arriva && a.cursore) {
       // scrittura umana: da zero, o solo la differenza se sostituisce un livello (scrittura.js)
-      const vecchio = sostituitoDa(l, livelli);
+      const vecchio = sostituitoDa(l, viste);
       const v = scrittore.stato(l.id, vecchio ? vecchio.codice.replace(/\s+$/, '') : '', a.testo, l.richiesto, epocaDi(mappa, l.da), epoca, vecchio?.id ?? null);
       scrivi(b, v.prima, v.cursore, v.nascosto, v.dopo);
       if (v.cursore) {
@@ -189,21 +220,22 @@ function disegna() {
         firma.push(`${chiave}|h${Math.round(b.codice.offsetHeight)}`);
       }
     } else if (a.cursore) scrivi(b, a.mostrato, true, a.testo.slice(a.mostrato.length));
-    else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : attivi(l.codice, ciclo), 'nota');
-    mostraCoda(b, a.arriva ? [] : righeVisibili(l.coda, l.volume), chiave, firma);
+    else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : convertiIntervalli(attivi(l.originale, ciclo), l.inv), 'nota');
+    mostraCoda(b, a.arriva || !testi.coda.acceso ? [] : righeVisibili(l.coda, l.volume), chiave, firma);
     suona ||= !a.arriva && !l.muto;
   }
   // il jam che sto scrivendo, prima che entri
-  const jamLive = livelli.find((l) => l.nome === 'jam' && l.a === null);
-  if (bozze.jam && bozze.jam.replace(/\s+$/, '') !== jamLive?.codice.replace(/\s+$/, '')) {
+  const jamLive = viste.find((l) => l.nome === 'jam' && l.a === null);
+  const jamBozza = bozze.jam ? vistaCodice(bozze.jam).testo : null;
+  if (jamBozza && jamBozza.replace(/\s+$/, '') !== jamLive?.codice.replace(/\s+$/, '')) {
     const b = blocco('jam');
     visti.add('jam');
     ordine.push(b.el);
     b.el.classList.add('bozza');
-    b.tag.textContent = 'jam · in scrittura';
-    scrivi(b, bozze.jam, true);
-    firma.push(`jam|${bozze.jam}`);
-    segnaNovita('jam', bozze.jam, epoca);
+    mostraTag(b, testoEtichetta({ nome: 'jam', stato: 'scrittura', punto: false }, testi));
+    scrivi(b, jamBozza, true);
+    firma.push(`jam|${jamBozza}`);
+    segnaNovita('jam', jamBozza, epoca);
   }
   for (const [chiave, b] of blocchi) {
     if (!visti.has(chiave)) {
@@ -360,29 +392,53 @@ function giro() {
 
 // La scorciatoia dello schermo intero (⌃⌘F, o quella scelta nelle impostazioni) vale anche da qui.
 window.addEventListener('keydown', (e) => {
+  if (ANTEPRIMA) return;
   if (corrisponde(e, AZIONI.find((a) => a.id === 'uscitaIntera'), effettive(preferenze.scorciatoie).uscitaIntera)) {
     e.preventDefault();
-    window.cutx.uscitaSchermoIntero();
+    cutx.uscitaSchermoIntero();
   }
   if (corrisponde(e, AZIONI.find((a) => a.id === 'sfondo'), effettive(preferenze.scorciatoie).sfondo)) {
     e.preventDefault();
-    window.cutx.salvaPreferenze({ sfondoProiettore: modoDopo(modoValido(preferenze.sfondoProiettore)) });
+    cutx.salvaPreferenze({ sfondoProiettore: modoDopo(modoValido(preferenze.sfondoProiettore)) });
   }
 });
 
 $('wordmark').src = wordmark;
 avviaGatto();
-globalThis.cutxInsegna = avviaInsegna($('insegna'));
+// Il logo, il neon e il titolo seguono i testi per il pubblico; il resto lo leggono i fotogrammi da `testi`.
+let logoCaricato = null; // percorso dell'immagine che sto mostrando
+async function aggiornaLogo() {
+  const voluta = testi.logo.immagine || null;
+  if (voluta === logoCaricato) return;
+  logoCaricato = voluta;
+  const dati = voluta ? await cutx.leggiImmagine(voluta).catch(() => null) : null;
+  if (logoCaricato === voluta) $('wordmark').src = dati || wordmark; // un file che non si legge: resta il logo di CUTX
+}
+let neonCtl = null;
+let neonTesto = null;
+function aggiornaNeon() {
+  if (neonTesto === testi.neon.testo) return;
+  neonTesto = testi.neon.testo;
+  neonCtl?.ferma();
+  $('insegna').textContent = neonTesto;
+  neonCtl = avviaInsegna($('insegna'));
+  globalThis.cutxInsegna = neonCtl;
+}
+
 function applica(p) {
   preferenze = p;
+  testi = risolviTesti(p);
+  $('wordmark').hidden = !testi.logo.acceso;
+  aggiornaLogo();
+  aggiornaNeon();
   const prima = sfondo.modo;
   sfondo.imposta(p.sfondoProiettore);
   if (sfondo.modo !== prima) chiediOnda();
   document.body.classList.toggle('senza-gatto', p.gatto === false);
   document.body.classList.toggle('senza-insegna', p.insegna === false);
 }
-window.cutx.suPreferenze(applica);
-applica(await window.cutx.preferenze());
+if (!ANTEPRIMA) cutx.suPreferenze(applica);
+applica(ANTEPRIMA ? {} : await cutx.preferenze());
 setInterval(disegna, 100);
 giro();
 globalThis.cutxSfondo = sfondo;

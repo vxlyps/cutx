@@ -192,6 +192,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('testi')) ok = (await sicura('testi', provaTesti)) && ok;
   if (parti.includes('finestra')) ok = (await sicura('finestra', provaFinestra)) && ok;
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
@@ -959,11 +960,11 @@ async function provaImpostazioni({ finestre, scrivi }) {
     await premi(',', 'meta');
     await vai('proiezione');
     const interruttori = await js(`document.querySelectorAll('#imp-proiezione .imp-riga').length`);
-    controlla('la proiezione ha i suoi interruttori (con «apri all\'avvio») e la scelta dello sfondo', interruttori === 7, String(interruttori));
+    controlla('la proiezione ha i suoi interruttori (con «apri all\'avvio») e la scelta dello sfondo', interruttori === 6, String(interruttori));
     await js(`document.querySelectorAll('#imp-proiezione .imp-riga')[2].querySelectorAll('button')[1].click()`); // gatto off
     await aspetta(0.5);
     controlla('gatto off: sparisce dalla barra', (await prefs()).gatto === false && (await js(`getComputedStyle(document.querySelector('.barra .gatto-posto')).display`)) === 'none');
-    await js(`document.querySelectorAll('#imp-proiezione .imp-riga')[3].querySelectorAll('button')[1].click()`); // insegna off
+    await js(`document.querySelector('#imp-testi [data-voce="neon"] .segmenti').querySelectorAll('button')[1].click()`); // insegna off (nei testi per il pubblico)
     await aspetta(0.4);
     controlla('insegna off: sparisce', (await js(`getComputedStyle(document.getElementById('insegna')).display`)) === 'none');
     await js(`window.cutx.salvaPreferenze({ gatto: true, insegna: true })`);
@@ -2380,6 +2381,98 @@ async function provaScrittura({ finestre, scrivi }) {
   return ok;
 }
 
+
+// --- testi per il pubblico: cosa si vede sul proiettore e nell'anteprima delle impostazioni (npx electron . --prova=testi) ---
+async function provaTesti({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const uscita = (codice) => chiedi(finestre.uscita, codice);
+  const prefs = async (testiPubblico, altro = {}) => {
+    await js(`window.cutx.salvaPreferenze(${JSON.stringify({ testiPubblico, ...altro })})`);
+    await aspetta(0.6);
+  };
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  finestre.uscita.setContentSize(1280, 720);
+  await prefs({}, { insegna: true });
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const pre = '// brano di prova\nsetcpm(120/4)\n\n';
+  const codice = `${pre}// la cassa\ns("sine*2").gain(.0001) // piano piano`;
+  const entra = (nome, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, inizio: pre.length, nome, provenienza: 'prova', cicli: 1, scritto: true, ...extra })})`);
+  await entra('basso');
+  await aspetta(2.5);
+  const testo = async () => (await uscita('globalThis.cutxUscita().testo')) ?? '';
+  const t0 = await testo();
+  controlla('predefiniti: il codice c\'è, commenti e preambolo no', /s\("sine\*2"\)/.test(t0) && !/\/\//.test(t0) && !/setcpm|brano di prova/.test(t0), JSON.stringify(t0));
+  controlla('predefiniti: l\'etichetta del livello c\'è', /basso/i.test(t0), JSON.stringify(t0));
+  await prefs({ commenti: { acceso: true }, preambolo: { acceso: true } });
+  const t1 = await testo();
+  controlla('commenti e preambolo accesi: si vedono', /la cassa/.test(t1) && /piano piano/.test(t1) && /setcpm/.test(t1) && /brano di prova/.test(t1), JSON.stringify(t1));
+  await prefs({ commenti: { acceso: true } });
+  const t2 = await testo();
+  controlla('solo commenti accesi: il preambolo resta nascosto', /la cassa/.test(t2) && !/setcpm|brano di prova/.test(t2), JSON.stringify(t2));
+  await prefs({});
+  controlla('BPM: «120 BPM» di default', /120 BPM/.test(await uscita(`document.getElementById('bpm').textContent`)));
+  await prefs({ bpm: { testo: 'tempo {bpm}' } });
+  controlla('BPM: il testo si cambia con il segnaposto', (await uscita(`document.getElementById('bpm').textContent`)) === 'tempo 120');
+  await prefs({ bpm: { acceso: false }, frase: { acceso: false }, logo: { acceso: false } });
+  controlla('BPM, frase e logo si spengono', (await uscita(`[document.getElementById('bpm').hidden, document.getElementById('frase').hidden, document.getElementById('wordmark').hidden].join()`)) === 'true,true,true');
+  await prefs({ neon: { testo: 'ciao ciao' } });
+  controlla('neon: il testo si cambia (e le lettere restano una per una)', (await uscita(`document.getElementById('insegna').textContent`)) === 'ciaociao' || (await uscita(`document.getElementById('insegna').textContent`)) === 'ciao ciao');
+  await prefs({}, { insegna: false });
+  controlla('neon spento', /none/.test(await uscita(`getComputedStyle(document.getElementById('insegna')).display`)));
+  await prefs({}, { insegna: true });
+
+  // etichette: rinominare, nascondere, e il paracadute mai
+  await entra('libero');
+  await aspetta(2.2);
+  await prefs({ etichette: { nomi: { libero: 'pezzo' } } });
+  const tag = async (nome) => uscita(`[...document.querySelectorAll('.livello')].map((b) => b.hidden || b.querySelector('.tag').hidden ? '' : b.querySelector('.tag').textContent).join('|')`);
+  controlla('«libero» rinominato in «pezzo»', /pezzo/.test(await tag()), await tag());
+  await prefs({ etichette: { nomi: { libero: '' } } });
+  controlla('nome vuoto: l\'etichetta di «libero» non si vede', !/libero|pezzo/.test(await tag()), await tag());
+  await entra('paracadute');
+  await aspetta(2.2);
+  controlla('«paracadute» non compare mai sul proiettore', !/paracadute/i.test(await tag()) && !/paracadute/i.test(await testo()), await tag());
+  await prefs({ etichette: { acceso: false } });
+  controlla('etichette spente: nessuna', (await tag()).replace(/\|/g, '') === '', await tag());
+  await prefs({});
+
+  // il titolo della finestra
+  await prefs({ titolo: { testo: 'Serata' } });
+  controlla('titolo della finestra', finestre.uscita.getTitle() === 'Serata', finestre.uscita.getTitle());
+  await prefs({});
+
+  // anteprima nelle impostazioni
+  await js(`document.getElementById('apri-impostazioni').click()`);
+  await aspetta(0.5);
+  await js(`document.querySelector('#imp-nav [data-sez="proiezione"]').click()`);
+  await aspetta(3);
+  const doc = `document.querySelector('#imp-anteprima iframe').contentDocument`;
+  const livelliAnteprima = await js(`${doc}.querySelectorAll('.livello').length`);
+  controlla('anteprima: la vera pagina del proiettore con i livelli di esempio', livelliAnteprima >= 3, String(livelliAnteprima));
+  controlla('anteprima: BPM e testi di esempio', /BPM/.test(await js(`${doc}.getElementById('bpm').textContent`)) && /libero/.test(await js(`${doc}.getElementById('scorri').textContent`)));
+  await prefs({ bpm: { acceso: false } });
+  controlla('anteprima: segue subito le impostazioni', (await js(`${doc}.getElementById('bpm').hidden`)) === true);
+  await prefs({ conto: { testo: 'fra {n} {cicli}' } });
+  await aspetta(1);
+  controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
+  const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 15, String(righeTesti));
+  await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
+  await aspetta(0.8);
+  controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');
+  await js(`document.getElementById('chiudi-impostazioni').click()`);
+  await prefs({}, { insegna: true });
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
 
 // --- la finestra del pubblico: mai da sola, si apre e si chiude solo col tasto «uscita» o ⌃⌘F (npx electron . --prova=finestra) ---
 async function provaFinestra({ finestre, scrivi }) {
