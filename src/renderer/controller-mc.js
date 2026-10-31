@@ -3,7 +3,7 @@
 //  - manopole (V-Pot): CC 16–23 sul canale 1, valori relativi (1–63 = in avanti, 65–127 = indietro: il bit 6 è il segno);
 //  - push delle manopole: note 32–39 (velocità 127 giù, 0 su);
 //  - i 16 tasti: note nel gruppo delle funzioni Mackie (CLICK, SOLO, TRACK, SEND, PAN, PLUG-IN, EQ, INSTRUMENT, DROP, REPLACE, CYCLE…);
-//    quali sono si controlla con la calibrazione nelle impostazioni (le etichette della guida non dicono tutta la fila bassa);
+//    la fila bassa è DROP REPLACE REWIND FORWARD CYCLE STOP PLAY REC (calibrata sul controller vero); la calibrazione nelle impostazioni resta;
 //  - tasti layer A e B: MARKER e NUDGE (le etichette a destra del fader, in alto e in basso);
 //  - fader: pitch bend (il «MASTER» del Mackie è sul canale 9);
 //  - anelli: CC 48–55 (0x30 + n), valore = posizione (0–11) + modo × 16 (0 punto, 1 pan, 2 fan, 3 spread) + 64 per il led sotto;
@@ -17,11 +17,11 @@ export const MODI_ANELLO = ['punto', 'pan', 'fan', 'spread'];
 // Le note note dalla guida, per posto: 16 tasti (8 in alto, 8 in basso), null = da calibrare.
 export const TASTI_PREDEFINITI = [
   89, 90, 40, 41, 42, 43, 44, 45, // alto: CLICK SOLO TRACK SEND PAN PLUG-IN EQ INSTRUMENT
-  87, 88, null, null, 86, null, null, null, // basso: DROP REPLACE … CYCLE …
+  87, 88, 91, 92, 86, 93, 94, 95, // basso: DROP REPLACE REWIND FORWARD CYCLE STOP PLAY REC (verificati con la calibrazione sul controller vero)
 ];
 export const LAYER_PREDEFINITI = { A: 84, B: 85 }; // MARKER, NUDGE
 
-export const NOMI_TASTI = ['CLICK', 'SOLO', 'TRACK', 'SEND', 'PAN', 'PLUG-IN', 'EQ', 'INSTRUMENT', 'DROP', 'REPLACE', '', '', 'CYCLE', '', '', ''];
+export const NOMI_TASTI = ['CLICK', 'SOLO', 'TRACK', 'SEND', 'PAN', 'PLUG-IN', 'EQ', 'INSTRUMENT', 'DROP', 'REPLACE', 'REWIND', 'FORWARD', 'CYCLE', 'STOP', 'PLAY', 'REC'];
 
 // Le tabelle effettive: quelle calibrate (preferenze) sopra i predefiniti.
 export function tabella(preferenza) {

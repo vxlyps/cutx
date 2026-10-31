@@ -2,6 +2,7 @@
 // poi blocca e crasha interfaccia e cuffia, una cosa alla volta. Per ogni fase conta i click
 // che la sentinella del live ha sentito davvero in uscita: le casse non devono perderne uno.
 import path from 'node:path';
+import { app } from 'electron';
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as stash from './stash.js';
 import { leggiAls, leggiAlsFile } from '../ableton/leggi.js';
@@ -192,6 +193,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('striscia')) ok = (await sicura('striscia', provaStriscia)) && ok;
+  if (parti.includes('striscia-aspetto')) ok = (await sicura('striscia-aspetto', provaStrisciaAspetto)) && ok;
   if (parti.includes('specchio-aspetto')) ok = (await sicura('specchio-aspetto', provaSpecchioAspetto)) && ok;
   if (parti.includes('controller')) ok = (await sicura('controller', provaController)) && ok;
   if (parti.includes('cuffia')) ok = (await sicura('cuffia', provaCuffia)) && ok;
@@ -2427,6 +2430,183 @@ async function provaScrittura({ finestre, scrivi }) {
 }
 
 
+// --- la striscia viva: note vere del ciclo, misuratore del suono vero, silenzio, troppo forte, proiettore, e quanto pesa con 7 livelli (npx electron . --prova=striscia) ---
+async function provaStriscia({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  await js(`window.cutx.salvaPreferenze({ striscia: true, testiPubblico: {} })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const livelli = [
+    ['melodia', 'note("c3 e3 g3 b3 c4 g3 e3 d3").s("triangle").gain(.15)'],
+    ['batteria', 's("bd*4, hh*8, ~ sd ~ sd").gain(.0001)'],
+    ['muto', 'note("c1 ~ c1 ~").s("sine").gain(.0001)'],
+    ['forte', 'note("c3*4").s("sine").gain(4)'],
+    ['basso', 'note("<c2 e2>*4").s("sawtooth").lpf(400).gain(.05)'],
+    ['pad', 'note("<c3 a2>").s("sawtooth").lpf(600).gain(.04)'],
+    ['arp', 'note("c4 e4 g4 c5").s("square").gain(.03)'],
+  ];
+  for (const [nome, codice] of livelli) await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true })})`);
+  await aspetta(8);
+  const carta = (nome) => `[...document.querySelectorAll('#livelli .card.livello')].find((c) => c.querySelector('.nome').textContent === '${nome}')`;
+  const testoMisura = (nome) => js(`${carta(nome)}?.querySelector('.sv-testo')?.textContent`);
+  const eventi = (nome) => js(`(() => { const id = ${carta(nome)}?.dataset?.id; const l = cutxProva.pila.livelli.find((x) => x.nome === '${nome}'); const e = cutxProva.pila.strisce.get(l.id) ?? {}; return Object.values(e).find((x) => x?.length) ?? []; })()`);
+  const melodia = await eventi('melodia');
+  controlla('le note vere del ciclo arrivano (8 note, con altezze diverse)', melodia.length === 8 && new Set(melodia.map((e) => e[2])).size >= 5, JSON.stringify(melodia.slice(0, 4)));
+  const batt = await eventi('batteria');
+  controlla('le batterie sono tacche (classi grave/media/acuta, non note)', batt.length >= 8 && batt.every((e) => e[2] < 0) && new Set(batt.map((e) => e[2])).size === 3, JSON.stringify([...new Set(batt.map((e) => e[2]))]));
+  const alte = await js(`[...document.querySelectorAll('#livelli .card.livello .striscia-viva')].map((s) => Math.round(s.getBoundingClientRect().height))`);
+  controlla('la striscia è bassa (26 px)', alte.length >= 7 && alte.every((h) => h >= 24 && h <= 30), JSON.stringify(alte));
+  controlla('il misuratore dice i dB del suono vero, su una riga', /^−\d+ dB$/.test(await testoMisura('melodia')), await testoMisura('melodia'));
+  controlla('un livello senza suono (gain bassissimo): SILENZIO', (await testoMisura('muto')) === 'SILENZIO' && (await testoMisura('batteria')) === 'SILENZIO', JSON.stringify([await testoMisura('muto'), await testoMisura('batteria')]));
+  controlla('un livello che esagera: TROPPO e i dB, su una riga', /^TROPPO [−-]?\d+ dB$/.test(await testoMisura('forte')), await testoMisura('forte'));
+  const altezzaTesto = await js(`(() => { const t = ${carta('forte')}.querySelector('.sv-testo'); return t.getBoundingClientRect().height; })()`);
+  controlla('e non va a capo', altezzaTesto < 20, String(altezzaTesto));
+  await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: cutxProva.pila.livelli.find((x) => x.nome === 'melodia').id, muto: true })`);
+  await aspetta(1);
+  controlla('un livello in muto: MUTO', (await testoMisura('melodia')) === 'MUTO');
+  await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: cutxProva.pila.livelli.find((x) => x.nome === 'melodia').id, muto: false })`);
+
+  // il proiettore: solo le note che scorrono; il misuratore solo se acceso
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(2.5);
+  const proiettore = () => chiedi(finestre.uscita, `(() => { const s = [...document.querySelectorAll('.livello .striscia-viva')].filter((x) => !x.hidden); return { strisce: s.length, misuratori: s.filter((x) => !x.querySelector('.sv-misura').hidden).length, testo: s[0]?.querySelector('.sv-testo')?.textContent }; })()`);
+  const p0 = await proiettore();
+  controlla('proiettore: di default solo le note che scorrono, misuratore spento', p0.strisce >= 5 && p0.misuratori === 0, JSON.stringify(p0));
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { misuratore: { acceso: true } } })`);
+  await aspetta(2);
+  const p1 = await proiettore();
+  controlla('proiettore: accendendo il misuratore compare, con i dB', p1.misuratori >= 5 && /dB|SILENZIO|TROPPO|MUTO/.test(p1.testo ?? ''), JSON.stringify(p1));
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { striscia: { acceso: false } } })`);
+  await aspetta(1);
+  controlla('proiettore: spenta nei testi per il pubblico, sparisce', (await proiettore()).strisce === 0);
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: {} })`);
+  await aspetta(1);
+
+  // quanto pesa con 7 livelli: tutta l'app (interfaccia, motori, proiettore), media su 8 secondi
+  const cpu = async (s) => {
+    app.getAppMetrics();
+    await aspetta(s);
+    const m = app.getAppMetrics();
+    const somma = (tipi) => m.filter((x) => tipi.includes(x.type)).reduce((t, x) => t + (x.cpu?.percentCPUUsage ?? 0), 0);
+    return { totale: somma(['Browser', 'Tab', 'GPU', 'Utility']), schede: somma(['Tab']) };
+  };
+  await js(`window.cutx.salvaPreferenze({ striscia: true })`);
+  await aspetta(2);
+  const con = await cpu(8);
+  await js(`window.cutx.salvaPreferenze({ striscia: false })`);
+  await aspetta(2);
+  const senza = await cpu(8);
+  await js(`window.cutx.salvaPreferenze({ striscia: true })`);
+  scrivi(`INFO  CPU con 8 livelli (somma di tutti i processi, % di un core): con la striscia ${con.totale.toFixed(1)}% (schede ${con.schede.toFixed(1)}%), senza ${senza.totale.toFixed(1)}% (schede ${senza.schede.toFixed(1)}%) → la striscia pesa circa ${(con.totale - senza.totale).toFixed(1)} punti`);
+  controlla('la striscia pesa poco (meno di 15 punti di un core con 7 livelli)', con.totale - senza.totale < 15, `${con.totale.toFixed(1)} vs ${senza.totale.toFixed(1)}`);
+  try {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'striscia');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'reale.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } catch {}
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- la proposta grafica della striscia viva (solo uno screenshot, dati finti: npx electron . --prova=striscia-aspetto) ---
+async function provaStrisciaAspetto({ finestre, scrivi }) {
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const entra = (nome, codice, cicli = 1, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli, scritto: true, ...extra })})`);
+  await entra('melodia', 'note("c3 e3 g3 b3 c4 g3 e3 d3").s("triangle").gain(.0001)');
+  await entra('batteria', 's("bd*4, hh*8, ~ sd ~ sd").bank("RolandTR909").gain(.0001)');
+  await entra('sub', 'note("c1 ~ c1 ~").s("sine").gain(.0001)');
+  await aspetta(3);
+  await entra('pad', 'note("<c3 a2>").s("sawtooth").lpf(600).gain(.0001)', 6);
+  await aspetta(0.5);
+  await js(`(() => {
+    const stile = document.createElement('style');
+    stile.textContent = \`
+      .striscia { display:flex; gap:10px; align-items:stretch; margin-top:8px; font-family:var(--mono); }
+      .striscia canvas.note { flex:1; height:44px; min-width:0; background:#070905; border:1px solid var(--linea); }
+      .striscia .misura { width:112px; display:flex; flex-direction:column; justify-content:center; gap:3px; }
+      .striscia .misura canvas { width:112px; height:10px; background:#0a0c07; border:1px solid var(--linea); }
+      .striscia .misura .et { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--secondario); display:flex; justify-content:space-between; }
+      .striscia .misura .et.silenzio { color:var(--spento,#7a7e72); }
+      .striscia .misura .et.forte { color:var(--testo); }
+      .striscia.attesa canvas.note { opacity:.35; }
+    \`;
+    document.head.append(stile);
+    const Y = (m) => 4 + (84 - m) / (84 - 28) * 30;
+    const disegna = (cv, tipo, testa, entra) => {
+      const w = cv.width = cv.clientWidth * 2, h = cv.height = 88;
+      const c = cv.getContext('2d');
+      c.scale(2, 2);
+      const W = w / 2, H = 44;
+      c.fillStyle = '#0a0d05'; c.fillRect(0, 0, W, H);
+      // le 16 divisioni del ciclo
+      c.fillStyle = '#16190f';
+      for (let i = 0; i < 16; i++) c.fillRect(i * W / 16, 0, 1, H);
+      c.fillStyle = '#23271a';
+      for (let i = 0; i < 4; i++) c.fillRect(i * W / 4, 0, 1.5, H);
+      if (tipo === 'melodia' || tipo === 'basso') {
+        const note = tipo === 'melodia' ? [[0, 48, .9], [2, 52, .6], [4, 55, .8], [6, 59, .5], [8, 60, 1], [10, 55, .6], [12, 52, .7], [14, 50, .5]] : [[0, 36, 1], [4, 36, .8], [8, 36, 1], [12, 36, .8]];
+        for (const [i, m, v] of note) { c.fillStyle = 'rgba(159,194,58,' + (.25 + .75 * v) + ')'; c.fillRect(i * W / 16 + 1, Y(m), W / 16 * (tipo === 'basso' ? 3 : 1.7), 3); }
+      }
+      if (tipo === 'batteria') {
+        for (let i = 0; i < 16; i += 4) { c.fillStyle = 'rgba(159,194,58,1)'; c.fillRect(i * W / 16 + 1, 26, 3, 14); }
+        for (let i = 0; i < 16; i += 2) { c.fillStyle = 'rgba(159,194,58,.45)'; c.fillRect(i * W / 16 + 1, 12, 3, 7); }
+        for (const i of [5, 13]) { c.fillStyle = 'rgba(217,220,204,.9)'; c.fillRect(i * W / 16 + 1, 20, 3, 10); }
+      }
+      if (testa !== null) { c.fillStyle = 'rgba(217,220,204,.9)'; c.fillRect(testa * W, 0, 1.5, H); }
+      if (entra) { c.fillStyle = 'rgba(159,194,58,.18)'; c.fillRect(0, 0, W * entra, H); c.fillStyle = '#d9dccc'; c.font = '11px Fragment Mono, monospace'; c.fillText('entra tra 2 · ' + Math.round(entra * 100) + '%', 10, 26); }
+    };
+    const misura = (cv, livello) => {
+      cv.width = 224; cv.height = 20;
+      const c = cv.getContext('2d');
+      c.scale(2, 2);
+      const n = 24;
+      for (let i = 0; i < n; i++) {
+        const on = i / n < livello;
+        c.fillStyle = !on ? '#15180f' : i / n > .88 ? '#d9dccc' : '#9fc23a';
+        c.fillRect(i * 4.6, 0, 3.6, 10);
+      }
+    };
+    const stati = [
+      ['melodia', 'melodia', .42, .38, 'normale', '-14 dB'],
+      ['batteria', 'batteria', .93, .62, 'forte', '-1 dB'],
+      ['sub', 'basso', .0, .12, 'silenzio', ''],
+      ['pad', 'melodia', 0, null, 'entra', ''],
+    ];
+    const carte = [...document.querySelectorAll('#livelli .card.livello')];
+    for (const [nome, tipo, liv, testa, stato, db] of stati) {
+      const carta = carte.find((c) => c.querySelector('.nome').textContent === nome);
+      if (!carta) continue;
+      const striscia = document.createElement('div');
+      striscia.className = 'striscia' + (stato === 'entra' ? ' attesa' : '');
+      const note = document.createElement('canvas'); note.className = 'note';
+      const m = document.createElement('div'); m.className = 'misura';
+      const cv = document.createElement('canvas');
+      const et = document.createElement('div'); et.className = 'et ' + stato;
+      et.innerHTML = stato === 'silenzio' ? '<span>silenzio</span>' : stato === 'forte' ? '<span>troppo forte</span><span>' + db + '</span>' : stato === 'entra' ? '<span>in arrivo</span>' : '<span>suono</span><span>' + db + '</span>';
+      m.append(et, cv);
+      striscia.append(note, m);
+      carta.querySelector('.griglia')?.replaceWith(striscia);
+      disegna(note, tipo, testa, stato === 'entra' ? 0.35 : 0);
+      misura(cv, liv);
+    }
+  })()`);
+  await aspetta(0.8);
+  const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'striscia');
+  await mkdir(cartella, { recursive: true });
+  await writeFile(path.join(cartella, 'proposta.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  scrivi(`OK    foto in ${cartella}/proposta.png`);
+  await js('cutxProva.fermaTutto()');
+  return true;
+}
+
 // --- la proposta grafica dello specchio del controller (solo uno screenshot: npx electron . --prova=specchio-aspetto) ---
 async function provaSpecchioAspetto({ finestre, scrivi }) {
   const js = (codice) => chiedi(finestre.controllo, codice);
@@ -2838,7 +3018,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1);
   controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
   const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
-  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 15, String(righeTesti));
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 17, String(righeTesti));
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');

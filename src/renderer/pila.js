@@ -6,12 +6,12 @@
 // Ogni livello si modifica sul posto: suona la versione di prima finché ⌘↵ non applica le
 // modifiche al ciclo successivo; esc annulla. In fondo c'è il jam, per improvvisare.
 import { creaEditor } from './editor.js';
-import { attivi, griglia, riempi } from './evidenzia.js';
+import { attivi, riempi } from './evidenzia.js';
 import { aspetto, epocaDi } from './aspetto.js';
 import { resta } from './dissolvenza.js';
+import { StatoMisura, testoMisura } from './striscia.js';
+import { creaStriscia, disegnaNote, muoviTestina } from './striscia-vista.js';
 import { leggiVoce, righeScorrevoli, righeVisibili } from './coda.js';
-
-const PASSI = 16;
 
 function el(tag, classe, testo) {
   const e = document.createElement(tag);
@@ -29,6 +29,7 @@ export class Pila {
     this.carte = new Map(); // id → carta
     this.inizioUscita = new Map(); // id → epoca in cui ho visto partire l'uscita
     this.scritturaAMacchina = true;
+    this.strisce = new Map(); // id del livello → { ciclo: eventi } (le note vere, dal motore live)
     this.selezionato = null; // id del livello scelto con un clic sulla card: a lui vanno le code da sole (e, col controller, i colpi)
     this.modifiche = new Map(); // nome del livello → { editor, carta } mentre lo modifico
     this.creaJam(jam);
@@ -148,12 +149,12 @@ export class Pila {
     const codaTesto = el('pre', 'coda');
     const pulisci = el('button', 'key piccolo', 'pulisci coda');
     coda.append(codaTesto, pulisci);
-    const celle = el('div', 'griglia');
-    for (let i = 0; i < PASSI; i++) celle.append(el('div'));
+    // la striscia viva: le note vere del ciclo e il suono vero del livello (sostituisce le tacchette)
+    const striscia = creaStriscia();
     const piede = el('div', 'lbl piede-carta');
     const errore = el('p', 'errore');
-    art.append(testa, barra, codice, editor, coda, celle, piede, errore);
-    const c = { el: art, livello: l, nome, manopola, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, celle, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
+    art.append(testa, barra, codice, editor, coda, striscia.radice, piede, errore);
+    const c = { el: art, livello: l, nome, manopola, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, striscia, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
     pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
@@ -344,7 +345,7 @@ export class Pila {
         c.barra.hidden = false;
         c.coda.hidden = !c.righeCoda.length;
         this.disegnaCodice(c, a);
-        this.disegnaGriglia(c, a);
+        this.disegnaStriscia(c, a);
         continue;
       }
       if (a.arriva) {
@@ -364,7 +365,7 @@ export class Pila {
       // un numero che scivola: sulla card scorre anche lui
       if (l.scivola && Object.keys(l.scivola).length) this.disegnaRigheCoda(c, righeScorrevoli(c.righeCoda, l.scivola, a.ciclo), l.coda?.length ?? 0);
       this.disegnaCodice(c, a);
-      this.disegnaGriglia(c, a);
+      this.disegnaStriscia(c, a);
     }
     return { suonano, inArrivo };
   }
@@ -385,13 +386,48 @@ export class Pila {
     riempi(c.codice, a.testo, accese, 'nota');
   }
 
-  disegnaGriglia(c, a) {
-    const celle = a.arriva ? null : griglia(c.livello.codice, a.ciclo, PASSI);
-    c.celle.hidden = !celle;
-    if (!celle) return;
-    const ora = Math.floor((a.ciclo - Math.floor(a.ciclo)) * PASSI);
-    [...c.celle.children].forEach((d, i) => {
-      d.className = celle[i] ? (i === ora && !c.livello.muto ? 'colpo ora' : 'colpo') : i === ora ? 'ora' : '';
-    });
+  // --- la striscia viva ---
+
+  // Le note vere del ciclo, arrivate dal motore live ({ ciclo, livelli: { id: eventi } }).
+  suStrisce(m) {
+    for (const [id, eventi] of Object.entries(m.livelli)) {
+      const prima = this.strisce.get(Number(id)) ?? {};
+      this.strisce.set(Number(id), { [m.ciclo]: eventi, [m.ciclo - 1]: prima[m.ciclo - 1] ?? prima[m.ciclo] });
+    }
+  }
+
+  // Il suono vero di ogni livello (picco 0..1 dall'ultima misura): lo stato del misuratore e la barra.
+  suMisure(m, ora = performance.now(), cicloMs = 2000) {
+    for (const [id, pk] of Object.entries(m.livelli)) {
+      const c = this.carte.get(Number(id));
+      if (!c) continue;
+      const l = c.livello;
+      c.stato_misura ??= new StatoMisura();
+      const eventi = this.strisce.get(Number(id));
+      const haNote = !!eventi && Object.values(eventi).some((e) => e?.length);
+      const r = c.stato_misura.aggiorna({ pk, ora, cicloMs, haNote, muto: l.muto });
+      c.striscia.barra.style.width = `${(r.livello * 100).toFixed(0)}%`;
+      c.striscia.misura.dataset.stato = r.stato;
+      c.misuraTesto = testoMisura(r);
+      if (!c.sfumaTesto) c.striscia.testo.textContent = c.misuraTesto;
+    }
+  }
+
+  disegnaStriscia(c, a) {
+    const s = c.striscia;
+    // un livello in arrivo ha già la sua barra «entra tra»: la striscia aspetta
+    s.radice.hidden = a.arriva;
+    if (a.arriva) return;
+    const eventi = this.strisce.get(c.livello.id);
+    const intero = Math.floor(a.ciclo);
+    const ev = eventi?.[intero] ?? eventi?.[intero - 1] ?? [];
+    disegnaNote(s, ev);
+    muoviTestina(s, a.ciclo - intero);
+    // dissolvenza o uscita: al posto del dB c'è quanto manca
+    const sfuma = c.livello.sfuma && a.ciclo < c.livello.sfuma.a ? c.livello.sfuma : null;
+    const manca = sfuma ? sfuma.a - a.ciclo : c.livello.a !== null ? c.livello.a - a.ciclo : null;
+    c.sfumaTesto = manca !== null && manca > 0;
+    if (c.sfumaTesto) s.testo.textContent = `${sfuma?.verso === 'entra' ? 'entra' : 'esce'} ${manca.toFixed(1)}`;
+    else if (c.misuraTesto) s.testo.textContent = c.misuraTesto;
   }
 }

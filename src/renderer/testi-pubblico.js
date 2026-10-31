@@ -14,6 +14,8 @@ export const PREDEFINITI = {
   conto: { acceso: true, testo: 'tra {n} {cicli}' },
   scrittura: { acceso: true, testo: 'in scrittura' },
   coda: { acceso: true },
+  striscia: { acceso: true }, // le note vere del ciclo sotto ogni livello, con la testina che scorre
+  misuratore: { acceso: false }, // il suono vero del livello (a destra della striscia): spento di default
   commenti: { acceso: false }, // le righe // del codice
   preambolo: { acceso: false }, // il preambolo del brano (setcpm…): un setcpm scritto io dal vivo è un gesto e si vede
   controller: { acceso: false, testo: '{testo}' }, // fase 4: la scritta grande di quello che tocco («REESE · FILTRO 0.42»)

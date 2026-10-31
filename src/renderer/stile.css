@@ -2561,3 +2561,105 @@ input[type='checkbox'] {
 .browser.con-specchio .riquadro-help {
   min-height: 56px;
 }
+
+/* la striscia viva sotto ogni card live: bassa, trattini sottili, il misuratore sempre su una riga */
+.striscia-viva {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  margin-top: 6px;
+}
+
+.striscia-viva[hidden] {
+  display: none;
+}
+
+.sv-note {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  background: #070905;
+  border: 1px solid var(--linea);
+  overflow: hidden;
+}
+
+.sv-note canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sv-testina {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sv-testina::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(217, 220, 204, 0.85);
+}
+
+.sv-misura {
+  flex: none;
+  width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.sv-barra {
+  flex: 1;
+  height: 6px;
+  min-width: 36px;
+  background: repeating-linear-gradient(90deg, #15180f 0 3px, #0a0c07 3px 4px);
+  position: relative;
+}
+
+.sv-barra i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: repeating-linear-gradient(90deg, var(--marcio) 0 3px, transparent 3px 4px);
+}
+
+.sv-testo {
+  width: 70px;
+  text-align: right;
+  color: var(--secondario);
+  overflow: hidden;
+}
+
+.sv-misura[data-stato='silenzio'] .sv-testo {
+  color: var(--spento);
+}
+
+.sv-misura[data-stato='troppo'] .sv-testo {
+  color: var(--errore, #e0674f);
+}
+
+.sv-misura[data-stato='troppo'] .sv-barra i {
+  background: repeating-linear-gradient(90deg, var(--errore, #e0674f) 0 3px, transparent 3px 4px);
+}
+
+.sv-misura[data-stato='muto'] .sv-testo {
+  color: var(--spento);
+}
+
+/* il conto grande «−5.2» non serve: c'è «entra tra N» con la sua barra */
+.card.livello .conto {
+  display: none;
+}

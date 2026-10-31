@@ -6,6 +6,8 @@ import { Scrittore, piano as pianoScrittura, vedi as vediScrittura } from './scr
 import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
 import { righeScorrevoli, righeVisibili } from './coda.js';
+import { StatoMisura, testoMisura } from './striscia.js';
+import { creaStriscia, disegnaNote, muoviTestina } from './striscia-vista.js';
 import { convertiIntervalli, filtraCodice, riempi as riempiTesto, risolvi as risolviTesti, testoEtichetta } from './testi-pubblico.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
@@ -27,6 +29,9 @@ let mappa = null;
 let livelli = [];
 let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
+const strisceU = new Map(); // id del livello → { ciclo: eventi }: le note vere, dal motore live
+const misureU = new Map(); // id → { pk, quando }; lo stato del misuratore sta in statiU
+const statiU = new Map();
 let scritta = null; // { testo, quando }: quello che tocco sul controller, se l'ho acceso nei testi per il pubblico
 let testi = risolviTesti({}); // i testi per il pubblico (testi-pubblico.js): cosa si vede e con quali parole
 const inizioUscita = new Map();
@@ -38,6 +43,13 @@ const sfondo = new Sfondo($('sfondo'));
 let portaLive = null;
 // il live manda l'onda solo se lo sfondo è l'oscilloscopio
 const chiediOnda = () => !ANTEPRIMA && portaLive?.postMessage({ tipo: 'onda', on: sfondo.modo === 'oscilloscopio' });
+// il misuratore sul proiettore è spento di default: il live manda le misure solo se lo accendo
+let misureChieste = null;
+const chiediMisure = () => {
+  const on = !!testi.misuratore.acceso && testi.striscia.acceso;
+  if (!ANTEPRIMA && on !== misureChieste) portaLive?.postMessage({ tipo: 'misure-uscita', on });
+  misureChieste = on;
+};
 
 window.addEventListener('message', (e) => {
   const con = e.data?.porta;
@@ -52,6 +64,11 @@ window.addEventListener('message', (e) => {
     else if (data.tipo === 'livelli') livelli = data.livelli;
     else if (data.tipo === 'bozze') bozze = data;
     else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
+    else if (data.tipo === 'strisce') {
+      for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { ...(strisceU.get(Number(id)) ?? {}), [data.ciclo]: ev, [data.ciclo - 2]: undefined });
+    } else if (data.tipo === 'misure') {
+      for (const [id, pk] of Object.entries(data.livelli)) misureU.set(Number(id), { pk, quando: performance.now() });
+    }
     else if (data.tipo === 'preferenze' && ANTEPRIMA) applica(data.p);
   };
   if (con === 'controllo') bozze = { livelli: {}, jam: null };
@@ -100,8 +117,10 @@ function blocco(chiave) {
     const coda = document.createElement('pre');
     coda.className = 'coda';
     coda.hidden = true;
-    el.append(tag, codice, coda);
-    blocchi.set(chiave, { el, tag, codice, coda });
+    const striscia = creaStriscia();
+    striscia.radice.hidden = true;
+    el.append(tag, codice, coda, striscia.radice);
+    blocchi.set(chiave, { el, tag, codice, coda, striscia });
   }
   return blocchi.get(chiave);
 }
@@ -145,6 +164,29 @@ function vistaCodice(codice, inizio = 0) {
     if (cacheViste.size > 200) cacheViste.delete(cacheViste.keys().next().value);
   }
   return cacheViste.get(chiave);
+}
+
+// La striscia sotto il codice: le note vere del ciclo (sempre, se accesa nei testi per il pubblico) e, solo se acceso, il misuratore.
+function mostraStriscia(b, l, a, ciclo, firma, chiave, epoca) {
+  const s = b.striscia;
+  const visibile = testi.striscia.acceso && !a.arriva;
+  s.radice.hidden = !visibile;
+  firma.push(`${chiave}|s${visibile ? 1 : 0}`);
+  if (!visibile) return;
+  const e = strisceU.get(l.id);
+  const intero = Math.floor(ciclo);
+  disegnaNote(s, e?.[intero] ?? e?.[intero - 1] ?? []);
+  muoviTestina(s, ciclo - intero);
+  s.misura.hidden = !testi.misuratore.acceso;
+  if (!testi.misuratore.acceso) return;
+  const m = misureU.get(l.id);
+  if (!m) return;
+  if (!statiU.has(l.id)) statiU.set(l.id, new StatoMisura());
+  const haNote = !!e && Object.values(e).some((x) => x?.length);
+  const r = statiU.get(l.id).aggiorna({ pk: m.pk, ora: performance.now(), cicloMs: mappa?.cps ? 1000 / mappa.cps : 2000, haNote, muto: l.muto });
+  s.barra.style.width = `${(r.livello * 100).toFixed(0)}%`;
+  s.misura.dataset.stato = r.stato;
+  s.testo.textContent = testoMisura(r);
 }
 
 // La coda sotto il codice: se cambia solo un numero si cambia il testo e basta; se cambia il numero di righe si rimisura tutto.
@@ -251,6 +293,7 @@ function disegna() {
     } else if (a.cursore) scrivi(b, a.mostrato, true, a.testo.slice(a.mostrato.length));
     else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : convertiIntervalli(attivi(l.originale, ciclo), l.inv), 'nota');
     mostraCoda(b, a.arriva || !testi.coda.acceso ? [] : righeScorrevoli(righeVisibili(l.coda, l.volume), l.scivola, ciclo), chiave, firma, epoca, !a.arriva && testi.coda.acceso);
+    mostraStriscia(b, l, a, ciclo, firma, chiave, epoca);
     suona ||= !a.arriva && !l.muto;
   }
   // il jam che sto scrivendo, prima che entri
@@ -321,6 +364,7 @@ function misuraRighe() {
       for (let k = 0; k < nc; k++) righe.push({ top: tc + k * lc, bottom: tc + (k + 1) * lc });
       fine = tc + nc * lc;
     }
+    if (!b.striscia.radice.hidden) fine = Math.max(fine, top + b.striscia.radice.offsetTop + b.striscia.radice.offsetHeight);
     livelliGeom.set(chiave, { top, bottom: fine });
   }
   righe.sort((x, y) => x.top - y.top);
@@ -457,6 +501,7 @@ function aggiornaNeon() {
 function applica(p) {
   preferenze = p;
   testi = risolviTesti(p);
+  chiediMisure();
   $('wordmark').hidden = !testi.logo.acceso;
   aggiornaLogo();
   aggiornaNeon();

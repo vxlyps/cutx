@@ -3,8 +3,9 @@
 // - cuffia: segue la mappa del live e suona sul jack, allo stesso istante.
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
 import { frequenzaMaster } from './controller-mappa.js';
+import { eventiDaHap } from './striscia.js';
 import { applica as applicaCoda, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
-import { evalScope, getTrigger, repl, setTime, signal, silence } from '@strudel/core';
+import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
   getAudioContext,
@@ -241,6 +242,7 @@ function metteCoda(l) {
     l.pattern = commuta(l.commuta.vecchio, r.pattern, l.commuta.B);
   } else l.pattern = r.pattern;
   l.codaRitmica = false;
+  l.strisciaCiclo = null; // le note del ciclo si rifanno
 }
 
 // Passato il battito del cambio il pattern è solo il nuovo; passata una scivolata il numero è fermo (e si rifà il pattern senza segnale).
@@ -485,7 +487,10 @@ function guadagnoDi(l) {
     gain.connect(fade);
     fade.connect(micro);
     controller.output.connectToDestination(micro, [0, 1]);
-    guadagni.set(l.id, { orbita, gain, lp, hp, fade, micro });
+    // l'orecchio della striscia viva: il suono vero del livello (dopo effetti, volume e dissolvenza); solo una presa, non è nella catena
+    const analisi = new AnalyserNode(ac, { fftSize: 4096, smoothingTimeConstant: 0 });
+    micro.connect(analisi);
+    guadagni.set(l.id, { orbita, gain, lp, hp, fade, micro, analisi });
   }
   return guadagni.get(l.id);
 }
@@ -506,7 +511,7 @@ function liberaGuadagno(id) {
     const controller = getSuperdoughAudioController();
     controller.nodes[g.orbita]?.disconnect();
     delete controller.nodes[g.orbita];
-    for (const n of [g.lp, g.hp, g.fade, g.micro]) n.disconnect();
+    for (const n of [g.lp, g.hp, g.fade, g.micro, g.analisi]) n.disconnect();
     g.gain.disconnect();
   }, 15000);
 }
@@ -615,6 +620,53 @@ rip.suEvento = (hap, t, sorgente) => {
 rip.suCps = (cps) => cambiaTempo(cps, 'subito');
 anello && (anello.suMisura = (ms) => manda('controllo', { tipo: 'anello', ms }));
 
+// --- la striscia viva: le note vere del ciclo e il suono vero di ogni livello ---
+// Le note: una volta a ciclo (e quando la coda cambia) si interroga il pattern del livello, con la sua coda sopra, per il ciclo che si sta
+// programmando; l'interfaccia e l'uscita le disegnano. Il suono: un analizzatore per livello letto una quindicina di volte al secondo.
+let strisceOn = true;
+let misureUscita = false;
+const bufferMisura = new Float32Array(4096);
+
+function aggiornaStrisce() {
+  if (!LIVE || !strisceOn || !rip.mappa || rip.fine === null) return;
+  const c = Math.floor(rip.fine);
+  const nuove = {};
+  for (const l of livelli) {
+    if (l.strisciaCiclo === c || (l.a !== Infinity && l.a <= c)) continue;
+    l.strisciaCiclo = c;
+    let ev = [];
+    try {
+      if (l.da < c + 1) ev = eventiDaHap(l.pattern.queryArc(c, c + 1, { _cps: rip.mappa.cps }), c, noteToMidi);
+    } catch {
+      // un pattern che non si lascia interrogare lo dirà il riproduttore
+    }
+    // un livello non suona prima di entrare né dopo essere uscito
+    nuove[l.id] = ev.filter((e) => c + e[0] >= l.da && c + e[0] < l.a);
+  }
+  if (!Object.keys(nuove).length) return;
+  const m = { tipo: 'strisce', ciclo: c, livelli: nuove };
+  manda('controllo', m);
+  manda('uscita', m);
+}
+
+function misura() {
+  if (!LIVE || !strisceOn) return;
+  const livelliMisura = {};
+  for (const l of livelli) {
+    const g = guadagni.get(l.id);
+    if (!g) continue;
+    g.analisi.getFloatTimeDomainData(bufferMisura);
+    let pk = 0;
+    for (let i = 0; i < bufferMisura.length; i++) pk = Math.max(pk, Math.abs(bufferMisura[i]));
+    livelliMisura[l.id] = Math.round(pk * 10000) / 10000;
+  }
+  if (!Object.keys(livelliMisura).length) return;
+  const m = { tipo: 'misure', livelli: livelliMisura };
+  manda('controllo', m);
+  if (misureUscita) manda('uscita', m);
+}
+setInterval(misura, 66);
+
 function giro() {
   const ora = performance.now();
   if (ultimoGiro) giroMax = Math.max(giroMax, ora - ultimoGiro);
@@ -623,6 +675,7 @@ function giro() {
   rip.tick();
   pulisci();
   ripulisciCode();
+  aggiornaStrisce();
 }
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
@@ -753,6 +806,13 @@ async function ricevi(da, m) {
     }
     case 'coda':
       return cambiaCoda(m);
+    case 'strisce-on': // l'interfaccia (o le impostazioni) accende e spegne la striscia viva: spenta non costa niente
+      strisceOn = !!m.on;
+      for (const l of livelli) l.strisciaCiclo = null;
+      return;
+    case 'misure-uscita': // il proiettore vuole il misuratore (spento di default)
+      if (da === 'uscita') misureUscita = !!m.on;
+      return;
     case 'filtro-master': // il fader del controller: un passa-basso su tutta l'uscita live (in alto = aperto, identità)
       if (LIVE) filtroMasterA(Number(m.x));
       return;

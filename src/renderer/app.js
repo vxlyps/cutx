@@ -1041,6 +1041,8 @@ for (const m of [live, cuffia]) {
       paracaduteAperto = !!msg.paracadute;
       pila.aggiorna(livelliLive);
     }
+    else if (msg.tipo === 'strisce') pila.suStrisce(msg);
+    else if (msg.tipo === 'misure') pila.suMisure(msg, performance.now(), mappa?.cps ? 1000 / mappa.cps : 2000);
     else if (msg.tipo === 'suoni-mancanti' && !inTest) {
       // un campione che non c'è nello stash non suona: lo si dice, non resta silenzio
       const dove = msg.nome ? `«${msg.nome}»` : msg.ruolo === 'cuffia' ? 'in cuffia' : 'nel live';
@@ -1052,6 +1054,7 @@ for (const m of [live, cuffia]) {
 }
 // Un live rinato dopo un crash riparte vuoto: l'interfaccia gli rimette quello che suonava (se non aveva perso niente, non fa niente).
 live.suCollegato = () => {
+  live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (ripreso) ripristinaLive();
 };
 // Una cuffia rinata riparte da vuota: le ridò il suo codice.
@@ -1225,6 +1228,7 @@ function applicaPreferenze(p) {
   const dissPrima = preferenze.dissolvenzaEntrata;
   preferenze = p;
   controllerMidi.ricaricaTabella();
+  if (p.striscia !== (preferenze.striscia)) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   $('paracadute').hidden = p.paracadute === false;

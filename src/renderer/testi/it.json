@@ -235,6 +235,11 @@
     ],
     "help": [
       {
+        "chiave": "striscia",
+        "nome": "striscia viva",
+        "testo": "sotto ogni card live: le note vere del ciclo e il suono vero del livello (spenta non costa niente)"
+      },
+      {
         "chiave": "suggerimenti",
         "nome": "suggerimenti al passaggio",
         "testo": "mouse fermo un secondo sopra un comando"

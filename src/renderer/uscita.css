@@ -283,3 +283,85 @@ body {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* la striscia viva sotto il codice di ogni livello (note vere del ciclo; il misuratore solo se acceso) */
+.striscia-viva {
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  height: calc(26 * var(--u));
+  margin-top: calc(4 * var(--u));
+}
+
+.striscia-viva[hidden] {
+  display: none;
+}
+
+.sv-note {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(217, 220, 204, 0.08);
+}
+
+.sv-note canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sv-testina {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sv-testina::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(217, 220, 204, 0.8);
+}
+
+.sv-misura {
+  flex: none;
+  width: calc(230 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  font-size: calc(15 * var(--u));
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--spento);
+}
+
+.sv-misura[hidden] {
+  display: none;
+}
+
+.sv-barra {
+  flex: 1;
+  height: calc(7 * var(--u));
+  background: repeating-linear-gradient(90deg, #15180f 0 3px, #0a0c07 3px 4px);
+  position: relative;
+}
+
+.sv-barra i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: repeating-linear-gradient(90deg, var(--marcio) 0 3px, transparent 3px 4px);
+}
+
+.sv-misura[data-stato='troppo'] {
+  color: #e0674f;
+}
+
+.livello.muto .striscia-viva {
+  opacity: 0.4;
+}
