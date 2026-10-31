@@ -7,6 +7,7 @@ import { evalScope, getTrigger, repl, setTime, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
   getAudioContext,
+  getSound,
   getSuperdoughAudioController,
   initAudio,
   registerSynthSounds,
@@ -105,10 +106,27 @@ function compila(codice) {
   return lavoro;
 }
 
+// I suoni che il codice chiede (nei primi cicli) e che nessuno ha caricato (bd, sd… se non sono nello stash): superdough li salta
+// in silenzio e sulla console, quindi si dice all'interfaccia, che lo scrive sotto la testa del CUE.
+function avvisaSuoniMancanti(pattern, nome) {
+  const mancanti = new Set();
+  try {
+    for (const hap of pattern.queryArc(0, 16)) {
+      const v = hap.value;
+      if (!v || typeof v.s !== 'string' || ['-', '~', '_'].includes(v.s)) continue;
+      if (!getSound(v.bank ? `${v.bank}_${v.s}` : v.s)) mancanti.add(v.s);
+    }
+  } catch {
+    // un pattern che non si lascia interrogare lo dirà il riproduttore
+  }
+  if (mancanti.size) manda('controllo', { tipo: 'suoni-mancanti', ruolo: RUOLO, nome: nome ?? null, suoni: [...mancanti] });
+}
+
 // Un errore lascia suonare quello che c'era: si risponde con l'errore e basta.
 async function valuta(codice, etichetta = {}) {
   const c = await compila(codice);
   if (c.errore) return c.errore;
+  avvisaSuoniMancanti(c.pattern, etichetta.nome);
   if (!LIVE) {
     anteprimaId++;
     if (etichetta.anteprima) {
@@ -225,6 +243,7 @@ function cambiaCoda(m) {
 async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
+  avvisaSuoniMancanti(c.pattern, nome);
   const da = rip.prossimoConfine() + Math.max(1, cicli) - 1;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
   const d = dissolvenzaDi(dissolvenza);

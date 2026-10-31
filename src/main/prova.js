@@ -2494,6 +2494,38 @@ async function provaCoda({ finestre, scrivi }) {
   const dalFile = await attivo();
   controlla('go live: la coda del file va al livello, il codice è senza', dalFile?.coda?.join('|') === '.lpf(900)|.fast(2)' && !dalFile.codice.includes('@coda'), JSON.stringify({ coda: dalFile?.coda, codice: dalFile?.codice }));
 
+  // 8. il CUE libero, lo stesso caso di chi suona: il codice sopra la coda resta e suona (prima arrivava solo la coda)
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.8);
+  const testoLibero = 'note("c3 e3 g3 b3").s("triangle").gain(.0001)\n// @coda\n.fast(2)\n.lpf(600)';
+  await js(`cutxProva.scriviCue(${JSON.stringify(testoLibero)})`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(2.5);
+  const libero = await attivo();
+  controlla('CUE libero: il livello ha il suo codice e la sua coda', libero?.codice === 'note("c3 e3 g3 b3").s("triangle").gain(.0001)' && libero.coda?.join('|') === '.fast(2)|.lpf(600)', JSON.stringify({ coda: libero?.coda, codice: libero?.codice }));
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await aspetta(2);
+  const suonati = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === libero?.id);
+  controlla('CUE libero: suona (con .fast(2) e .lpf(600))', suonati.length >= 8 && suonati.every((e) => e[2] === 600), String(suonati.length));
+  const cartaLibera = await js(`[...document.querySelectorAll('#livelli .card.livello')].at(-1)?.querySelector('.codice')?.textContent`);
+  controlla('CUE libero: la card mostra il codice', /note\("c3 e3 g3 b3"\)/.test(cartaLibera ?? ''), JSON.stringify(cartaLibera));
+
+  // 9. una selezione che parte da `// @coda` lascia fuori il codice: non entra niente, e si dice perché
+  const prima = (await live()).livelli.length;
+  await js(`(() => { const v = cutxProva.cue.libero.vista; v.dispatch({ selection: { anchor: v.state.doc.line(2).from, head: v.state.doc.length } }); })()`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(1);
+  controlla('solo la coda selezionata: non entra un livello vuoto, e l\'avviso lo dice', (await live()).livelli.length === prima && /solo la coda/.test(await js(`document.getElementById('cue-avviso').textContent`)));
+
+  // 10. un campione che non c'è nello stash (bd, sd): avviso chiaro, non silenzio
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.5);
+  await js(`cutxProva.scriviCue('s("bd sd").gain(.0001)')`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(1.5);
+  const avvisoSuoni = await js(`document.getElementById('cue-avviso').textContent`);
+  controlla('suono che non esiste: avviso con i nomi', /bd, sd/.test(avvisoSuoni) && /nello stash/.test(avvisoSuoni), JSON.stringify(avvisoSuoni));
+
   await js('cutxProva.fermaTutto()');
   return ok;
 }

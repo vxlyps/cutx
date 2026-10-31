@@ -160,6 +160,8 @@ async function goLive() {
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
   const { codice: senzaCoda, coda } = separaCoda(codice);
+  // la coda da sola non suona niente: di solito è una selezione che parte da `// @coda` e lascia fuori il codice sopra
+  if (coda.length && !senzaCoda.replace(/^\s*setcp[ms]\(.*$/gm, '').trim()) return cue.avviso('c\'è solo la coda, senza il codice a cui si applica: seleziona anche le righe sopra `// @coda`, o niente');
   const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
@@ -931,7 +933,11 @@ for (const m of [live, cuffia]) {
       livelliLive = msg.livelli;
       pila.aggiorna(livelliLive);
     }
-    else if (msg.tipo === 'eco') misuratore.eco(msg.ciclo, msg.ruolo, msg.epoca);
+    else if (msg.tipo === 'suoni-mancanti' && !inTest) {
+      // un campione che non c'è nello stash non suona: lo si dice, non resta silenzio
+      const dove = msg.nome ? `«${msg.nome}»` : msg.ruolo === 'cuffia' ? 'in cuffia' : 'nel live';
+      cue.avviso(`${dove}: ${msg.suoni.length === 1 ? 'il suono' : 'i suoni'} ${msg.suoni.join(', ')} ${msg.suoni.length === 1 ? 'non è' : 'non sono'} nello stash: non ${msg.suoni.length === 1 ? 'suonerà' : 'suoneranno'}`, { persistente: true });
+    } else if (msg.tipo === 'eco') misuratore.eco(msg.ciclo, msg.ruolo, msg.epoca);
     else if (msg.tipo === 'anello') misuratore.misuraAnello(msg.ms);
     else if (msg.tipo === 'anello-stato') $('anello-stato').textContent = msg.attivo ? 'in ascolto' : `errore: ${msg.errore}`;
   };
