@@ -2501,6 +2501,18 @@ async function provaController({ finestre, scrivi }) {
   const l2 = (await attivi()).find((l) => l.id === due.livello);
   controlla('tenuta premuta + giro: il filtro entra nella coda del livello (e il muto non scatta)', /^\.lpf\(\d+\)$/.test(l2?.coda?.[0] ?? '') && l2.muto === false && Number(l2.coda[0].match(/\d+/)[0]) > 800, JSON.stringify([l2?.coda, l2?.muto]));
   controlla('e il livello è quello scelto (bordo verde)', (await js('cutxProva.pila.selezionato')) === due.livello);
+  await aspetta(0.3);
+  const spec = await js(`(() => {
+    const m = [...document.querySelectorAll('#specchio .spec-m')];
+    return { visibile: !document.getElementById('specchio').hidden, n: m.length, righe: new Set(m.map((x) => x.offsetTop)).size, nomi: m.map((x) => x.querySelector('.nm').textContent), info: document.querySelector('#specchio .spec-info')?.textContent, a: document.querySelector('#specchio .pag.on')?.textContent, toccata: m.findIndex((x) => x.classList.contains('toccata')) + 1 };
+  })()`);
+  controlla('lo specchio: otto manopole in una riga sola, nomi di al massimo 6 lettere', spec.visibile && spec.n === 8 && spec.righe === 1 && spec.nomi.every((n) => n.length <= 6), JSON.stringify(spec));
+  controlla('lo specchio: in testata il nome intero e il valore dell\'ultima toccata (volume), la pagina A accesa, la manopola 2 in evidenza', /^DUE · VOLUME|^DUE · FILTRO \d+ Hz/.test(spec.info) && spec.a === 'A' && spec.toccata === 2, JSON.stringify(spec));
+  try {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'controller');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'specchio.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } catch {}
   controlla('niente scritta gigante al centro', (await js(`document.getElementById('scritta-controller')`)) === null);
 
   controlla('sulle card il numero della manopola che le comanda (②)', (await js(`[...document.querySelectorAll('#livelli .card.livello .manopola-n')].map((x) => x.textContent).join('')`)).includes('②'));

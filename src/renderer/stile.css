@@ -2437,3 +2437,127 @@ input[type='checkbox'] {
 .postazione:not(.con-controller) .manopola-n {
   display: none;
 }
+
+/* lo specchio del controller: la fotografia dell'X-Touch Mini, otto manopole in una riga */
+.specchio {
+  flex-shrink: 0;
+  border-top: 1px solid var(--linea);
+  padding: 8px 8px 8px;
+  font-family: var(--mono);
+}
+
+.specchio .spec-testa {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--testo);
+  min-width: 0;
+}
+
+.specchio .pag {
+  border: 1px solid var(--grigio);
+  padding: 0 6px;
+  color: var(--spento);
+  flex: none;
+}
+
+.specchio .pag.on {
+  background: var(--testo);
+  border-color: var(--testo);
+  color: #050604;
+}
+
+.specchio .spec-info {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.specchio .spec-riga {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.specchio .spec-m {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 2px 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+.specchio .spec-m.toccata {
+  border-color: var(--marcio);
+  background: rgba(159, 194, 58, 0.07);
+}
+
+.specchio .spec-anello {
+  width: 30px;
+  height: 30px;
+}
+
+.specchio .traccia {
+  fill: none;
+  stroke: #2b2e24;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.specchio .traccia.libera {
+  stroke: #1b1d16;
+  stroke-width: 2;
+}
+
+.specchio .valore {
+  fill: none;
+  stroke: var(--marcio);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.specchio .punto-valore {
+  fill: var(--marcio);
+}
+
+.specchio .nm,
+.specchio .v {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.specchio .nm {
+  color: var(--testo);
+}
+
+.specchio .v {
+  color: var(--marcio);
+}
+
+.specchio .spec-m.libera .nm {
+  color: var(--spento);
+}
+
+.specchio .spec-m.muta .nm {
+  color: var(--spento);
+  text-decoration: line-through;
+}
+
+.specchio .spec-m.muta .v {
+  color: var(--spento);
+}
+
+/* con lo specchio il suggerimento si fa più basso */
+.browser.con-specchio .riquadro-help {
+  min-height: 56px;
+}

@@ -2,7 +2,7 @@
 // e accende anelli e tasti con i valori veri. Ogni cosa che tocco diventa codice: le manopole scrivono nella coda del livello.
 // Non suona niente da solo e non decide niente: gira quello che giro io. Se il controller sparisce, CUTX va avanti uguale.
 import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioAnello, messaggioTasto, noteTasti, parole, tabella } from './controller-mc.js';
-import { PARAMETRI, PAGINA_B, PASSO_VOLUME, PASSO_X, TASTI_A, clamp01, normalizzato, rigaCoda } from './controller-mappa.js';
+import { PARAMETRI, PAGINA_B, PASSO_VOLUME, PASSO_X, TASTI_A, clamp01, corto, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
@@ -141,6 +141,7 @@ export class Controller {
   vaiA(pagina) {
     if (pagina === this.pagina) return;
     this.pagina = pagina;
+    this.toccata = null;
     this.ultime.clear();
     this.riga(pagina === 'A' ? 'pagina A · suona' : 'pagina B · scolpisci');
     this.cambiato();
@@ -183,7 +184,7 @@ export class Controller {
   giraMaster(passi) {
     this.master = clamp01(this.master + passi * PASSO_VOLUME);
     this.azioni.master?.(Math.round(this.master * 100) / 100);
-    this.toccata = { n: 8, quando: this.ora() };
+    this.toccata = { n: 8, quando: this.ora(), testo: `GENERALE · VOLUME ${this.master.toFixed(2)}` };
     this.azioni.scritta?.(`GENERALE · VOLUME ${this.master.toFixed(2)}`);
   }
 
@@ -199,7 +200,7 @@ export class Controller {
 
   // La manopola n ha toccato il livello l: la card si illumina un attimo, lo specchio la mette in evidenza, il proiettore (se acceso) la scritta.
   tocca(l, chiave, testo, n) {
-    this.toccata = { n, quando: this.ora() };
+    this.toccata = { n, quando: this.ora(), testo };
     this.azioni.tocca?.(l.id);
     this.azioni.scritta?.(testo);
   }
@@ -215,7 +216,7 @@ export class Controller {
     const x = clamp01(this.xDi(l, chiave) + passi * PASSO_X);
     this.x.set(`${l.id}|${chiave}`, x);
     this.mandaCoda(l.id, rigaCoda(p, x));
-    this.tocca(l, chiave, `${l.nome.toUpperCase()} · ${p.nome} ${x.toFixed(2)}`, n);
+    this.tocca(l, chiave, `${l.nome.toUpperCase()} · ${p.nome} ${valoreTesto(p, x)}`, n);
   }
 
   giraGlobale(n, passi) {
@@ -223,6 +224,7 @@ export class Controller {
       const bpm = Math.max(20, Math.min(300, Math.round((this.bpmVoluto ?? this.azioni.bpm?.() ?? 120) + passi)));
       this.bpmVoluto = bpm;
       this.azioni.tempo?.(bpm);
+      this.toccata = { n: 1, quando: this.ora(), testo: `GLOBALE · BPM ${bpm}` };
       this.azioni.scritta?.(`GLOBALE · BPM ${bpm}`);
       return;
     }
@@ -233,6 +235,7 @@ export class Controller {
     const x = clamp01((this.x.get(k) ?? 0) + passi * PASSO_X);
     this.x.set(k, x);
     for (const l of this.azioni.livelli()) this.mandaCoda(l.id, rigaCoda(p, x));
+    this.toccata = { n, quando: this.ora(), testo: `GLOBALE · ${p.nome} ${x.toFixed(2)}` };
     this.azioni.scritta?.(`GLOBALE · ${p.nome} ${x.toFixed(2)}`);
   }
 
@@ -278,7 +281,7 @@ export class Controller {
     const l = this.livello(n);
     if (!l) return;
     this.azioni.muto(l.id);
-    this.toccata = { n, quando: this.ora() };
+    this.toccata = { n, quando: this.ora(), testo: `${l.nome.toUpperCase()} · ${l.muto ? 'SUONA' : 'MUTO'}` };
     this.azioni.tocca?.(l.id);
     this.azioni.scritta?.(`${l.nome.toUpperCase()} · ${l.muto ? 'SUONA' : 'MUTO'}`);
   }
@@ -388,9 +391,9 @@ export class Controller {
     if (this.pagina === 'A') {
       for (let n = 1; n <= 7; n++) {
         const l = livelli[n - 1];
-        m.push(l ? { stile: 'fan', valore: l.muto ? null : l.volume, nome: l.nome, testo: l.muto ? 'muto' : l.volume.toFixed(2), muto: l.muto } : null);
+        m.push(l ? { stile: 'fan', valore: l.muto ? null : l.volume, nome: l.nome, corto: corto(l.nome), testo: l.muto ? 'muto' : l.volume.toFixed(2), muto: l.muto } : null);
       }
-      m.push({ stile: 'fan', valore: this.master, nome: 'generale', testo: this.master.toFixed(2) });
+      m.push({ stile: 'fan', valore: this.master, nome: 'generale', corto: 'gener', testo: this.master.toFixed(2) });
       return m;
     }
     for (let n = 1; n <= 8; n++) {
@@ -398,10 +401,10 @@ export class Controller {
       if (this.bersaglio === 'globale') {
         if (n === 1) {
           const bpm = this.bpmVoluto ?? this.azioni.bpm?.() ?? 120;
-          m.push({ stile: 'punto', valore: clamp01((bpm - 60) / 140), nome: 'bpm', testo: String(Math.round(bpm)) });
+          m.push({ stile: 'punto', valore: clamp01((bpm - 60) / 140), nome: 'bpm', corto: 'bpm', testo: String(Math.round(bpm)) });
         } else if (chiave === 'eco' || chiave === 'riverbero') {
           const x = this.x.get(`globale|${chiave}`) ?? 0;
-          m.push({ stile: 'punto', valore: x, nome: PARAMETRI[chiave].nome.toLowerCase(), testo: x.toFixed(2) });
+          m.push({ stile: 'punto', valore: x, nome: PARAMETRI[chiave].nome.toLowerCase(), corto: PARAMETRI[chiave].corto, testo: x.toFixed(2) });
         } else m.push(null);
         continue;
       }
@@ -409,11 +412,11 @@ export class Controller {
       if (!l || !chiave) {
         m.push(null);
       } else if (chiave === 'volume') {
-        m.push({ stile: 'fan', valore: l.volume, nome: 'volume', testo: l.volume.toFixed(2) });
+        m.push({ stile: 'fan', valore: l.volume, nome: 'volume', corto: 'volume', testo: l.volume.toFixed(2) });
       } else {
         const x = this.xDi(l, chiave);
         const p = PARAMETRI[chiave];
-        m.push({ stile: 'punto', valore: x, nome: p.nome.toLowerCase(), testo: rigaCoda(p, x).replace(/^\.\w+\(|\)$/g, '') });
+        m.push({ stile: 'punto', valore: x, nome: p.nome.toLowerCase(), corto: p.corto, testo: valoreTesto(p, x) });
       }
     }
     return m;

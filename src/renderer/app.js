@@ -9,6 +9,7 @@ import { separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js'
 import { Importa } from './importa.js';
 import { Controller } from './controller.js';
 import { PaginaController } from './impostazioni-controller.js';
+import { Specchio } from './specchio.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
 import { Cronologia } from './cronologia.js';
@@ -1209,6 +1210,8 @@ const controllerMidi = new Controller({
   salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: c }),
 });
 const paginaController = new PaginaController(controllerMidi);
+const specchio = new Specchio($('specchio'));
+setInterval(() => specchio.aggiorna(controllerMidi), 100);
 // i numeri ①–⑦ sulle card compaiono solo con il controller collegato
 controllerMidi.quandoCambia(() => document.querySelector('.postazione').classList.toggle('con-controller', controllerMidi.collegato));
 controllerMidi.collega();
