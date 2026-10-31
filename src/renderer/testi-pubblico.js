@@ -21,6 +21,7 @@ export const PREDEFINITI = {
   preambolo: { acceso: false }, // il preambolo del brano (setcpm…): un setcpm scritto io dal vivo è un gesto e si vede
   controller: { acceso: false, testo: '{testo}' }, // fase 4: la scritta grande di quello che tocco («REESE · FILTRO 0.42»)
   scena: { acceso: false, testo: '{scena}' }, // fase 4: il nome della scena del beat
+  brano: { acceso: false, testo: '{brano}' }, // il nome del brano che entra (passando al prossimo)
 };
 
 // Segnaposto di ogni testo (per le impostazioni).
@@ -30,6 +31,7 @@ export const SEGNAPOSTO = {
   conto: ['n', 'cicli'],
   controller: ['testo'],
   scena: ['scena'],
+  brano: ['brano'],
 };
 
 // Le preferenze salvate sopra i predefiniti, voce per voce. `insegna` (vecchia preferenza) è l'interruttore del neon.

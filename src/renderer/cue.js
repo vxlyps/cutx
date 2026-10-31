@@ -104,12 +104,34 @@ export class Cue {
   // Un go live riuscito dal «prossimo» quando non suona ancora nessun brano: quel brano è adesso l'attivo.
   dopoGoLive() {
     if (this.modo !== 'brano' || this.linguetta !== 'prossimo' || this.slot.attivo || !this.slot.prossimo) return;
+    this.promuovi();
+  }
+
+  // Il prossimo diventa il brano attivo (quando il suo beat suona, o al primo go live), e il successivo del set diventa il prossimo.
+  // Se guardavo il prossimo, adesso guardo lo stesso brano, che è l'attivo.
+  promuovi() {
+    if (!this.slot.prossimo) return false;
     this.slot.attivo = this.slot.prossimo;
     this.slot.prossimo = null;
-    this.linguetta = 'attivo';
+    this.linguetta = 'attivo'; // guardavo il prossimo (o il vecchio attivo): adesso vedo l'attivo nuovo
+    this.cartaAttiva = null;
     this.mostraBrano(true);
     this.mostraModo();
     this.azioni.suPromosso?.(this.slot.attivo.file); // il successivo del set diventa il prossimo
+    return true;
+  }
+
+  // La riga sotto le linguette: cosa farà il tempo passando al prossimo brano (vuota se niente).
+  mostraPassaggio(testo) {
+    const e = $('passaggio');
+    if (e.textContent !== testo) e.textContent = testo;
+    e.hidden = !testo;
+  }
+
+  // Il nome del brano di una linguetta (o null).
+  nomeDi(quale) {
+    const b = this.slot[quale];
+    return b ? B.testa(b.modello).brano || b.file?.replace(/\.cutx$/, '') || null : null;
   }
 
   // --- cosa suona, per i colori ---
@@ -217,13 +239,13 @@ export class Cue {
   }
 
   // Una scena del beat come clip da mandare: si chiama «beat», porta con sé tutte le scene (per ◀ ▶) e quello da cui parte.
-  pezzoScena(modello, k, base, righe = null) {
+  pezzoScena(modello, k, base, righe = null, nomeBrano = this.nomeBrano) {
     const scene = modello.beat.scene;
     return {
       nome: 'beat',
-      provenienza: `${base === 'scratch' ? 'scratch' : this.nomeBrano} ◆${k + 1}`,
+      provenienza: `${base === 'scratch' ? 'scratch' : nomeBrano} ◆${k + 1}`,
       beat: {
-        base: base === 'scratch' ? 'scratch' : this.nomeBrano,
+        base: base === 'scratch' ? 'scratch' : nomeBrano,
         indice: k,
         scene: scene.map((m, j) => ({ nome: m.nome, codice: B.codiceScena(modello, j).codice, inizio: B.codiceScena(modello, j).inizio })),
       },
@@ -947,7 +969,7 @@ export class Cue {
 
   async apri(file, dove = 'prossimo', opzioni = {}) {
     const presente = this.slot[dove];
-    if (presente?.sporco) {
+    if (presente?.sporco && !opzioni.forza) {
       const ok = await conferma({
         titolo: 'apri brano',
         testo: `${B.testa(presente.modello).brano || presente.file} ha modifiche non salvate. Le perdo?`,

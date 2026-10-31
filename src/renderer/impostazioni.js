@@ -262,6 +262,7 @@ export class Impostazioni {
       voce('preambolo', 'preambolo del brano', 'acceso: si vedono le righe sopra la sezione (setcpm del brano…). Spento: solo sul mio schermo. Un setcpm scritto dal vivo si vede sempre', { testo: false }),
       voce('controller', 'scritta del controller', 'fase 4: la scritta grande di quello che tocco'),
       voce('scena', 'nome della scena', 'fase 4: intro, drop… del beat'),
+      voce('brano', 'nome del brano che entra', 'passando al prossimo brano compare per un attimo (spento di default)'),
       (() => {
         const r = crea('div', 'imp-riga');
         const t = crea('div', 'imp-testo');

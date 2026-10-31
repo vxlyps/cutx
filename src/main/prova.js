@@ -195,6 +195,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
+  if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
   if (parti.includes('cue-aspetto')) ok = (await sicura('cue-aspetto', provaCueAspetto)) && ok;
@@ -933,7 +934,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     // --- scorciatoie rimappabili ---
     await vai('scorciatoie');
     const righe = await js(`document.querySelectorAll('#scorciatoie-elenco .imp-riga').length`);
-    controlla('l\'elenco ha tutte le azioni', righe === 26, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set, scelta del livello, linguetta del CUE)
+    controlla('l\'elenco ha tutte le azioni', righe === 27, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set, scelta del livello, linguetta del CUE)
     const cap = (id) => `#scorciatoie-elenco [data-azione="${id}"] .cap-gruppo`;
     await js(`document.querySelector('${cap('goLive')}').click()`);
     controlla('un clic sul tasto aspetta la combinazione nuova', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('premi un tasto'));
@@ -2649,6 +2650,98 @@ async function provaCueController({ finestre, scrivi }) {
   return ok;
 }
 
+// --- passa al prossimo brano col set di prova (brano 1 a 170 → 2 a 174: rampa; 2 → 3 a 140: salto), tasto 3 tenuto, CUFFIA + ◀ ▶ (npx electron . --prova=passaggio) ---
+async function provaPassaggio({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
+  const bpm = async () => (await js('cutxProva.diagnosi()')).bpm;
+  const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
+  const radice = stash.radice();
+  if (!existsSync(path.join(radice, 'set.cutx'))) {
+    scrivi('INFO  nello stash di prova non c\'è set.cutx: la prova del passaggio non si fa');
+    return true;
+  }
+  await js(`window.cutx.salvaPreferenze({ controller: null, rampaCicli: 2 })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  await chiedi(finestre.live, `undefined`).catch(() => null);
+  await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`); // il set vero ha i suoi suoni: la prova non deve suonare
+  try {
+    await js(`cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
+    await js(`cutxProva.caricaSerata({ percorso: 'prova-passaggio-' + Date.now() })`);
+    await aspetta(1);
+    controlla('il set parte da brano 1 (quello che apre): ▸ brano 1', (await ling('prossimo')).includes('brano 1'), await ling('prossimo'));
+    controlla('senza niente live non c\'è niente da dire sul tempo', (await js(`document.getElementById('passaggio').hidden`)) === true);
+    await js(`cutxProva.cue.scegliSezione(0)`);
+    await js(`document.getElementById('go-live').click()`);
+    await aspetta(4);
+    controlla('go live: brano 1 è il brano attivo (● brano 1) e brano 2 il prossimo', (await ling('attivo')).includes('● brano 1') && (await ling('prossimo')).includes('▸ brano 2'), `${await ling('attivo')} | ${await ling('prossimo')}`);
+    controlla('il tempo è quello di brano 1 (170)', Math.abs((await bpm()) - 170) < 0.6, String(await bpm()));
+    // una clip ritmica di brano 1 che resta live
+    await js(`cutxProva.cue.cambiaLinguetta('attivo'); cutxProva.cue.scegliSezione(cutxProva.cue.sezioniNav().indexOf('melodia'))`);
+    await js(`document.getElementById('go-live').click()`);
+    await aspetta(4);
+    controlla('sotto le linguette: passando a brano 2 il tempo sale con una rampa (+2%)', /rampa/.test(await js(`document.getElementById('passaggio').textContent`)) && /\+2/.test(await js(`document.getElementById('passaggio').textContent`)), await js(`document.getElementById('passaggio').textContent`));
+    // CUFFIA tenuto + ◀ ▶: il prossimo secondo l'ordine del set (e senza il brano che suona)
+    const cuffia = await tasto(4);
+    const giu = await tasto(1);
+    const su = await tasto(2);
+    await midi(0x90, cuffia, 127);
+    await midi(0x90, su, 127);
+    await midi(0x90, su, 0);
+    await aspetta(1);
+    controlla('CUFFIA + ▶: il prossimo diventa brano 3 (l\'ordine del set)', (await ling('prossimo')).includes('▸ brano 3'), await ling('prossimo'));
+    await midi(0x90, giu, 127);
+    await midi(0x90, giu, 0);
+    await aspetta(1);
+    controlla('CUFFIA + ◀: torna brano 2', (await ling('prossimo')).includes('▸ brano 2'), await ling('prossimo'));
+    await midi(0x90, giu, 127);
+    await midi(0x90, giu, 0);
+    await aspetta(1);
+    controlla('CUFFIA + ◀ ancora: il brano che suona (1) non si può scegliere come prossimo', (await ling('prossimo')).includes('▸ brano 2'), await ling('prossimo'));
+    await midi(0x90, cuffia, 0);
+    // il tasto 3 tenuto: passa a brano 2 con la rampa
+    const t3 = await tasto(3);
+    await midi(0x90, t3, 127);
+    await aspetta(0.4);
+    controlla('il tasto 3 lampeggia mentre lo tengo', (await js(`cutxProva.controllerMidi.desiderate().get('t${t3}')[2]`)) === 1);
+    await aspetta(0.9);
+    await midi(0x90, t3, 0);
+    const visti = [];
+    for (let i = 0; i < 40; i++) {
+      visti.push(Math.round((await bpm()) * 100) / 100);
+      await aspetta(0.35);
+    }
+    controlla('brano 2: il tempo sale a gradini fino a 174 (rampa, non salto)', visti[0] < 171 && visti.at(-1) > 173.9 && visti.some((x) => x > 170.3 && x < 173.7) && visti.every((x, i) => i === 0 || x >= visti[i - 1] - 0.01), JSON.stringify([...new Set(visti)]));
+    controlla('brano 2 è adesso l\'attivo (● brano 2) e il prossimo è brano 3', (await ling('attivo')).includes('● brano 2') && (await ling('prossimo')).includes('▸ brano 3'), `${await ling('attivo')} | ${await ling('prossimo')}`);
+    const vivi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).sort();
+    controlla('la clip di brano 1 resta live (melodia), accanto al beat nuovo', vivi.includes('melodia') && vivi.includes('beat'), JSON.stringify(vivi));
+    controlla('sotto le linguette: passando a brano 3 il tempo salta e nomina la clip ritmica', /salta/.test(await js(`document.getElementById('passaggio').textContent`)) && /melodia/.test(await js(`document.getElementById('passaggio').textContent`)), await js(`document.getElementById('passaggio').textContent`));
+    // il salto
+    await js(`cutxProva.passaBrano()`);
+    let salto = false;
+    for (let i = 0; i < 30 && !salto; i++) {
+      await aspetta(0.3);
+      salto = Math.abs((await bpm()) - 140) < 0.6;
+    }
+    controlla('brano 3: il tempo salta a 140', salto, String(await bpm()));
+    controlla('l\'avviso dice che salta e nomina le clip ritmiche rimaste', /salta da 174 a 140/.test(await js(`document.getElementById('cue-avviso').textContent`)) && /melodia/.test(await js(`document.getElementById('cue-avviso').textContent`)), await js(`document.getElementById('cue-avviso').textContent`));
+    await aspetta(1);
+    controlla('brano 3 è l\'attivo; in fondo al set non c\'è un prossimo', (await ling('attivo')).includes('● brano 3') && (await ling('prossimo')) === '▸ –', `${await ling('attivo')} | ${await ling('prossimo')}`);
+    controlla('senza un prossimo, passare non fa niente e lo dice', (await js(`cutxProva.passaBrano()`)) === undefined && /non c'è un prossimo brano/.test(await js(`document.getElementById('cue-avviso').textContent`)));
+  } finally {
+    await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ rampaCicli: 8 })`);
+    await js(`cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
+  }
+  return ok;
+}
+
 // --- il SET e il KIT: set.cutx, kit.cutx, ● e ▸, il successivo che si carica da solo (npx electron . --prova=set; usa uno stash temporaneo) ---
 async function provaSet({ finestre, scrivi }) {
   let ok = true;
@@ -3628,7 +3721,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1);
   controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
   const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
-  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 18, String(righeTesti));
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 19, String(righeTesti));
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');

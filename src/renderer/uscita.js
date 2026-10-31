@@ -33,6 +33,7 @@ let righeGlobali = []; // le righe globali del fader e dei colpi «su tutto»: a
 const strisceU = new Map(); // id del livello → { ciclo: eventi }: le note vere, dal motore live
 const misureU = new Map(); // id → { pk, quando }; lo stato del misuratore sta in statiU
 const statiU = new Map();
+let branoEntra = null; // { nome, quando }: il brano che entra passando al prossimo, se l'ho acceso nei testi per il pubblico
 let scritta = null; // { testo, quando }: quello che tocco sul controller, se l'ho acceso nei testi per il pubblico
 let testi = risolviTesti({}); // i testi per il pubblico (testi-pubblico.js): cosa si vede e con quali parole
 const inizioUscita = new Map();
@@ -66,6 +67,7 @@ window.addEventListener('message', (e) => {
     else if (data.tipo === 'bozze') bozze = data;
     else if (data.tipo === 'globali') righeGlobali = data.righe;
     else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
+    else if (data.tipo === 'brano') branoEntra = { nome: data.nome, quando: performance.now() };
     else if (data.tipo === 'strisce') {
       for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { ...(strisceU.get(Number(id)) ?? {}), [data.ciclo]: ev, [data.ciclo - 2]: undefined });
     } else if (data.tipo === 'misure') {
@@ -227,8 +229,10 @@ function disegna() {
   sfondo.disegna(ciclo, livelli);
   // la scritta grande del controller: solo se è accesa, e per un attimo
   const visibile = testi.controller.acceso && scritta && performance.now() - scritta.quando < 1800;
-  $('scritta').hidden = !visibile;
-  if (visibile) $('scritta').textContent = riempiTesto(testi.controller.testo, { testo: scritta.testo });
+  const brano = testi.brano.acceso && branoEntra && performance.now() - branoEntra.quando < 4000;
+  $('scritta').hidden = !visibile && !brano;
+  if (brano) $('scritta').textContent = riempiTesto(testi.brano.testo, { brano: branoEntra.nome });
+  else if (visibile) $('scritta').textContent = riempiTesto(testi.controller.testo, { testo: scritta.testo });
   $('bpm').hidden = !testi.bpm.acceso;
   $('bpm').textContent = riempiTesto(testi.bpm.testo, { bpm: arrotondaBpm(bpmDi(cpsAl(mappa, epoca))) });
   $('frase').hidden = !testi.frase.acceso;

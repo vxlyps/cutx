@@ -25,6 +25,7 @@ export const AZIONI = [
   { id: 'salvaLive', nome: 'salva il live come brano', predefinita: 'Shift+Meta+KeyS' },
   { id: 'aggiungiSezione', nome: '+ clip dalle righe selezionate', predefinita: 'Meta+KeyE' },
   { id: 'fraseDaCapo', nome: 'frase da capo al prossimo ciclo', predefinita: 'Meta+Digit0' },
+  { id: 'passaBrano', nome: 'passa al prossimo brano (due volte di fila)', predefinita: 'Shift+Meta+KeyP' },
   { id: 'paracadute', nome: 'paracadute (due volte di fila)', predefinita: 'Meta+KeyP' },
   { id: 'uscitaIntera', nome: 'apri / chiudi l\'uscita', predefinita: 'Ctrl+Meta+KeyF' },
   { id: 'annullaSet', nome: 'annulla l\'ultima azione sul set (fuori dagli editor)', predefinita: 'Meta+KeyZ', soloFuori: true },

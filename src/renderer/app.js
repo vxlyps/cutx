@@ -3,6 +3,7 @@
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
 import { Serata } from './set-vista.js';
+import * as P from './passaggio.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
@@ -200,6 +201,8 @@ async function goLive(pezzo = null) {
   const daCue = !(pezzo && typeof pezzo === 'object' && 'codice' in pezzo);
   const p = daCue ? cue.pezzo() : pezzo; // un pezzo dato (le clip del kit) o quello del CUE
   if (p.errore) return cue.avviso(p.errore);
+  // una scena del beat del PROSSIMO brano, mentre un altro brano suona: è il passaggio (col tempo che ci arriva)
+  if (daCue && p.beat && cue.linguetta === 'prossimo' && cue.slot.attivo && cue.slot.prossimo) return passaBrano(p.beat.indice);
   // solo righe di coda (.lpf(600)…): non è un livello, si aggiunge alla coda di quello scelto con un clic sulla sua card
   const voci = soloCoda(p.codice.slice(p.inizio ?? 0));
   if (voci) return aggiungiCoda(voci);
@@ -277,6 +280,78 @@ function mostraBeat() {
       ? { base: (suona ?? pendente).beat.base, indice: suona ? suona.beat.indice : null, pendente: pendente ? pendente.beat.indice : null }
       : null,
   );
+}
+
+// --- passa al prossimo brano ---
+
+let passaggio = null; // { nome, da }: il beat del prossimo brano sta per entrare (a fine frase)
+
+const nomeDelBrano = (b) => (b ? B.testa(b.modello).brano || b.file : null);
+
+// Le clip che restano live (tutte tranne il beat) e che hanno un ritmo: sono quelle che sentirebbero un salto di tempo.
+function ritmicheRimaste() {
+  const restano = livelliLive.filter((l) => l.a === null && !eNomeBeat(l.nome) && l.nome !== 'paracadute');
+  return P.clipRitmiche(restano, (id) => Object.values(pila.strisce.get(id) ?? {}).filter(Boolean).at(-1));
+}
+
+// Un comando: a fine frase entra il beat del prossimo brano, dalla scena k (la prima). Le clip del brano vecchio restano finché le tolgo io;
+// il tempo fa una rampa se i due brani sono vicini (entro l'8%), altrimenti salta quando il beat nuovo entra.
+async function passaBrano(k = 0) {
+  if (inTest) return null;
+  const prossimo = cue.slot.prossimo;
+  if (!prossimo) return void cue.avviso('non c\'è un prossimo brano: sceglilo nel set o aprilo dalla libreria');
+  const m = prossimo.modello;
+  const nome = nomeDelBrano(prossimo);
+  if (!m.beat?.scene.length) return void cue.avviso(`«${nome}» non ha un beat: manda le sue clip una a una`);
+  if (passaggio) return void cue.avviso(`il passaggio a «${passaggio.nome}» è già in arrivo`);
+  const p = cue.pezzoScena(m, Math.min(k, m.beat.scene.length - 1), 'brano', null, nome);
+  const attuale = bpmSet();
+  const nuovo = B.bpmDelBrano(m);
+  const t = P.decidiTempo(attuale, nuovo, livelliLive.some((l) => l.a === null));
+  let { codice, inizio } = p;
+  let rampa = null;
+  if (t.tipo === 'rampa') {
+    // il tempo del brano nuovo non entra col suo setcpm: ci arriva la rampa
+    const pre = B.senzaTempo(codice.slice(0, inizio));
+    codice = pre + codice.slice(inizio);
+    inizio = pre.length;
+    rampa = { bpm: nuovo, cicli: preferenze.rampaCicli ?? P.CICLI_RAMPA };
+  }
+  const { codice: senzaCoda, coda } = separaCoda(codice);
+  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  mostraErrore(r.errore, 'live');
+  if (r.errore) return r;
+  passaggio = { nome, da: r.da };
+  const n = (x) => Math.round(x * 10) / 10;
+  if (t.tipo === 'salto') {
+    const ritmiche = ritmicheRimaste();
+    cue.avviso(`il tempo salta da ${n(attuale)} a ${n(nuovo)} bpm quando entra «${nome}»${ritmiche.length ? ` · clip ritmiche rimaste che cambiano velocità: ${ritmiche.join(', ')}` : ''}`, { persistente: ritmiche.length > 0 });
+  } else if (t.tipo === 'rampa') cue.avviso(`«${nome}»: il tempo va da ${n(attuale)} a ${n(nuovo)} bpm con una rampa`);
+  else cue.avviso(`passo a «${nome}»`);
+  portaUscita?.postMessage({ tipo: 'brano', nome });
+  if (!cue.slot.attivo) cue.promuovi(); // il primo brano della serata
+  return { brano: nome, da: r.da };
+}
+
+// Il beat del prossimo brano suona: quel brano è adesso l'attivo e il successivo del set diventa il prossimo.
+function controllaPassaggio() {
+  const ciclo = mappa ? cicloDi(mappa, performance.timeOrigin + performance.now()) : 0;
+  const { suona } = statoBeat();
+  const prossimo = cue.nomeDi('prossimo');
+  if (suona && prossimo && suona.beat.base === prossimo && cue.nomeDi('attivo') !== prossimo) {
+    passaggio = null;
+    cue.promuovi();
+  }
+  if (passaggio && ciclo > passaggio.da + 2) passaggio = null;
+  // sotto le linguette: cosa farà il tempo passando al prossimo
+  const m = cue.slot.prossimo?.modello;
+  let testo = '';
+  if (m?.beat?.scene.length && !passaggio) {
+    const bpmNuovo = B.bpmDelBrano(m);
+    const rit = P.decidiTempo(bpmSet(), bpmNuovo, livelliLive.some((l) => l.a === null)).tipo === 'salto' ? ritmicheRimaste() : [];
+    testo = P.testoPassaggio({ nome: cue.nomeDi('prossimo'), bpmAttuale: bpmSet(), bpmNuovo, occupato: livelliLive.some((l) => l.a === null), ritmiche: rit });
+  }
+  cue.mostraPassaggio(testo);
 }
 
 // Le dissolvenze (dissolvenza.js): quanti cicli, e se solo volume o anche filtro (impostazioni).
@@ -464,6 +539,37 @@ function helpOnOff() {
   window.cutx.salvaPreferenze({ suggerimenti: !acceso, riquadroHelp: !acceso });
 }
 
+// ⇧⌘P due volte di fila (o il pulsante tenuto premuto): passa al prossimo brano.
+let ultimoPasso = 0;
+function passaDoppio() {
+  const ora = performance.now();
+  if (ora - ultimoPasso < DOPPIO_MS) {
+    ultimoPasso = 0;
+    return passaBrano();
+  }
+  ultimoPasso = ora;
+  cue.avviso('di nuovo ⇧⌘P per passare al prossimo brano');
+}
+
+// Un pulsante che si tiene premuto un secondo (si riempie): niente passaggi per sbaglio.
+function pulsanteTenuto(b, fa) {
+  let timer = null;
+  const lascia = () => {
+    clearTimeout(timer);
+    b.classList.remove('carica');
+  };
+  b.onpointerdown = () => {
+    b.classList.add('carica');
+    timer = setTimeout(() => {
+      lascia();
+      fa();
+    }, 1000);
+  };
+  b.onpointerup = lascia;
+  b.onpointerleave = lascia;
+}
+pulsanteTenuto($('passa-brano'), () => passaBrano());
+
 // Le scorciatoie valgono anche dentro l'editor: le prendo prima di lui.
 // ⌘↵: nel LIVE (jam o livello in modifica) applica al prossimo ciclo, nel CUE prova in cuffia.
 function invio() {
@@ -518,6 +624,7 @@ const FA = {
   cambiaLinguetta: () => {
     cue.cambiaLinguetta();
   },
+  passaBrano: passaDoppio,
   passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
   help: helpOnOff,
   esci: () => {
@@ -1034,6 +1141,7 @@ function mostraCue() {
   const inLive = livelliLive.filter((l) => l.a === null).map((l) => ({ nome: l.nome, provenienza: l.provenienza }));
   cue.aggiornaStati({ live: inTest ? [] : inLive, cuffia: inTest ? null : etichetta(cuffia) });
   mostraBeat();
+  controllaPassaggio();
   serata.segnaLive(livelliLive);
   cue.aggiornaTempo({ set: bpmSet(), occupato: livelliLive.some((l) => l.a === null) });
   const b = $('cuffia-onoff');
@@ -1244,6 +1352,8 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   motori: { live, cuffia },
+  passaBrano,
+  caricaSerata,
   serata,
   statoBeat,
   muoviScena,
@@ -1268,7 +1378,10 @@ globalThis.cutxProva = {
   },
   imp,
   importa,
-  scriviCue: (codice) => (cue.libero.codice = codice),
+  scriviCue: (codice) => {
+    cue.cambiaModo('libero'); // scrivere nello scratch: ci si va (all'avvio può essere aperto il brano che apre il set)
+    cue.libero.codice = codice;
+  },
   cue,
   posaGatto: (nome) => posaGatto(nome),
   accendiInsegna: () => insegna.sfarfalla(),
@@ -1357,13 +1470,25 @@ const controllerMidi = new Controller({
   },
   // muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo la sezione va in cuffia
   cueSposta: (delta) => cue.spostaSezione(delta),
+  // CUFFIA tenuto + ◀ ▶: il prossimo brano nell'ordine del set (senza il brano che suona); senza set, nell'ordine della libreria
   cueBrano: async (verso) => {
-    const i = libreria.findIndex((b) => b.file === cue.brano?.file);
-    const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
-    if (j < 0 || j >= libreria.length || j === i) return null;
-    await cue.apri(libreria[j].file);
-    return cue.brano?.file === libreria[j].file ? libreria[j].nome : null;
+    const base = cue.slot.prossimo?.file ?? cue.slot.attivo?.file ?? null;
+    let file = null;
+    if (serata.set && serata.primo()) {
+      file = serata.vicino(base, verso);
+      if (file && file === cue.slot.attivo?.file) file = serata.vicino(file, verso);
+      if (file && !libreria.some((b) => b.file === file)) file = null;
+    } else {
+      const i = libreria.findIndex((b) => b.file === base);
+      const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
+      file = j >= 0 && j < libreria.length && j !== i ? libreria[j].file : null;
+    }
+    if (!file) return null;
+    await cue.apri(file, 'prossimo', { fuoco: false, forza: true });
+    return cue.slot.prossimo?.file === file ? libreria.find((b) => b.file === file)?.nome ?? file : null;
   },
+  passaBrano: () => passaBrano(),
+  passaInAttesa: () => !!passaggio,
   seleziona: (id) => pila.seleziona(id),
   selezionato: () => pila.selezionato,
   togliRiga: (id, chiave) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }),

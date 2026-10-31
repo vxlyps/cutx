@@ -4,6 +4,7 @@
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
 import { eventiDaHap } from './striscia.js';
 import { eNomeBeat } from './nomi.js';
+import { CICLI_RAMPA, gradiniRampa } from './passaggio.js';
 import { applica as applicaCoda, applicaGlobali, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
@@ -345,7 +346,7 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   avvisaSuoniMancanti(c.pattern, nome);
@@ -384,11 +385,21 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
   livelli.push(l);
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
+  if (rampa && rip.mappa) rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
   iniziaSet(da);
   aggiornaLivelli();
   dissolvi(l, 'entra', da, d.cicli, d.entra);
   for (const vecchio of scambi) dissolvi(vecchio, 'esce', da, d.cicli, d.esce);
   return { da, livello: l.id };
+}
+
+// La rampa del passaggio tra due brani: dal ciclo `da` (quando entra il beat nuovo) il tempo sale o scende di un gradino a ciclo fino a `cps1`.
+// Una modifica a mano del tempo ('ciclo') vince: annulla i gradini che non sono ancora arrivati.
+function rampaTempo(da, cps1, cicli) {
+  if (!(cps1 > 0)) return;
+  const ultimo = rip.cambiProssimi(ac.currentTime).filter((c) => c.ciclo < da).at(-1)?.cps;
+  const cps0 = ultimo ?? rip.cpsAl(ac.currentTime);
+  cambiaTempo(null, { da, rampa: gradiniRampa(cps0, cps1, da, cicli) });
 }
 
 // --- paracadute "CUTX, scelgo te!" ---
@@ -626,7 +637,14 @@ function pubblicaMappa() {
 // il numero in alto ('ciclo' = all'inizio del ciclo dopo). Mai `rip.cambiaCps*` da altre parti: lo controlla un test.
 // quando: 'subito' | 'ciclo' | un numero di ciclo.
 function cambiaTempo(cps, quando) {
-  if (!LIVE || !(cps > 0) || !rip.mappa) return;
+  if (!LIVE || !rip.mappa) return;
+  if (quando?.rampa) {
+    // la rampa del passaggio tra due brani: un gradino a ciclo a partire da quando.da (i gradini già programmati dopo si annullano)
+    rip.annullaCambiDopo(quando.da - 1);
+    for (const g of quando.rampa) rip.cambiaCpsA(g.ciclo, g.cps);
+    return pubblicaMappa();
+  }
+  if (!(cps > 0)) return;
   if (quando === 'subito') rip.cambiaCps(cps);
   else if (quando === 'ciclo') {
     // a mano: vince su un livello che stava per portare il suo tempo (entrerebbe dopo e lo cambierebbe di nuovo)

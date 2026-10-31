@@ -659,3 +659,36 @@ test('il beat sta sempre sulla manopola 1 (e sul tasto-livello 1 in pagina B); s
   const luci = c.desiderate();
   assert.equal(luci.get('a1')[2], 0);
 });
+
+test('tasto 3: un tocco cambia linguetta, tenuto un secondo passa al prossimo brano (e lampeggia)', async () => {
+  const { c, log, avanza, azioni } = prova([L(1, 'beat')]);
+  azioni.linguetta = () => {
+    log.push(['linguetta']);
+    return { quale: 'prossimo', nome: 'brano 2' };
+  };
+  azioni.passaBrano = async () => {
+    log.push(['passaBrano']);
+    return { brano: 'brano 2' };
+  };
+  const t3 = c.tab.tasti[2];
+  c.riceve(tasto(t3, true));
+  avanza(200);
+  c.riceve(tasto(t3, false));
+  await Promise.resolve();
+  assert.equal(log.filter((x) => x[0] === 'linguetta').length, 1, 'un tocco: cambio linguetta');
+  assert.equal(log.filter((x) => x[0] === 'passaBrano').length, 0);
+  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'CUE · ▸ BRANO 2'));
+  c.riceve(tasto(t3, true));
+  avanza(500);
+  assert.equal(c.desiderate().get(`t${t3}`)[2], 1, 'lampeggia mentre lo tengo');
+  avanza(600);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(log.filter((x) => x[0] === 'passaBrano').length, 1, 'tenuto un secondo: passa');
+  c.riceve(tasto(t3, false));
+  assert.equal(log.filter((x) => x[0] === 'linguetta').length, 1, 'e al rilascio non cambia anche la linguetta');
+  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'BRANO · BRANO 2'));
+  // in attesa della fine della frase lampeggia ancora
+  azioni.passaInAttesa = () => true;
+  assert.equal(c.desiderate().get(`t${t3}`)[2], 1);
+});

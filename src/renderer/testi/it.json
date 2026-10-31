@@ -90,6 +90,10 @@
       "nome": "scena",
       "testo": "Clic: scegli la scena e vedi il suo codice. Doppio clic: rinomina."
     },
+    "passa-brano": {
+      "nome": "prossimo brano",
+      "testo": "Tieni premuto un secondo: a fine frase entra il beat del prossimo brano dalla sua prima scena. Le clip del brano vecchio restano finché le togli tu. Se i tempi sono vicini (entro l'8%) il tempo ci arriva con una rampa, altrimenti salta quando entra il beat nuovo."
+    },
     "aggiungi-sezione": {
       "nome": "+ clip",
       "testo": "Le righe selezionate diventano una clip del brano, col nome che scegli.",

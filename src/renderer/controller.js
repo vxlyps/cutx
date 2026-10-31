@@ -534,8 +534,14 @@ export class Controller {
         this.riga('prossimo brano: tieni premuto per passare');
         this.passaTimer = this.imposta(() => {
           stato.passato = true;
-          if (this.azioni.passaBrano) this.azioni.passaBrano();
-          else this.riga('passare al prossimo brano: arriva presto');
+          if (this.azioni.passaBrano) {
+            Promise.resolve(this.azioni.passaBrano()).then((r) => {
+              if (r?.brano) {
+                this.toccata = { n: null, quando: this.ora(), testo: `BRANO · ${String(r.brano).toUpperCase()}` };
+                this.azioni.scritta?.(this.toccata.testo);
+              }
+            });
+          } else this.riga('passare al prossimo brano: arriva presto');
           this.cambiato();
         }, PARACADUTE_MS);
       } else if (this.passaTenuto) {

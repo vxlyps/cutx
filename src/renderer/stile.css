@@ -3183,3 +3183,28 @@ input[type='checkbox'] {
   flex: none;
   overflow: visible;
 }
+
+/* il pulsante «prossimo brano ▸»: si tiene premuto un secondo, si riempie */
+.key.tenere {
+  position: relative;
+  overflow: hidden;
+}
+.key.tenere .riempi {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 0;
+  background: var(--marcio);
+}
+.key.tenere.carica .riempi {
+  width: 100%;
+  transition: width 1s linear;
+}
+.passaggio {
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  color: var(--secondario);
+}

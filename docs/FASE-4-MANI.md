@@ -78,7 +78,7 @@
 - Manopole 2-7 = clip live 2-7: gira = volume, premi = muto, tieni premuto e gira = filtro di quella clip. La clip toccato per ultimo è il selezionato e su schermo si vede. Se entra un settimo clip, avvisami o prendi il posto del più vecchio in muto: proponimi tu.
 - Manopola 8 = volume generale.
 - Anelli LED = valore vero (si aggiornano anche quando CUTX cambia i valori da solo: dissolvenze, volume dal CUE…).
-- Tasti in alto: ◀ scena, ▶ scena, prossimo brano, cuffia (tocco = ascolta la sezione selezionata / smette, al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE in silenzio, restano selezionate; tenuto + ◀ / ▶ = brano precedente/successivo della libreria), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
+- Tasti in alto: ◀ scena, ▶ scena, prossimo brano (tocco = cambia linguetta del CUE; tenuto 1 s = passa al prossimo brano), cuffia (tocco = ascolta la sezione selezionata / smette, al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE in silenzio, restano selezionate; tenuto + ◀ / ▶ = scelgo quale brano del SET è il prossimo), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
 - Tasti in basso: i colpi.
 - Fader: filtro del drop su tutto il live.
 
