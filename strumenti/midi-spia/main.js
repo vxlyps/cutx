@@ -3,7 +3,8 @@
 //   node_modules/.bin/electron strumenti/midi-spia            → solo ascolto per 30 secondi
 //   SPIA_GUIDA=1 node_modules/.bin/electron strumenti/midi-spia → giro guidato (circa 2 minuti e mezzo)
 //   SPIA_LED=1 …                                               → prova di accensione di anelli e tasti
-// Il registro è in $TMPDIR/cutx-midi-spia.log (o SPIA_OUT).
+//   SPIA_MC=1 …                                                → giro in modalità Mackie (MC), poi torna in standard da solo
+// Il registro è in $TMPDIR/cutx-midi-spia-<modo>.log (o SPIA_OUT).
 const { app, BrowserWindow, session } = require('electron');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
@@ -11,7 +12,8 @@ const os = require('node:os');
 const path = require('node:path');
 
 app.setPath('userData', path.join(os.tmpdir(), 'cutx-midi-spia-dati'));
-const OUT = process.env.SPIA_OUT || path.join(os.tmpdir(), 'cutx-midi-spia.log');
+const MODO = process.env.SPIA_GUIDA ? 'guida' : process.env.SPIA_LED ? 'led' : process.env.SPIA_MC ? 'mc' : 'ascolto';
+const OUT = process.env.SPIA_OUT || path.join(os.tmpdir(), `cutx-midi-spia-${MODO}.log`);
 fs.writeFileSync(OUT, '');
 const scrivi = (r) => {
   fs.appendFileSync(OUT, `${r}\n`);
@@ -70,33 +72,109 @@ app.whenReady().then(async () => {
     dillo('Fatto, grazie.');
     await aspetta(2);
   } else if (process.env.SPIA_LED) {
+    // Modalità STANDARD, come dice la tabella RX della guida ufficiale: tutto sul canale globale (11). Tasti: nota-on con velocità
+    // 0 spento, 1 acceso, 2 lampeggia (note 0–7 riga alta, 8–15 riga bassa, secondo il manuale). Anelli: CC 1–8 = comportamento
+    // (0 singolo, 1 pan, 2 fan, 3 spread, 4 trim), CC 9–16 = valore (0 spento, 1–13 acceso, 14–26 lampeggia, 27 tutti, 28 tutti lampeggiano).
+    const CH = 10; // canale 11
     const manda = (...b) => w.webContents.executeJavaScript(`manda(${b.join(',')})`);
-    // tasti: nota 8..23 (layer A) con velocità 0, 1, 127; anelli: CC 1..8 con valori diversi
-    await marca('LED tasto 8 acceso (velocità 127)');
-    dillo('Provo i tasti e gli anelli. Guarda cosa si accende.');
-    await manda(0x90, 8, 127);
+    const note = (n, v) => manda(0x90 | CH, n, v);
+    const cc = (n, v) => manda(0xb0 | CH, n, v);
+    const gruppo = async (testo, da, a, vel, s = 2.5) => {
+      await marca(testo);
+      dillo(testo);
+      for (let n = da; n <= a; n++) await note(n, vel);
+      await aspetta(s);
+      for (let n = da; n <= a; n++) await note(n, 0);
+      await aspetta(0.8);
+    };
+    dillo('Prova dei led in modalità standard. Guarda il controller e ricordati cosa si accende.');
+    await aspetta(4);
+    for (const [t, da, a] of [['Gruppo uno: note da zero a sette', 0, 7], ['Gruppo due: note da otto a quindici', 8, 15], ['Gruppo tre: note da sedici a ventitré', 16, 23], ['Gruppo quattro: note da ventiquattro a trentuno', 24, 31]]) await gruppo(t, da, a, 1);
+    await gruppo('Gruppo cinque: note da otto a quindici, lampeggiano', 8, 15, 2, 3.5);
+    for (let k = 1; k <= 8; k++) await cc(k, 0); // comportamento singolo
+    await marca('anelli: singolo, tutti a metà');
+    dillo('Anelli: singolo, tutti a metà');
+    for (let k = 9; k <= 16; k++) await cc(k, 7);
+    await aspetta(3);
+    const modi = ['singolo', 'pan', 'fan', 'spread', 'trim'];
+    for (let m = 0; m < modi.length; m++) {
+      await marca(`anello uno: ${modi[m]}`);
+      dillo(`Anello uno: ${modi[m]}`);
+      await cc(1, m);
+      for (const v of [1, 4, 7, 10, 13]) {
+        await cc(9, v);
+        await aspetta(1.1);
+      }
+      await cc(9, 0);
+      await aspetta(0.5);
+    }
+    await cc(1, 0);
+    for (const [t, v] of [['anello uno: valore venti, lampeggia', 20], ['anello uno: tutti accesi', 27], ['anello uno: tutti lampeggiano', 28]]) {
+      await marca(t);
+      dillo(t);
+      await cc(9, v);
+      await aspetta(2.5);
+    }
+    await cc(9, 0);
+    await marca('layer B (program change 1)');
+    dillo('Cambio layer: B');
+    await manda(0xc0 | CH, 1);
+    await aspetta(3);
+    await marca('layer A (program change 0)');
+    dillo('Cambio layer: A');
+    await manda(0xc0 | CH, 0);
+    await aspetta(3);
+    await marca('fine');
+    dillo('Fatto. Dimmi cosa hai visto.');
     await aspetta(2);
-    await marca('LED tasto 8 lampeggia (velocità 1)');
-    await manda(0x90, 8, 1);
-    await aspetta(2);
-    await manda(0x90, 8, 0);
-    for (const [nome, valori] of [
-      ['anello 1 valori 1..13', [1, 4, 7, 10, 13]],
-      ['anello 1 valori 17..27', [17, 20, 23, 27]],
-      ['anello 1 valori 33..43', [33, 36, 40, 43]],
-      ['anello 1 valori 49..61', [49, 52, 56, 61]],
-      ['anello 1 valori 65..77', [65, 70, 77]],
-      ['anello 1 valori 81..127', [81, 100, 127]],
-    ]) {
-      await marca(nome);
-      dillo(nome.replace('..', ' a '));
-      for (const v of valori) {
-        await manda(0xb0, 1, v);
+  } else if (process.env.SPIA_MC) {
+    // Modalità MACKIE (MC): si entra con CC 127 = 1 sul canale globale e si torna in standard con CC 127 = 0. Registra come si muovono
+    // manopole, tasti e fader, e prova gli anelli alla maniera Mackie (CC 48–55 sul canale 1).
+    const manda = (...b) => w.webContents.executeJavaScript(`manda(${b.join(',')})`);
+    const indietro = () => manda(0xba, 127, 0);
+    process.on('exit', () => {});
+    dillo('Passo alla modalità Mackie. Il led MC MODE si deve accendere.');
+    await marca('passo in MC (CC 127 = 1, canale 11)');
+    await manda(0xba, 127, 1);
+    await aspetta(4);
+    const GIRO_MC = [
+      ['Manopola uno: gira a destra, piano', 6],
+      ['Manopola uno: gira a sinistra', 6],
+      ['Manopola uno: gira ancora a sinistra, più a lungo', 6],
+      ['Manopola uno: premila e rilasciala', 5],
+      ['Manopola otto: gira a destra, poi premila', 7],
+      ['Tasto in alto a sinistra: premilo', 5],
+      ['Tasto in alto a destra: premilo', 5],
+      ['Tasto in basso a sinistra: premilo', 5],
+      ['Tasto in basso a destra: premilo', 5],
+      ['Premi i tasti, uno dopo l\'altro, riga alta da sinistra a destra', 12],
+      ['Premi i tasti, uno dopo l\'altro, riga bassa da sinistra a destra', 12],
+      ['Fader: sposta tutta la corsa, su e giù', 7],
+      ['Premi il tasto layer A', 5],
+      ['Premi il tasto layer B', 5],
+    ];
+    for (const [testo, secondi] of GIRO_MC) {
+      await marca(testo);
+      dillo(testo);
+      await aspetta(secondi);
+    }
+    // anelli alla maniera Mackie: CC 0x30 + n sul canale 1; bit 0-3 posizione, bit 4-5 modo (0 punto, 1 pan, 2 fan, 3 spread)
+    for (const [nome, vals] of [['punto', [1, 6, 11]], ['pan', [0x11, 0x16, 0x1b]], ['fan', [0x21, 0x26, 0x2b]], ['spread', [0x31, 0x36, 0x3b]]]) {
+      await marca(`anello uno Mackie: ${nome}`);
+      dillo(`Anello uno, ${nome}`);
+      for (const v of vals) {
+        await manda(0xb0, 0x30, v);
         await aspetta(1.2);
       }
-      await manda(0xb0, 1, 0);
+      await manda(0xb0, 0x30, 0);
     }
+    await marca('torno in standard (CC 127 = 0, canale 11)');
+    dillo('Torno alla modalità standard.');
+    await indietro();
+    await aspetta(3);
     await marca('fine');
+    dillo('Fatto. Se il led MC MODE è ancora acceso dimmelo.');
+    await aspetta(2);
   } else {
     await aspetta(Number(process.env.SPIA_S || 30));
   }
