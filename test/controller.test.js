@@ -124,18 +124,58 @@ test('pagina B: i tasti scelgono il bersaglio e le manopole scrivono la coda', (
   assert.equal(c.pagina, 'A');
 });
 
-test('le luci mostrano i valori veri: pagina A volumi (muto = spento), pagina B il bersaglio', () => {
+test('le luci: anelli solo per le manopole assegnate, col valore vero e lo stile di quello che comandano', () => {
   const { c } = prova([L(1, 'drum', 1), L(2, 'basso', 0.5, true)]);
   const l = c.desiderate();
-  assert.deepEqual(l.get('a1'), [0xb0, 0x30, 11]); // volume pieno: posizione 11
-  assert.deepEqual(l.get('a2'), [0xb0, 0x31, 0]); // muto: anello spento
-  assert.deepEqual(l.get('t84'), [0x90, 84, 127]); // layer A acceso
-  assert.deepEqual(l.get('t85'), [0x90, 85, 0]);
+  assert.deepEqual(l.get('a1'), [0xb0, 0x30, 32 + 11]); // il volume è una barra che si riempie (fan), pieno
+  assert.deepEqual(l.get('a2'), [0xb0, 0x31, 0]); // muto: spento
+  assert.deepEqual(l.get('a3'), [0xb0, 0x32, 0]); // manopola libera: spenta
+  assert.deepEqual(l.get('a8'), [0xb0, 0x37, 32 + 11]); // il generale
   c.pagina = 'B';
   c.bersaglio = 1;
   const b = c.desiderate();
-  assert.equal(b.get('a1')[2], 32 + 11, 'pagina B: modo fan, volume pieno');
-  assert.deepEqual(b.get('t85'), [0x90, 85, 127]);
+  assert.equal(b.get('a1')[2], 32 + 11, 'volume: fan');
+  assert.equal(b.get('a2')[2], 11, 'filtro (aperto): punto, tutto a destra');
+  assert.deepEqual(b.get('a6'), [0xb0, 0x35, 0], 'velocità: non ancora assegnata, spenta');
+  c.bersaglio = 5; // un livello che non c'è
+  assert.ok([...c.desiderate()].filter(([k]) => k.startsWith('a')).every(([, m]) => m[2] === 0), 'nessun bersaglio: tutti spenti');
+});
+
+test('i tasti: spenti se non fanno niente, accesi quando la cosa è attiva, lampi e lampeggi solo per l\'attesa', () => {
+  const { c, avanza, azioni } = prova([L(1, 'drum')]);
+  const nota = (i) => c.tab.tasti[i - 1];
+  let l = c.desiderate();
+  assert.equal(l.get('t84')[2], 127, 'pagina A: layer A acceso');
+  assert.equal(l.get('t85')[2], 0);
+  assert.ok(noteSpente(l, [nota(1), nota(2), nota(3), nota(4), nota(5), nota(6), nota(7), nota(8)]), 'senza niente di attivo i tasti sono spenti');
+  azioni.inCuffia = () => true;
+  assert.equal(c.desiderate().get(`t${nota(4)}`)[2], 127, 'cuffia attiva: acceso');
+  azioni.inAttesa = () => true;
+  assert.equal(c.desiderate().get(`t${nota(5)}`)[2], 1, 'go live che aspetta il ciclo: lampeggia');
+  azioni.inAttesa = () => false;
+  c.riceve(tasto(nota(6), true)); // togli: un lampo breve
+  assert.equal(c.desiderate().get(`t${nota(6)}`)[2], 127);
+  avanza(400);
+  assert.equal(c.desiderate().get(`t${nota(6)}`)[2], 0, 'il lampo passa');
+  c.riceve(tasto(nota(8), true)); // paracadute tenuto: lampeggia
+  assert.equal(c.desiderate().get(`t${nota(8)}`)[2], 1);
+  avanza(1100);
+  azioni.paracaduteAperto = () => true;
+  assert.equal(c.desiderate().get(`t${nota(8)}`)[2], 127, 'aperto: acceso fisso');
+});
+
+function noteSpente(luci, note) {
+  return note.every((n) => luci.get(`t${n}`)[2] === 0 || n === undefined);
+}
+
+test('le manopole dicono cosa comandano (per lo specchio e per i numeri sulle card)', () => {
+  const { c } = prova([L(1, 'drum', 0.8), L(2, 'basso', 0.5, true)]);
+  const m = c.manopole();
+  assert.equal(m.length, 8);
+  assert.deepEqual([m[0].nome, m[0].testo, m[0].stile], ['drum', '0.80', 'fan']);
+  assert.equal(m[1].testo, 'muto');
+  assert.equal(m[2], null);
+  assert.equal(m[7].nome, 'generale');
 });
 
 test('il valore iniziale dell\'anello viene dal codice scritto a mano, se c\'è', () => {

@@ -67,6 +67,9 @@ export class Pila {
       const c = this.carte.get(l.id);
       c.livello = l;
       c.nome.textContent = l.nome;
+      // il numero della manopola che la comanda (①–⑦, nell'ordine dei livelli vivi)
+      const posto = this.attivi().indexOf(l);
+      c.manopola.textContent = posto >= 0 && posto < 7 ? '①②③④⑤⑥⑦'[posto] : '';
       c.provenienza.textContent = l.provenienza;
       c.pienoVolume.style.width = `${Math.min(1, l.volume) * 100}%`;
       c.muto.classList.toggle('on', l.muto);
@@ -116,6 +119,8 @@ export class Pila {
     const art = el('article', 'card livello');
     const testa = el('div', 'card-testa');
     const nome = el('span', 'nome');
+    const manopola = el('span', 'manopola-n');
+    manopola.title = 'la manopola del controller che comanda questo livello';
     const provenienza = el('span', 'lbl');
     const stato = el('span', 'lbl stato-livello');
     const conto = el('span', 'conto');
@@ -128,7 +133,7 @@ export class Pila {
     const togli = el('button', 'key piccolo', '×');
     togli.dataset.aiuto = 'livello-togli';
     togli.setAttribute('aria-label', 'Togli a fine ciclo');
-    testa.append(el('span', 'punto', '●'), nome, provenienza, stato, el('div', 'spazio'), conto, volume, muto, togli);
+    testa.append(el('span', 'punto', '●'), nome, manopola, provenienza, stato, el('div', 'spazio'), conto, volume, muto, togli);
     const barra = el('div', 'barra-arrivo');
     const pieno = el('div');
     barra.append(pieno);
@@ -148,7 +153,7 @@ export class Pila {
     const piede = el('div', 'lbl piede-carta');
     const errore = el('p', 'errore');
     art.append(testa, barra, codice, editor, coda, celle, piede, errore);
-    const c = { el: art, livello: l, nome, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, celle, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
+    const c = { el: art, livello: l, nome, manopola, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, celle, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
     pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
@@ -176,6 +181,15 @@ export class Pila {
     };
     codice.onclick = () => (c.livello.sfuma?.verso === 'esce' && c.livello.a !== null ? null : this.apriModifica(c));
     return c;
+  }
+
+  // La manopola ha toccato questo livello: la card si illumina un attimo.
+  tocca(id) {
+    const c = this.carte.get(id);
+    if (!c) return;
+    c.el.classList.add('toccata');
+    clearTimeout(c.toccataTimer);
+    c.toccataTimer = setTimeout(() => c.el.classList.remove('toccata'), 650);
   }
 
   // Un clic su una card la sceglie; un secondo clic non la toglie (si cambia scegliendone un'altra).

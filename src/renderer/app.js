@@ -891,6 +891,7 @@ const pila = new Pila($('livelli'), $('jam'), {
 // I livelli arrivano in due modi: spinti dal motore a ogni cambio (subito) e nello stato di ogni pong (ogni mezzo secondo, un po'
 // in ritardo). Vale quello più recente: un pong partito prima dell'ultimo cambio non deve riportare indietro la lista
 // (un muto o un volume appena cambiati sparivano per un attimo, e un ⇧⌘S in quel momento li salvava vecchi).
+let paracaduteAperto = false; // dal motore live: il paracadute è aperto
 let spintaLivelli = 0; // quando è arrivata l'ultima spinta di livelli dal motore live
 function mostraLive() {
   if (!live.viva) livelliLive = [];
@@ -1036,6 +1037,7 @@ for (const m of [live, cuffia]) {
     else if (msg.tipo === 'livelli') {
       if (m === live) spintaLivelli = performance.now();
       livelliLive = msg.livelli;
+      paracaduteAperto = !!msg.paracadute;
       pila.aggiorna(livelliLive);
     }
     else if (msg.tipo === 'suoni-mancanti' && !inTest) {
@@ -1152,16 +1154,16 @@ globalThis.cutxProva = {
 };
 
 // --- il controller (X-Touch Mini in MC): le stesse azioni della tastiera e del mouse, gli anelli con i valori veri ---
-let scrittaTimer = null;
-function mostraScritta(testo) {
-  const e = $('scritta-controller');
+let rigaTimer = null;
+function mostraRiga(testo) {
+  const e = $('riga-controller');
   e.textContent = testo;
-  // con le impostazioni aperte c'è già il monitor: la scritta grande non copre la pagina
-  e.hidden = !$('impostazioni').hidden;
-  clearTimeout(scrittaTimer);
-  scrittaTimer = setTimeout(() => (e.hidden = true), 1600);
-  portaUscita?.postMessage({ tipo: 'scritta', testo }); // la finestra del pubblico la mostra solo se l'ho accesa nei testi
+  e.classList.add('visibile');
+  clearTimeout(rigaTimer);
+  rigaTimer = setTimeout(() => e.classList.remove('visibile'), 1500);
 }
+// La finestra del pubblico la scritta del controller la mostra solo se l'ho accesa nei testi per il pubblico.
+const mostraScritta = (testo) => portaUscita?.postMessage({ tipo: 'scritta', testo });
 let gestoVolume = null; // un giro di manopola sul volume è un passo solo di ⌘Z
 const controllerMidi = new Controller({
   livelli: () => pila.attivi(),
@@ -1198,11 +1200,17 @@ const controllerMidi = new Controller({
   inCuffia: () => !!cuffia.stato.codice,
   paracadute: () => lanciaParacadute(),
   scritta: (testo) => mostraScritta(testo),
+  riga: (testo) => mostraRiga(testo),
+  tocca: (id) => pila.tocca(id),
+  inAttesa: () => !inTest && mappa && livelliLive.some((l) => l.a === null && l.da !== null && cicloDi(mappa, performance.timeOrigin + performance.now()) < l.da),
+  paracaduteAperto: () => paracaduteAperto,
   avviso: (testo) => cue.avviso(testo, { persistente: true }),
   calibrazione: () => preferenze.controller,
   salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: c }),
 });
 const paginaController = new PaginaController(controllerMidi);
+// i numeri ①–⑦ sulle card compaiono solo con il controller collegato
+controllerMidi.quandoCambia(() => document.querySelector('.postazione').classList.toggle('con-controller', controllerMidi.collegato));
 controllerMidi.collega();
 
 setInterval(mostra, 100);

@@ -31,10 +31,21 @@ export class Controller {
     this.ultime = new Map(); // luci già mandate
     this.calibrazione = null; // { passo, tasti, layer } mentre calibro
     this.suMonitor = null; // (testo, grezzo, evento) => {}
-    this.suStato = null; // () => {}
+    this.ascoltatori = []; // () => {}: chi vuole sapere che lo stato è cambiato (impostazioni, card)
     this.sequenza = 0; // per fermare una prova luci quando ne parte un'altra
     this.paracaduteTimer = null;
+    this.paracaduteTenuto = false;
+    this.lampi = new Map(); // nota → fino a quando resta accesa dopo l'azione (un lampo breve)
+    this.toccata = null; // { n, quando }: l'ultima manopola toccata, per lo specchio
     this.tab = tabella(azioni.calibrazione?.());
+  }
+
+  quandoCambia(fn) {
+    this.ascoltatori.push(fn);
+  }
+
+  cambiato() {
+    for (const fn of this.ascoltatori) fn();
   }
 
   // --- MIDI ---
@@ -57,7 +68,7 @@ export class Controller {
       this.porta.uscita = uscita ?? null;
       if (!ingresso) this.modo = 'sconosciuto';
       this.ultime.clear();
-      this.suStato?.();
+      this.cambiato();
     };
     this.access.onstatechange = cerca;
     cerca();
@@ -93,7 +104,7 @@ export class Controller {
     if (nuovoModo !== this.modo) {
       this.modo = nuovoModo;
       this.ultime.clear();
-      this.suStato?.();
+      this.cambiato();
       // se è in standard lo rimetto in MC (una volta), e lo dico
       if (nuovoModo === 'standard' && !this.provatoMC) {
         this.provatoMC = true;
@@ -131,7 +142,8 @@ export class Controller {
     if (pagina === this.pagina) return;
     this.pagina = pagina;
     this.ultime.clear();
-    this.azioni.scritta?.(pagina === 'A' ? 'PAGINA A · SUONA' : 'PAGINA B · SCOLPISCI');
+    this.riga(pagina === 'A' ? 'pagina A · suona' : 'pagina B · scolpisci');
+    this.cambiato();
   }
 
   livello(n) {
@@ -145,32 +157,33 @@ export class Controller {
     if (this.pagina === 'A') {
       if (n === 8) return this.giraMaster(passi);
       const l = this.livello(n);
-      if (!l) return this.azioni.scritta?.(`MANOPOLA ${n} · NESSUN LIVELLO`);
+      if (!l) return this.riga(`manopola ${n}: nessun livello`);
       // tenuta premuta + giro = il filtro di quel livello
-      if (this.push.get(n)?.giu && this.push.get(n).tenuta) return this.cambiaParametro(l, 'filtro', passi);
+      if (this.push.get(n)?.giu && this.push.get(n).tenuta) return this.cambiaParametro(l, 'filtro', passi, n);
       const v = clamp01(l.volume + passi * PASSO_VOLUME);
       this.azioni.volume(l.id, Math.round(v * 100) / 100);
-      this.azioni.scritta?.(`${l.nome.toUpperCase()} · VOLUME ${v.toFixed(2)}`);
+      this.tocca(l, 'volume', `${l.nome.toUpperCase()} · VOLUME ${v.toFixed(2)}`, n);
       return;
     }
     // pagina B: i parametri del bersaglio
     const chiave = PAGINA_B[n - 1];
     if (this.bersaglio === 'globale') return this.giraGlobale(n, passi);
     const l = this.livello(this.bersaglio);
-    if (!l) return this.azioni.scritta?.('NESSUN LIVELLO');
-    if (!chiave) return this.azioni.scritta?.(`MANOPOLA ${n} · ARRIVA PRESTO`);
+    if (!l) return this.riga('nessun livello scelto');
+    if (!chiave) return this.riga(`manopola ${n}: arriva presto`);
     if (chiave === 'volume') {
       const v = clamp01(l.volume + passi * PASSO_VOLUME);
       this.azioni.volume(l.id, Math.round(v * 100) / 100);
-      this.azioni.scritta?.(`${l.nome.toUpperCase()} · VOLUME ${v.toFixed(2)}`);
+      this.tocca(l, 'volume', `${l.nome.toUpperCase()} · VOLUME ${v.toFixed(2)}`, n);
       return;
     }
-    this.cambiaParametro(l, chiave, passi);
+    this.cambiaParametro(l, chiave, passi, n);
   }
 
   giraMaster(passi) {
     this.master = clamp01(this.master + passi * PASSO_VOLUME);
     this.azioni.master?.(Math.round(this.master * 100) / 100);
+    this.toccata = { n: 8, quando: this.ora() };
     this.azioni.scritta?.(`GENERALE · VOLUME ${this.master.toFixed(2)}`);
   }
 
@@ -184,12 +197,25 @@ export class Controller {
     return x;
   }
 
-  cambiaParametro(l, chiave, passi) {
+  // La manopola n ha toccato il livello l: la card si illumina un attimo, lo specchio la mette in evidenza, il proiettore (se acceso) la scritta.
+  tocca(l, chiave, testo, n) {
+    this.toccata = { n, quando: this.ora() };
+    this.azioni.tocca?.(l.id);
+    this.azioni.scritta?.(testo);
+  }
+
+  // Un messaggio senza un posto suo (cambio pagina, «arriva presto»…): una riga sottile in basso nel LIVE.
+  riga(testo) {
+    this.azioni.riga?.(testo);
+    this.azioni.scritta?.(testo.toUpperCase());
+  }
+
+  cambiaParametro(l, chiave, passi, n) {
     const p = PARAMETRI[chiave];
     const x = clamp01(this.xDi(l, chiave) + passi * PASSO_X);
     this.x.set(`${l.id}|${chiave}`, x);
     this.mandaCoda(l.id, rigaCoda(p, x));
-    this.azioni.scritta?.(`${l.nome.toUpperCase()} · ${p.nome} ${x.toFixed(2)}`);
+    this.tocca(l, chiave, `${l.nome.toUpperCase()} · ${p.nome} ${x.toFixed(2)}`, n);
   }
 
   giraGlobale(n, passi) {
@@ -246,12 +272,14 @@ export class Controller {
     if (eraTenuta) return; // il muto non scatta se tenevo premuto per scegliere
     if (this.pagina !== 'A') return;
     if (n === 8) {
-      this.azioni.scritta?.('GENERALE · NIENTE MUTO (USA IL VOLUME)');
+      this.riga('generale: niente muto (usa il volume)');
       return;
     }
     const l = this.livello(n);
     if (!l) return;
     this.azioni.muto(l.id);
+    this.toccata = { n, quando: this.ora() };
+    this.azioni.tocca?.(l.id);
     this.azioni.scritta?.(`${l.nome.toUpperCase()} · ${l.muto ? 'SUONA' : 'MUTO'}`);
   }
 
@@ -263,18 +291,25 @@ export class Controller {
       this.bersaglio = n === 8 ? 'globale' : n;
       this.ultime.clear();
       const l = n === 8 ? null : this.livello(n);
-      this.azioni.scritta?.(n === 8 ? 'BERSAGLIO · GLOBALE' : `BERSAGLIO · ${l ? l.nome.toUpperCase() : `LIVELLO ${n} (VUOTO)`}`);
+      this.riga(n === 8 ? 'bersaglio: globale' : `bersaglio: ${l ? l.nome : `livello ${n} (vuoto)`}`);
       return;
     }
     if (n > 8) {
-      if (giu) this.azioni.scritta?.('COLPI · ARRIVANO COL PASSO 4');
+      if (giu) this.riga('colpi: arrivano col passo 4');
       return;
     }
     const comando = TASTI_A[n - 1];
     if (comando === 'paracadute') {
       // tenuto un secondo: niente partenze per sbaglio
       this.ferma(this.paracaduteTimer);
-      if (giu) this.paracaduteTimer = this.imposta(() => this.azioni.paracadute?.(), PARACADUTE_MS);
+      this.paracaduteTenuto = giu;
+      if (giu) {
+        this.riga('paracadute: tieni premuto');
+        this.paracaduteTimer = this.imposta(() => {
+          this.paracaduteTenuto = false;
+          this.azioni.paracadute?.();
+        }, PARACADUTE_MS);
+      }
       return;
     }
     if (!giu) return;
@@ -284,15 +319,17 @@ export class Controller {
         this.azioni.scritta?.(this.azioni.inCuffia?.() ? 'CUFFIA · STOP' : 'CUFFIA');
         break;
       case 'goLive':
+        this.lampo(this.tab.tasti[n - 1]);
         this.azioni.goLive?.();
         this.azioni.scritta?.('GO LIVE');
         break;
       case 'togli':
+        this.lampo(this.tab.tasti[n - 1]);
         this.azioni.togli?.();
         this.azioni.scritta?.('TOGLI');
         break;
       default:
-        this.azioni.scritta?.(`${comando.toUpperCase()} · ARRIVA PRESTO`);
+        this.riga(`${comando.replace(/([A-Z])/g, ' $1').toLowerCase()}: arriva presto`);
     }
   }
 
@@ -300,12 +337,12 @@ export class Controller {
 
   avviaCalibrazione() {
     this.calibrazione = { passo: 0, tasti: Array(16).fill(null), layer: {} };
-    this.suStato?.();
+    this.cambiato();
   }
 
   annullaCalibrazione() {
     this.calibrazione = null;
-    this.suStato?.();
+    this.cambiato();
   }
 
   // Il tasto da premere adesso: 1–16 poi layer A e B.
@@ -329,7 +366,7 @@ export class Controller {
       this.calibrazione = null;
       this.ultime.clear();
     }
-    this.suStato?.();
+    this.cambiato();
   }
 
   ricaricaTabella() {
@@ -338,37 +375,78 @@ export class Controller {
 
   // --- luci ---
 
-  // Le luci come dovrebbero essere adesso: anelli e tasti con i valori veri.
-  desiderate() {
-    const luci = new Map();
+  // Un lampo breve su un tasto che ha appena fatto qualcosa (go live, togli).
+  lampo(nota) {
+    if (nota === null || nota === undefined) return;
+    this.lampi.set(nota, this.ora() + 300);
+  }
+
+  // Cosa comanda ogni manopola adesso: null = libera (anello spento); altrimenti { stile: 'fan' | 'punto', valore 0..1 | null (muto) }.
+  manopole() {
     const livelli = this.azioni.livelli();
-    const anello = (n, valore, modo) => luci.set(`a${n}`, valore === null ? messaggioAnello(n, 0, modo) : anelloDa(n, valore, modo));
+    const m = [];
     if (this.pagina === 'A') {
       for (let n = 1; n <= 7; n++) {
         const l = livelli[n - 1];
-        anello(n, !l || l.muto ? null : l.volume, 'punto');
+        m.push(l ? { stile: 'fan', valore: l.muto ? null : l.volume, nome: l.nome, testo: l.muto ? 'muto' : l.volume.toFixed(2), muto: l.muto } : null);
       }
-      anello(8, this.master, 'punto');
-    } else {
-      for (let n = 1; n <= 8; n++) {
-        const chiave = PAGINA_B[n - 1];
-        const l = this.bersaglio === 'globale' ? null : livelli[this.bersaglio - 1];
-        let x = null;
-        if (this.bersaglio === 'globale') x = chiave === 'eco' || chiave === 'riverbero' ? this.x.get(`globale|${chiave}`) ?? 0 : null;
-        else if (l && chiave === 'volume') x = l.volume;
-        else if (l && chiave) x = this.xDi(l, chiave);
-        anello(n, x, 'fan');
+      m.push({ stile: 'fan', valore: this.master, nome: 'generale', testo: this.master.toFixed(2) });
+      return m;
+    }
+    for (let n = 1; n <= 8; n++) {
+      const chiave = PAGINA_B[n - 1];
+      if (this.bersaglio === 'globale') {
+        if (n === 1) {
+          const bpm = this.bpmVoluto ?? this.azioni.bpm?.() ?? 120;
+          m.push({ stile: 'punto', valore: clamp01((bpm - 60) / 140), nome: 'bpm', testo: String(Math.round(bpm)) });
+        } else if (chiave === 'eco' || chiave === 'riverbero') {
+          const x = this.x.get(`globale|${chiave}`) ?? 0;
+          m.push({ stile: 'punto', valore: x, nome: PARAMETRI[chiave].nome.toLowerCase(), testo: x.toFixed(2) });
+        } else m.push(null);
+        continue;
+      }
+      const l = livelli[this.bersaglio - 1];
+      if (!l || !chiave) {
+        m.push(null);
+      } else if (chiave === 'volume') {
+        m.push({ stile: 'fan', valore: l.volume, nome: 'volume', testo: l.volume.toFixed(2) });
+      } else {
+        const x = this.xDi(l, chiave);
+        const p = PARAMETRI[chiave];
+        m.push({ stile: 'punto', valore: x, nome: p.nome.toLowerCase(), testo: rigaCoda(p, x).replace(/^\.\w+\(|\)$/g, '') });
       }
     }
-    // tasti: il layer attivo, la cuffia, il bersaglio della pagina B
-    const accesi = new Set([this.tab.layer[this.pagina]]);
+    return m;
+  }
+
+  // Le luci come dovrebbero essere adesso: anelli solo per le manopole assegnate (col valore vero), tasti solo se hanno qualcosa da dire.
+  desiderate() {
+    const luci = new Map();
+    const manopole = this.manopole();
+    manopole.forEach((m, i) => {
+      const n = i + 1;
+      luci.set(`a${n}`, !m || m.valore === null ? messaggioAnello(n, 0, 'punto') : anelloDa(n, m.valore, m.stile));
+    });
+    const stati = new Map(); // nota → true | 'lampeggia'
+    const livelli = this.azioni.livelli();
+    stati.set(this.tab.layer[this.pagina], true); // la pagina
     if (this.pagina === 'A') {
-      if (this.azioni.inCuffia?.()) accesi.add(this.tab.tasti[TASTI_A.indexOf('cuffia')]);
+      const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
+      if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
+      if (this.azioni.inAttesa?.()) stati.set(nota('goLive'), 'lampeggia'); // il go live aspetta il suo ciclo
+      if (this.paracaduteTenuto) stati.set(nota('paracadute'), 'lampeggia');
+      else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
     } else {
-      const i = this.bersaglio === 'globale' ? 7 : this.bersaglio - 1;
-      accesi.add(this.tab.tasti[i]);
+      // il bersaglio acceso; i tasti dei livelli che non ci sono restano spenti
+      stati.set(this.tab.tasti[this.bersaglio === 'globale' ? 7 : this.bersaglio - 1], true);
     }
-    for (const nota of noteTasti(this.tab)) luci.set(`t${nota}`, messaggioTasto(nota, accesi.has(nota)));
+    const ora = this.ora();
+    for (const [nota, fino] of this.lampi) {
+      if (fino > ora) stati.set(nota, true);
+      else this.lampi.delete(nota);
+    }
+    void livelli;
+    for (const nota of noteTasti(this.tab)) luci.set(`t${nota}`, messaggioTasto(nota, stati.get(nota) ?? false));
     return luci;
   }
 

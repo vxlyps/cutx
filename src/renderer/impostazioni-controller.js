@@ -16,7 +16,7 @@ export class PaginaController {
     this.righe = [];
     this.stato = '';
     this.disegnato = false;
-    controller.suStato = () => this.disegna();
+    controller.quandoCambia(() => this.disegna());
     controller.suMonitor = (testo, grezzo) => this.riga(testo, grezzo);
     this.disegna();
     this.disegnaMappa();

@@ -192,6 +192,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('specchio-aspetto')) ok = (await sicura('specchio-aspetto', provaSpecchioAspetto)) && ok;
   if (parti.includes('controller')) ok = (await sicura('controller', provaController)) && ok;
   if (parti.includes('cuffia')) ok = (await sicura('cuffia', provaCuffia)) && ok;
   if (parti.includes('cuffia-aspetto')) ok = (await sicura('cuffia-aspetto', provaCuffiaAspetto)) && ok;
@@ -2386,6 +2387,70 @@ async function provaScrittura({ finestre, scrivi }) {
 }
 
 
+// --- la proposta grafica dello specchio del controller (solo uno screenshot: npx electron . --prova=specchio-aspetto) ---
+async function provaSpecchioAspetto({ finestre, scrivi }) {
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  await js(`(() => {
+    const stile = document.createElement('style');
+    stile.textContent = \`
+      .spec { border-top:1px solid var(--linea); padding:10px 12px 12px; font-family:var(--mono); }
+      .spec-testa { display:flex; align-items:center; gap:8px; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--secondario); margin-bottom:8px; }
+      .spec-testa .pag { border:1px solid var(--grigio,#3a3a38); padding:1px 6px; color:var(--spento,#7a7e72); }
+      .spec-testa .pag.on { background:var(--testo); color:#050604; border-color:var(--testo); }
+      .spec-testa .nome-pag { color:var(--testo); }
+      .spec-griglia { display:grid; grid-template-columns:repeat(4,1fr); gap:8px 4px; }
+      .spec-m { display:flex; flex-direction:column; align-items:center; gap:1px; padding:4px 0 3px; border:1px solid transparent; border-radius:3px; min-width:0; }
+      .spec-m.toccata { border-color:var(--marcio); background:rgba(159,194,58,.07); }
+      .spec-m svg { display:block; }
+      .spec-m .n { font-size:10px; color:var(--secondario); }
+      .spec-m .nm { font-size:10px; letter-spacing:.04em; color:var(--testo); max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .spec-m .v { font-size:10px; color:var(--marcio); }
+      .spec-m.libera .nm, .spec-m.libera .v { color:var(--spento,#7a7e72); }
+      .spec-m.muta .nm { color:var(--spento,#7a7e72); text-decoration:line-through; }
+      .spec-m.muta .v { color:var(--spento,#7a7e72); }
+      .spec + .spec { margin-top:0; }
+    \`;
+    document.head.append(stile);
+    const P = (a) => ({ x: 20 + 14 * Math.cos(a), y: 20 + 14 * Math.sin(a) });
+    const A0 = 135 * Math.PI / 180, A1 = 405 * Math.PI / 180;
+    const arco = (da, a, col, w = 3) => { const p = P(da), q = P(a); const grande = (a - da) > Math.PI ? 1 : 0; return \`<path d="M\${p.x} \${p.y} A14 14 0 \${grande} 1 \${q.x} \${q.y}" fill="none" stroke="\${col}" stroke-width="\${w}" stroke-linecap="round"/>\`; };
+    const anello = (tipo, v) => {
+      const trac = arco(A0, A1 - 0.001, '#26281f');
+      if (tipo === 'libera') return \`<svg width="38" height="38" viewBox="0 0 40 40">\${arco(A0, A1 - 0.001, '#1b1d16', 2)}</svg>\`;
+      if (tipo === 'muta') return \`<svg width="38" height="38" viewBox="0 0 40 40">\${trac}</svg>\`;
+      if (tipo === 'fan') return \`<svg width="38" height="38" viewBox="0 0 40 40">\${trac}\${v > 0.01 ? arco(A0, A0 + (A1 - A0) * v, '#9fc23a') : ''}</svg>\`;
+      if (tipo === 'centro') { const m = (A0 + A1) / 2, e = m + (A1 - A0) * (v - 0.5); return \`<svg width="38" height="38" viewBox="0 0 40 40">\${trac}\${Math.abs(v - 0.5) > 0.01 ? arco(Math.min(m, e), Math.max(m, e), '#9fc23a') : ''}</svg>\`; }
+      const a = A0 + (A1 - A0) * v, p = P(a);
+      return \`<svg width="38" height="38" viewBox="0 0 40 40">\${trac}<circle cx="\${p.x}" cy="\${p.y}" r="3.2" fill="#9fc23a"/></svg>\`;
+    };
+    const manopola = (n, nome, tipo, v, testo, extra = '') => \`<div class="spec-m \${extra}">\${anello(tipo, v)}<span class="nm">\${nome}</span><span class="v">\${testo}</span></div>\`;
+    const scatola = (pag, titolo, manopole) => \`<div class="spec"><div class="spec-testa"><span>x-touch mini</span><span class="pag \${pag === 'A' ? 'on' : ''}">A</span><span class="pag \${pag === 'B' ? 'on' : ''}">B</span><span class="nome-pag">\${titolo}</span></div><div class="spec-griglia">\${manopole}</div></div>\`;
+    const a = scatola('A', 'suona',
+      manopola(1, 'drum', 'fan', 0.8, '0.80') +
+      manopola(2, 'basso', 'fan', 0.55, '0.55', 'toccata') +
+      manopola(3, 'melodia', 'muta', 0, 'muto', 'muta') +
+      manopola(4, 'pad', 'fan', 0.3, '0.30') +
+      manopola(5, '–', 'libera', 0, '', 'libera') + manopola(6, '–', 'libera', 0, '', 'libera') + manopola(7, '–', 'libera', 0, '', 'libera') +
+      manopola(8, 'generale', 'fan', 1, '1.00'));
+    const b = scatola('B', 'scolpisci · basso',
+      manopola(1, 'volume', 'fan', 0.55, '0.55') +
+      manopola(2, 'filtro', 'punto', 0.36, '800', 'toccata') +
+      manopola(3, 'risonanza', 'punto', 0, '0.0') +
+      manopola(4, 'eco', 'punto', 0.2, '0.20') +
+      manopola(5, 'riverbero', 'punto', 0.1, '0.10') +
+      manopola(6, '–', 'libera', 0, '', 'libera') + manopola(7, 'sporco', 'punto', 0, '0.00') + manopola(8, '–', 'libera', 0, '', 'libera'));
+    const aiuto = document.getElementById('riquadro-help');
+    aiuto.insertAdjacentHTML('beforebegin', a + b);
+    document.getElementById('elenco').style.maxHeight = '120px';
+  })()`);
+  await aspetta(0.8);
+  const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'controller');
+  await mkdir(cartella, { recursive: true });
+  await writeFile(path.join(cartella, 'specchio-proposta.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  scrivi(`OK    foto in ${cartella}/specchio-proposta.png`);
+  return true;
+}
+
 // --- il controller: messaggi MIDI finti (niente hardware) dentro l'app vera: manopole, push, tasti, pagine, luci, monitor (npx electron . --prova=controller) ---
 async function provaController({ finestre, scrivi }) {
   let ok = true;
@@ -2411,7 +2476,9 @@ async function provaController({ finestre, scrivi }) {
   await aspetta(0.6);
 
   // pagina A: volume, muto, filtro
+  await js(`cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
   await giro(2, 5);
+  controlla('la card della manopola si illumina un attimo', (await js(`document.querySelectorAll('#livelli .card.livello.toccata').length`)) === 1);
   await aspetta(0.6);
   const v = (await attivi()).find((l) => l.id === due.livello)?.volume;
   controlla('manopola 2: il volume del secondo livello sale (0,5 → 0,6)', Math.abs(v - 0.6) < 0.011, String(v));
@@ -2434,11 +2501,12 @@ async function provaController({ finestre, scrivi }) {
   const l2 = (await attivi()).find((l) => l.id === due.livello);
   controlla('tenuta premuta + giro: il filtro entra nella coda del livello (e il muto non scatta)', /^\.lpf\(\d+\)$/.test(l2?.coda?.[0] ?? '') && l2.muto === false && Number(l2.coda[0].match(/\d+/)[0]) > 800, JSON.stringify([l2?.coda, l2?.muto]));
   controlla('e il livello è quello scelto (bordo verde)', (await js('cutxProva.pila.selezionato')) === due.livello);
-  controlla('la scritta grande si vede', (await js(`!document.getElementById('scritta-controller').hidden || document.getElementById('scritta-controller').textContent.length > 0`)) === true);
+  controlla('niente scritta gigante al centro', (await js(`document.getElementById('scritta-controller')`)) === null);
 
+  controlla('sulle card il numero della manopola che le comanda (②)', (await js(`[...document.querySelectorAll('#livelli .card.livello .manopola-n')].map((x) => x.textContent).join('')`)).includes('②'));
   // pagina B
   await midi(0x90, 85, 127);
-  controlla('il tasto layer B porta alla pagina B', (await js('cutxProva.controllerMidi.pagina')) === 'B');
+  controlla('il tasto layer B porta alla pagina B, e lo dice la riga sottile in basso (non una scritta gigante)', (await js('cutxProva.controllerMidi.pagina')) === 'B' && /pagina B/.test(await js(`document.getElementById('riga-controller').textContent`)) && (await js(`document.getElementById('riga-controller').classList.contains('visibile')`)) === true);
   await midi(0x90, await tasto(1), 127);
   await midi(0x90, await tasto(1), 0);
   await giro(4, 10);
@@ -2488,7 +2556,7 @@ async function provaController({ finestre, scrivi }) {
   await aspetta(0.4);
   const stato = await js(`document.getElementById('ctl-stato').innerText`);
   controlla('se parla in standard lo dice e dà le istruzioni (tasto MC tenuto mentre si collega l\'USB)', /standard/.test(stato) && /MC MODE/.test(stato) && /tasto MC/.test(stato), JSON.stringify(stato));
-  await js(`cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.suStato?.()`);
+  await js(`cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.cambiato()`);
   await aspetta(0.3);
   controlla('i bottoni «prova luci» e «calibra» ci sono', (await js(`document.querySelectorAll('#ctl-luci button').length`)) === 4 && (await js(`document.querySelectorAll('#ctl-calibra button').length`)) >= 1);
 
