@@ -619,8 +619,9 @@ async function provaLivelli({ finestre, scrivi }) {
   // note in verde e griglia
   const verde = await finche(() => js(`!!document.querySelector('#livelli .livello .codice .nota')`));
   controlla('le note che suonano si accendono in verde nel LIVE', verde);
-  const colpi = await js(`document.querySelectorAll('#livelli .livello .griglia .colpo').length`);
-  controlla('la griglia ritmica mostra i colpi', colpi >= 8, String(colpi));
+  // la striscia viva ha sostituito la griglia: le note vere del ciclo arrivano dal motore
+  const colpi = await finche(() => js(`(() => { const l = cutxProva.pila.livelli.find((x) => x.a === null); const e = l && cutxProva.pila.strisce.get(l.id); return e ? Math.max(...Object.values(e).map((x) => x?.length ?? 0)) : 0; })()`).then((n) => n >= 4 && n));
+  controlla('la striscia viva mostra le note vere del ciclo', colpi >= 4, String(colpi));
 
   // in cuffia, in bianco nel CUE
   await js(`cutxProva.scriviCue(${JSON.stringify(MEL)})`);
