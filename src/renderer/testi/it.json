@@ -74,6 +74,22 @@
       "nome": "inserisci",
       "testo": "Lo scrive nel CUE, dove sta il cursore."
     },
+    "scheda-set": {
+      "nome": "set",
+      "testo": "La serata: i brani in ordine (● quello che suona, ▸ il prossimo; clic per sceglierlo come prossimo). Sotto il kit: clip sempre disponibili in ogni brano."
+    },
+    "linguette": {
+      "nome": "● attivo / ▸ prossimo",
+      "testo": "Il brano che suona e quello che viene dopo. Tab le alterna (sul controller, il tasto 3 con un tocco)."
+    },
+    "beat": {
+      "nome": "beat",
+      "testo": "La base ritmica del brano, con le sue scene. La scena accesa suona; clic su una pillola per vederne il codice e mandarla."
+    },
+    "scena": {
+      "nome": "scena",
+      "testo": "Clic: scegli la scena e vedi il suo codice. Doppio clic: rinomina."
+    },
     "aggiungi-sezione": {
       "nome": "+ clip",
       "testo": "Le righe selezionate diventano una clip del brano, col nome che scegli.",

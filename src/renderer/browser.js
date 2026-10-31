@@ -1,4 +1,4 @@
-// Il browser a sinistra, tre schede: i suoni dello stash, la libreria dei brani, la guida di Strudel.
+// Il browser a sinistra: i suoni dello stash, il set (la serata e il kit), la libreria dei brani, i progetti Ableton, la guida di Strudel.
 // ▶ fa sentire in cuffia, + inserisce nel CUE dove c'è il cursore. Funziona offline: la guida è un file locale.
 import help from './testi/help.json';
 import it from './testi/it.json';
@@ -49,8 +49,9 @@ export class Browser {
   vai(nome) {
     this.scheda = nome;
     for (const b of this.schede) b.classList.toggle('on', b.dataset.scheda === nome);
-    this.cerca.placeholder = { suoni: 'cerca nello stash', libreria: 'cerca un brano', ableton: 'cerca un progetto', help: 'cerca una funzione' }[nome];
+    this.cerca.placeholder = { suoni: 'cerca nello stash', set: 'cerca nel set e nel kit', libreria: 'cerca un brano', ableton: 'cerca un progetto', help: 'cerca una funzione' }[nome];
     if (nome === 'ableton') this.cercaProgetti();
+    if (nome === 'set') this.azioni.rileggiSet().then(() => this.scheda === 'set' && this.mostra()); // set.cutx e kit.cutx si possono scrivere a mano
     this.mostra();
   }
 
@@ -61,7 +62,7 @@ export class Browser {
   mostra() {
     const scroll = this.elenco.scrollTop;
     this.elenco.replaceChildren();
-    ({ suoni: () => this.mostraSuoni(), libreria: () => this.mostraLibreria(), ableton: () => this.mostraAbleton(), help: () => this.mostraHelp() })[this.scheda]();
+    ({ suoni: () => this.mostraSuoni(), set: () => this.azioni.disegnaSet(this.elenco, this.filtro), libreria: () => this.mostraLibreria(), ableton: () => this.mostraAbleton(), help: () => this.mostraHelp() })[this.scheda]();
     this.elenco.scrollTop = scroll;
   }
 

@@ -3086,3 +3086,100 @@ input[type='checkbox'] {
 .card .lbl.sostituisce {
   color: var(--marcio);
 }
+
+/* --- la scheda SET: la serata e il kit --- */
+.set-riga {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+}
+.set-riga .segno {
+  width: 14px;
+  color: var(--marcio);
+  text-align: center;
+  flex: none;
+}
+.set-riga.attivo .nome {
+  color: var(--marcio);
+}
+.set-riga.prossimo .nome {
+  color: var(--testo);
+}
+.set-riga.manca .nome,
+.manca-testo {
+  color: #e0674f;
+}
+.etichetta-set {
+  border: 1px solid var(--bordo);
+  border-radius: 9px;
+  padding: 0 7px;
+  color: var(--secondario);
+}
+.strumenti-set {
+  display: none;
+  gap: 4px;
+  margin-left: auto;
+}
+.set-riga:hover .strumenti-set {
+  display: inline-flex;
+}
+.set-riga:hover .etichetta-set {
+  display: none;
+}
+.aggiungi-al-set {
+  width: 100%;
+  margin: 8px 0 4px;
+  height: 30px;
+  background: var(--pannello);
+  color: var(--secondario);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  font: 12px var(--mono);
+  padding: 0 8px;
+}
+.kit-riga {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+}
+.kit-riga .segno {
+  width: 14px;
+  color: transparent;
+  flex: none;
+  text-align: center;
+}
+.kit-riga.live .segno {
+  color: var(--marcio);
+}
+.kit-riga .nome {
+  flex: 1;
+}
+.kit-blocco.aperto {
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  padding: 2px 6px 6px;
+  margin: 2px 0;
+}
+.kit-codice {
+  border-radius: 6px;
+  max-height: 14em;
+  overflow: auto;
+}
+.set-riga .nome,
+.kit-riga .nome {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.set-riga .segno,
+.kit-riga .segno {
+  width: 14px;
+  min-width: 14px;
+  text-align: center;
+}
+.elenco .voce span.segno {
+  flex: none;
+  overflow: visible;
+}

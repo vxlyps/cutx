@@ -2,6 +2,7 @@
 // Qui non suona niente: il codice va ai motori live e cuffia, ognuno nel suo processo.
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
+import { Serata } from './set-vista.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
@@ -78,6 +79,8 @@ const cue = new Cue(CODICE_INIZIALE, {
   portaIlSet: (bpm) => live.manda({ tipo: 'tempo', bpm }),
   bozza: () => salvaBozza(),
   mostraLibreria: () => scegliScheda('libreria'),
+  suBrani: () => browser?.scheda === 'set' && browser.mostra(),
+  suPromosso: (file) => caricaProssimoDopo(file),
 });
 cue.registra = (voce) => cronologia.registra(voce);
 
@@ -132,9 +135,13 @@ function fermaCuffia() {
 }
 
 // Il tasto «cuffia» di una card: se si sta già sentendo quella, spegne; altrimenti la manda in cuffia.
-function provaInCuffia() {
+function provaInCuffia(pezzo = null) {
   if (inTest) return;
-  const p = cue.pezzo();
+  const p = pezzo && typeof pezzo === 'object' && 'codice' in pezzo ? pezzo : cue.pezzo(); // un pezzo dato (le clip del kit) o quello del CUE
+  if (p.errore) return cue.avviso(p.errore);
+  return provaPezzo(p);
+}
+function provaPezzo(p) {
   if (p.errore) return cue.avviso(p.errore);
   dovaCuffia = p.dove ? { ...p.dove, inizio: p.inizio } : null;
   return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza });
@@ -188,9 +195,10 @@ function nomeLiberoNuovo() {
 }
 
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
-async function goLive() {
+async function goLive(pezzo = null) {
   if (inTest) return;
-  const p = cue.pezzo();
+  const daCue = !(pezzo && typeof pezzo === 'object' && 'codice' in pezzo);
+  const p = daCue ? cue.pezzo() : pezzo; // un pezzo dato (le clip del kit) o quello del CUE
   if (p.errore) return cue.avviso(p.errore);
   // solo righe di coda (.lpf(600)…): non è un livello, si aggiunge alla coda di quello scelto con un clic sulla sua card
   const voci = soloCoda(p.codice.slice(p.inizio ?? 0));
@@ -218,7 +226,7 @@ async function goLive() {
   const r = await live.richiesta({ tipo: 'entra', beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
-  if (!r.errore) cue.dopoGoLive(); // il primo brano mandato live diventa il brano attivo
+  if (!r.errore && daCue) cue.dopoGoLive(); // il primo brano mandato live diventa il brano attivo
   return r;
 }
 
@@ -612,6 +620,7 @@ async function apriStash(stato) {
     : 'nessun suono: metti dei WAV in suoni/<nome>/';
   $('offset-cuffia').value = config.offsetCuffiaMs ?? 0;
   await aggiornaLibreria();
+  await caricaSerata(stato);
   await aggiornaElenchi();
 }
 
@@ -719,6 +728,8 @@ browser = new Browser(
     durataSuono,
     inserisci: (testo) => cue.inserisci(testo),
     apriBrano: (file) => cue.apri(file),
+    disegnaSet: (el, filtro) => serata.disegna(el, filtro),
+    rileggiSet: () => serata.carica(),
     cartelleAbleton: () => preferenze.cartelleAbleton ?? [],
     progettiAbleton: () => window.cutx.progettiAbleton(),
     infoProgetto: (percorso) => window.cutx.infoAbleton(percorso),
@@ -726,6 +737,42 @@ browser = new Browser(
     apriProgetto: (progetto) => importa.apri(progetto),
   },
 );
+// --- il set e il kit ---
+
+const serata = new Serata({
+  libreria: () => libreria,
+  branoAttivo: () => cue.slot.attivo?.file ?? null,
+  branoProssimo: () => cue.slot.prossimo?.file ?? null,
+  // clic su un brano del set: se suona lo mostro, altrimenti lo apro come prossimo
+  scegli: (file) => {
+    if (cue.slot.attivo?.file === file) return cue.cambiaLinguetta('attivo');
+    if (cue.slot.prossimo?.file === file) return cue.cambiaLinguetta('prossimo');
+    return cue.apri(file, 'prossimo', { fuoco: false });
+  },
+  provaKit: (p) => provaInCuffia(p),
+  liveKit: (p) => goLive(p),
+  fermaTutto: () => fermaTutto(),
+  avviso: (testo) => cue.avviso(testo),
+  ridisegna: () => mostraBrowser(),
+});
+let setAvviato = null; // lo stash per cui ho già aperto il brano che apre il set
+
+// Dopo che un brano diventa l'attivo, il successivo del set diventa il prossimo (senza togliermi dalla linguetta in cui sto lavorando).
+async function caricaProssimoDopo(file) {
+  const dopo = serata.dopo(file);
+  if (dopo && libreria.some((b) => b.file === dopo)) await cue.apri(dopo, 'prossimo', { fuoco: false, mostra: false });
+}
+
+// Ogni volta che si apre uno stash: rilegge set.cutx e kit.cutx e, se il CUE è vuoto, apre come prossimo il brano che apre il set.
+async function caricaSerata(stato) {
+  await serata.carica();
+  mostraBrowser();
+  if (!stato?.percorso || setAvviato === stato.percorso || cue.slot.attivo || cue.slot.prossimo) return;
+  setAvviato = stato.percorso;
+  const primo = serata.primo();
+  if (primo && libreria.some((b) => b.file === primo)) await cue.apri(primo, 'prossimo', { fuoco: false });
+}
+
 function scegliScheda(nome) {
   browser.vai(nome);
 }
@@ -987,6 +1034,7 @@ function mostraCue() {
   const inLive = livelliLive.filter((l) => l.a === null).map((l) => ({ nome: l.nome, provenienza: l.provenienza }));
   cue.aggiornaStati({ live: inTest ? [] : inLive, cuffia: inTest ? null : etichetta(cuffia) });
   mostraBeat();
+  serata.segnaLive(livelliLive);
   cue.aggiornaTempo({ set: bpmSet(), occupato: livelliLive.some((l) => l.a === null) });
   const b = $('cuffia-onoff');
   b.classList.toggle('on', cuffia.viva && cuffiaUdibile);
@@ -1196,6 +1244,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   motori: { live, cuffia },
+  serata,
   statoBeat,
   muoviScena,
   pausaCuffia,

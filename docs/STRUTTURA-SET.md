@@ -51,7 +51,7 @@ La manopola 1 resta il BEAT. Le scene con ◀ ▶. I colpi vanno sul selezionato
 
 1. **Nomi nuovi**: fatto (31/10/2026).
 2. **CUE a due linguette**: fatto (31/10/2026). Tab alterna; sul controller il **tasto 3** (tocco = cambia linguetta, tenuto 1 s = passa al prossimo brano, dal passo 4) al posto di CUFFIA + GO LIVE (che resta «manda la clip»). «Passa da CUE a LIVE» è ora Shift+Tab.
-3. SET e KIT: da fare. 4. Passa al prossimo brano: da fare. 5. Controller (CUFFIA tenuto + ◀ ▶ = scelgo il prossimo del SET): da fare.
+3. **SET e KIT**: fatto (31/10/2026). 4. Passa al prossimo brano: da fare. 5. Controller (CUFFIA tenuto + ◀ ▶ = scelgo il prossimo del SET): da fare.
 
 ## ORDINE DEI LAVORI
 

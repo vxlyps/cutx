@@ -195,6 +195,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
+  if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
   if (parti.includes('cue-aspetto')) ok = (await sicura('cue-aspetto', provaCueAspetto)) && ok;
   if (parti.includes('beat')) ok = (await sicura('beat', provaBeat)) && ok;
@@ -2645,6 +2646,84 @@ async function provaCueController({ finestre, scrivi }) {
     await midi(0x90, cuffia, 0);
   } else scrivi(`INFO  libreria con ${n} brano: la prova del brano successivo/precedente non si fa (la logica è nei test)`);
   await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- il SET e il KIT: set.cutx, kit.cutx, ● e ▸, il successivo che si carica da solo (npx electron . --prova=set; usa uno stash temporaneo) ---
+async function provaSet({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-set-'));
+  await mkdir(path.join(tmp, 'libreria'), { recursive: true });
+  const brano = (n) => `// @brano ${n}\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n`;
+  for (const n of ['a', 'b', 'c', 'd']) await writeFile(path.join(tmp, 'libreria', `${n}.cutx`), brano(n));
+  await writeFile(path.join(tmp, 'set.cutx'), '// @set prova\n\na.cutx · apre\nb.cutx\nc.cutx · chiude\n');
+  await writeFile(path.join(tmp, 'kit.cutx'), '// @clip colpo\ns("sine*4").gain(.0001)\n// @clip tappeto\nnote("c2").s("sine").gain(.0001)\n');
+  const vero = stash._percorsoPerProva(tmp);
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
+    await js('cutxProva.ricaricaStash()');
+    await aspetta(1.5);
+    controlla('all\'avvio il prossimo è il brano che apre il set («▸ a»)', (await js(`document.getElementById('ling-prossimo').textContent`)).includes('▸ a') && (await js('cutxProva.cue.linguetta')) === 'prossimo', await js(`document.getElementById('ling-prossimo').textContent`));
+    await js(`document.querySelector('[data-scheda="set"]').click()`);
+    await aspetta(0.6);
+    const righe = () => js(`[...document.querySelectorAll('#elenco .set-riga')].map((r) => [r.dataset.file, r.className.replace('voce cliccabile set-riga', '').trim(), r.textContent])`);
+    let r = await righe();
+    controlla('la scheda set elenca i tre brani nell\'ordine, con apre e chiude', r.length === 3 && r.map((x) => x[0]).join() === 'a.cutx,b.cutx,c.cutx' && /apre/.test(r[0][2]) && /chiude/.test(r[2][2]), JSON.stringify(r));
+    controlla('▸ segna il prossimo (a)', r[0][1].includes('prossimo'), JSON.stringify(r[0]));
+    controlla('il kit ha le sue due clip', (await js(`document.querySelectorAll('#elenco .kit-riga').length`)) === 2);
+    await js(`document.querySelectorAll('#elenco .set-riga')[1].click()`);
+    await aspetta(1);
+    controlla('un clic su un brano lo apre come prossimo (▸ b)', (await js(`document.getElementById('ling-prossimo').textContent`)).includes('▸ b') && (await righe())[1][1].includes('prossimo'));
+    // il primo go live del prossimo: diventa l'attivo e il successivo del set (c) diventa il prossimo
+    await js(`cutxProva.cue.scegliSezione(1)`);
+    await js(`document.getElementById('go-live').click()`);
+    await aspetta(4);
+    controlla('go live: b diventa il brano attivo (● b)', (await js(`document.getElementById('ling-attivo').textContent`)).includes('● b'));
+    controlla('e il successivo del set (c) diventa il prossimo, in automatico', (await js(`document.getElementById('ling-prossimo').textContent`)).includes('▸ c'), await js(`document.getElementById('ling-prossimo').textContent`));
+    r = await righe();
+    controlla('nel set ● è su b e ▸ su c', r[1][1].includes('attivo') && r[2][1].includes('prossimo'), JSON.stringify(r));
+    controlla('restando sulla linguetta ● attivo (non mi sposta)', (await js('cutxProva.cue.linguetta')) === 'attivo');
+    // il kit: cuffia, live, codice
+    await js(`document.querySelectorAll('#elenco .kit-riga button')[0].click()`); // ▶ della prima clip
+    await aspetta(1.2);
+    const cs = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+    controlla('▶ su una clip del kit la manda in cuffia', cs?.nome === 'colpo' && /sine\*4/.test(cs?.codice ?? ''), JSON.stringify([cs?.nome]));
+    await js(`document.querySelectorAll('#elenco .kit-riga button')[1].click()`); // live della prima clip
+    await aspetta(3.5);
+    const vivi = (await live()).livelli.filter((l) => l.a === null).map((l) => [l.nome, l.provenienza]);
+    controlla('«live» su una clip del kit la manda live (provenienza «kit §1»)', vivi.some((x) => x[0] === 'colpo' && x[1] === 'kit §1'), JSON.stringify(vivi));
+    controlla('e il brano attivo e il prossimo non cambiano', (await js(`document.getElementById('ling-attivo').textContent`)).includes('● b') && (await js(`document.getElementById('ling-prossimo').textContent`)).includes('▸ c'));
+    controlla('la riga del kit si segna live', await js(`document.querySelector('#elenco .kit-riga[data-i="0"]')?.classList.contains('live') ?? false`));
+    // il codice del kit si apre e si modifica; si salva in kit.cutx
+    await js(`document.querySelectorAll('#elenco .kit-riga')[1].click()`);
+    await aspetta(0.5);
+    controlla('un clic sul nome apre il codice della clip', (await js(`document.querySelectorAll('#elenco .kit-codice .cm-content').length`)) === 1);
+    await js(`cutxProva.serata.editors[0].codice = 'note("e2").s("sine").gain(.0001)'`);
+    await aspetta(1.2);
+    controlla('la modifica va in kit.cutx', (await readFile(path.join(tmp, 'kit.cutx'), 'utf8')).includes('note("e2")'), await readFile(path.join(tmp, 'kit.cutx'), 'utf8'));
+    // aggiungere un brano al set dal menu
+    await js(`document.querySelector('#elenco .kit-riga')?.parentElement; (() => { const s = document.querySelector('#elenco .aggiungi-al-set'); s.value = 'd.cutx'; s.dispatchEvent(new Event('change')); })()`);
+    await aspetta(0.8);
+    controlla('+ aggiungi: d.cutx entra nel set (e nel file)', (await readFile(path.join(tmp, 'set.cutx'), 'utf8')).includes('d.cutx') && (await righe()).length === 4);
+    await js(`document.querySelectorAll('#elenco .set-riga')[3].querySelectorAll('.strumenti-set button')[0].click()`); // «apre» su d
+    await aspetta(0.6);
+    controlla('«apre» sposta il segno (file riscritto)', /d\.cutx · apre/.test(await readFile(path.join(tmp, 'set.cutx'), 'utf8')) && !/a\.cutx · apre/.test(await readFile(path.join(tmp, 'set.cutx'), 'utf8')));
+    const cartellaFoto = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'set');
+    await mkdir(cartellaFoto, { recursive: true });
+    await js(`document.querySelectorAll('#elenco .set-riga')[1].dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+    await writeFile(path.join(cartellaFoto, 'set.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } finally {
+    stash._percorsoPerProva(vero);
+    await js('cutxProva.fermaTutto(); cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; document.querySelector("[data-scheda=suoni]").click()');
+    await js('cutxProva.ricaricaStash()').catch(() => null);
+    await rm(tmp, { recursive: true, force: true });
+  }
   return ok;
 }
 

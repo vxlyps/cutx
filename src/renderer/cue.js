@@ -85,6 +85,11 @@ export class Cue {
 
   // Le due linguette col nome dei brani.
   mostraLinguette() {
+    const firma = `${this.slot.attivo?.file}|${this.slot.prossimo?.file}`;
+    if (firma !== this.firmaBrani) {
+      this.firmaBrani = firma;
+      this.azioni.suBrani?.(); // il set segna ● e ▸
+    }
     for (const [quale, segno] of [['attivo', '●'], ['prossimo', '▸']]) {
       const b = $(`ling-${quale}`);
       const brano = this.slot[quale];
@@ -104,6 +109,7 @@ export class Cue {
     this.linguetta = 'attivo';
     this.mostraBrano(true);
     this.mostraModo();
+    this.azioni.suPromosso?.(this.slot.attivo.file); // il successivo del set diventa il prossimo
   }
 
   // --- cosa suona, per i colori ---
@@ -305,13 +311,13 @@ export class Cue {
   // --- brano: mappa e card ---
 
   // Un brano della libreria si apre nella linguetta «▸ prossimo» (se non dico altro); quello che c'era si chiude con ⌘Z per riaverlo.
-  apriModello(file, testo, dove = 'prossimo') {
+  apriModello(file, testo, dove = 'prossimo', { fuoco = true, mostra = true } = {}) {
     const prima = this.slot[dove];
     const modoPrima = this.modo;
     const linguettaPrima = this.linguetta;
     const nuovo = { file, modello: B.leggi(testo), sporco: false };
     this.slot[dove] = nuovo;
-    this.linguetta = dove;
+    if (mostra) this.linguetta = dove;
     this.versione++;
     // aprire un altro brano chiude quello di prima, con le sue modifiche: ⌘Z lo riporta com'era
     if (prima) {
@@ -331,12 +337,14 @@ export class Cue {
         rifai: () => false,
       });
     }
-    this.cartaAttiva = null;
-    this.modo = 'brano';
+    if (mostra) {
+      this.cartaAttiva = null;
+      this.modo = 'brano';
+    }
     this.mostraBrano(true);
     this.mostraModo();
-    this.controllaSuoni();
-    this.carte.find((c) => c.i >= 0)?.editor.focus();
+    if (this.linguetta === dove) this.controllaSuoni();
+    if (fuoco && mostra) this.carte.find((c) => c.i >= 0)?.editor.focus();
   }
 
   controllaSuoni() {
@@ -937,19 +945,20 @@ export class Cue {
     vista.dispatch({ changes: { from: 0, to: daPrima, insert: dopo.slice(0, daDopo) } });
   }
 
-  async apri(file) {
-    if (this.brano?.sporco) {
+  async apri(file, dove = 'prossimo', opzioni = {}) {
+    const presente = this.slot[dove];
+    if (presente?.sporco) {
       const ok = await conferma({
         titolo: 'apri brano',
-        testo: `${this.nomeBrano} ha modifiche non salvate. Le perdo?`,
+        testo: `${B.testa(presente.modello).brano || presente.file} ha modifiche non salvate. Le perdo?`,
         si: 'apri lo stesso',
         no: 'annulla',
       });
       if (!ok) return;
     }
     try {
-      this.apriModello(file, await window.cutx.leggiBrano(file));
-      if (this.sceltaIniziale !== false) this.scegliSezione(0);
+      this.apriModello(file, await window.cutx.leggiBrano(file), dove, opzioni);
+      if (this.sceltaIniziale !== false && opzioni.fuoco !== false && opzioni.mostra !== false) this.scegliSezione(0);
     } catch (e) {
       this.avviso(`non riesco ad aprire ${file}: ${e.message}`);
     }

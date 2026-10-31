@@ -156,6 +156,29 @@ export async function leggiColpi() {
   }
 }
 
+// set.cutx (la serata: i brani in ordine) e kit.cutx (le clip sempre disponibili), nella radice dello stash. Li scrive Valerio a mano
+// o dall'interfaccia: se non ci sono, ritornano null e non si creano da soli.
+async function leggiFileStash(nome) {
+  if (!radice()) return null;
+  try {
+    return await readFile(path.join(attivo(), nome), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+export const leggiSet = () => leggiFileStash('set.cutx');
+export const leggiKit = () => leggiFileStash('kit.cutx');
+
+async function scriviFileStash(nome, testo) {
+  if (!radice()) throw new Error('nessuno stash');
+  await writeFile(path.join(attivo(), nome), String(testo));
+  return true;
+}
+
+export const scriviSet = (testo) => scriviFileStash('set.cutx', testo);
+export const scriviKit = (testo) => scriviFileStash('kit.cutx', testo);
+
 export async function leggiBrano(nome) {
   const file = radice() && fileBrano(nome);
   if (!file) throw new Error('brano fuori dalla libreria');
