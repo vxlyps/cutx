@@ -192,6 +192,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('controller')) ok = (await sicura('controller', provaController)) && ok;
   if (parti.includes('cuffia')) ok = (await sicura('cuffia', provaCuffia)) && ok;
   if (parti.includes('cuffia-aspetto')) ok = (await sicura('cuffia-aspetto', provaCuffiaAspetto)) && ok;
   if (parti.includes('testi')) ok = (await sicura('testi', provaTesti)) && ok;
@@ -2384,6 +2385,131 @@ async function provaScrittura({ finestre, scrivi }) {
   return ok;
 }
 
+
+// --- il controller: messaggi MIDI finti (niente hardware) dentro l'app vera: manopole, push, tasti, pagine, luci, monitor (npx electron . --prova=controller) ---
+async function provaController({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const attivi = async () => (await live()).livelli.filter((l) => l.a === null);
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const giro = (n, passi) => midi(0xb0, 15 + n, passi > 0 ? passi : 0x40 | -passi);
+  const push = (n, giu) => midi(0x90, 31 + n, giu ? 127 : 0);
+  const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: {}, controller: null })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'`);
+  await aspetta(0.5);
+  const entra = (nome, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*8").gain(.0001).lpf(800)', nome, provenienza: 'prova', cicli: 1, ...extra })})`);
+  const uno = await entra('uno');
+  const due = await entra('due');
+  await aspetta(2.8);
+  await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${due.livello}, volume: 0.5 })`);
+  await aspetta(0.6);
+
+  // pagina A: volume, muto, filtro
+  await giro(2, 5);
+  await aspetta(0.6);
+  const v = (await attivi()).find((l) => l.id === due.livello)?.volume;
+  controlla('manopola 2: il volume del secondo livello sale (0,5 → 0,6)', Math.abs(v - 0.6) < 0.011, String(v));
+  await push(2, true);
+  await aspetta(0.1);
+  await push(2, false);
+  await aspetta(0.5);
+  controlla('un tocco sul push 2: muto', (await attivi()).find((l) => l.id === due.livello)?.muto === true);
+  await push(2, true);
+  await aspetta(0.1);
+  await push(2, false);
+  await aspetta(0.5);
+  controlla('un secondo tocco: torna a suonare', (await attivi()).find((l) => l.id === due.livello)?.muto === false);
+  await push(2, true);
+  await aspetta(0.6);
+  for (let i = 0; i < 12; i++) await giro(2, 1);
+  await aspetta(0.5);
+  await push(2, false);
+  await aspetta(0.5);
+  const l2 = (await attivi()).find((l) => l.id === due.livello);
+  controlla('tenuta premuta + giro: il filtro entra nella coda del livello (e il muto non scatta)', /^\.lpf\(\d+\)$/.test(l2?.coda?.[0] ?? '') && l2.muto === false && Number(l2.coda[0].match(/\d+/)[0]) > 800, JSON.stringify([l2?.coda, l2?.muto]));
+  controlla('e il livello è quello scelto (bordo verde)', (await js('cutxProva.pila.selezionato')) === due.livello);
+  controlla('la scritta grande si vede', (await js(`!document.getElementById('scritta-controller').hidden || document.getElementById('scritta-controller').textContent.length > 0`)) === true);
+
+  // pagina B
+  await midi(0x90, 85, 127);
+  controlla('il tasto layer B porta alla pagina B', (await js('cutxProva.controllerMidi.pagina')) === 'B');
+  await midi(0x90, await tasto(1), 127);
+  await midi(0x90, await tasto(1), 0);
+  await giro(4, 10);
+  await aspetta(0.6);
+  const l1 = (await attivi()).find((l) => l.id === uno.livello);
+  controlla('pagina B: il tasto 1 sceglie il livello 1 e la manopola 4 scrive l\'eco nella sua coda', /^\.delay\(0\.\d+\)$/.test(l1?.coda?.find((x) => x.startsWith('.delay')) ?? ''), JSON.stringify(l1?.coda));
+  await midi(0x90, 84, 127);
+  controlla('il tasto layer A torna alla pagina A', (await js('cutxProva.controllerMidi.pagina')) === 'A');
+
+  // tasti: go live dal CUE
+  const prima = (await attivi()).length;
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue('s("sine*4").gain(.0001)')`);
+  await midi(0x90, await tasto(5), 127);
+  await midi(0x90, await tasto(5), 0);
+  await aspetta(2.8);
+  controlla('il tasto 5 (alto) è go live: entra un livello', (await attivi()).length === prima + 1, String((await attivi()).length));
+
+  // luci: i valori veri sugli anelli
+  const inviati = await js(`(() => {
+    const c = cutxProva.controllerMidi;
+    const log = [];
+    c.porta.uscita = { send: (b) => log.push([...b]) };
+    c.ultime.clear();
+    c.luci();
+    return log;
+  })()`);
+  const anello1 = inviati.find((m) => m[0] === 0xb0 && m[1] === 0x30);
+  controlla('le luci: anello 1 e tasto layer A (84) acceso', !!anello1 && inviati.some((m) => m[0] === 0x90 && m[1] === 84 && m[2] === 127), JSON.stringify(inviati.slice(0, 4)));
+  const dopoDue = await js(`(() => { const c = cutxProva.controllerMidi; const log = []; c.porta.uscita = { send: (b) => log.push([...b]) }; c.luci(); return log.length; })()`);
+  controlla('le luci già mandate non si rimandano', dopoDue === 0, String(dopoDue));
+
+  // la pagina delle impostazioni: stato, monitor
+  await js(`document.getElementById('apri-impostazioni').click()`);
+  await aspetta(0.4);
+  await js(`document.querySelector('#imp-nav [data-sez="controller"]').click()`);
+  await aspetta(0.4);
+  await giro(3, 2);
+  await aspetta(0.5);
+  const monitor = await js(`document.getElementById('ctl-monitor').innerText`);
+  controlla('il monitor dice cosa riceve in parole e in piccolo il messaggio grezzo', /manopola 3 → \+2/.test(monitor) && /b0 12 02/.test(monitor), JSON.stringify(monitor));
+  try {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'controller');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'pagina.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } catch {}
+  await midi(0xba, 1, 20);
+  await aspetta(0.4);
+  const stato = await js(`document.getElementById('ctl-stato').innerText`);
+  controlla('se parla in standard lo dice e dà le istruzioni (tasto MC tenuto mentre si collega l\'USB)', /standard/.test(stato) && /MC MODE/.test(stato) && /tasto MC/.test(stato), JSON.stringify(stato));
+  await js(`cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.suStato?.()`);
+  await aspetta(0.3);
+  controlla('i bottoni «prova luci» e «calibra» ci sono', (await js(`document.querySelectorAll('#ctl-luci button').length`)) === 4 && (await js(`document.querySelectorAll('#ctl-calibra button').length`)) >= 1);
+
+  // la scritta sul proiettore: spenta di default, accesa dai testi per il pubblico
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  await js(`document.getElementById('chiudi-impostazioni').click()`);
+  await giro(1, 1);
+  await aspetta(0.5);
+  controlla('la scritta del controller sul proiettore è spenta di default', (await chiedi(finestre.uscita, `document.getElementById('scritta').hidden`)) === true);
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { controller: { acceso: true } } })`);
+  await aspetta(0.6);
+  await giro(1, 1);
+  await aspetta(0.4);
+  const proiettore = await chiedi(finestre.uscita, `[document.getElementById('scritta').hidden, document.getElementById('scritta').textContent].join('|')`);
+  controlla('accesa nei testi per il pubblico: compare (es. «UNO · VOLUME 0.99»)', /^false\|.*VOLUME/.test(proiettore), JSON.stringify(proiettore));
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: {} })`);
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
 
 // --- la cuffia nel CUE: il tasto «cuffia» di ogni sezione si illumina, la striscia «in cuffia» con ■ e STOP (npx electron . --prova=cuffia) ---
 async function provaCuffia({ finestre, scrivi }) {

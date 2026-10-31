@@ -16,7 +16,7 @@ export const PREDEFINITI = {
   coda: { acceso: true },
   commenti: { acceso: false }, // le righe // del codice
   preambolo: { acceso: false }, // il preambolo del brano (setcpm…): un setcpm scritto io dal vivo è un gesto e si vede
-  controller: { acceso: false, testo: '{pezzo} · {parametro} {valore}' }, // fase 4: la scritta grande di quello che tocco
+  controller: { acceso: false, testo: '{testo}' }, // fase 4: la scritta grande di quello che tocco («REESE · FILTRO 0.42»)
   momento: { acceso: false, testo: '{momento}' }, // fase 4: il nome del momento della spina
 };
 
@@ -25,7 +25,7 @@ export const SEGNAPOSTO = {
   bpm: ['bpm'],
   frase: ['n'],
   conto: ['n', 'cicli'],
-  controller: ['pezzo', 'parametro', 'valore'],
+  controller: ['testo'],
   momento: ['momento'],
 };
 

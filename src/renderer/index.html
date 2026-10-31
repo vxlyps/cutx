@@ -203,6 +203,7 @@
           <button class="key" data-sez="audio">audio</button>
           <button class="key" data-sez="scorciatoie">scorciatoie</button>
           <button class="key" data-sez="proiezione">proiezione</button>
+          <button class="key" data-sez="controller">controller</button>
           <button class="key" data-sez="stash">stash</button>
           <button class="key" data-sez="ableton">ableton</button>
           <button class="key" data-sez="estensioni">estensioni</button>
@@ -295,6 +296,21 @@
           <div id="imp-scrittura" class="imp-gruppo"></div>
         </section>
 
+        <section class="imp-sez" data-sez="controller" hidden>
+          <h1 class="imp-titolo">controller</h1>
+          <div id="ctl-stato" class="imp-gruppo"></div>
+          <h2 class="imp-sotto">monitor in diretta</h2>
+          <p class="lbl imp-aiuto">gira una manopola o premi qualcosa: qui vedi cosa riceve CUTX, in parole e (piccolo) il messaggio grezzo</p>
+          <div id="ctl-monitor" class="ctl-monitor"></div>
+          <h2 class="imp-sotto">prova luci</h2>
+          <div id="ctl-luci" class="imp-gruppo"></div>
+          <h2 class="imp-sotto">calibrazione dei tasti</h2>
+          <p class="lbl imp-aiuto">i 16 tasti e i due layer mandano note che dipendono dal modello: premili nell'ordine che ti chiedo e CUTX li impara</p>
+          <div id="ctl-calibra" class="imp-gruppo"></div>
+          <h2 class="imp-sotto">la mappa</h2>
+          <div id="ctl-mappa" class="ctl-mappa"></div>
+        </section>
+
         <section class="imp-sez" data-sez="stash" hidden>
           <h1 class="imp-titolo">stash</h1>
           <div class="imp-riga">
@@ -331,6 +347,7 @@
       </div>
     </div>
 
+    <div id="scritta-controller" class="scritta-controller" aria-live="polite" hidden></div>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

@@ -1,0 +1,41 @@
+// La mappa dell'X-Touch Mini: cosa fa ogni manopola e ogni tasto nelle due pagine (A «suona», B «scolpisci»). Parte pura: i valori dei
+// parametri e le tabelle; chi li usa è controller.js. Ogni cosa che si tocca finisce nel codice (la coda del livello) o in un comando.
+// Le pagine si scelgono con i tasti layer A e B; la pagina si vede dagli anelli (A = punto, B = fan) e dal tasto layer acceso.
+
+// I parametri della pagina B: la chiave è la funzione Strudel che finisce nella coda; il valore sta fra min e max (log = scala logaritmica).
+export const PARAMETRI = {
+  filtro: { nome: 'FILTRO', chiave: 'lpf', min: 150, max: 16000, log: true, predefinito: 1, decimali: 0 }, // 1 = aperto
+  risonanza: { nome: 'RISONANZA', chiave: 'lpq', min: 0, max: 20, predefinito: 0, decimali: 1 },
+  eco: { nome: 'ECO', chiave: 'delay', min: 0, max: 1, predefinito: 0, decimali: 2 },
+  riverbero: { nome: 'RIVERBERO', chiave: 'room', min: 0, max: 1, predefinito: 0, decimali: 2 },
+  sporco: { nome: 'SPORCO', chiave: 'distort', min: 0, max: 3, predefinito: 0, decimali: 2 },
+};
+
+// Pagina B, le otto manopole: volume (il livello), filtro, risonanza, eco, riverbero, velocità (a scatti: arriva coi colpi),
+// sporco, altezza (arriva dopo). null = non ancora.
+export const PAGINA_B = ['volume', 'filtro', 'risonanza', 'eco', 'riverbero', null, 'sporco', null];
+
+// Pagina A, i tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia, go live, togli, piano/registra, paracadute (tenuto 1 s).
+export const TASTI_A = ['momentoIndietro', 'momentoAvanti', 'passaSpina', 'cuffia', 'goLive', 'togli', 'piano', 'paracadute'];
+
+// Dal numero 0..1 al valore e ritorno.
+export function valoreDa(p, x) {
+  const t = Math.max(0, Math.min(1, x));
+  return p.log ? p.min * (p.max / p.min) ** t : p.min + (p.max - p.min) * t;
+}
+export function normalizzato(p, v) {
+  const n = p.log ? Math.log(v / p.min) / Math.log(p.max / p.min) : (v - p.min) / (p.max - p.min);
+  return Math.max(0, Math.min(1, n));
+}
+
+// La riga di coda per un valore: .lpf(742), .delay(0.4)
+export function rigaCoda(p, x) {
+  const v = valoreDa(p, x);
+  const testo = p.decimali === 0 ? String(Math.round(v)) : String(Math.round(v * 10 ** p.decimali) / 10 ** p.decimali);
+  return `.${p.chiave}(${testo})`;
+}
+
+// Un passo di manopola: 1/64 dell'escursione (una rotazione lenta = fine, veloce = più passi insieme).
+export const PASSO_X = 1 / 64;
+export const PASSO_VOLUME = 0.02;
+export const clamp01 = (x) => Math.max(0, Math.min(1, x));

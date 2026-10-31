@@ -260,3 +260,21 @@ body {
 .senza-insegna .insegna {
   display: none;
 }
+
+/* la scritta grande di quello che tocco sul controller (se l'ho acceso nei testi per il pubblico) */
+.scritta {
+  position: absolute;
+  left: 50%;
+  bottom: calc(60 * var(--u));
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: calc(8 * var(--u)) calc(28 * var(--u));
+  font-family: 'Fragment Mono', monospace;
+  font-size: calc(46 * var(--u));
+  letter-spacing: 0.08em;
+  color: var(--marcio);
+  text-shadow: var(--bagliore);
+  background: rgba(5, 6, 4, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
+}

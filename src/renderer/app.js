@@ -7,6 +7,8 @@ import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
 import { separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
 import { Importa } from './importa.js';
+import { Controller } from './controller.js';
+import { PaginaController } from './impostazioni-controller.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
 import { Cronologia } from './cronologia.js';
@@ -1121,6 +1123,9 @@ globalThis.cutxProva = {
   salvaLiveComeBrano,
   lanciaParacadute,
   pila,
+  get controllerMidi() {
+    return controllerMidi;
+  },
   imp,
   importa,
   scriviCue: (codice) => (cue.libero.codice = codice),
@@ -1146,12 +1151,67 @@ globalThis.cutxProva = {
   misure: () => ({ stima: misuratore.stima.riepilogo(), live: live.stato, cuffia: cuffia.stato }),
 };
 
+// --- il controller (X-Touch Mini in MC): le stesse azioni della tastiera e del mouse, gli anelli con i valori veri ---
+let scrittaTimer = null;
+function mostraScritta(testo) {
+  const e = $('scritta-controller');
+  e.textContent = testo;
+  // con le impostazioni aperte c'è già il monitor: la scritta grande non copre la pagina
+  e.hidden = !$('impostazioni').hidden;
+  clearTimeout(scrittaTimer);
+  scrittaTimer = setTimeout(() => (e.hidden = true), 1600);
+  portaUscita?.postMessage({ tipo: 'scritta', testo }); // la finestra del pubblico la mostra solo se l'ho accesa nei testi
+}
+let gestoVolume = null; // un giro di manopola sul volume è un passo solo di ⌘Z
+const controllerMidi = new Controller({
+  livelli: () => pila.attivi(),
+  volume: (id, v) => {
+    const l = livelloVivo(id);
+    if (!l) return;
+    if (gestoVolume?.id !== id) {
+      gestoVolume = { id, prima: l.volume, timer: null };
+    }
+    clearTimeout(gestoVolume.timer);
+    const g = gestoVolume;
+    g.timer = setTimeout(() => {
+      registraVolume(g.id, g.prima, livelloVivo(g.id)?.volume);
+      if (gestoVolume === g) gestoVolume = null;
+    }, 700);
+    l.volume = v; // subito: il prossimo scatto parte da qui, senza aspettare l'eco del motore
+    live.manda({ tipo: 'livello', livello: id, volume: v });
+  },
+  muto: (id) => {
+    const l = livelloVivo(id);
+    if (!l) return;
+    registraMuto(id, !l.muto);
+    l.muto = !l.muto;
+    live.manda({ tipo: 'livello', livello: id, muto: l.muto });
+  },
+  seleziona: (id) => pila.seleziona(id),
+  coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
+  master: (volume) => live.manda({ tipo: 'master', volume }),
+  tempo: (bpm) => live.manda({ tipo: 'tempo', bpm }),
+  bpm: () => bpmSet() ?? 120,
+  goLive: () => goLive(),
+  togli: () => togliLivello(pila.selezionato ?? undefined),
+  cuffia: () => (cuffia.stato.codice ? fermaCuffia() : provaInCuffia()),
+  inCuffia: () => !!cuffia.stato.codice,
+  paracadute: () => lanciaParacadute(),
+  scritta: (testo) => mostraScritta(testo),
+  avviso: (testo) => cue.avviso(testo, { persistente: true }),
+  calibrazione: () => preferenze.controller,
+  salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: c }),
+});
+const paginaController = new PaginaController(controllerMidi);
+controllerMidi.collega();
+
 setInterval(mostra, 100);
 mostra();
 mostraTempo();
 function applicaPreferenze(p) {
   const dissPrima = preferenze.dissolvenzaEntrata;
   preferenze = p;
+  controllerMidi.ricaricaTabella();
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   $('paracadute').hidden = p.paracadute === false;

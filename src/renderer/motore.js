@@ -735,6 +735,9 @@ async function ricevi(da, m) {
     }
     case 'coda':
       return cambiaCoda(m);
+    case 'master': // il volume generale del live (la manopola 8 del controller): lineare, con una sfumata breve
+      if (LIVE) getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(Math.max(0, Math.min(1.5, Number(m.volume))), ac.currentTime, SFUMATA_S);
+      return;
     case 'suoni-extra': // suoni solo da ascoltare (anteprima dei progetti Ableton): nome → [indirizzi]
       await pronto;
       return samples(m.mappa);

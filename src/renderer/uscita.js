@@ -27,6 +27,7 @@ let mappa = null;
 let livelli = [];
 let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
+let scritta = null; // { testo, quando }: quello che tocco sul controller, se l'ho acceso nei testi per il pubblico
 let testi = risolviTesti({}); // i testi per il pubblico (testi-pubblico.js): cosa si vede e con quali parole
 const inizioUscita = new Map();
 const blocchi = new Map(); // chiave → { el, tag, codice }
@@ -50,6 +51,7 @@ window.addEventListener('message', (e) => {
     else if (data.tipo === 'mappa') mappa = data;
     else if (data.tipo === 'livelli') livelli = data.livelli;
     else if (data.tipo === 'bozze') bozze = data;
+    else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
     else if (data.tipo === 'preferenze' && ANTEPRIMA) applica(data.p);
   };
   if (con === 'controllo') bozze = { livelli: {}, jam: null };
@@ -160,6 +162,10 @@ function disegna() {
   const quarto = Math.floor((ciclo - intero) * 4);
   const lunghezza = preferenze.lunghezzaFrase ?? 16;
   sfondo.disegna(ciclo, livelli);
+  // la scritta grande del controller: solo se è accesa, e per un attimo
+  const visibile = testi.controller.acceso && scritta && performance.now() - scritta.quando < 1800;
+  $('scritta').hidden = !visibile;
+  if (visibile) $('scritta').textContent = riempiTesto(testi.controller.testo, { testo: scritta.testo });
   $('bpm').hidden = !testi.bpm.acceso;
   $('bpm').textContent = riempiTesto(testi.bpm.testo, { bpm: arrotondaBpm(bpmDi(cpsAl(mappa, epoca))) });
   $('frase').hidden = !testi.frase.acceso;
