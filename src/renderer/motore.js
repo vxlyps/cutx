@@ -4,9 +4,10 @@
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
 import { eventiDaHap } from './striscia.js';
 import { eNomeBeat } from './nomi.js';
+import { CEILING, creaLimiter } from './limiter.js';
 import { CICLI_RAMPA, gradiniRampa } from './passaggio.js';
 import { applica as applicaCoda, applicaGlobali, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
-import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence } from '@strudel/core';
+import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, State, TimeSpan } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
   getAudioContext,
@@ -43,7 +44,29 @@ const pronto = (async () => {
   );
   await registerSynthSounds();
   await initAudio();
+  if (LIVE) installaLimiter();
 })();
+
+// IL GUARDIANO — il limiter sull'uscita del live (limiter.js): sta fra il volume generale e le casse.
+let limiter = null; // { compressore, analisi }
+function installaLimiter() {
+  if (limiter) return;
+  const uscita = getSuperdoughAudioController().output;
+  const l = creaLimiter(ac);
+  const analisi = new AnalyserNode(ac, { fftSize: 2048, smoothingTimeConstant: 0 }); // solo per le prove: il picco vero in uscita
+  uscita.destinationGain.disconnect(ac.destination); // le altre prese (onda, sentinella) restano
+  uscita.destinationGain.connect(l.ingresso);
+  l.uscita.connect(ac.destination);
+  l.uscita.connect(analisi);
+  limiter = { compressore: l.compressore, analisi };
+}
+// Il picco (lineare) dell'ultimo blocco in uscita, dopo il limiter.
+function piccoUscita() {
+  if (!limiter) return null;
+  const d = new Float32Array(limiter.analisi.fftSize);
+  limiter.analisi.getFloatTimeDomainData(d);
+  return d.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+}
 
 const porte = {}; // controllo, live o cuffia → MessagePort
 const manda = (a, m) => porte[a]?.postMessage(m);
@@ -349,6 +372,9 @@ function cambiaCoda(m) {
 async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
+  // il guardiano: un codice che si rompe in uno dei primi cicli (un errore pigro) non entra, e quello che suona continua
+  const guasto = verificaPattern(c.pattern);
+  if (guasto) return { errore: guasto };
   avvisaSuoniMancanti(c.pattern, nome);
   // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
   // (con una griglia — i colpi — entra sul primo punto della griglia)
@@ -383,6 +409,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   if (Array.isArray(coda)) l.coda = coda.filter((t) => leggiVoce(t)).map((t) => leggiVoce(t).testo); // quella scritta nella sezione vince
   if (l.coda.length || globali.size) metteCoda(l);
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
+  l.sostituisce = scambi[0] ?? null; // se il guardiano deve rimettere la versione di prima
   livelli.push(l);
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
   if (rampa && rip.mappa) rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
@@ -390,6 +417,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   aggiornaLivelli();
   dissolvi(l, 'entra', da, d.cicli, d.entra);
   for (const vecchio of scambi) dissolvi(vecchio, 'esce', da, d.cicli, d.esce);
+  entraMorbido(l, da);
   return { da, livello: l.id };
 }
 
@@ -582,6 +610,62 @@ function tagliaTutto(giu, ciclo = null) {
   }
   if (!giu) setTimeout(() => (tagliato = false), Math.max(0, (quando - ora) * 1000) + 100);
 }
+
+// Il guardiano: ogni livello entra al suo volume con una micro-dissolvenza (3 ms: scende a zero un attimo prima del suo primo suono e
+// risale subito), così nessun attacco parte a metà onda. L'attacco vero (un colpo di cassa) non si sente toccato.
+function entraMorbido(l, ciclo) {
+  const g = guadagni.get(l.id);
+  if (!g?.micro || !rip.mappa || !Number.isFinite(ciclo)) return;
+  const t = rip.tempo(ciclo);
+  if (!(t > ac.currentTime + 0.01)) return;
+  const p = g.micro.gain;
+  p.setValueAtTime(0, t - 0.0015);
+  p.linearRampToValueAtTime(1, t + 0.003);
+}
+
+// queryArc di Strudel inghiotte gli errori (li scrive nel registro e risponde «niente»): il guardiano li vuole vedere, quindi si usa query().
+function interrogaVisibile(pattern, a, b, controlli) {
+  return typeof pattern.query === 'function' ? pattern.query(new State(new TimeSpan(a, b), controlli)) : pattern.queryArc(a, b, controlli);
+}
+rip.interroga = interrogaVisibile;
+
+// Un pattern si lascia interrogare nei suoi primi cicli? Altrimenti ritorna il messaggio dell'errore.
+function verificaPattern(pattern, cicli = 16) {
+  try {
+    interrogaVisibile(pattern, 0, cicli, {});
+    return null;
+  } catch (e) {
+    return testoErrore(e);
+  }
+}
+
+// Il messaggio di un errore, qualunque cosa sia stata lanciata.
+function testoErrore(e) {
+  if (typeof e === 'string') return e;
+  if (typeof e?.message === 'string') return e.message;
+  try {
+    return JSON.stringify(e, Object.getOwnPropertyNames(e ?? {}));
+  } catch {
+    return String(e);
+  }
+}
+
+// Il guardiano a tempo di esecuzione: se un livello appena sostituito si rompe mentre suona, torna quello di prima (e lo dice).
+rip.suErroreSorgente = (s, messaggio) => {
+  if (!LIVE || s.erroreDato) return;
+  s.erroreDato = true;
+  const vecchio = s.sostituisce;
+  const puoTornare = vecchio && s.da !== -Infinity && vecchio.a !== Infinity && (rip.fine ?? 0) - s.da < 64;
+  if (puoTornare) {
+    s.a = Math.max(s.da, rip.fine ?? s.da); // il nuovo smette di essere programmato adesso
+    if (!livelli.includes(vecchio)) livelli.push(vecchio); // (se era già stato buttato via, ricompare: il suo guadagno si ricrea)
+    vecchio.a = Infinity;
+    annullaDissolvi(vecchio);
+    annullaDissolvi(s);
+    aggiornaLivelli();
+  }
+  manda('controllo', { tipo: 'guardiano', nome: s.nome, errore: messaggio, ripristinato: !!puoTornare });
+};
 
 // Un livello uscito: dopo la coda (riverbero, delay) il suo guadagno e la sua orbita si buttano.
 function liberaGuadagno(id) {
@@ -829,6 +913,7 @@ function stato() {
     globali: [...globali.values()],
     breakFattore,
     tagliato,
+    limiter: limiter ? { riduzioneDb: limiter.compressore.reduction, picco: piccoUscita(), ceiling: CEILING } : null,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     dissolvenze: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, { fade: g.fade.gain.value, lp: g.lp.frequency.value, hp: g.hp.frequency.value }])) : undefined,

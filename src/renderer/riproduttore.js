@@ -26,7 +26,9 @@ export class Riproduttore {
     this.errore = null;
     this.suEvento = null; // (hap, t, sorgente) => {}, per misuratore, sentinella e prove
     this.suCps = null; // (cps) => {}, quando un evento chiede un tempo nuovo (cps nel valore)
-    this.suMappa = null; // () => {}, quando la mappa cambia
+    this.suMappa = null;
+    // Come si interroga un pattern. Quello di Strudel (queryArc) inghiotte gli errori e risponde «niente»: il live li vuole vedere (motore.js lo cambia).
+    this.interroga = (pattern, a, b, controlli) => pattern.queryArc(a, b, controlli); // () => {}, quando la mappa cambia
   }
 
   // Una sorgente sola che suona sempre: la cuffia, la prova.
@@ -123,9 +125,10 @@ export class Riproduttore {
       if (fine <= inizio) continue;
       let haps;
       try {
-        haps = s.pattern.queryArc(inizio, fine, { _cps: cps, cyclist: 'cyclist' });
+        haps = this.interroga(s.pattern, inizio, fine, { _cps: cps, cyclist: 'cyclist' });
       } catch (e) {
-        this.errore = String(e.message ?? e);
+        this.errore = typeof e?.message === 'string' ? e.message : typeof e === 'string' ? e : (() => { try { return JSON.stringify(e, Object.getOwnPropertyNames(e ?? {})); } catch { return String(e); } })();
+        this.suErroreSorgente?.(s, this.errore); // il guardiano (motore.js): rimette la versione di prima
         continue;
       }
       for (const hap of haps) {

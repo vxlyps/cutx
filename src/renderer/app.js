@@ -4,6 +4,7 @@
 import { Cue } from './cue.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
+import { misuraLimiter } from './limiter.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
@@ -1288,6 +1289,7 @@ for (const m of [live, cuffia]) {
       cue.avviso(`${dove}: ${msg.suoni.length === 1 ? 'il suono' : 'i suoni'} ${msg.suoni.join(', ')} ${msg.suoni.length === 1 ? 'non è' : 'non sono'} nello stash: non ${msg.suoni.length === 1 ? 'suonerà' : 'suoneranno'}`, { persistente: true });
     } else if (msg.tipo === 'eco') misuratore.eco(msg.ciclo, msg.ruolo, msg.epoca);
     else if (msg.tipo === 'anello') misuratore.misuraAnello(msg.ms);
+    else if (msg.tipo === 'guardiano' && !inTest) cue.avviso(`«${msg.nome}»: ${msg.errore}${msg.ripristinato ? ' · continua a suonare la versione di prima' : ''}`, { persistente: true });
     else if (msg.tipo === 'anello-stato') $('anello-stato').textContent = msg.attivo ? 'in ascolto' : `errore: ${msg.errore}`;
   };
 }
@@ -1352,6 +1354,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   motori: { live, cuffia },
+  misuraLimiter,
   passaBrano,
   caricaSerata,
   serata,

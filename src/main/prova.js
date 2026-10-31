@@ -195,6 +195,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
+  if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
@@ -2647,6 +2648,55 @@ async function provaCueController({ finestre, scrivi }) {
     await midi(0x90, cuffia, 0);
   } else scrivi(`INFO  libreria con ${n} brano: la prova del brano successivo/precedente non si fa (la logica è nei test)`);
   await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- il guardiano: il limiter, l'errore pigro che non entra, il livello che si rompe mentre suona e la versione di prima che torna (npx electron . --prova=guardiano) ---
+async function provaGuardiano({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  // il limiter, fuori linea (non suona niente): trasparente sotto la soglia, tiene tutto sotto il tetto sopra
+  const misure = [];
+  for (const a of [0.05, 0.25, 0.5, 0.8, 1, 2, 4, 8]) misure.push(await js(`cutxProva.misuraLimiter(${a})`));
+  const sotto = misure.filter((m) => m.ampiezza <= 0.5);
+  controlla('limiter: sotto la soglia è trasparente (±0,4 dB)', sotto.every((m) => Math.abs(m.guadagnoDb) < 0.4), JSON.stringify(sotto.map((m) => +m.guadagnoDb.toFixed(2))));
+  controlla('limiter: niente esce sopra il tetto (−0,25 dBFS), nemmeno con +18 dB in ingresso', misure.every((m) => m.picco <= 0.9721), JSON.stringify(misure.map((m) => +m.picco.toFixed(3))));
+  controlla('limiter: più entra, più si limita (il picco non cresce di molto)', misure.at(-1).picco - misure.find((m) => m.ampiezza === 1).picco < 0.15, JSON.stringify(misure.map((m) => +m.picco.toFixed(3))));
+  const st = await live();
+  controlla('il live ha il limiter acceso (e a riposo non riduce)', st.limiter !== null && st.limiter.riduzioneDb > -0.5, JSON.stringify(st.limiter));
+  // un errore pigro (si rompe dopo il primo ciclo ma entro i 16 controllati) non entra e quello che suona continua
+  await js(`cutxProva.fermaTutto()`);
+  const entra = (nome, codice, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true, ...extra })})`);
+  await entra('x', 's("sine*2").gain(.0001)');
+  await aspetta(3);
+  const r = await entra('x', 's("sine*2").gain(.0001).withHaps((haps) => haps.map((h) => { if (h.whole.begin.valueOf() >= 3) throw new Error('boom pigro'); return h; }))');
+  controlla('un errore che viene fuori nei primi cicli non entra (e lo dice)', /boom pigro/.test(r.errore ?? ''), JSON.stringify(r));
+  await aspetta(2.5);
+  let vivi = (await live()).livelli.filter((l) => l.a === null);
+  controlla('e quello che suonava continua (stesso livello, versione di prima)', vivi.length === 1 && vivi[0].codice.includes('sine*2') && !vivi[0].codice.includes('boom'), JSON.stringify(vivi.map((l) => [l.nome, l.id])));
+  // un livello che si rompe mentre suona (dopo i cicli controllati): torna la versione di prima, e il guardiano lo segnala
+  const prima = vivi[0].id;
+  const T = Date.now() + 5000;
+  await entra('x', `s("sine*2").gain(.0001).withHaps((haps) => { if (Date.now() > ${T}) throw new Error('boom a metà'); return haps; })`);
+  await aspetta(3);
+  vivi = (await live()).livelli.filter((l) => l.a === null);
+  controlla('la versione nuova è entrata (un altro livello)', vivi.length === 1 && vivi[0].id !== prima && vivi[0].codice.includes('boom a metà'), JSON.stringify(vivi.map((l) => [l.nome, l.id])));
+  await aspetta(5);
+  vivi = (await live()).livelli.filter((l) => l.a === null);
+  controlla('quando si rompe, torna la versione di prima', vivi.length === 1 && vivi[0].id === prima && !vivi[0].codice.includes('boom'), JSON.stringify((await live()).livelli.map((l) => [l.nome, l.id, l.a, l.codice.slice(0, 25)])));
+  const avviso = await js(`document.getElementById('cue-avviso').textContent`);
+  controlla('e l\'interfaccia lo dice', /boom a metà/.test(avviso) && /versione di prima/.test(avviso), avviso);
+  controlla('la versione di prima continua a produrre eventi (non è rimasta zitta)', await (async () => {
+    const e0 = (await live()).eventi;
+    await aspetta(2);
+    return (await live()).eventi > e0;
+  })());
+  await js(`cutxProva.fermaTutto()`);
   return ok;
 }
 
