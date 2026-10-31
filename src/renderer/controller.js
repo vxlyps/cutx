@@ -219,8 +219,13 @@ export class Controller {
     return this.livello(this.bersaglio)?.nome ?? `livello ${this.bersaglio}`;
   }
 
+  // I sette posti delle manopole: 1 = la spina (null se non c'è), 2–7 = i pezzi. Senza `posti` (nei test) i livelli vanno uno dopo l'altro.
+  posti() {
+    return this.azioni.posti ? this.azioni.posti() : Array.from({ length: 7 }, (_, i) => this.azioni.livelli()[i] ?? null);
+  }
+
   livello(n) {
-    return this.azioni.livelli()[n - 1] ?? null;
+    return this.posti()[n - 1] ?? null;
   }
 
   // --- manopole ---
@@ -599,7 +604,7 @@ export class Controller {
 
   // Cosa comanda ogni manopola adesso: null = libera (anello spento); altrimenti { stile: 'fan' | 'punto', valore 0..1 | null (muto) }.
   manopole() {
-    const livelli = this.azioni.livelli();
+    const livelli = this.posti();
     const m = [];
     if (this.pagina === 'A') {
       for (let n = 1; n <= 7; n++) {
@@ -651,7 +656,6 @@ export class Controller {
     });
     const stati = new Map(); // nota → true | 'lampeggia'
     for (const i of this.colpi.attivi.keys()) stati.set(this.tab.tasti[8 + i], true); // un colpo si vede acceso finché lo tengo
-    const livelli = this.azioni.livelli();
     stati.set(this.tab.layer[this.pagina], true); // la pagina
     const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
     // il paracadute c'è in tutte e due le pagine (tasto 8, tenuto un secondo)
@@ -672,7 +676,6 @@ export class Controller {
       if (fino > ora) stati.set(nota, true);
       else this.lampi.delete(nota);
     }
-    void livelli;
     for (const nota of noteTasti(this.tab)) luci.set(`t${nota}`, messaggioTasto(nota, stati.get(nota) ?? false));
     return luci;
   }

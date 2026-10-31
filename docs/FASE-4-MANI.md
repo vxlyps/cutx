@@ -73,6 +73,7 @@
 
 ### Pagina A · SUONA
 
+- La spina sta SEMPRE sulla manopola 1 (e sul tasto-livello 1 in pagina B) e la sua card è sempre la prima in cima al LIVE, qualunque sia l'ordine di entrata; i pezzi vanno su 2-7 nell'ordine di entrata. Senza spina live la manopola 1 resta libera (anello spento, lo specchio scrive «spina» in grigio) e i pezzi restano su 2-7. I colpi «solo colpo» vanno sulla spina vera; se non c'è, sul primo livello (lo specchio dice «non c'è la spina»).
 - Manopola 1 = spina: gira a sinistra svuota (passa-basso), a destra alleggerisce (passa-alto), al centro piena; premi = muto.
 - Manopole 2-7 = pezzi live 2-7: gira = volume, premi = muto, tieni premuto e gira = filtro di quel pezzo. Il pezzo toccato per ultimo è il selezionato e su schermo si vede. Se entra un settimo pezzo, avvisami o prendi il posto del più vecchio in muto: proponimi tu.
 - Manopola 8 = volume generale.

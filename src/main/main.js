@@ -454,6 +454,19 @@ ipcMain.handle('stash:scegli', async () => {
   avvisaMotori();
   return stash.stato();
 });
+ipcMain.handle('stash:copia-info', () => stash.infoCopia());
+let copiando = false;
+ipcMain.handle('stash:copia', async (e) => {
+  if (copiando) return { errore: 'una copia è già in corso' };
+  copiando = true;
+  try {
+    return await stash.copiaStash((p) => e.sender.send('stash:copia-avanza', p));
+  } catch (err) {
+    return { errore: String(err.message ?? err) };
+  } finally {
+    copiando = false;
+  }
+});
 ipcMain.handle('stash:rileggi', () => avvisaMotori()); // lo stash è tornato: i motori rileggono suoni e uscite
 ipcMain.handle('stash:salva', async (_e, config) => {
   await stash.salvaConfig(config);

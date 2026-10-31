@@ -40,6 +40,7 @@ export class GestoreColpi {
   // I livelli su cui va un colpo «spina»: quelli con la manopola tenuta premuta, il livello scelto in pagina B, altrimenti la spina (il primo).
   bersagliSpina() {
     const c = this.c;
+    this.senzaSpina = false;
     if (c.pagina === 'A') {
       const tenute = [...c.push].filter(([, s]) => s.giu).map(([n]) => c.livello(n)).filter(Boolean);
       if (tenute.length) return tenute;
@@ -47,8 +48,12 @@ export class GestoreColpi {
       const l = c.livello(c.bersaglio);
       if (l) return [l];
     }
+    // la spina vera; se non c'è, il primo livello che suona (e lo specchio lo dice)
     const spina = c.livello(1);
-    return spina ? [spina] : [];
+    if (spina) return [spina];
+    const primo = c.posti().find(Boolean);
+    this.senzaSpina = !!primo;
+    return primo ? [primo] : [];
   }
 
   premi(i, giu) {
@@ -63,7 +68,7 @@ export class GestoreColpi {
       this.attivi.set(i, stato);
       this.applica(stato, 0, true);
       if (colpo.passi > 1) this.avanza(stato);
-      c.toccata = { n: null, quando: c.ora(), testo: `COLPO · ${colpo.nome.toUpperCase()}${stato.bersagli.length ? ` · ${stato.bersagli.map((l) => l.nome).join(' + ')}` : colpo.bersaglio === 'tutto' ? ' · TUTTO' : ''}` };
+      c.toccata = { n: null, quando: c.ora(), testo: `COLPO · ${colpo.nome.toUpperCase()}${stato.bersagli.length ? ` · ${stato.bersagli.map((l) => l.nome).join(' + ')}${colpo.bersaglio === 'spina' && this.senzaSpina ? ' (non c\'è la spina)' : ''}` : colpo.bersaglio === 'tutto' ? ' · TUTTO' : ''}` };
       c.azioni.scritta?.(c.toccata.testo);
       c.cambiato();
       return;

@@ -49,6 +49,10 @@ export class Impostazioni {
     for (const b of document.querySelectorAll('#imp-nav [data-sez]')) b.onclick = () => this.vai(b.dataset.sez);
     $('scorciatoie-ripristina').onclick = () => this.dati.salvaPreferenze({ scorciatoie: {} });
     $('imp-cambia-stash').onclick = () => this.dati.scegliStash();
+    $('imp-copia-stash').onclick = () => this.copiaStash();
+    window.cutx.suCopiaAvanza?.((p) => {
+      $('imp-copia-nota').textContent = `copio… ${p.fatti} di ${p.totale} file · ${Math.round(p.byte / 1048576)} di ${Math.round(p.byteTotali / 1048576)} MB`;
+    });
     $('imp-ableton-aggiungi').onclick = () => window.cutx.aggiungiCartellaAbleton();
     $('imp-mostra-log').onclick = () => window.cutx.mostraLog();
     // la versione e dov'è il registro: si chiedono una volta
@@ -324,6 +328,7 @@ export class Impostazioni {
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
     this.disegnaScorciatoie();
     this.disegnaAbleton();
+    this.disegnaCopia();
     const config = this.dati.config();
     $('imp-stash-nome').textContent = config.nome ?? 'nessuno stash';
     $('imp-stash-percorso').textContent = this.dati.percorsoStash() ?? 'scegli una cartella: diventa lo stash del set';
@@ -336,6 +341,41 @@ export class Impostazioni {
         this.caricando = false;
       }
     }
+  }
+
+  // --- la copia di sicurezza dello stash sul Mac ---
+
+  async copiaStash() {
+    const bottone = $('imp-copia-stash');
+    bottone.disabled = true;
+    $('imp-copia-nota').textContent = 'preparo la copia…';
+    const r = await window.cutx.copiaStash();
+    bottone.disabled = false;
+    if (r.errore) $('imp-copia-nota').textContent = `non riuscita: ${r.errore}`;
+    else $('imp-copia-nota').textContent = r.copiati ? `fatto: ${r.copiati} file copiati (${Math.round(r.byte / 1048576)} MB), ${r.uguali} erano già a posto` : `era già tutto copiato (${r.uguali} file) · ${r.cartella}`;
+    this.disegnaCopia(false);
+  }
+
+  async disegnaCopia(scriviNota = true) {
+    const i = await window.cutx.infoCopiaStash();
+    if (scriviNota && !$('imp-copia-nota').textContent.startsWith('copio')) {
+      const quando = i.quando ? new Date(i.quando).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+      $('imp-copia-nota').textContent = i.esiste ? `${i.cartella} · ultima copia: ${quando ?? 'non so quando'}${i.inUso ? ' · IN USO adesso (l\'SSD non c\'è)' : ''}` : `${i.cartella} · non c'è ancora una copia: falla prima della serata, con l'SSD attaccato`;
+    }
+    const riga = $('imp-copia-uso');
+    riga.replaceChildren();
+    const testo = crea('div', 'imp-testo');
+    testo.append(crea('span', '', 'se l\'SSD non c\'è all\'avvio, usa la copia'), crea('span', 'imp-nota', 'un avviso in cima lo dice; quello che salvi resta nella copia. Appena l\'SSD torna, CUTX torna da solo allo stash vero.'));
+    const scelta = crea('div', 'segmenti');
+    for (const [v, nome] of [[true, 'sì'], [false, 'no']]) {
+      const b = crea('button', `key${i.usa === v ? ' on' : ''}`, nome);
+      b.onclick = async () => {
+        await this.dati.salvaPreferenze({ usaCopiaStash: v });
+        this.disegnaCopia();
+      };
+      scelta.append(b);
+    }
+    riga.append(testo, scelta);
   }
 
   // --- ableton: le cartelle dei progetti ---

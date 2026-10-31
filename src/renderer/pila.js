@@ -66,14 +66,16 @@ export class Pila {
       }
     }
     this.contenitore.querySelector('.vuoto')?.remove();
-    for (const l of this.livelli) {
+    // la spina sta sempre in cima (anche mentre esce), poi i livelli come sono arrivati
+    const ordine = [...this.livelli].sort((a, b) => (b.nome === 'spina') - (a.nome === 'spina'));
+    for (const l of ordine) {
       if (!this.carte.has(l.id)) this.carte.set(l.id, this.carta(l));
       const c = this.carte.get(l.id);
       c.livello = l;
       c.nome.textContent = l.nome;
       // il numero della manopola che la comanda (①–⑦, nell'ordine dei livelli vivi)
-      const posto = this.attivi().indexOf(l);
-      c.manopola.textContent = posto >= 0 && posto < 7 ? '①②③④⑤⑥⑦'[posto] : '';
+      const posto = this.posti().indexOf(l);
+      c.manopola.textContent = posto >= 0 ? '①②③④⑤⑥⑦'[posto] : '';
       c.provenienza.textContent = l.provenienza;
       c.pienoVolume.style.width = `${Math.min(1, l.volume) * 100}%`;
       c.muto.classList.toggle('on', l.muto);
@@ -86,7 +88,7 @@ export class Pila {
       c.codaTesto.title = l.codaErrore ?? '';
       c.el.classList.toggle('muto', l.muto);
       // solo se è fuori posto: spostare la carta toglierebbe il fuoco a chi ci sta scrivendo
-      if (this.contenitore.children[this.livelli.indexOf(l)] !== c.el) this.contenitore.append(c.el);
+      if (this.contenitore.children[ordine.indexOf(l)] !== c.el) this.contenitore.append(c.el);
     }
     this.mostraSelezione();
     this.adatta();
@@ -117,8 +119,19 @@ export class Pila {
   }
 
   // I livelli che suonano o stanno per entrare, nell'ordine in cui si vedono: ⌥1–9 li mette in muto.
+  // La spina (se c'è) è sempre la prima; poi i pezzi nell'ordine di entrata.
   attivi() {
-    return this.livelli.filter((l) => l.a === null);
+    const vivi = this.livelli.filter((l) => l.a === null);
+    const spina = vivi.filter((l) => l.nome === 'spina').at(-1);
+    return spina ? [spina, ...vivi.filter((l) => l !== spina)] : vivi;
+  }
+
+  // I sette posti delle manopole: 1 = la spina (null se non c'è: la manopola resta libera), 2–7 = i pezzi nell'ordine di entrata.
+  posti() {
+    const vivi = this.attivi();
+    const spina = vivi[0]?.nome === 'spina' ? vivi[0] : null;
+    const altri = spina ? vivi.slice(1) : vivi;
+    return Array.from({ length: 7 }, (_, i) => (i === 0 ? spina : altri[i - 1] ?? null));
   }
 
   carta(l) {

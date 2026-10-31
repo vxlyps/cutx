@@ -552,22 +552,28 @@ async function salva(modifiche) {
 // Lo stash è su un SSD che non c'è (non ancora collegato, o scollegato): un avviso chiaro in cima, mai una schermata vuota senza
 // spiegazioni. CUTX riguarda ogni pochi secondi: appena il disco torna riprende da solo (e lo dice ai motori, per i suoni).
 let stashMancante = false;
+let stashInCopia = false; // l'SSD non c'è e si lavora sulla copia dello stash sul Mac
 function mostraAvvisoStash(stato) {
   const mancante = !!stato.percorso && !!stato.mancante;
-  const era = stashMancante;
+  const inCopia = !!stato.percorso && !!stato.copiaAttiva;
+  const era = stashMancante || stashInCopia;
   stashMancante = mancante;
-  $('avviso-stash').hidden = !mancante;
+  stashInCopia = inCopia;
+  $('avviso-stash').hidden = !mancante && !inCopia;
   if (mancante) {
     const nome = stato.percorso.split('/').filter(Boolean).pop();
-    $('avviso-stash-testo').textContent = `Lo stash «${nome}» non è collegato (${stato.percorso}). Attacca il disco: CUTX lo ritrova da solo. Finché manca non ci sono suoni né brani.`;
+    $('avviso-stash-testo').textContent = `Lo stash «${nome}» non è collegato (${stato.percorso}). Attacca il disco: CUTX lo ritrova da solo. Finché manca non ci sono suoni né brani.${stato.copia ? ' (C\'è una copia sul Mac: attivala in Impostazioni → stash.)' : ''}`;
     if (!era) window.cutx.logEvento('avviso', 'stash', `non collegato: ${stato.percorso}`);
+  } else if (inCopia) {
+    $('avviso-stash-testo').textContent = `L'SSD non c'è: stai usando la COPIA dello stash sul Mac. Quello che salvi resta nella copia, non sull'SSD. Appena il disco torna CUTX torna da solo allo stash vero.`;
+    if (!era) window.cutx.logEvento('avviso', 'stash', `SSD assente: uso la copia sul Mac`);
   } else if (era) {
     cue.avviso(`stash «${config.nome ?? ''}» ritrovato`);
     window.cutx.logEvento('info', 'stash', 'ritrovato');
     window.cutx.rileggiStash(); // i motori ricaricano i suoni
   }
 }
-setInterval(async () => stashMancante && apriStash(await window.cutx.stash()), 3000);
+setInterval(async () => (stashMancante || stashInCopia) && apriStash(await window.cutx.stash()), 3000);
 
 let percorsoStash = null;
 let controllerPronto = false; // il controller si costruisce più in basso: finché non c'è, i colpi non si caricano
@@ -587,7 +593,7 @@ async function apriStash(stato) {
     config = { uscite: {}, offsetCuffiaMs: 0, ...stato.config };
     suoni = stato.suoni;
     $('stash-nome').textContent = config.nome;
-    $('stash-dove').textContent = stato.percorso.startsWith('/Volumes/') ? 'ssd' : 'mac';
+    $('stash-dove').textContent = stato.copiaAttiva ? 'copia' : stato.percorso.startsWith('/Volumes/') ? 'ssd' : 'mac';
   }
   $('stash').title = stato.percorso ?? 'Scegli lo stash';
   mostraAvvisoStash(stato);
@@ -1268,6 +1274,7 @@ const mostraScritta = (testo) => portaUscita?.postMessage({ tipo: 'scritta', tes
 let gestoVolume = null; // un giro di manopola sul volume è un passo solo di ⌘Z
 const controllerMidi = new Controller({
   livelli: () => pila.attivi(),
+  posti: () => pila.posti(),
   volume: (id, v) => {
     const l = livelloVivo(id);
     if (!l) return;

@@ -194,6 +194,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
+  if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
   if (parti.includes('spina')) ok = (await sicura('spina', provaSpina)) && ok;
   if (parti.includes('cue-controller')) ok = (await sicura('cue-controller', provaCueController)) && ok;
   if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
@@ -2623,6 +2624,49 @@ async function provaCueController({ finestre, scrivi }) {
   return ok;
 }
 
+// --- la copia di sicurezza dello stash sul Mac e l'avvio senza SSD (npx electron . --prova=copia-stash) ---
+async function provaCopiaStash({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const dest = stash.cartellaCopia();
+  controlla('la copia sta nei dati della prova (non in Documenti)', dest.includes('CUTX-prova'), dest);
+  await rm(dest, { recursive: true, force: true }); // è roba della prova
+  await js(`window.cutx.salvaPreferenze({ usaCopiaStash: true })`);
+  const vero = stash.radice();
+  controlla('prima della copia l\'SSD che manca vuol dire stash mancante', (stash._percorsoPerProva('/Volumes/SSD-non-collegato/x'), stash.radice() === null));
+  stash._percorsoPerProva(vero);
+  let ultimo = null;
+  const r = await stash.copiaStash((p) => (ultimo = p));
+  controlla('copia dello stash: file copiati, nessun errore', !r.errore && r.copiati > 0 && ultimo?.fatti === r.copiati, JSON.stringify(r));
+  controlla('ci sono libreria, colpi.cutx e stash.json', ['libreria', 'colpi.cutx', 'stash.json'].every((x) => existsSync(path.join(dest, x))));
+  controlla('i brani sono identici', (await readFile(path.join(vero, 'libreria', 'brano_1.cutx'), 'utf8')) === (await readFile(path.join(dest, 'libreria', 'brano_1.cutx'), 'utf8')));
+  const r2 = await stash.copiaStash();
+  controlla('la seconda copia non rifà quello che è già a posto', !r2.errore && r2.copiati === 0 && r2.uguali > 0, JSON.stringify(r2));
+  controlla('lo stash vero non è stato toccato (il brano c\'è ancora)', existsSync(path.join(vero, 'libreria', 'brano_1.cutx')));
+  // l'SSD non c'è all'avvio: si usa la copia
+  stash._percorsoPerProva('/Volumes/SSD-non-collegato/x');
+  await js('cutxProva.ricaricaStash()');
+  controlla('SSD assente con la copia: si lavora sulla copia', stash.radice() === dest && stash.inCopia());
+  controlla('un avviso in cima dice che è la copia', (await js(`!document.getElementById('avviso-stash').hidden && document.getElementById('avviso-stash-testo').textContent`)).includes('COPIA'));
+  controlla('la barra dice «copia» e i brani ci sono', (await js(`document.getElementById('stash-dove').textContent`)) === 'copia' && (await stash.elencoLibreria()).some((b) => b.file === 'brano_1.cutx'));
+  controlla('i suoni vengono dalla copia', Object.keys((await stash.stato()).suoni).length > 1);
+  const i = await stash.infoCopia();
+  controlla('le impostazioni sanno dov\'è e quando è stata fatta, e che è in uso', i.esiste && i.inUso && !!i.quando, JSON.stringify(i));
+  // spenta dalle impostazioni: SSD assente vuol dire mancante
+  await js(`window.cutx.salvaPreferenze({ usaCopiaStash: false })`);
+  await js('cutxProva.ricaricaStash()');
+  controlla('con «usa la copia» su no, l\'SSD assente è un avviso di stash mancante', stash.radice() === null && (await js(`document.getElementById('avviso-stash-testo').textContent`)).includes('non è collegato'));
+  await js(`window.cutx.salvaPreferenze({ usaCopiaStash: true })`);
+  stash._percorsoPerProva(vero); // l'SSD torna
+  controlla('appena il disco torna CUTX torna allo stash vero da solo', !!(await (async () => { for (let k = 0; k < 40; k++) { if ((await js(`document.getElementById('avviso-stash').hidden`)) === true && !stash.inCopia()) return true; await aspetta(0.25); } return false; })()));
+  await rm(dest, { recursive: true, force: true });
+  return ok;
+}
+
 // --- la spina e i suoi momenti: go live di un momento, ◀ ▶ a fine frase, un cambio in attesa sostituito (npx electron . --prova=spina) ---
 async function provaSpina({ finestre, scrivi }) {
   let ok = true;
@@ -2673,6 +2717,19 @@ async function provaSpina({ finestre, scrivi }) {
   await aspetta(3.5);
   const nomi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).sort();
   controlla('un pezzo entra accanto alla spina, senza toccarla', JSON.stringify(nomi) === '["basso","spina"]', JSON.stringify(nomi));
+  // la spina sta sempre sulla manopola 1 e in cima al LIVE, anche se è entrata dopo un pezzo; senza spina la manopola 1 è libera
+  await js('cutxProva.fermaTutto()');
+  await aspetta(1);
+  await js(`cutxProva.cue.scegliSezione(3)`);
+  await tocca(5); // prima il pezzo
+  await aspetta(3.5);
+  controlla('senza spina la manopola 1 è libera e il pezzo sta sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '[null,"basso",null,null,null,null,null]');
+  controlla('e l\'anello 1 è spento', (await js(`cutxProva.controllerMidi.manopole()[0]`)) === null);
+  await js(`cutxProva.cue.scegliSezione(0)`);
+  await tocca(5); // poi la spina
+  await aspetta(3.5);
+  controlla('entrata dopo il pezzo, la spina va comunque sulla manopola 1 e il pezzo sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '["spina","basso",null,null,null,null,null]');
+  controlla('la sua card è la prima in cima al LIVE, col numero ①', (await js(`document.querySelector('#livelli .card.livello .nome')?.textContent`)) === 'spina' && (await js(`document.querySelector('#livelli .card.livello .manopola, #livelli .card.livello [class*=manopola]')?.textContent`)) === '①');
   // armare il drop: un cambio di momento in attesa e un go live subito dopo, il pezzo entra insieme a lui
   await js(`cutxProva.muoviMomento(1)`);
   await aspetta(0.3);
@@ -2995,7 +3052,7 @@ async function provaController({ finestre, scrivi }) {
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'`);
   await aspetta(0.5);
   const entra = (nome, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*8").gain(.0001).lpf(800)', nome, provenienza: 'prova', cicli: 1, ...extra })})`);
-  const uno = await entra('uno');
+  const uno = await entra('spina'); // la spina sta sulla manopola 1; «due» è un pezzo sulla 2
   const due = await entra('due');
   await aspetta(2.8);
   await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${due.livello}, volume: 0.5 })`);

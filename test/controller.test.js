@@ -610,3 +610,19 @@ test('stop: di default torna sull\'1 della battuta (griglia 1 ciclo); con l\'opz
   v.avanza(1200);
   assert.deepEqual(v.log.filter((x) => x[0] === 'globale').at(-1).slice(2), [null, 1]);
 });
+
+test('la spina sta sempre sulla manopola 1 (e sul tasto-livello 1 in pagina B); senza spina la manopola 1 resta libera', () => {
+  const spina = L(9, 'spina');
+  const pezzi = [L(1, 'basso'), L(2, 'pad')];
+  const { c } = prova([]);
+  c.azioni.posti = () => [spina, pezzi[0], pezzi[1], null, null, null, null];
+  assert.equal(c.livello(1).nome, 'spina');
+  assert.equal(c.livello(3).nome, 'pad');
+  assert.equal(c.manopole()[0].nome, 'spina');
+  c.azioni.posti = () => [null, pezzi[0], pezzi[1], null, null, null, null];
+  assert.equal(c.livello(1), null);
+  assert.equal(c.manopole()[0], null, 'anello spento');
+  assert.equal(c.manopole()[1].nome, 'basso');
+  const luci = c.desiderate();
+  assert.equal(luci.get('a1')[2], 0);
+});

@@ -84,7 +84,7 @@ export class Specchio {
       e.append(num, disegnaAnello(m));
       const nm = document.createElement('span');
       nm.className = 'nm';
-      nm.textContent = m ? m.corto : '–';
+      nm.textContent = m ? m.corto : controller.pagina === 'A' && i === 0 ? 'spina' : '–'; // la manopola 1 libera dice di che cosa è il posto
       const v = document.createElement('span');
       v.className = 'v';
       v.textContent = m ? m.testo : '';

@@ -232,6 +232,8 @@ function mandaGlobali() {
   manda('uscita', m);
 }
 const idSpina = () => livelli.find((x) => x.a === Infinity)?.id ?? null;
+// la spina vera (il livello «spina», anche mentre cambia momento); se non c'è, il primo livello come prima
+const eSpinaVera = (l) => l.nome === 'spina' || (!livelli.some((x) => x.nome === 'spina' && x.a === Infinity) && l.id === idSpina());
 
 function metteCoda(l) {
   const r0 = applicaCoda(l.base, l.coda, { scivolate: l.scivolate, segnale: signal });
@@ -544,7 +546,7 @@ function applicaGuadagni() {
   for (const l of livelli) {
     const g = guadagnoDi(l);
     l.orbita = g.orbita;
-    const rompi = breakFattore < 1 && l.id !== idSpina() ? breakFattore : 1;
+    const rompi = breakFattore < 1 && !eSpinaVera(l) ? breakFattore : 1;
     g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume * rompi, ac.currentTime, SFUMATA_S);
   }
 }
