@@ -351,6 +351,7 @@ ipcMain.handle('suoni:durata', async (_e, rel) => {
   }
 });
 ipcMain.handle('libreria:elenco', () => stash.elencoLibreria());
+ipcMain.handle('colpi:leggi', () => stash.leggiColpi());
 ipcMain.handle('libreria:leggi', (_e, nome) => stash.leggiBrano(nome));
 ipcMain.handle('libreria:scrivi', (_e, nome, testo, opzioni) => stash.scriviBrano(nome, testo, opzioni));
 ipcMain.handle('preferenze:leggi', () => preferenze.leggi());

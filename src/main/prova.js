@@ -193,6 +193,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('cue-controller')) ok = (await sicura('cue-controller', provaCueController)) && ok;
   if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
   if (parti.includes('striscia')) ok = (await sicura('striscia', provaStriscia)) && ok;
@@ -2433,6 +2434,108 @@ async function provaScrittura({ finestre, scrivi }) {
 }
 
 
+// --- i colpi: i tasti della fila bassa, a tempo sulla griglia, visibili come codice (npx electron . --prova=colpi) ---
+async function provaColpi({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const attivi = async () => (await live()).livelli.filter((l) => l.a === null);
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const tastoColpo = async (nome) => js(`cutxProva.controllerMidi.tab.tasti[8 + cutxProva.controllerMidi.colpi.colpi.findIndex((c) => c.nome === '${nome}')]`);
+  const registra = async (s) => {
+    await chiedi(finestre.live, 'cutxRegistro(true)');
+    await aspetta(s);
+    return chiedi(finestre.live, 'cutxRegistro(false)');
+  };
+  await js(`window.cutx.salvaPreferenze({ controller: null, colpiGriglia: 0.25, testiPubblico: {} })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  await js(`cutxProva.motori.live.manda({ tipo: 'tempo', bpm: 120 })`); // niente livello di partenza: la spina è il primo che entra
+  await aspetta(1);
+  const entra = (nome, codice) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true })})`);
+  const spina = await entra('spina', 's("sine*16").gain(.0001)');
+  const pezzo = await entra('pezzo', 's("sine*8").gain(.0001)');
+  await aspetta(3);
+  const nomi = await js('cutxProva.controllerMidi.colpi.colpi.map((c) => c.nome).join()');
+  controlla('colpi.cutx caricato dallo stash: gli otto colpi nell\'ordine dei tasti', nomi === 'roll,spezza,mezzo,doppio,indietro,stop,sale,eco', nomi);
+
+  // doppio sulla spina: la riga .fast(2) entra sul battito, il ritmo raddoppia; al rilascio torna a tempo
+  const sulla16 = (c) => Math.abs(c * 16 - Math.round(c * 16)) < 1e-6;
+  const doppio = await tastoColpo('doppio');
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await midi(0x90, doppio, 127);
+  await aspetta(2.5);
+  const durante = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello);
+  const conRiga = (await attivi()).find((l) => l.id === spina.livello)?.coda ?? [];
+  controlla('«doppio» sulla spina: la riga .fast(2) si vede nella sua coda', conRiga.includes('.fast(2)'), JSON.stringify(conRiga));
+  const nuovo = durante.find((e) => !sulla16(e[1]));
+  const B = nuovo ? Math.floor(nuovo[1] * 4) / 4 : null;
+  controlla('il ritmo raddoppia esattamente su un battito (¼ di ciclo), senza sovrapporsi', B !== null && durante.filter((e) => e[1] < B - 1e-9).every((e) => sulla16(e[1])) && durante.filter((e) => !sulla16(e[1])).length > 4, JSON.stringify({ B, n: durante.length }));
+  const altro = (await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? [];
+  controlla('l\'altro livello non è toccato', !altro.some((r) => r.startsWith('.fast')), JSON.stringify(altro));
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await midi(0x90, doppio, 0);
+  await aspetta(2.5);
+  const dopo = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello);
+  const fine = dopo.slice(-12);
+  controlla('al rilascio la riga esce e tutto torna a tempo (di nuovo sulla griglia di prima)', !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).some((r) => r.startsWith('.fast')) && fine.every((e) => sulla16(e[1])), JSON.stringify(fine.slice(-4)));
+
+  // con la manopola di un pezzo tenuta premuta il colpo va su quel pezzo
+  const posto = (await attivi()).findIndex((l) => l.id === pezzo.livello) + 1;
+  const indietro = await tastoColpo('indietro');
+  await midi(0x90, 31 + posto, 127);
+  await midi(0x90, indietro, 127);
+  await aspetta(0.6);
+  const codaPezzo = (await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? [];
+  const codaSpina = (await attivi()).find((l) => l.id === spina.livello)?.coda ?? [];
+  controlla('con la manopola del pezzo premuta, «indietro» va su quel pezzo e non sulla spina', codaPezzo.includes('.rev()') && !codaSpina.includes('.rev()'), JSON.stringify([codaPezzo, codaSpina]));
+  await midi(0x90, indietro, 0);
+  await aspetta(1.2);
+  await midi(0x90, 31 + posto, 0);
+  await aspetta(0.5);
+  controlla('rilasciati: la riga esce e il muto non è scattato', !((await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? []).includes('.rev()') && (await attivi()).find((l) => l.id === pezzo.livello)?.muto === false);
+
+  // stop: una riga globale su tutto (all(x => x.gain(0))), a tempo; rilascio a tempo
+  const stop = await tastoColpo('stop');
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await midi(0x90, stop, 127);
+  await aspetta(2);
+  const fermi = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[4] === 0);
+  controlla('«stop»: riga globale all(x => x.gain(0)) visibile, e tutto va a gain 0', (await live()).globali.includes('all(x => x.gain(0))') && fermi.length > 6 && /all\(x => x\.gain\(0\)\)/.test(await js(`document.getElementById('globali').textContent`)), JSON.stringify((await live()).globali));
+  await midi(0x90, stop, 0);
+  await aspetta(2);
+  controlla('rilasciato: la riga sparisce', (await live()).globali.length === 0 && (await js(`document.getElementById('globali').hidden`)) === true);
+
+  // sale: un livello di rumore con il passa-alto che sale, visibile come codice
+  const sale = await tastoColpo('sale');
+  await midi(0x90, sale, 127);
+  await aspetta(1.5);
+  const l1 = (await attivi()).find((l) => l.nome === 'sale');
+  await aspetta(2.2);
+  const l2 = (await attivi()).find((l) => l.nome === 'sale');
+  controlla('«sale»: un livello di rumore entra, col passa-alto che sale ogni due battiti', !!l1 && !!l2 && l1.coda.some((r) => r.startsWith('.hpf')) && l1.coda.join() !== l2.coda.join(), JSON.stringify([l1?.coda, l2?.coda]));
+  await midi(0x90, sale, 0);
+  await aspetta(2.5);
+  controlla('rilasciato: il livello di rumore se ne va', !(await attivi()).some((l) => l.nome === 'sale'));
+
+  // roll: .ply che cresce
+  const roll = await tastoColpo('roll');
+  await midi(0x90, roll, 127);
+  await aspetta(0.6);
+  const r1 = ((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).find((r) => r.startsWith('.ply'));
+  await aspetta(2.4);
+  const r2 = ((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).find((r) => r.startsWith('.ply'));
+  controlla('«roll»: il .ply cresce mentre tengo premuto (2 → 4 o 8)', r1 === '.ply(2)' && (r2 === '.ply(4)' || r2 === '.ply(8)'), JSON.stringify([r1, r2]));
+  await midi(0x90, roll, 0);
+  await aspetta(1.5);
+  controlla('rilasciato: la riga .ply esce', !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).some((r) => r.startsWith('.ply')));
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
 // --- muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo va in cuffia, go live manda la scelta (npx electron . --prova=cue-controller) ---
 async function provaCueController({ finestre, scrivi }) {
   let ok = true;
@@ -2449,8 +2552,9 @@ async function provaCueController({ finestre, scrivi }) {
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
   const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @sezione intro\ns("sine*2").gain(.0001)\n// @sezione basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @sezione melodia\nnote("c4 e4 g4 b4").s("triangle").gain(.0001)\n';
-  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano'); cutxProva.cue.attiva(null)`);
-  await aspetta(1);
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1.5);
+  await js(`cutxProva.cue.attiva(null)`); // nessuna sezione scelta (un fuoco dell'editor potrebbe averne scelta una)
   const scelta = () => js(`cutxProva.cue.nomeSezioneScelta()`);
   const cuffia = await tasto(4);
   const golive = await tasto(5);
@@ -2470,11 +2574,11 @@ async function provaCueController({ finestre, scrivi }) {
   await midi(0x90, cuffia, 0); // lascio «cuffia»
   controlla('lascio «cuffia»: la sezione resta scelta (melodia) e la cuffia non si toglie', (await scelta()) === 'melodia' || (await scelta()) === 'basso');
   await aspetta(1.3);
+  const attesa = await scelta(); // la sezione scelta PRIMA del go live (dopo, la card live si richiude)
   await midi(0x90, golive, 127);
   await midi(0x90, golive, 0);
   await aspetta(3);
   const nomi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome);
-  const attesa = await scelta();
   controlla('GO LIVE manda la sezione scelta', nomi.length === 1 && nomi[0] === attesa, JSON.stringify({ nomi, attesa }));
   // brano successivo / precedente
   const n = await js('cutxProva.libreria().length');

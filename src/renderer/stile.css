@@ -2905,3 +2905,32 @@ input[type='checkbox'] {
   height: 102px;
   min-height: 102px;
 }
+
+.ctl-colpi-elenco {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.ctl-colpo {
+  display: grid;
+  grid-template-columns: 110px 90px 60px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.ctl-catena {
+  font-family: var(--mono);
+  color: var(--marcio);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctl-errore {
+  margin: 2px 0;
+  color: var(--errore, #e0674f);
+  font-size: 12px;
+}

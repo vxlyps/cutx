@@ -514,10 +514,12 @@ function mostraAvvisoStash(stato) {
 setInterval(async () => stashMancante && apriStash(await window.cutx.stash()), 3000);
 
 let percorsoStash = null;
+let controllerPronto = false; // il controller si costruisce più in basso: finché non c'è, i colpi non si caricano
 async function apriStash(stato) {
   if (stato.percorso !== percorsoStash) cronologia.svuota(); // un altro stash: la storia di prima non vale più
   percorsoStash = stato.percorso;
   haStash = !!stato.config;
+  if (controllerPronto) caricaColpi();
   suoni = {};
   if (!stato.percorso) {
     $('stash-nome').textContent = 'nessuno';
@@ -1166,28 +1168,32 @@ globalThis.cutxProva = {
   misure: () => ({ stima: misuratore.stima.riepilogo(), live: live.stato, cuffia: cuffia.stato }),
 };
 
-// Il riser del fader: un livello di rumore con un passa-alto che sale; entra subito (non al ciclo dopo) ed esce subito quando il fader torna giù.
-let riserId = null;
-let riserCreando = false;
-let riserUltimo = null;
-async function gestisciRiser(r) {
-  riserUltimo = r;
-  const righe = () => [`.hpf(${riserUltimo.hpf})`, `.gain(${riserUltimo.gain})`];
-  if (!r) {
-    if (riserId !== null) live.manda({ tipo: 'togli', livello: riserId, subito: true });
-    riserId = null;
+// I livelli temporanei del controller: il riser del fader (rumore con un passa-alto che sale) e il «sale» dei colpi. Entrano e escono subito
+// (o sulla griglia dei colpi), non al ciclo dopo. def = { codice, coda: [righe] } oppure null per toglierlo.
+const temporanei = new Map(); // chiave → { id, creando, ultimo, griglia }
+async function gestisciTemp(chiave, def, griglia = 0, nome = chiave) {
+  const t = temporanei.get(chiave) ?? { id: null, creando: false, ultimo: null, griglia: 0 };
+  temporanei.set(chiave, t);
+  t.ultimo = def;
+  t.griglia = griglia;
+  if (!def) {
+    if (t.id !== null) live.manda({ tipo: 'togli', livello: t.id, subito: true, griglia });
+    t.id = null;
     return;
   }
-  if (riserId !== null) return live.manda({ tipo: 'coda', livello: riserId, imposta: righe(), origine: 'manopola' });
-  if (riserCreando) return;
-  riserCreando = true;
-  const risposta = await live.richiesta({ tipo: 'entra', codice: 's("white*16").decay(.12).sustain(0)', nome: 'riser', provenienza: 'fader', cicli: 1, scritto: true, subito: true, coda: righe() });
-  riserCreando = false;
+  if (t.id !== null) return live.manda({ tipo: 'coda', livello: t.id, imposta: def.coda, origine: 'manopola' });
+  if (t.creando) return;
+  t.creando = true;
+  const risposta = await live.richiesta({ tipo: 'entra', codice: def.codice, nome, provenienza: 'controller', cicli: 1, scritto: true, subito: true, griglia, coda: def.coda });
+  t.creando = false;
   if (!risposta.livello) return;
-  riserId = risposta.livello;
-  if (!riserUltimo) gestisciRiser(null); // nel frattempo il fader era già tornato giù
-  else live.manda({ tipo: 'coda', livello: riserId, imposta: righe(), origine: 'manopola' });
+  t.id = risposta.livello;
+  if (!t.ultimo) gestisciTemp(chiave, null, t.griglia, nome); // nel frattempo l'avevo già lasciato
+  else live.manda({ tipo: 'coda', livello: t.id, imposta: t.ultimo.coda, origine: 'manopola' });
 }
+// Il riser del fader: rumore con un passa-alto che sale.
+const RUMORE = 's("white*16").decay(.12).sustain(0)';
+const gestisciRiser = (r) => gestisciTemp('riser', r ? { codice: RUMORE, coda: [`.hpf(${r.hpf})`, `.gain(${r.gain})`] } : null, 0, 'riser');
 
 // --- il controller (X-Touch Mini in MC): le stesse azioni della tastiera e del mouse, gli anelli con i valori veri ---
 let rigaTimer = null;
@@ -1251,7 +1257,14 @@ const controllerMidi = new Controller({
   },
   // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
   faderEffetto: (pagina) => preferenze.controller?.fader?.[pagina],
-  globale: (chiave, riga) => live.manda({ tipo: 'globale', chiave, riga }),
+  globale: (chiave, riga, griglia = 0) => live.manda({ tipo: 'globale', chiave, riga, griglia }),
+  // i colpi: righe di coda e livelli temporanei, sulla griglia scelta nelle impostazioni (1/4 o 1/8)
+  colpiGriglia: () => preferenze.colpiGriglia ?? 0.25,
+  colpiScegliGriglia: (v) => window.cutx.salvaPreferenze({ colpiGriglia: v }),
+  ricaricaColpi: () => caricaColpi(),
+  codaQ: (id, riga, griglia) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola', griglia }),
+  togliQ: (id, chiave, griglia) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola', griglia }),
+  livelloTemp: (chiave, def, griglia) => gestisciTemp(chiave, def ? { codice: def.codice, coda: def.coda } : null, griglia, def?.nome ?? chiave.replace(/^colpo:/, '')),
   breakTutti: (fattore) => live.manda({ tipo: 'break', fattore }),
   riser: (r) => gestisciRiser(r),
   coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
@@ -1279,6 +1292,12 @@ setInterval(() => specchio.aggiorna(controllerMidi), 100);
 // i numeri ①–⑦ sulle card compaiono solo con il controller collegato
 controllerMidi.quandoCambia(() => document.querySelector('.postazione').classList.toggle('con-controller', controllerMidi.collegato));
 controllerMidi.collega();
+// colpi.cutx dallo stash (se non c'è si crea con i predefiniti): al primo giro e ogni volta che lo stash cambia
+async function caricaColpi() {
+  controllerMidi.colpi.carica(await window.cutx.leggiColpi().catch(() => null));
+}
+caricaColpi();
+controllerPronto = true;
 
 setInterval(mostra, 100);
 mostra();

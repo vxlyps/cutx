@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('cutx', {
   suStashCambiato: (fn) => ipcRenderer.on('stash-cambiato', () => fn()),
   durataSuono: (rel) => ipcRenderer.invoke('suoni:durata', rel),
   libreria: () => ipcRenderer.invoke('libreria:elenco'),
+  leggiColpi: () => ipcRenderer.invoke('colpi:leggi'),
   leggiBrano: (nome) => ipcRenderer.invoke('libreria:leggi', nome),
   scriviBrano: (nome, testo, opzioni) => ipcRenderer.invoke('libreria:scrivi', nome, testo, opzioni),
   preferenze: () => ipcRenderer.invoke('preferenze:leggi'),

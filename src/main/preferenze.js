@@ -18,6 +18,7 @@ export const PREDEFINITE = {
   dissolvenzaUscita: 0,
   dissolvenzaTipo: 'volume', // 'volume' | 'filtro'
   dissolvenzaFiltroUscita: 'hp', // 'hp' (passa-alto che sale) | 'lp' (passa-basso che chiude)
+  colpiGriglia: 0.25, // i colpi del controller entrano e escono sulla griglia: ¼ di ciclo (un battito) o ⅛
   scivolata: 0.25, // quanto scivola un numero della coda cambiato a mano, in cicli (battute): 0, ¼ (un battito), ½, 1
   paracaduteCicli: 2, // la transizione del paracadute
   sfondoProiettore: 'niente', // dietro al codice sul proiettore: niente, note, oscilloscopio

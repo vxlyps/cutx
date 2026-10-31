@@ -9,6 +9,7 @@ const crea = (tag, classe, testo) => {
 };
 
 import { EFFETTI_FADER } from './controller-mappa.js';
+import { NOMI_TASTI } from './controller-mc.js';
 
 const RIGHE = 14; // quante righe tiene il monitor
 
@@ -111,6 +112,32 @@ export class PaginaController {
         return riga;
       }),
     );
+
+    // i colpi: la griglia e i tasti
+    const colpi = $('ctl-colpi');
+    const griglia = crea('div', 'imp-riga');
+    const gTesto = crea('div', 'imp-testo');
+    gTesto.append(crea('span', '', 'griglia dei colpi'), crea('span', 'imp-nota', 'un colpo entra sul primo punto della griglia dopo che premi e torna a tempo sulla griglia dopo che lasci'));
+    const gSelect = crea('select');
+    for (const [v, t] of [[0.25, '¼ (un battito)'], [0.125, '⅛ (mezzo battito)']]) {
+      const o = crea('option', '', t);
+      o.value = String(v);
+      o.selected = Number(c.azioni.colpiGriglia?.() ?? 0.25) === v;
+      gSelect.append(o);
+    }
+    gSelect.onchange = () => c.azioni.colpiScegliGriglia?.(Number(gSelect.value));
+    griglia.append(gTesto, gSelect);
+    const elenco = crea('div', 'ctl-colpi-elenco');
+    c.colpi.colpi.forEach((colpo, i) => {
+      const r = crea('div', 'ctl-colpo');
+      r.append(crea('span', 'lbl', `${i + 9} · ${NOMI_TASTI[8 + i]}`), crea('span', '', colpo.nome), crea('span', 'lbl', colpo.bersaglio), crea('span', 'ctl-catena', colpo.catena));
+      elenco.append(r);
+    });
+    if (!c.colpi.colpi.length) elenco.append(crea('span', 'lbl', 'nessun colpo caricato (serve uno stash)'));
+    for (const e of c.colpi.errori) elenco.append(crea('p', 'ctl-errore', `colpi.cutx riga ${e.riga}: ${e.errore} — ${e.testo}`));
+    const ricarica = crea('button', 'key', 'ricarica colpi.cutx');
+    ricarica.onclick = () => c.azioni.ricaricaColpi?.();
+    colpi.replaceChildren(griglia, elenco, ricarica);
 
     const luci = $('ctl-luci');
     const stampa = crea('span', 'lbl', this.stato);

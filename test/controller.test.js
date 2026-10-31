@@ -415,3 +415,125 @@ test('pagina B: premere una manopola rimette quel parametro (toglie la riga dall
   c.riceve(push(1, false));
   assert.ok(log.some((x2) => x2[0] === 'muto'));
 });
+
+// --- i colpi ---
+import { COLPI_PREDEFINITI } from '../src/renderer/colpi.js';
+
+function conColpi(livelli = [L(1, 'drum'), L(2, 'basso'), L(3, 'pad')]) {
+  const t = prova(livelli);
+  t.azioni.codaQ = (id, riga, g) => t.log.push(['codaQ', id, riga, g]);
+  t.azioni.togliQ = (id, chiave, g) => t.log.push(['togliQ', id, chiave, g]);
+  t.azioni.globale = (chiave, riga, g) => t.log.push(['globale', chiave, riga, g]);
+  t.azioni.livelloTemp = (chiave, def, g) => t.log.push(['livelloTemp', chiave, def, g]);
+  t.azioni.colpiGriglia = () => 0.25;
+  t.c.colpi.carica(COLPI_PREDEFINITI);
+  const tasti = Object.fromEntries(['roll', 'spezza', 'mezzo', 'doppio', 'indietro', 'stop', 'sale', 'eco'].map((n, i) => [n, t.c.tab.tasti[8 + i]]));
+  return { ...t, tasti };
+}
+
+test('i colpi: gli otto del file, nell\'ordine dei tasti 9–16', () => {
+  const { c } = conColpi();
+  assert.deepEqual(c.colpi.colpi.map((x) => x.nome), ['roll', 'spezza', 'mezzo', 'doppio', 'indietro', 'stop', 'sale', 'eco']);
+  assert.equal(c.tab.tasti[8], 87, 'DROP');
+  assert.equal(c.tab.tasti[15], 95, 'REC');
+});
+
+test('un colpo «spina» da solo va sulla spina (il livello 1), entra sulla griglia e al rilascio torna com\'era', () => {
+  const { c, log, avanza, tasti } = conColpi();
+  c.riceve(tasto(tasti.doppio, true));
+  assert.deepEqual(log.filter((x) => x[0] === 'codaQ'), [['codaQ', 1, '.fast(2)', 0.25]]);
+  assert.match(c.toccata.testo, /COLPO · DOPPIO · drum/);
+  assert.equal(c.desiderate().get(`t${tasti.doppio}`)[2], 127, 'il tasto è acceso finché lo tengo');
+  avanza(3000);
+  c.riceve(tasto(tasti.doppio, false));
+  assert.deepEqual(log.filter((x) => x[0] === 'togliQ'), [['togliQ', 1, 'fast', 0.25]]);
+  assert.equal(c.desiderate().get(`t${tasti.doppio}`)[2], 0);
+});
+
+test('un colpo che sostituisce una riga già in coda la rimette com\'era al rilascio', () => {
+  const { c, log, avanza, tasti } = conColpi([L(1, 'drum', 1, false, ['.fast(0.5)'])]);
+  c.riceve(tasto(tasti.doppio, true));
+  avanza(3000);
+  c.riceve(tasto(tasti.doppio, false));
+  assert.deepEqual(log.filter((x) => x[0] === 'codaQ').at(-1), ['codaQ', 1, '.fast(0.5)', 0.25]);
+  assert.equal(log.filter((x) => x[0] === 'togliQ').length, 0);
+});
+
+test('con la manopola di un pezzo tenuta premuta il colpo va su quel pezzo (più manopole: tutti) e il muto non scatta', () => {
+  const { c, log, avanza, tasti } = conColpi();
+  c.riceve(push(3, true));
+  c.riceve(tasto(tasti.indietro, true));
+  assert.deepEqual(log.filter((x) => x[0] === 'codaQ'), [['codaQ', 3, '.rev()', 0.25]]);
+  c.riceve(tasto(tasti.indietro, false));
+  avanza(3000);
+  c.riceve(push(3, false));
+  assert.equal(log.filter((x) => x[0] === 'muto').length, 0, 'un colpo con la manopola premuta non è un muto');
+  log.length = 0;
+  c.riceve(push(2, true));
+  c.riceve(push(3, true));
+  c.riceve(tasto(tasti.mezzo, true));
+  assert.deepEqual(log.filter((x) => x[0] === 'codaQ').map((x) => x[1]).sort(), [2, 3]);
+});
+
+test('stop ed eco sono righe globali su tutto, anche con una manopola premuta', () => {
+  const { c, log, avanza, tasti } = conColpi();
+  c.riceve(push(3, true));
+  c.riceve(tasto(tasti.stop, true));
+  assert.deepEqual(log.filter((x) => x[0] === 'globale'), [['globale', 'colpo:stop', 'all(x => x.gain(0))', 0.25]]);
+  c.riceve(tasto(tasti.eco, true)); // si combinano
+  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], 'all(x => x.delay(.7).delayfeedback(.6))');
+  avanza(3000);
+  c.riceve(tasto(tasti.stop, false));
+  c.riceve(tasto(tasti.eco, false));
+  assert.deepEqual(log.filter((x) => x[0] === 'globale').slice(-2).map((x) => [x[1], x[2]]), [['colpo:stop', null], ['colpo:eco', null]]);
+});
+
+test('roll: il .ply cresce ogni due battiti (2 → 4 → 8) finché tengo, e si ferma all\'ultimo', () => {
+  const { c, log, avanza, tasti } = conColpi();
+  c.riceve(tasto(tasti.roll, true));
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[2], '.ply(2)');
+  avanza(1000); // 120 bpm: due battiti = 1 s
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[2], '.ply(4)');
+  avanza(1000);
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[2], '.ply(8)');
+  avanza(5000);
+  assert.equal(log.filter((x) => x[0] === 'codaQ').length, 3, 'all\'ultimo non scrive più');
+  assert.match(c.toccata.testo, /COLPO · ROLL 8/);
+  c.riceve(tasto(tasti.roll, false));
+  assert.deepEqual(log.filter((x) => x[0] === 'togliQ'), [['togliQ', 1, 'ply', 0.25]]);
+});
+
+test('sale: un livello temporaneo di rumore con il passa-alto che sale, visibile come codice', () => {
+  const { c, log, avanza, tasti } = conColpi();
+  c.riceve(tasto(tasti.sale, true));
+  const entra = log.find((x) => x[0] === 'livelloTemp');
+  assert.equal(entra[1], 'colpo:sale');
+  assert.equal(entra[2].codice, 's("white*16").decay(.12).sustain(0)');
+  assert.deepEqual(entra[2].coda, ['.hpf(400)', '.gain(.08)']);
+  avanza(1000);
+  avanza(1000);
+  assert.deepEqual(log.filter((x) => x[0] === 'livelloTemp').at(-1)[2].coda, ['.hpf(2000)', '.gain(.16)']);
+  c.riceve(tasto(tasti.sale, false));
+  assert.equal(log.filter((x) => x[0] === 'livelloTemp').at(-1)[2], null);
+});
+
+test('un tocco più breve della griglia: il ritorno aspetta (l\'entrata c\'è stata)', () => {
+  const { c, log, avanza, tasti } = conColpi();
+  c.riceve(tasto(tasti.doppio, true));
+  avanza(100);
+  c.riceve(tasto(tasti.doppio, false));
+  assert.equal(log.filter((x) => x[0] === 'togliQ').length, 0, 'ancora no');
+  avanza(900); // 120 bpm: la griglia ¼ = 500 ms
+  assert.equal(log.filter((x) => x[0] === 'togliQ').length, 1);
+});
+
+test('in pagina B i colpi vanno sul livello scelto; un tasto senza colpo lo dice', () => {
+  const { c, log, tasti } = conColpi();
+  c.riceve([0x90, c.tab.layer.B, 127]);
+  c.riceve(tasto(c.tab.tasti[2], true)); // bersaglio: livello 3
+  c.riceve(tasto(tasti.mezzo, true));
+  assert.deepEqual(log.filter((x) => x[0] === 'codaQ'), [['codaQ', 3, '.slow(2)', 0.25]]);
+  c.colpi.colpi.length = 2;
+  c.riceve(tasto(tasti.eco, true));
+  assert.ok(log.some((x) => x[0] === 'scritta' && /COLPO 8: NON ASSEGNATO/i.test(x[1])));
+});

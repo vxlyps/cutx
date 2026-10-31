@@ -4,6 +4,7 @@ import path from 'node:path';
 import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import * as brano from '../renderer/brano.js';
+import { COLPI_PREDEFINITI } from '../renderer/colpi.js';
 
 export const FORMATO = 1;
 const CARTELLE = ['suoni', 'libreria', 'video', 'estensioni'];
@@ -121,6 +122,22 @@ export async function elencoLibreria() {
     }
   }
   return brani.sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// colpi.cutx, nella radice dello stash: gli otto colpi dei tasti del controller. Se non c'è si crea con quelli predefiniti (poi è mio).
+export async function leggiColpi() {
+  if (!radice()) return null;
+  const file = path.join(percorso, 'colpi.cutx');
+  try {
+    return await readFile(file, 'utf8');
+  } catch {
+    try {
+      await writeFile(file, COLPI_PREDEFINITI);
+      return COLPI_PREDEFINITI;
+    } catch {
+      return null; // stash in sola lettura: si usano i predefiniti senza scrivere
+    }
+  }
 }
 
 export async function leggiBrano(nome) {

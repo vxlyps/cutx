@@ -208,7 +208,8 @@ let codaTimer = null;
 let ricostruzioni = 0; // per le prove: quante volte si è rifatto un pattern
 
 // Il battito successivo (un quarto di ciclo) che non è ancora stato programmato.
-const battitoDopo = () => Math.ceil((rip.fine ?? rip.ciclo(ac.currentTime)) * 4) / 4;
+// `g` = la griglia in cicli (¼ = un battito, ⅛ = mezzo battito): i colpi del controller entrano e escono su quella.
+const battitoDopo = (g = 0.25) => Math.ceil((rip.fine ?? rip.ciclo(ac.currentTime)) / g - 1e-9) * g;
 
 // Una micro-dissolvenza sulle code del vecchio, prima del cambio: scende in 10 ms e risale appena prima del battito (l'attacco del nuovo non si tocca).
 function micro(l, ciclo) {
@@ -246,15 +247,21 @@ function metteCoda(l) {
   l.codaErrore = null;
   if (l.codaRitmica && rip.mappa) {
     // un effetto ritmico (fast, rev…): entra sul battito successivo, il vecchio e il nuovo non si sovrappongono mai
-    const vecchio = l.commuta ? l.commuta.vecchio : l.pattern;
-    const B = l.commuta ? l.commuta.B : battitoDopo();
+    // un cambio già in attesa del suo battito prende anche questo; uno il cui battito è già programmato è finito: se ne parte un altro
+    const pendente = l.commuta && l.commuta.B > (rip.fine ?? 0);
+    const vecchio = pendente ? l.commuta.vecchio : l.commuta ? l.commuta.nuovo : l.pattern;
+    const B = pendente ? l.commuta.B : battitoDopo(l.griglia ?? 0.25);
+    l.griglia = undefined;
     l.commuta = { B, vecchio, nuovo: r.pattern };
     l.pattern = commuta(vecchio, r.pattern, B);
     if (!l.sfuma) micro(l, B);
-  } else if (l.commuta) {
+  } else if (l.commuta && l.commuta.B > (rip.fine ?? 0)) {
     l.commuta.nuovo = r.pattern; // un cambio in attesa del suo battito: prende anche questo
     l.pattern = commuta(l.commuta.vecchio, r.pattern, l.commuta.B);
-  } else l.pattern = r.pattern;
+  } else {
+    l.commuta = null;
+    l.pattern = r.pattern;
+  }
   l.codaRitmica = false;
   l.strisciaCiclo = null; // le note del ciclo si rifanno
 }
@@ -302,6 +309,11 @@ function cambiaCoda(m) {
   for (const chiave of m.togli ?? []) coda = togliVoce(coda, chiave);
   for (const testo of m.imposta ?? []) coda = impostaVoce(coda, testo);
   if (coda.length === l.coda.length && coda.every((t, i) => t === l.coda[i])) return;
+  if (Number(m.griglia) > 0) {
+    // un colpo: la modifica (anche numerica) entra e esce sulla griglia, mai a metà
+    l.codaRitmica = true;
+    l.griglia = Number(m.griglia);
+  }
   const ora = rip.mappa ? rip.ciclo(ac.currentTime) : 0;
   const t0 = Math.max(rip.fine ?? ora, ora);
   const morbido = m.origine === 'mano' && m.scivolata > 0 && rip.mappa;
@@ -330,12 +342,13 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0 }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   avvisaSuoniMancanti(c.pattern, nome);
   // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
-  const da = subito ? rip.fine ?? rip.ciclo(ac.currentTime) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  // (con una griglia — i colpi — entra sul primo punto della griglia)
+  const da = subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
@@ -408,11 +421,11 @@ function riprendiDalParacadute(dissolvenza) {
 
 // Esce alla fine del ciclo in corso.
 // Con una dissolvenza il livello continua a suonare e sfuma per tot cicli; un secondo togli (o un clic sulla card) lo salva.
-function togli(id, dissolvenza, subito = false) {
+function togli(id, dissolvenza, subito = false, griglia = 0) {
   const l = livelli.find((x) => x.id === id);
   if (!l) return;
   if (subito && l.a === Infinity) {
-    l.a = rip.fine ?? rip.ciclo(ac.currentTime); // smette di essere programmato adesso (il fader che torna giù)
+    l.a = griglia ? Math.max(l.da, battitoDopo(griglia)) : rip.fine ?? rip.ciclo(ac.currentTime); // smette di essere programmato adesso (o sulla griglia)
     return aggiornaLivelli();
   }
   if (l.sfuma?.verso === 'esce' && l.a !== Infinity) return salva(l);
@@ -613,7 +626,7 @@ rip.suEvento = (hap, t, sorgente) => {
   const inizio = hap.whole.begin.valueOf();
   sorgente.primo ??= inizio;
   sorgente.ultimo = inizio;
-  registro?.push([sorgente.id, inizio, hap.value?.cutoff ?? null, hap.value?.note ?? null]);
+  registro?.push([sorgente.id, inizio, hap.value?.cutoff ?? null, hap.value?.note ?? null, hap.value?.gain ?? null]);
   if (!eco) return;
   sentinella.atteso(t);
   anello?.atteso(t);
@@ -798,13 +811,17 @@ async function ricevi(da, m) {
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'togli':
-      return togli(m.livello, m.dissolvenza, m.subito);
+      return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0);
     case 'globale': // una riga globale (all(x => …)) del fader o di un colpo; riga null la toglie
       if (typeof m.riga === 'string' && m.riga.trim()) globali.set(String(m.chiave), m.riga.trim());
       else globali.delete(String(m.chiave));
       for (const l of livelli) {
         l.codaSporca = true;
         l.strisciaCiclo = null;
+        if (Number(m.griglia) > 0) {
+          l.codaRitmica = true; // i colpi «su tutto» entrano e escono sulla griglia
+          l.griglia = Number(m.griglia);
+        }
       }
       pianificaCoda();
       return mandaGlobali();

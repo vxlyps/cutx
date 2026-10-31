@@ -4,6 +4,7 @@
 import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioAnello, messaggioTasto, noteTasti, parole, tabella } from './controller-mc.js';
 import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, calcolaFader, EFFETTI_FADER, FADER_PREDEFINITO, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
+import { GestoreColpi } from './controller-colpi.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
 const PARACADUTE_MS = 1000;
@@ -36,6 +37,7 @@ export class Controller {
     this.suMonitor = null; // (testo, grezzo, evento) => {}
     this.ascoltatori = []; // () => {}: chi vuole sapere che lo stato è cambiato (impostazioni, card)
     this.sequenza = 0; // per fermare una prova luci quando ne parte un'altra
+    this.colpi = new GestoreColpi(this);
     this.paracaduteTimer = null;
     this.paracaduteTenuto = false;
     this.cuffiaTenuta = null; // { usato } mentre tengo premuto «cuffia»: girare una manopola scorre le sezioni del CUE, ◀ ▶ cambiano brano
@@ -406,6 +408,7 @@ export class Controller {
     if (giu) {
       stato.giu = true;
       stato.tenuta = false;
+      stato.usato = false;
       this.ferma(stato.timer);
       stato.timer = this.imposta(() => {
         stato.tenuta = true;
@@ -419,7 +422,10 @@ export class Controller {
     const eraTenuta = stato.tenuta;
     stato.giu = false;
     stato.tenuta = false;
-    if (eraTenuta) return; // il muto non scatta se tenevo premuto per scegliere
+    if (eraTenuta || stato.usato) {
+      stato.usato = false;
+      return; // il muto non scatta se tenevo premuto per scegliere o per dare un colpo
+    }
     if (this.pagina === 'B') return this.resetParametro(n); // pagina B: premere = rimettere quel parametro com'era
     if (this.pagina !== 'A') return;
     if (n === 8) {
@@ -446,7 +452,7 @@ export class Controller {
       return;
     }
     if (n > 8) {
-      if (giu) this.riga('colpi: arrivano col passo 4');
+      this.colpi.premi(n - 9, giu);
       return;
     }
     const comando = TASTI_A[n - 1];
@@ -603,6 +609,7 @@ export class Controller {
       luci.set(`a${n}`, !m || m.valore === null ? messaggioAnello(n, 0, 'punto') : anelloDa(n, m.valore, m.stile));
     });
     const stati = new Map(); // nota → true | 'lampeggia'
+    for (const i of this.colpi.attivi.keys()) stati.set(this.tab.tasti[8 + i], true); // un colpo si vede acceso finché lo tengo
     const livelli = this.azioni.livelli();
     stati.set(this.tab.layer[this.pagina], true); // la pagina
     if (this.pagina === 'A') {
