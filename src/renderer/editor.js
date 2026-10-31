@@ -34,6 +34,7 @@ function fasceSezioni(statoSezione) {
     let classe = null; // null = preambolo o testa: niente fascia
     let inTesta = true;
     let haTesta = false;
+    let inCoda = false; // dopo `// @coda` fino alla prossima sezione (coda.js)
     for (let n = 1; n <= doc.lines; n++) {
       const riga = doc.line(n);
       if (inTesta && TESTA_BRANO.test(riga.text)) {
@@ -47,6 +48,8 @@ function fasceSezioni(statoSezione) {
         continue;
       }
       inTesta = false;
+      if (eSezione(riga.text)) inCoda = false;
+      else if (/^\s*\/\/\s*@coda\s*$/.test(riga.text)) inCoda = true;
       if (eSezione(riga.text)) {
         const { nome } = leggiRigaSezione(riga.text);
         const stato = statoSezione(nome);
@@ -55,7 +58,7 @@ function fasceSezioni(statoSezione) {
         const i = riga.text.indexOf(nome, riga.text.indexOf('@sezione') + 8);
         if (nome && i >= 0) b.add(riga.from + i, riga.from + i + nome.length, Decoration.mark({ class: 'cm-sez-nome' }));
       } else if (classe) {
-        b.add(riga.from, riga.from, Decoration.line({ class: classe }));
+        b.add(riga.from, riga.from, Decoration.line({ class: inCoda ? `${classe} cm-coda` : classe }));
       }
     }
     return b.finish();

@@ -2,6 +2,7 @@
 // - live: comanda il tempo, suona sulle casse, pubblica la mappa del tempo alla cuffia;
 // - cuffia: segue la mappa del live e suona sul jack, allo stesso istante.
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
+import { applica as applicaCoda, imposta as impostaVoce, leggiVoce, togli as togliVoce } from './coda.js';
 import { evalScope, getTrigger, repl, setTime, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
@@ -146,7 +147,11 @@ function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = 
     nome: nome ?? 'libero',
     provenienza: provenienza ?? '',
     codice,
-    pattern,
+    pattern, // quello che suona: la base con la coda sopra
+    base: pattern, // il codice compilato, senza coda
+    coda: [], // ['.lpf(1200)', …]: coda.js
+    codaErrore: null,
+    codaSporca: false,
     da,
     a: Infinity,
     richiesto: orologio.epoca(ac.currentTime),
@@ -171,8 +176,53 @@ function annullaDissolvi(l) {
 }
 const dissolvenzaDi = (d) => ({ cicli: Math.max(0, Math.round(Number(d?.cicli) || 0)), entra: filtroEntra(d?.tipo), esce: filtroEsce(d?.tipo, d?.filtroUscita) });
 
+// --- la coda (coda.js): le voci si mettono sul pattern già compilato, senza rivalutare il codice ---
+// Il riproduttore interroga finestre di tempo una dopo l'altra: cambiare il pattern fra due giri non perde e non raddoppia eventi.
+// Mentre si gira una manopola i cambi arrivano a raffica: il pattern si rifà al massimo 25 volte al secondo (l'ultimo valore vince).
+const CODA_MIN_MS = 40;
+let codaUltima = 0;
+let codaTimer = null;
+let ricostruzioni = 0; // per le prove: quante volte si è rifatto un pattern
+
+function metteCoda(l) {
+  const r = applicaCoda(l.base, l.coda);
+  if (r.errore) l.codaErrore = r.errore; // continua la versione di prima
+  else {
+    l.codaErrore = null;
+    l.pattern = r.pattern;
+  }
+}
+
+function pianificaCoda() {
+  if (codaTimer) return;
+  codaTimer = setTimeout(() => {
+    codaTimer = null;
+    codaUltima = performance.now();
+    for (const l of livelli) {
+      if (!l.codaSporca) continue;
+      l.codaSporca = false;
+      ricostruzioni++;
+      metteCoda(l);
+    }
+    aggiornaLivelli();
+  }, Math.max(0, codaUltima + CODA_MIN_MS - performance.now()));
+}
+
+// { livello, imposta: ['.lpf(1200)'], togli: ['lpf'], pulisci: true } — nell'ordine: pulisci, togli, imposta.
+function cambiaCoda(m) {
+  const l = livelli.find((x) => x.id === m.livello && x.a === Infinity);
+  if (!l) return;
+  let coda = m.pulisci ? [] : l.coda;
+  for (const chiave of m.togli ?? []) coda = togliVoce(coda, chiave);
+  for (const testo of m.imposta ?? []) coda = impostaVoce(coda, testo);
+  if (coda.length === l.coda.length && coda.every((t, i) => t === l.coda[i])) return;
+  l.coda = coda;
+  l.codaSporca = true;
+  pianificaCoda();
+}
+
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   const da = rip.prossimoConfine() + Math.max(1, cicli) - 1;
@@ -186,7 +236,10 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     scambi.push(vecchio);
     l.volume = vecchio.volume;
     l.muto = vecchio.muto;
+    l.coda = vecchio.coda; // una modifica al codice non butta via la coda
   }
+  if (Array.isArray(coda)) l.coda = coda.filter((t) => leggiVoce(t)).map((t) => leggiVoce(t).testo); // quella scritta nella sezione vince
+  if (l.coda.length) metteCoda(l);
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
   livelli.push(l);
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
@@ -299,6 +352,8 @@ const descrivi = (l) => ({
   nome: l.nome,
   provenienza: l.provenienza,
   codice: l.codice,
+  coda: l.coda,
+  codaErrore: l.codaErrore,
   da: l.da === -Infinity ? null : l.da,
   a: l.a === Infinity ? null : l.a,
   richiesto: l.richiesto,
@@ -427,11 +482,13 @@ const anello = LIVE ? new Anello(ac) : null;
 let ultimoGiro = 0;
 let giroMax = 0; // il ritardo più lungo tra due giri del riproduttore, in ms
 
+let registro = null; // solo per le prove: [livello, ciclo, lpf] di ogni evento programmato
 rip.suEvento = (hap, t, sorgente) => {
   // Il primo e l'ultimo ciclo suonati da ogni livello: per controllare che entri ed esca a tempo.
   const inizio = hap.whole.begin.valueOf();
   sorgente.primo ??= inizio;
   sorgente.ultimo = inizio;
+  registro?.push([sorgente.id, inizio, hap.value?.cutoff ?? null]);
   if (!eco) return;
   sentinella.atteso(t);
   anello?.atteso(t);
@@ -526,6 +583,7 @@ function stato() {
     nome: LIVE ? (ultimo?.nome ?? null) : prova.nome,
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
+    ricostruzioni,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     dissolvenze: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, { fade: g.fade.gain.value, lp: g.lp.frequency.value, hp: g.hp.frequency.value }])) : undefined,
@@ -575,6 +633,8 @@ async function ricevi(da, m) {
       if (m.muto !== undefined) l.muto = m.muto === 'inverti' ? !l.muto : !!m.muto; // inverti: lo stato vero è qui
       return aggiornaLivelli();
     }
+    case 'coda':
+      return cambiaCoda(m);
     case 'suoni-extra': // suoni solo da ascoltare (anteprima dei progetti Ableton): nome → [indirizzi]
       await pronto;
       return samples(m.mappa);
@@ -652,6 +712,11 @@ globalThis.cutxStato = stato;
 globalThis.cutxAzzeraMisure = () => {
   giroMax = 0;
   sentinella.azzera();
+};
+globalThis.cutxRegistro = (on) => {
+  const r = registro;
+  registro = on ? [] : null;
+  return r;
 };
 globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 

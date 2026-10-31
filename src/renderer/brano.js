@@ -15,6 +15,8 @@
 // Il brano si tiene riga per riga, così com'è: riscriverlo dà esattamente il testo di partenza.
 // Le funzioni qui non toccano niente fuori: prendono un brano e ne restituiscono uno nuovo.
 
+import { unisci as unisciCoda } from './coda.js';
+
 export const NOMI_SEZIONE = ['intro', 'drum', 'basso', 'melodia', 'break', 'drop', 'outro'];
 
 const TESTA = /^\/\/ @(brano|bpm|data|origine|suoni)(?:\s+(.*))?$/;
@@ -243,7 +245,7 @@ export function aggiungiSezione(testo, da, a, nome) {
 
 // --- dal live a un brano ---
 
-// livelli: [{ nome, codice, volume, muto }] nell'ordine in cui sono entrati.
+// livelli: [{ nome, codice, coda, volume, muto }] (la coda va in fondo alla sezione, dopo `// @coda`) nell'ordine in cui sono entrati.
 // Il tempo del file è uno solo, quello del set in quel momento (bpm): in testa e nel preambolo. Le righe setcpm dei livelli,
 // che vengono dal brano da cui erano partiti, si tolgono: non devono contraddirlo.
 export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
@@ -255,7 +257,7 @@ export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
     const info = {};
     if (l.volume !== undefined && l.volume !== 1) info.volume = l.volume;
     if (l.muto) info.muto = true;
-    return { riga: rigaSezione(n, info), nome: n, info, corpo: (bpm ? senzaTempo(l.codice) : l.codice).replace(/\n+$/, '').split('\n') };
+    return { riga: rigaSezione(n, info), nome: n, info, corpo: unisciCoda((bpm ? senzaTempo(l.codice) : l.codice).replace(/\n+$/, ''), l.coda).split('\n') };
   });
   const vuoto = { testa: [], preambolo: bpm ? ['', `setcpm(${bpm}/4)`, ''] : [], sezioni };
   return scrivi(conTesta(vuoto, { brano: nome, bpm, data, suoni })) + '\n';

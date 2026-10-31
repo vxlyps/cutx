@@ -124,6 +124,22 @@ body {
   color: var(--testo);
 }
 
+.coda {
+  margin: 0;
+  font-family: 'Fragment Mono', monospace;
+  font-size: calc(40 * var(--u) * var(--scala, 1));
+  line-height: 1.3;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--marcio);
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(159, 194, 58, 0.45);
+}
+
+.livello.muto .coda {
+  color: var(--spento);
+  text-shadow: none;
+}
+
 .codice .nota {
   background: var(--marcio);
   color: var(--su-marcio);

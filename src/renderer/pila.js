@@ -9,6 +9,7 @@ import { creaEditor } from './editor.js';
 import { attivi, griglia, riempi } from './evidenzia.js';
 import { aspetto, epocaDi } from './aspetto.js';
 import { resta } from './dissolvenza.js';
+import { righeVisibili } from './coda.js';
 
 const PASSI = 16;
 
@@ -68,6 +69,13 @@ export class Pila {
       c.provenienza.textContent = l.provenienza;
       c.pienoVolume.style.width = `${Math.min(1, l.volume) * 100}%`;
       c.muto.classList.toggle('on', l.muto);
+      // la coda cambia mentre si gira: solo il testo, sul posto
+      const righe = righeVisibili(l.coda, l.volume);
+      const chiaveCoda = righe.join('\n');
+      if (c.codaTesto.textContent !== chiaveCoda) c.codaTesto.textContent = chiaveCoda;
+      c.righeCoda = righe;
+      c.coda.classList.toggle('con-errore', !!l.codaErrore);
+      c.codaTesto.title = l.codaErrore ?? '';
       c.el.classList.toggle('muto', l.muto);
       // solo se è fuori posto: spostare la carta toglierebbe il fuoco a chi ci sta scrivendo
       if (this.contenitore.children[this.livelli.indexOf(l)] !== c.el) this.contenitore.append(c.el);
@@ -127,12 +135,20 @@ export class Pila {
     codice.dataset.aiuto = 'livello-codice';
     const editor = el('div', 'editor editor-carta');
     editor.hidden = true;
+    // la coda (coda.js): le righe che girano le manopole, sotto il codice, aggiornate sul posto
+    const coda = el('div', 'coda-blocco');
+    coda.hidden = true;
+    coda.dataset.aiuto = 'livello-coda';
+    const codaTesto = el('pre', 'coda');
+    const pulisci = el('button', 'key piccolo', 'pulisci coda');
+    coda.append(codaTesto, pulisci);
     const celle = el('div', 'griglia');
     for (let i = 0; i < PASSI; i++) celle.append(el('div'));
     const piede = el('div', 'lbl piede-carta');
     const errore = el('p', 'errore');
-    art.append(testa, barra, codice, editor, celle, piede, errore);
-    const c = { el: art, livello: l, nome, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, celle, piede, errore, pienoVolume, muto };
+    art.append(testa, barra, codice, editor, coda, celle, piede, errore);
+    const c = { el: art, livello: l, nome, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, celle, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
+    pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
     // un clic sulla card che sta sfumando la salva: l'uscita si annulla e il livello torna al suo volume
@@ -272,6 +288,7 @@ export class Pila {
         c.el.classList.remove('in-arrivo');
         c.el.classList.add('in-uscita');
         c.barra.hidden = false;
+        c.coda.hidden = !c.righeCoda.length;
         this.disegnaCodice(c, a);
         this.disegnaGriglia(c, a);
         continue;
@@ -289,6 +306,7 @@ export class Pila {
       c.el.classList.toggle('in-arrivo', a.arriva);
       c.el.classList.toggle('in-uscita', a.esce);
       c.barra.hidden = !a.arriva;
+      c.coda.hidden = a.arriva || !c.righeCoda.length;
       this.disegnaCodice(c, a);
       this.disegnaGriglia(c, a);
     }

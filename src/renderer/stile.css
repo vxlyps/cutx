@@ -497,6 +497,35 @@ body {
   margin: 0;
 }
 
+.coda-blocco {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--marcio-scuro);
+}
+
+.coda-blocco .piccolo {
+  flex: none;
+  font-size: 10px;
+}
+
+.coda {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--marcio);
+}
+
+.coda-blocco.con-errore .coda {
+  color: var(--errore, #e0674f);
+}
+
 .vuoto {
   color: var(--spento);
   font-size: 12px;
@@ -973,6 +1002,11 @@ td:first-child {
 
 .editor .cm-line.cm-sez-live {
   box-shadow: inset 2px 0 0 var(--marcio);
+}
+
+.editor .cm-line.cm-coda,
+.editor .cm-line.cm-coda * {
+  color: var(--marcio) !important;
 }
 
 .editor .cm-line.cm-sez-testa {

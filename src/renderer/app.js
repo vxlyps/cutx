@@ -5,6 +5,7 @@ import { Cue } from './cue.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
+import { separa as separaCoda, unisci as unisciCoda } from './coda.js';
 import { Importa } from './importa.js';
 import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
@@ -157,7 +158,9 @@ async function goLive() {
     messaggi.push(`il set resta a ${set} bpm (il brano è a ${p.bpmBrano})`);
     if (B.eSezioneAudio(codice.slice(p.inizio))) messaggi.push('questa sezione suona un file audio: va al suo tempo originale');
   }
-  const r = await live.richiesta({ tipo: 'entra', codice, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
+  const { codice: senzaCoda, coda } = separaCoda(codice);
+  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;
@@ -176,11 +179,25 @@ function togliLivello(id) {
   if (!l) return;
   // un livello che sta già sfumando: il secondo togli lo salva, e non c'è niente da annullare
   if (l.a === null) {
-    const copia = { nome: l.nome, codice: l.codice, volume: l.volume, muto: l.muto };
+    const copia = { nome: l.nome, codice: unisciCoda(l.codice, l.coda), volume: l.volume, muto: l.muto };
     // ⌘Z lo riporta nel CUE, pronto: lo rimanda chi suona col go live (il live non si tocca)
     cronologia.registra({ etichetta: `livello «${l.nome}» tolto`, annulla: () => cue.reinserisci(copia) });
   }
   live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(preferenze.dissolvenzaUscita ?? 0) });
+}
+
+// Pulisci coda: le righe del livello se ne vanno (il volume resta). ⌘Z le rimette.
+function pulisciCoda(id) {
+  const l = livelloVivo(id);
+  if (inTest || !l?.coda?.length) return;
+  const prima = [...l.coda];
+  live.manda({ tipo: 'coda', livello: id, pulisci: true });
+  const rimetti = () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true, imposta: prima }) : false);
+  cronologia.registra({
+    etichetta: `coda di «${l.nome}»`,
+    annulla: rimetti,
+    rifai: () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true }) : false),
+  });
 }
 
 // Volume e muto di un livello si annullano subito (sono innocui): un trascinamento del volume è un passo solo.
@@ -675,7 +692,7 @@ function aggiornaIstantanea() {
   if (!ripreso || !live.viva || ripristinando) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   istantaneaLive = attivi.length
-    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ codice: l.codice, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ codice: l.codice, coda: l.coda, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
     : null;
 }
 
@@ -694,7 +711,7 @@ async function ripristinaLive() {
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), nome: l.nome, provenienza: l.provenienza, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, nome: l.nome, provenienza: l.provenienza, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
@@ -760,6 +777,7 @@ let volumePrima = null; // { id, v }: il volume com'era all'inizio del trascinam
 const pila = new Pila($('livelli'), $('jam'), {
   togli: (id) => togliLivello(id),
   salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
+  pulisciCoda: (id) => pulisciCoda(id),
   volume: (id, volume) => live.manda({ tipo: 'livello', livello: id, volume }),
   volumeInizio: (id) => (volumePrima = { id, v: livelloVivo(id)?.volume }),
   volumeFine: (id) => {
@@ -978,6 +996,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 globalThis.cutxProva = {
   motori: { live, cuffia },
   pausaCuffia,
+  pulisciCoda,
   cronologia,
   annullaSet,
   // per capire un fallimento: cosa vede l'interfaccia in questo momento

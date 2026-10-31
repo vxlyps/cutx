@@ -5,6 +5,7 @@ import { aspetto, cicloDi, epocaDi, sostituente, sostituito as sostituitoDa } fr
 import { Scrittore } from './scrittura.js';
 import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
+import { righeVisibili } from './coda.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
 import { Scorrimento, scegliDisposizione, trovaScala } from './scorri.js';
@@ -86,8 +87,12 @@ function blocco(chiave) {
     tag.className = 'tag';
     const codice = document.createElement('pre');
     codice.className = 'codice';
-    el.append(tag, codice);
-    blocchi.set(chiave, { el, tag, codice });
+    // la coda (coda.js) sta sotto il codice e si aggiorna sul posto: i numeri cambiano mentre si gira, senza macchina da scrivere
+    const coda = document.createElement('pre');
+    coda.className = 'coda';
+    coda.hidden = true;
+    el.append(tag, codice, coda);
+    blocchi.set(chiave, { el, tag, codice, coda });
   }
   return blocchi.get(chiave);
 }
@@ -113,6 +118,14 @@ function scrivi(b, scritto, cursore, nascosto = '', dopo = '') {
     b.codice.append(resto);
   }
   if (dopo) b.codice.append(dopo); // quello che c'era già dopo il punto che si sta cambiando: si vede
+}
+
+// La coda sotto il codice: se cambia solo un numero si cambia il testo e basta; se cambia il numero di righe si rimisura tutto.
+function mostraCoda(b, righe, chiave, firma) {
+  const testo = righe.join('\n');
+  b.coda.hidden = !righe.length;
+  if (b.coda.textContent !== testo) b.coda.textContent = testo;
+  firma.push(`${chiave}|c${righe.length}`);
 }
 
 function disegna() {
@@ -153,6 +166,7 @@ function disegna() {
       scrivi(b, bozza, true);
       firma.push(`${chiave}|${bozza}`);
       segnaNovita(chiave, bozza, epoca);
+      mostraCoda(b, [], chiave, firma);
       suona ||= !a.arriva;
       continue;
     }
@@ -176,6 +190,7 @@ function disegna() {
       }
     } else if (a.cursore) scrivi(b, a.mostrato, true, a.testo.slice(a.mostrato.length));
     else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : attivi(l.codice, ciclo), 'nota');
+    mostraCoda(b, a.arriva ? [] : righeVisibili(l.coda, l.volume), chiave, firma);
     suona ||= !a.arriva && !l.muto;
   }
   // il jam che sto scrivendo, prima che entri
@@ -237,7 +252,15 @@ function misuraRighe() {
     const n = Math.max(1, Math.round(b.codice.offsetHeight / lh));
     const t0 = top + b.codice.offsetTop;
     for (let k = 0; k < n; k++) righe.push({ top: t0 + k * lh, bottom: t0 + (k + 1) * lh });
-    livelliGeom.set(chiave, { top, bottom: t0 + n * lh });
+    let fine = t0 + n * lh;
+    if (!b.coda.hidden) {
+      const lc = parseFloat(getComputedStyle(b.coda).lineHeight) || lh;
+      const nc = Math.max(1, Math.round(b.coda.offsetHeight / lc));
+      const tc = top + b.coda.offsetTop;
+      for (let k = 0; k < nc; k++) righe.push({ top: tc + k * lc, bottom: tc + (k + 1) * lc });
+      fine = tc + nc * lc;
+    }
+    livelliGeom.set(chiave, { top, bottom: fine });
   }
   righe.sort((x, y) => x.top - y.top);
 }

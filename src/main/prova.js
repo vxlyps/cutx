@@ -192,6 +192,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
 
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
@@ -2378,6 +2379,124 @@ async function provaScrittura({ finestre, scrivi }) {
   return ok;
 }
 
+
+// --- la coda: righe sotto il codice, girate a raffica senza perdere né raddoppiare eventi (npx electron . --prova=coda) ---
+async function provaCoda({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const CODA_CARTA = `[...document.querySelectorAll('#livelli .card.livello')].filter((c) => c.querySelector('.nome').textContent === 'cima').at(-1)?.querySelector('.coda')?.textContent`;
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const coda = (id, m) => js(`cutxProva.motori.live.manda(${JSON.stringify({ tipo: 'coda', livello: id, ...m })})`);
+  const attivo = async () => (await live()).livelli.filter((l) => l.a === null).at(-1);
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1.5);
+  const r = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*16").gain(.0001).lpf(800)', nome: 'cima', provenienza: 'prova', cicli: 1 })})`);
+  await aspetta(2.5);
+  const id = r.livello;
+  controlla('il livello suona col suo .lpf(800)', (await attivo())?.id === id);
+
+  // 1. una coda messa a mano sovrascrive il valore scritto nel codice (l'ultimo vince)
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await coda(id, { imposta: ['.lpf(1200)'] });
+  await aspetta(1.2);
+  let ev = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === id);
+  controlla('.lpf(1200) in coda vince su .lpf(800) del codice', ev.length > 10 && ev.at(-1)[2] === 1200, JSON.stringify(ev.slice(-2)));
+  const dopo = await attivo();
+  controlla('la coda è nello stato del livello, il codice è rimasto com\'è', dopo.coda?.[0] === '.lpf(1200)' && dopo.codice === 's("sine*16").gain(.0001).lpf(800)');
+
+  // 2. una manopola girata a raffica (un messaggio ogni 8 ms per 4 s): niente eventi persi né doppi, rifacimenti limitati
+  const tardiPrima = (await live()).tardi;
+  const rifattePrima = (await live()).ricostruzioni;
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  const t0 = Date.now();
+  await js(`globalThis.giroFinito = false; (async () => {
+    for (let i = 0; i < 500; i++) {
+      cutxProva.motori.live.manda({ tipo: 'coda', livello: ${id}, imposta: ['.lpf(' + (1000 + i) + ')'] });
+      await new Promise((r) => setTimeout(r, 8));
+    }
+    globalThis.giroFinito = true;
+  })() && 0`);
+  await aspettaChe(() => js('globalThis.giroFinito'), 15);
+  const durata = (Date.now() - t0) / 1000;
+  await aspetta(0.6);
+  ev = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === id);
+  const indici = ev.map((e) => Math.round(e[1] * 16));
+  const conta = new Map();
+  for (const i of indici) conta.set(i, (conta.get(i) ?? 0) + 1);
+  const minimo = Math.min(...indici);
+  const massimo = Math.max(...indici);
+  const mancano = [];
+  for (let i = minimo; i <= massimo; i++) if (!conta.has(i)) mancano.push(i);
+  const doppi = [...conta].filter(([, n]) => n > 1).map(([i]) => i);
+  const dopoGiro = await live();
+  const rifatte = dopoGiro.ricostruzioni - rifattePrima;
+  controlla(`${ev.length} eventi in ${durata.toFixed(1)} s di manopola: nessuno perso`, ev.length > 50 && mancano.length === 0, `mancano ${mancano.slice(0, 8)}`);
+  controlla('nessuno doppio', doppi.length === 0, `doppi ${doppi.slice(0, 8)}`);
+  const finestraS = durata + 0.6;
+  controlla(`il pattern si rifà al massimo 25 volte al secondo (${rifatte} in ${finestraS.toFixed(1)} s)`, rifatte > 10 && rifatte <= finestraS * 25 + 2, String(rifatte));
+  controlla('nessun evento in ritardo', dopoGiro.tardi === tardiPrima, `${dopoGiro.tardi - tardiPrima} tardi`);
+  const valori = ev.map((e) => e[2]);
+  controlla('i valori salgono mentre giro e finiscono sull\'ultimo (1499)', valori.every((v, k) => k === 0 || v >= valori[k - 1]) && valori.at(-1) === 1499, JSON.stringify(valori.slice(-3)));
+
+  // 3. card e proiettore mostrano la coda, sul posto
+  const card = await js(CODA_CARTA);
+  controlla('la card mostra la coda', card === '.lpf(1499)', JSON.stringify(card));
+  const proiettore = await chiedi(finestre.uscita, `[...document.querySelectorAll('.livello')].filter((b) => /cima/.test(b.querySelector('.tag').textContent)).at(-1)?.querySelector('.coda')?.textContent`);
+  controlla('il proiettore mostra la coda', proiettore === '.lpf(1499)', String(proiettore));
+  await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${id}, volume: 0.6 })`);
+  await aspetta(0.5);
+  const conVolume = await js(CODA_CARTA);
+  controlla('il volume è l\'ultima riga della coda (.gain(0.6))', conVolume === '.lpf(1499)\n.gain(0.6)', JSON.stringify(conVolume));
+
+  // 4. una riga sbagliata non ferma niente: continua la versione di prima
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await coda(id, { imposta: ['.nonEsisteQuesto(1)'] });
+  await aspetta(1);
+  ev = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === id);
+  const sbagliato = await attivo();
+  controlla('una funzione che non esiste: segnalata, e suona la versione di prima', !!sbagliato.codaErrore && ev.length > 8 && ev.every((e) => e[2] === 1499), String(sbagliato.codaErrore));
+  await coda(id, { togli: ['nonEsisteQuesto'] });
+  await aspetta(0.3);
+  controlla('tolta la riga sbagliata l\'errore sparisce', !(await attivo()).codaErrore);
+
+  // 5. pulisci coda (e ⌘Z la rimette)
+  await js(`cutxProva.pulisciCoda(${id})`);
+  await aspetta(0.5);
+  controlla('pulisci coda: la coda è vuota, il codice suona com\'era (.lpf(800))', (await attivo()).coda.length === 0);
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await aspetta(0.8);
+  ev = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === id);
+  controlla('senza coda torna il valore del codice', ev.length > 4 && ev.at(-1)[2] === 800, JSON.stringify(ev.slice(-1)));
+  await js(`cutxProva.annullaSet()`);
+  await aspetta(0.5);
+  controlla('⌘Z rimette la coda', (await attivo()).coda?.[0] === '.lpf(1499)', JSON.stringify((await attivo()).coda));
+
+  // 6. una modifica al codice del livello non butta via la coda
+  await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*8").gain(.0001).lpf(800)', nome: 'cima', provenienza: 'prova', cicli: 1, scritto: true })})`);
+  await aspetta(2.5);
+  const nuovo = await attivo();
+  controlla('applicare una modifica tiene la coda', nuovo.id !== id && nuovo.coda?.[0] === '.lpf(1499)' && nuovo.codice.includes('sine*8'), JSON.stringify({ coda: nuovo.coda, codice: nuovo.codice }));
+
+  // 7. la coda scritta in fondo a una sezione (// @coda) entra col livello
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.8);
+  await js(`cutxProva.scriviCue('s("sine*4").gain(.0001)\\n// @coda\\n.lpf(900)\\n.fast(2)')`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(2.5);
+  const dalFile = await attivo();
+  controlla('go live: la coda del file va al livello, il codice è senza', dalFile?.coda?.join('|') === '.lpf(900)|.fast(2)' && !dalFile.codice.includes('@coda'), JSON.stringify({ coda: dalFile?.coda, codice: dalFile?.codice }));
+
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
 
 // --- pausa della cuffia: si ferma, e alla ripresa è di nuovo allineata al live (npx electron . --prova=pausa) ---
 async function provaPausa({ finestre, scrivi }) {
