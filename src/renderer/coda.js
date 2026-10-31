@@ -68,17 +68,83 @@ export function righeVisibili(coda, volume = 1) {
 
 // La coda messa sul pattern: { pattern } oppure { errore } (e allora chi chiama tiene il pattern di prima).
 // Le voci sono codice Strudel come quello scritto a mano: .lpf(1200) su un pattern che ha già un .lpf lo sovrascrive.
-export function applica(pattern, coda) {
+// extra.scivolate: { chiave: { da, a, t0, t1 } } — il numero di quella voce scivola da `da` ad `a` fra i cicli t0 e t1 (extra.segnale è il
+// `signal` di Strudel: si passa da fuori, così questo modulo resta puro).
+export function applica(pattern, coda, extra = {}) {
   const voci = (coda ?? []).filter((t) => leggiVoce(t));
   if (!voci.length) return { pattern };
+  const scivolate = extra.scivolate ?? {};
+  const righe = voci.map((t) => {
+    const { chiave } = leggiVoce(t);
+    return scivolate[chiave] && extra.segnale ? `.${chiave}(__scivola(${JSON.stringify(scivolate[chiave])}))` : t;
+  });
+  const scivola = (g) => extra.segnale((t) => valoreScivolato(g, Number(t)));
   try {
-    const risultato = new Function('p', `return p\n${voci.join('\n')}`)(pattern);
+    const risultato = new Function('p', '__scivola', `return p\n${righe.join('\n')}`)(pattern, scivola);
     if (typeof risultato?.queryArc !== 'function') throw new Error('la coda non dà un pattern');
     risultato.queryArc(0, 0.001); // un errore pigro (una stringa mini-notation sbagliata) viene fuori qui, non a metà suono
     return { pattern: risultato };
   } catch (e) {
     return { errore: String(e.message ?? e) };
   }
+}
+
+// --- effetti morbidi ---
+// I valori numerici di questi effetti, cambiati a mano, scivolano dal vecchio al nuovo (legati al tempo); tutto il resto (fast, slow, rev,
+// ply… e i valori che non sono un numero) è ritmico: entra sul battito successivo, senza sovrapporre vecchio e nuovo.
+export const SCORREVOLI = new Set([
+  'lpf', 'hpf', 'bpf', 'cutoff', 'hcutoff', 'bandf', 'lpq', 'hpq', 'bpq', 'resonance', 'hresonance', 'delay', 'delaytime', 'delayfeedback', 'delayfb',
+  'room', 'size', 'roomsize', 'rsize', 'gain', 'postgain', 'pan', 'shape', 'distort', 'crush', 'coarse', 'speed', 'detune', 'legato', 'attack', 'release',
+  'sustain', 'decay', 'lpenv', 'hpenv', 'vib', 'vibmod', 'phaserdepth', 'phaserrate', 'orbit',
+]);
+SCORREVOLI.delete('orbit');
+
+// Il numero di una voce (.lpf(1200) → 1200), solo se è un numero scritto e basta.
+export function numeroDi(testo) {
+  const m = String(testo).match(new RegExp(`^\\s*\\.\\w+\\(\\s*${NUMERO}\\s*\\)\\s*;?\\s*$`));
+  return m ? Number(m[1]) : null;
+}
+
+// Una voce che scivola: la funzione c'è nell'elenco e il valore è un numero.
+export const eScorrevole = (testo) => {
+  const v = leggiVoce(testo);
+  return !!v && SCORREVOLI.has(v.chiave) && numeroDi(testo) !== null;
+};
+
+// Dove sta il numero al ciclo t (lineare fra t0 e t1).
+export function valoreScivolato(g, t) {
+  if (!(g.t1 > g.t0) || t >= g.t1) return g.a;
+  if (t <= g.t0) return g.da;
+  return g.da + ((g.a - g.da) * (t - g.t0)) / (g.t1 - g.t0);
+}
+
+// Il numero come si scrive mentre scivola: interi se lo sono entrambi gli estremi, altrimenti due decimali (senza zeri inutili).
+export function formattaNumero(v, g) {
+  const intero = Number.isInteger(g.da) && Number.isInteger(g.a);
+  return intero ? String(Math.round(v)) : String(Math.round(v * 100) / 100);
+}
+
+// Le righe da mostrare con i numeri che scivolano al ciclo dato (chiave → { da, a, t0, t1 }).
+export function righeScorrevoli(righe, scivolate, ciclo) {
+  if (!scivolate || !Object.keys(scivolate).length) return righe;
+  return righe.map((r) => {
+    const v = leggiVoce(r);
+    const g = v && scivolate[v.chiave];
+    if (!g || ciclo >= g.t1) return r;
+    return r.replace(new RegExp(NUMERO), formattaNumero(valoreScivolato(g, ciclo), g));
+  });
+}
+
+// Due pattern in fila, con il cambio esattamente al ciclo `ciclo`: prima suona solo il vecchio, da lì solo il nuovo (niente sovrapposizioni).
+export function commuta(vecchio, nuovo, ciclo) {
+  return {
+    queryArc(a, b, contesto) {
+      const fuori = [];
+      if (a < ciclo) fuori.push(...vecchio.queryArc(a, Math.min(b, ciclo), contesto));
+      if (b > ciclo) fuori.push(...nuovo.queryArc(Math.max(a, ciclo), b, contesto));
+      return fuori;
+    },
+  };
 }
 
 // Un testo fatto solo di voci (con o senza `// @coda`, righe vuote e commenti a parte): è una coda da aggiungere a un livello, non un livello.

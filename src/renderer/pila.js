@@ -9,7 +9,7 @@ import { creaEditor } from './editor.js';
 import { attivi, griglia, riempi } from './evidenzia.js';
 import { aspetto, epocaDi } from './aspetto.js';
 import { resta } from './dissolvenza.js';
-import { leggiVoce, righeVisibili } from './coda.js';
+import { leggiVoce, righeScorrevoli, righeVisibili } from './coda.js';
 
 const PASSI = 16;
 
@@ -347,6 +347,8 @@ export class Pila {
       c.el.classList.toggle('in-uscita', a.esce);
       c.barra.hidden = !a.arriva;
       c.coda.hidden = a.arriva || !c.righeCoda.length;
+      // un numero che scivola: sulla card scorre anche lui
+      if (l.scivola && Object.keys(l.scivola).length) this.disegnaRigheCoda(c, righeScorrevoli(c.righeCoda, l.scivola, a.ciclo), l.coda?.length ?? 0);
       this.disegnaCodice(c, a);
       this.disegnaGriglia(c, a);
     }

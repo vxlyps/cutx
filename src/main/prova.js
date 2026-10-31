@@ -2736,6 +2736,45 @@ async function provaCoda({ finestre, scrivi }) {
   const righeCarta = await js(`document.querySelectorAll('#livelli .card.livello:not(.in-uscita) .coda-x').length`);
   controlla('ogni riga della coda ha la sua ×', righeCarta === 2, String(righeCarta));
 
+  // 13. effetti morbidi: un numero scritto a mano scivola, dalla manopola segue subito; un effetto ritmico entra sul battito, senza sovrapporsi
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.8);
+  const morbido = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*16").gain(.0001)', nome: 'cima', provenienza: 'prova', cicli: 1, coda: ['.lpf(600)'] })})`);
+  await aspetta(2.5);
+  const cicloLive = async () => (await live()).ciclo;
+  const leggi = async (s) => {
+    await chiedi(finestre.live, 'cutxRegistro(true)');
+    await aspetta(s);
+    return (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === morbido.livello);
+  };
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await coda(morbido.livello, { imposta: ['.lpf(1000)'], origine: 'mano', scivolata: 1 });
+  await aspetta(2.2);
+  let ev2 = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === morbido.livello);
+  const valoriMano = ev2.map((e) => e[2]);
+  const distinti = [...new Set(valoriMano)];
+  controlla('a mano: il numero scivola da 600 a 1000 (valori intermedi, mai indietro)', distinti.length >= 5 && valoriMano.every((v, k) => k === 0 || v >= valoriMano[k - 1]) && valoriMano[0] <= 700 && valoriMano.at(-1) === 1000, JSON.stringify(distinti.slice(0, 12)));
+  const stato = await attivo();
+  controlla('la scivolata finisce e il pattern torna a un numero fisso', Object.keys(stato.scivola ?? {}).length === 0 || (await aspetta(1), Object.keys((await attivo()).scivola ?? {}).length === 0));
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await coda(morbido.livello, { imposta: ['.lpf(1400)'] }); // dalla manopola: niente scivolata
+  const ev3 = await leggi(0.9);
+  controlla('dalla manopola il numero segue subito la mano (nessun valore intermedio)', ev3.length > 5 && ev3.every((e) => e[2] === 1400), JSON.stringify([...new Set(ev3.map((e) => e[2]))]));
+  // effetto ritmico: .fast(2) raddoppia gli eventi esattamente da un battito (¼ di ciclo)
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await coda(morbido.livello, { imposta: ['.fast(2)'], origine: 'mano', scivolata: 1 });
+  await aspetta(2.2);
+  const ev4 = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === morbido.livello);
+  const sulla16 = (c) => Math.abs(c * 16 - Math.round(c * 16)) < 1e-6;
+  const primoNuovo = ev4.find((e) => !sulla16(e[1]));
+  const B = primoNuovo ? Math.floor(primoNuovo[1] * 4) / 4 : null;
+  const vecchi = ev4.filter((e) => B !== null && e[1] < B - 1e-9);
+  const dopoB = ev4.filter((e) => B !== null && e[1] >= B - 1e-9);
+  const duplicati = ev4.length - new Set(ev4.map((e) => e[1].toFixed(6))).size;
+  controlla('effetto ritmico: cambia esattamente su un battito, prima solo il vecchio', B !== null && vecchi.every((e) => sulla16(e[1])), JSON.stringify({ B, vecchi: vecchi.length }));
+  controlla('effetto ritmico: dal battito solo il nuovo (il doppio degli eventi), nessun evento doppio', dopoB.some((e) => Math.abs(e[1] - B) < 1e-6) && dopoB.length > 8 && duplicati === 0, JSON.stringify({ dopo: dopoB.length, duplicati }));
+  void cicloLive;
+
   // 12. ⌃1–9 sceglie il livello (⌥ resta il muto); esc toglie la scelta
   await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*4").gain(.0001)', nome: 'due', provenienza: 'prova', cicli: 1 })})`);
   await aspetta(2.5);

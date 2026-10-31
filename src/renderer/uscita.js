@@ -5,7 +5,7 @@ import { aspetto, cicloDi, epocaDi, sostituente, sostituito as sostituitoDa } fr
 import { Scrittore } from './scrittura.js';
 import { arrotondaBpm, bpmDi, cpsAl, fraseDi } from './tempo.js';
 import { attivi, riempi } from './evidenzia.js';
-import { righeVisibili } from './coda.js';
+import { righeScorrevoli, righeVisibili } from './coda.js';
 import { convertiIntervalli, filtraCodice, riempi as riempiTesto, risolvi as risolviTesti, testoEtichetta } from './testi-pubblico.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
@@ -221,7 +221,7 @@ function disegna() {
       }
     } else if (a.cursore) scrivi(b, a.mostrato, true, a.testo.slice(a.mostrato.length));
     else riempi(b.codice, a.testo, a.arriva || l.muto ? [] : convertiIntervalli(attivi(l.originale, ciclo), l.inv), 'nota');
-    mostraCoda(b, a.arriva || !testi.coda.acceso ? [] : righeVisibili(l.coda, l.volume), chiave, firma);
+    mostraCoda(b, a.arriva || !testi.coda.acceso ? [] : righeScorrevoli(righeVisibili(l.coda, l.volume), l.scivola, ciclo), chiave, firma);
     suona ||= !a.arriva && !l.muto;
   }
   // il jam che sto scrivendo, prima che entri

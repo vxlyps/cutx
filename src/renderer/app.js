@@ -150,7 +150,8 @@ function aggiungiCoda(voci) {
     return 'nessun livello scelto';
   }
   const prima = [...(l.coda ?? [])];
-  live.manda({ tipo: 'coda', livello: l.id, imposta: voci });
+  // scritta a mano: i numeri scivolano (in `scivolata` cicli), gli effetti ritmici entrano sul battito
+  live.manda({ tipo: 'coda', livello: l.id, imposta: voci, origine: 'mano', scivolata: preferenze.scivolata ?? 0.25 });
   const id = l.id;
   cronologia.registra({
     etichetta: `coda di «${l.nome}»`,

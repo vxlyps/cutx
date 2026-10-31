@@ -76,3 +76,37 @@ test('soloCoda: righe di coda con o senza // @coda sono una coda, il resto no', 
   assert.equal(soloCoda('   '), null);
   assert.equal(soloCoda('.lpf(600)\nqualcosa'), null);
 });
+
+import { commuta, eScorrevole, formattaNumero, numeroDi, righeScorrevoli, valoreScivolato } from '../src/renderer/coda.js';
+
+test('numeri che scivolano: lineari fra t0 e t1, fermi prima e dopo', () => {
+  const g = { da: 600, a: 900, t0: 10, t1: 11 };
+  assert.equal(valoreScivolato(g, 9), 600);
+  assert.equal(valoreScivolato(g, 10.5), 750);
+  assert.equal(valoreScivolato(g, 12), 900);
+  assert.equal(valoreScivolato({ da: 1, a: 2, t0: 5, t1: 5 }, 5), 2); // senza durata: subito
+});
+
+test('quali voci scivolano: i numeri degli effetti sì, i ritmici e i non numeri no', () => {
+  assert.equal(eScorrevole('.lpf(900)'), true);
+  assert.equal(eScorrevole('.delay(.4)'), true);
+  assert.equal(eScorrevole('.fast(2)'), false);
+  assert.equal(eScorrevole('.lpf("<400 800>")'), false);
+  assert.equal(numeroDi('.room(.3)'), 0.3);
+});
+
+test('le righe mostrate col numero che scorre', () => {
+  const g = { da: 600, a: 900, t0: 10, t1: 11 };
+  assert.deepEqual(righeScorrevoli(['.lpf(900)', '.fast(2)'], { lpf: g }, 10.5), ['.lpf(750)', '.fast(2)']);
+  assert.deepEqual(righeScorrevoli(['.lpf(900)'], { lpf: g }, 11.5), ['.lpf(900)']);
+  assert.equal(formattaNumero(0.35, { da: 0.2, a: 0.5 }), '0.35');
+  assert.equal(formattaNumero(749.6, g), '750');
+});
+
+test('il cambio ritmico: prima solo il vecchio, da quel ciclo solo il nuovo', () => {
+  const hap = (nome) => (a, b) => [{ nome, a, b }];
+  const p = commuta({ queryArc: hap('v') }, { queryArc: hap('n') }, 5);
+  assert.deepEqual(p.queryArc(4, 5), [{ nome: 'v', a: 4, b: 5 }]);
+  assert.deepEqual(p.queryArc(5, 6), [{ nome: 'n', a: 5, b: 6 }]);
+  assert.deepEqual(p.queryArc(4.5, 5.5), [{ nome: 'v', a: 4.5, b: 5 }, { nome: 'n', a: 5, b: 5.5 }]);
+});

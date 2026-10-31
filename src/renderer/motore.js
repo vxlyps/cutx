@@ -2,8 +2,8 @@
 // - live: comanda il tempo, suona sulle casse, pubblica la mappa del tempo alla cuffia;
 // - cuffia: segue la mappa del live e suona sul jack, allo stesso istante.
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
-import { applica as applicaCoda, imposta as impostaVoce, leggiVoce, togli as togliVoce } from './coda.js';
-import { evalScope, getTrigger, repl, setTime, silence } from '@strudel/core';
+import { applica as applicaCoda, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
+import { evalScope, getTrigger, repl, setTime, signal, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
   getAudioContext,
@@ -171,6 +171,9 @@ function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = 
     inizio: 0, // dove finisce il preambolo del brano nel codice (il proiettore può nasconderlo)
     codaErrore: null,
     codaSporca: false,
+    codaRitmica: false, // il prossimo rifacimento della coda tocca il ritmo: sul battito
+    commuta: null, // { B, vecchio, nuovo } mentre un cambio ritmico aspetta il suo battito
+    scivolate: {}, // chiave → { da, a, t0, t1 }: i numeri che stanno scivolando
     da,
     a: Infinity,
     richiesto: orologio.epoca(ac.currentTime),
@@ -203,12 +206,58 @@ let codaUltima = 0;
 let codaTimer = null;
 let ricostruzioni = 0; // per le prove: quante volte si è rifatto un pattern
 
+// Il battito successivo (un quarto di ciclo) che non è ancora stato programmato.
+const battitoDopo = () => Math.ceil((rip.fine ?? rip.ciclo(ac.currentTime)) * 4) / 4;
+
+// Una micro-dissolvenza sulle code del vecchio, prima del cambio: scende in 10 ms e risale appena prima del battito (l'attacco del nuovo non si tocca).
+function micro(l, ciclo) {
+  const g = guadagni.get(l.id);
+  if (!g?.micro || !rip.mappa) return;
+  const t = rip.tempo(ciclo);
+  const param = g.micro.gain;
+  if (t - 0.014 < ac.currentTime) return;
+  param.setValueAtTime(1, t - 0.014);
+  param.linearRampToValueAtTime(0, t - 0.004);
+  param.linearRampToValueAtTime(1, t - 0.0005);
+}
+
 function metteCoda(l) {
-  const r = applicaCoda(l.base, l.coda);
-  if (r.errore) l.codaErrore = r.errore; // continua la versione di prima
-  else {
-    l.codaErrore = null;
-    l.pattern = r.pattern;
+  const r = applicaCoda(l.base, l.coda, { scivolate: l.scivolate, segnale: signal });
+  if (r.errore) {
+    l.codaErrore = r.errore; // continua la versione di prima
+    return;
+  }
+  l.codaErrore = null;
+  if (l.codaRitmica && rip.mappa) {
+    // un effetto ritmico (fast, rev…): entra sul battito successivo, il vecchio e il nuovo non si sovrappongono mai
+    const vecchio = l.commuta ? l.commuta.vecchio : l.pattern;
+    const B = l.commuta ? l.commuta.B : battitoDopo();
+    l.commuta = { B, vecchio, nuovo: r.pattern };
+    l.pattern = commuta(vecchio, r.pattern, B);
+    if (!l.sfuma) micro(l, B);
+  } else if (l.commuta) {
+    l.commuta.nuovo = r.pattern; // un cambio in attesa del suo battito: prende anche questo
+    l.pattern = commuta(l.commuta.vecchio, r.pattern, l.commuta.B);
+  } else l.pattern = r.pattern;
+  l.codaRitmica = false;
+}
+
+// Passato il battito del cambio il pattern è solo il nuovo; passata una scivolata il numero è fermo (e si rifà il pattern senza segnale).
+function ripulisciCode() {
+  if (!rip.mappa) return;
+  for (const l of livelli) {
+    if (l.commuta && (rip.fine ?? 0) > l.commuta.B + 0.25) {
+      l.pattern = l.commuta.nuovo;
+      l.commuta = null;
+    }
+    if (l.scivolate && !l.commuta) {
+      const scadute = Object.entries(l.scivolate).filter(([, g]) => (rip.fine ?? 0) > g.t1 + 0.1);
+      if (scadute.length) {
+        for (const [chiave] of scadute) delete l.scivolate[chiave];
+        l.codaSporca = true;
+        pianificaCoda();
+      }
+    }
   }
 }
 
@@ -227,7 +276,8 @@ function pianificaCoda() {
   }, Math.max(0, codaUltima + CODA_MIN_MS - performance.now()));
 }
 
-// { livello, imposta: ['.lpf(1200)'], togli: ['lpf'], pulisci: true } — nell'ordine: pulisci, togli, imposta.
+// { livello, imposta: ['.lpf(1200)'], togli: ['lpf'], pulisci: true, origine: 'mano' | 'manopola', scivolata: cicli } — nell'ordine: pulisci, togli, imposta.
+// Cambiata a mano (CUE, card, jam) un numero scivola in `scivolata` cicli; dalle manopole segue subito la mano. Un effetto ritmico entra sul battito.
 function cambiaCoda(m) {
   const l = livelli.find((x) => x.id === m.livello && x.a === Infinity);
   if (!l) return;
@@ -235,6 +285,28 @@ function cambiaCoda(m) {
   for (const chiave of m.togli ?? []) coda = togliVoce(coda, chiave);
   for (const testo of m.imposta ?? []) coda = impostaVoce(coda, testo);
   if (coda.length === l.coda.length && coda.every((t, i) => t === l.coda[i])) return;
+  const ora = rip.mappa ? rip.ciclo(ac.currentTime) : 0;
+  const t0 = Math.max(rip.fine ?? ora, ora);
+  const morbido = m.origine === 'mano' && m.scivolata > 0 && rip.mappa;
+  const chiave = (t) => leggiVoce(t)?.chiave;
+  const prima = new Map(l.coda.map((t) => [chiave(t), t]));
+  const dopo = new Map(coda.map((t) => [chiave(t), t]));
+  l.scivolate ??= {};
+  for (const [k, testo] of dopo) {
+    if (prima.get(k) === testo) continue;
+    if (eScorrevole(testo)) {
+      const nuovoValore = numeroDi(testo);
+      const inCorso = l.scivolate[k];
+      const vecchio = inCorso ? valoreScivolato(inCorso, t0) : valoreDi(l.coda, k) ?? valoreLetterale(l.codice, k);
+      delete l.scivolate[k];
+      if (morbido && vecchio !== null && vecchio !== nuovoValore) l.scivolate[k] = { da: vecchio, a: nuovoValore, t0, t1: t0 + m.scivolata };
+    } else l.codaRitmica = true;
+  }
+  for (const [k, testo] of prima) {
+    if (dopo.has(k)) continue;
+    delete l.scivolate[k];
+    if (!eScorrevole(testo)) l.codaRitmica = true; // togliere un effetto ritmico cambia il ritmo: sul battito
+  }
   l.coda = coda;
   l.codaSporca = true;
   pianificaCoda();
@@ -376,6 +448,7 @@ const descrivi = (l) => ({
   provenienza: l.provenienza,
   codice: l.codice,
   coda: l.coda,
+  scivola: l.scivolate,
   inizio: l.inizio,
   codaErrore: l.codaErrore,
   da: l.da === -Infinity ? null : l.da,
@@ -403,13 +476,15 @@ function guadagnoDi(l) {
     const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
     const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 0, Q: 0.707 });
     const fade = new GainNode(ac, { gain: 1 });
+    const micro = new GainNode(ac, { gain: 1 }); // la micro-dissolvenza del cambio ritmico della coda (a riposo è l'identità)
     o.output.disconnect();
     o.output.connect(lp);
     lp.connect(hp);
     hp.connect(gain);
     gain.connect(fade);
-    controller.output.connectToDestination(fade, [0, 1]);
-    guadagni.set(l.id, { orbita, gain, lp, hp, fade });
+    fade.connect(micro);
+    controller.output.connectToDestination(micro, [0, 1]);
+    guadagni.set(l.id, { orbita, gain, lp, hp, fade, micro });
   }
   return guadagni.get(l.id);
 }
@@ -430,7 +505,7 @@ function liberaGuadagno(id) {
     const controller = getSuperdoughAudioController();
     controller.nodes[g.orbita]?.disconnect();
     delete controller.nodes[g.orbita];
-    for (const n of [g.lp, g.hp, g.fade]) n.disconnect();
+    for (const n of [g.lp, g.hp, g.fade, g.micro]) n.disconnect();
     g.gain.disconnect();
   }, 15000);
 }
@@ -530,6 +605,7 @@ function giro() {
   if (!LIVE) seguiLive();
   rip.tick();
   pulisci();
+  ripulisciCode();
 }
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
