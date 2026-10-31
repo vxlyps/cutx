@@ -6,6 +6,7 @@ import * as B from './brano.js';
 import { creaEditor } from './editor.js';
 import { chiediNome, conferma } from './dialogo.js';
 import { analizza } from './analisi.js';
+import { eNomeBeat } from './nomi.js';
 
 const $ = (id) => document.getElementById(id);
 const oggi = () => {
@@ -36,7 +37,9 @@ export class Cue {
     this.modo = 'libero';
     this.stati = { live: [], cuffia: null }; // cosa suona: [{ nome, provenienza }]
     this.fileLibero = null; // il brano in cui è stato salvato il testo libero
-    this.brano = null; // { file, modello, sporco }
+    this.slot = { attivo: null, prossimo: null }; // i due brani del CUE: { file, modello, sporco, scenaScelta }
+    this.linguetta = 'prossimo'; // quale dei due si vede: «● attivo» (quello che suona) o «▸ prossimo»
+    this.beatEspanso = false; // il codice della scena del beat: compatto o per intero
     this.versione = 0; // cresce a ogni modifica del brano: una voce di ⌘Z vale solo se il brano non è cambiato dopo di lei
     this.registra = null; // (voce) => {}: la cronologia di ⌘Z (app.js)
     this.carte = []; // { i, editor, el } (i = -1 per il preambolo)
@@ -54,7 +57,52 @@ export class Cue {
     $('modo-libero').onclick = () => this.cambiaModo('libero');
     $('modo-brano').onclick = () => this.cambiaModo('brano');
     $('aggiungi-sezione').onclick = () => this.aggiungiSezione();
+    $('ling-attivo').onclick = () => this.cambiaLinguetta('attivo');
+    $('ling-prossimo').onclick = () => this.cambiaLinguetta('prossimo');
     $('cue-porta').onclick = () => this.portaA && this.azioni.portaIlSet(this.portaA);
+    this.mostraModo();
+  }
+
+  // Il brano che si vede: quello della linguetta scelta (a lui parlano tutte le card).
+  get brano() {
+    return this.slot[this.linguetta];
+  }
+
+  set brano(v) {
+    this.slot[this.linguetta] = v;
+  }
+
+  // Tab: da «● attivo» a «▸ prossimo» e ritorno (o una linguetta precisa). Ritorna quale si vede.
+  cambiaLinguetta(quale = null) {
+    const verso = quale ?? (this.linguetta === 'attivo' ? 'prossimo' : 'attivo');
+    this.linguetta = verso;
+    this.cartaAttiva = null;
+    this.modo = 'brano';
+    this.mostraBrano(true);
+    this.mostraModo();
+    return verso;
+  }
+
+  // Le due linguette col nome dei brani.
+  mostraLinguette() {
+    for (const [quale, segno] of [['attivo', '●'], ['prossimo', '▸']]) {
+      const b = $(`ling-${quale}`);
+      const brano = this.slot[quale];
+      const nome = brano ? B.testa(brano.modello).brano || brano.file?.replace(/\.cutx$/, '') || 'senza nome' : '–';
+      b.textContent = `${segno} ${nome}${brano?.sporco ? ' •' : ''}`;
+      b.classList.toggle('on', this.linguetta === quale);
+      b.classList.toggle('vuota', !brano);
+      b.title = quale === 'attivo' ? 'Il brano che suona (Tab alterna)' : 'Il brano che viene dopo (Tab alterna)';
+    }
+  }
+
+  // Un go live riuscito dal «prossimo» quando non suona ancora nessun brano: quel brano è adesso l'attivo.
+  dopoGoLive() {
+    if (this.modo !== 'brano' || this.linguetta !== 'prossimo' || this.slot.attivo || !this.slot.prossimo) return;
+    this.slot.attivo = this.slot.prossimo;
+    this.slot.prossimo = null;
+    this.linguetta = 'attivo';
+    this.mostraBrano(true);
     this.mostraModo();
   }
 
@@ -229,6 +277,7 @@ export class Cue {
   }
 
   mostraModo() {
+    this.mostraLinguette();
     const libero = this.modo === 'libero';
     $('vista-libero').hidden = !libero;
     $('vista-brano').hidden = libero;
@@ -255,19 +304,23 @@ export class Cue {
 
   // --- brano: mappa e card ---
 
-  apriModello(file, testo) {
-    const prima = this.brano;
+  // Un brano della libreria si apre nella linguetta «▸ prossimo» (se non dico altro); quello che c'era si chiude con ⌘Z per riaverlo.
+  apriModello(file, testo, dove = 'prossimo') {
+    const prima = this.slot[dove];
     const modoPrima = this.modo;
-    this.brano = { file, modello: B.leggi(testo), sporco: false };
+    const linguettaPrima = this.linguetta;
+    const nuovo = { file, modello: B.leggi(testo), sporco: false };
+    this.slot[dove] = nuovo;
+    this.linguetta = dove;
     this.versione++;
     // aprire un altro brano chiude quello di prima, con le sue modifiche: ⌘Z lo riporta com'era
     if (prima) {
-      const nuovo = this.brano;
       this.registra?.({
         etichetta: `brano «${prima.file ?? 'senza nome'}» chiuso`,
         annulla: () => {
-          if (this.brano !== nuovo) return false;
-          this.brano = prima;
+          if (this.slot[dove] !== nuovo) return false;
+          this.slot[dove] = prima;
+          this.linguetta = dove === linguettaPrima ? dove : linguettaPrima;
           this.versione++;
           this.cartaAttiva = null;
           this.modo = modoPrima;
@@ -299,18 +352,21 @@ export class Cue {
 
   // etichetta: se c'è, l'azione si può annullare con ⌘Z (unisci, dividi, rinomina, sezione nuova…); le modifiche al testo no: sono dell'editor.
   modifica(modello, ridisegna = true, etichetta = null) {
-    const prima = this.brano.modello;
-    const sporcoPrima = this.brano.sporco;
-    this.brano.modello = modello;
-    this.brano.sporco = true;
+    const slot = this.linguetta;
+    const brano = this.brano;
+    const prima = brano.modello;
+    const sporcoPrima = brano.sporco;
+    brano.modello = modello;
+    brano.sporco = true;
     this.versione++;
     const versione = this.versione;
     if (etichetta) {
       const torna = (m, sporco, v) => () => {
-        if (this.versione !== v) return false; // dopo è stato scritto altro: tornare indietro lo perderebbe
-        this.brano.modello = m;
-        this.brano.sporco = sporco;
+        if (this.versione !== v || this.slot[slot] !== brano) return false; // dopo è stato scritto altro (o il brano non c'è più): tornare indietro lo perderebbe
+        brano.modello = m;
+        brano.sporco = sporco;
         this.versione++;
+        this.linguetta = slot;
         this.mostraBrano(true);
         this.mostraModo();
         return `${etichetta}: annullato`;
@@ -320,10 +376,11 @@ export class Cue {
         etichetta,
         annulla: torna(prima, sporcoPrima, vDopo),
         rifai: () => {
-          if (this.brano.modello !== prima) return false;
-          this.brano.modello = modello;
-          this.brano.sporco = true;
+          if (brano.modello !== prima || this.slot[slot] !== brano) return false;
+          brano.modello = modello;
+          brano.sporco = true;
           this.versione++;
+          this.linguetta = slot;
           this.mostraBrano(true);
           this.mostraModo();
         },
@@ -356,6 +413,9 @@ export class Cue {
 
   // ricrea = rifà anche le card (cambiata la struttura); altrimenti solo mappa e stati.
   mostraBrano(ricrea) {
+    this.mostraLinguette();
+    if (!this.brano) return this.mostraVuoto();
+    $('brano-vuoto').hidden = true;
     const m = this.brano.modello;
     const stati = m.sezioni.map((s) => this.statoSezione(this.nomeBrano, s.nome));
     this.mostraMappa(stati);
@@ -369,15 +429,26 @@ export class Cue {
       el('span', 'spazio', live.map((s) => s.nome).join(' · ')),
       el('span', '', this.mostraLive ? 'live · richiudi' : 'live · apri'),
     );
-    // le scene del beat: mai richiusi, il live si vede dal colore
+    // le scene del beat: mai richiuse, il live si vede dalla pillola e dalla card
+    const scelta = this.scenaScelta();
+    const inLive = this.stati.live;
     for (const c of this.carte) {
       if (c.scena === undefined) continue;
       const stato = this.statoScena(this.nomeBrano, c.scena);
+      const scelte = c.scena === scelta;
+      c.pillola.className = `pillola${scelte ? ' scelta' : ''}${stato ? ` ${stato}` : ''}`;
+      c.pillola.textContent = `${stato === 'live' ? '● ' : stato === 'in-arrivo' ? '→ ' : stato === 'cuffia' ? '◖◗ ' : ''}${m.beat.scene[c.scena].nome}`;
+      c.el.hidden = !scelte;
       c.el.classList.toggle('in-cuffia', stato === 'cuffia');
-      c.cuffia?.classList.toggle('on', stato === 'cuffia');
       c.el.classList.toggle('e-live', stato === 'live');
       c.el.classList.toggle('in-arrivo', stato === 'in-arrivo');
-      c.stato.textContent = stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● il beat suona qui' : stato === 'in-arrivo' ? '→ entra a fine frase' : 'pronto';
+      if (scelte && this.beatInfo) {
+        this.beatInfo.cuffia.classList.toggle('on', stato === 'cuffia');
+        const altro = stato !== 'live' && inLive.find((x) => eNomeBeat(x.nome) && !x.provenienza.startsWith(`${this.nomeBrano} ◆`));
+        const inArrivo = m.beat.scene.findIndex((_, j) => this.statoScena(this.nomeBrano, j) === 'in-arrivo');
+        this.beatInfo.stato.textContent =
+          inArrivo >= 0 ? `→ «${m.beat.scene[inArrivo].nome}» entra a fine frase` : stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● il beat suona qui' : stato === 'in-arrivo' ? '→ entra a fine frase' : altro ? `sostituisce il beat (${altro.provenienza.replace(/ ◆\d+$/, '')})` : 'pronta';
+      }
     }
     for (const c of this.carte) {
       if (c.i < 0) continue;
@@ -386,8 +457,43 @@ export class Cue {
       c.el.classList.toggle('in-cuffia', stato === 'cuffia');
       c.cuffia?.classList.toggle('on', stato === 'cuffia');
       c.el.classList.toggle('e-live', stato === 'live');
-      c.stato.textContent = stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● live' : 'pronta';
+      // una clip con lo stesso nome già live, di un altro brano: va a sostituirla (con la dissolvenza)
+      const altra = stato !== 'live' && this.stati.live.find((x) => !eNomeBeat(x.nome) && x.nome === m.sezioni[c.i].nome && !x.provenienza.startsWith(`${this.nomeBrano} §`));
+      c.stato.textContent = stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● live' : altra ? `sostituisce ${altra.nome} (${altra.provenienza.replace(/ §\d+$/, '')})` : 'pronta';
+      c.stato.classList.toggle('sostituisce', !!altra && stato !== 'live' && stato !== 'cuffia');
     }
+  }
+
+  // Linguetta senza brano: un invito, niente card.
+  mostraVuoto() {
+    for (const c of this.carte) c.editor.distruggi();
+    this.carte = [];
+    $('carte').replaceChildren();
+    $('mappa').replaceChildren();
+    $('riga-live').hidden = true;
+    const v = $('brano-vuoto');
+    v.hidden = false;
+    v.textContent = this.linguetta === 'attivo' ? 'nessun brano attivo: il primo che mandi live diventa il brano attivo' : 'nessun brano qui: aprine uno dalla libreria';
+  }
+
+  // La scena del beat che si vede (e che parte con cuffia e go live): quella scelta, altrimenti quella che suona, altrimenti la prima.
+  scenaScelta() {
+    const m = this.brano?.modello;
+    const n = m?.beat?.scene.length ?? 0;
+    if (!n) return -1;
+    const k = this.brano.scenaScelta;
+    if (Number.isInteger(k) && k >= 0 && k < n) return k;
+    for (let i = 0; i < n; i++) if (this.statoScena(this.nomeBrano, i) === 'live') return i;
+    return 0;
+  }
+
+  scegliScena(k) {
+    const carta = this.carte.find((c) => c.scena === k);
+    if (!carta) return null;
+    this.brano.scenaScelta = k;
+    this.attiva(carta);
+    this.mostraBrano(false);
+    return this.brano.modello.beat.scene[k].nome;
   }
 
   mostraMappa(stati) {
@@ -435,9 +541,8 @@ export class Cue {
     const m = this.brano.modello;
     const indiceAttivo = this.cartaAttiva?.i;
     const scenaAttivo = this.cartaAttiva?.scena;
+    contenitore.append(this.cartaBeat());
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
-    contenitore.append(this.testataBeat());
-    (m.beat?.scene ?? []).forEach((_, k) => contenitore.append(this.cartaScena(k)));
     m.sezioni.forEach((_, i) => contenitore.append(this.carta(i)));
     this.cartaAttiva = scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
     $('riga-live').onclick = () => {
@@ -551,67 +656,98 @@ export class Cue {
     return art;
   }
 
-  // L'intestazione del beat: una riga sottile con «+ scena» (anche per creare il beat in un brano che non ce l'ha).
-  testataBeat() {
+  // La card del BEAT: in alto le scene come pillole (quella che suona accesa, quella prenotata segnata), sotto il codice della scena scelta
+  // (compatto, si espande). Ogni scena ha il suo editor, ma se ne vede uno solo.
+  cartaBeat() {
     const m = this.brano.modello;
-    const riga = el('div', `testata-beat${B.haBeat(m) ? '' : ' vuota'}`);
-    riga.dataset.aiuto = 'beat';
-    const aggiungi = tasto('+ scena', '', 'Aggiungi una scena al beat (la base ritmica del brano)');
+    const scene = m.beat?.scene ?? [];
+    const art = el('article', `card beat-card${scene.length ? '' : ' senza-beat'}`);
+    art.dataset.aiuto = 'beat';
+    const testa = el('div', 'card-testa');
+    const titolo = el('span', 'nome nome-beat', 'BEAT');
+    const stato = el('span', 'lbl', scene.length ? 'pronta' : 'niente beat in questo brano');
+    const cuffia = tasto('cuffia', '⌘↵', 'Ascolta in cuffia la scena scelta');
+    const live = tasto('go live', '⇧⌘↵', 'Fa partire il beat da questa scena (a fine frase, se il beat suona già)');
+    const toglie = tasto('×', '', 'Togli la scena scelta');
+    const espandi = tasto(this.beatEspanso ? 'riduci' : 'espandi', '', 'Il codice della scena: compatto o per intero');
+    testa.append(titolo, stato, el('div', 'spazio'));
+    if (scene.length) testa.append(espandi, toglie, cuffia, live);
+    const pillole = el('div', 'pillole');
+    const aggiungi = el('button', 'pillola nuova', '+ scena');
+    aggiungi.title = 'Aggiungi una scena al beat (la base ritmica del brano)';
     aggiungi.onclick = async () => {
       const nome = await chiediNome({ titolo: 'nome della scena', suggerimenti: ['intro', 'sviluppo', 'drop', 'break', 'outro'] });
       if (!nome) return;
-      this.modifica(B.aggiungiScena(this.brano.modello, nome, []), true, `scena «${nome}» aggiunto`);
-      this.carte.find((c) => c.scena === (this.brano.modello.beat.scene.length - 1))?.editor.focus();
+      this.brano.scenaScelta = (this.brano.modello.beat?.scene.length ?? 0);
+      this.modifica(B.aggiungiScena(this.brano.modello, nome, []), true, `scena «${nome}» aggiunta`);
+      this.carte.find((c) => c.scena === this.brano.scenaScelta)?.editor.focus();
     };
-    riga.append(el('span', 'lbl', B.haBeat(m) ? 'beat · le scene della base ritmica' : 'niente beat in questo brano'), el('div', 'spazio'), aggiungi);
-    return riga;
+    const corpo = el('div', `beat-corpo${this.beatEspanso ? ' espanso' : ''}`);
+    art.append(testa, pillole, corpo);
+    this.beatInfo = { stato, cuffia };
+    scene.forEach((sc, k) => {
+      const pillola = el('button', 'pillola', sc.nome);
+      pillola.dataset.aiuto = 'scena';
+      const carta = this.cartaScena(k, corpo, pillola);
+      pillola.onclick = () => {
+        this.scegliScena(k);
+        carta.editor.focus();
+      };
+      pillola.ondblclick = async () => {
+        const nuovo = await chiediNome({ titolo: 'rinomina la scena', valore: sc.nome, suggerimenti: ['intro', 'sviluppo', 'drop', 'break', 'outro'] });
+        if (nuovo && nuovo !== sc.nome) this.modifica(B.rinominaScena(this.brano.modello, k, nuovo), true, `scena «${sc.nome}» rinominata`);
+      };
+      pillole.append(pillola);
+    });
+    pillole.append(aggiungi);
+    const scelta = () => this.carte.find((c) => c.scena === this.scenaScelta());
+    cuffia.onclick = () => {
+      const c = scelta();
+      if (!c) return;
+      if (c.el.classList.contains('in-cuffia')) return this.azioni.fermaCuffia();
+      this.attiva(c);
+      this.azioni.provaInCuffia();
+    };
+    live.onclick = () => {
+      const c = scelta();
+      if (!c) return;
+      this.attiva(c);
+      this.azioni.goLive();
+    };
+    toglie.onclick = () => {
+      const k = this.scenaScelta();
+      if (k >= 0) this.modifica(B.togliScena(this.brano.modello, k), true, `scena «${scene[k].nome}» tolta`);
+    };
+    espandi.onclick = () => {
+      this.beatEspanso = !this.beatEspanso;
+      corpo.classList.toggle('espanso', this.beatEspanso);
+      espandi.firstChild.textContent = this.beatEspanso ? 'riduci' : 'espandi';
+    };
+    return art;
   }
 
-  // Una scena del beat: una card come quella di un pezzo, ma col suo codice, la sua cuffia e «go live» che fa partire il beat da lì.
-  cartaScena(k) {
+  // Il codice di una scena del beat: un editor dentro la card del beat (se ne vede uno alla volta, quello della pillola accesa).
+  cartaScena(k, corpo, pillola) {
     const m = this.brano.modello;
-    const mom = m.beat.scene[k];
-    const art = el('article', 'card sezione scena');
-    const testa = el('div', 'card-testa');
-    const nome = el('button', 'nome nome-sezione nome-scena', `◆ ${k + 1} ${mom.nome}`);
-    const stato = el('span', 'lbl', 'pronto');
-    testa.append(nome, stato, el('div', 'spazio'));
-    const corpo = el('div', 'editor editor-carta');
+    const sc = m.beat.scene[k];
+    const wrapper = el('div', 'beat-codice');
+    const editorEl = el('div', 'editor editor-carta');
     const avvisoTempo = el('p', 'avviso-audio');
     avvisoTempo.hidden = true;
-    const piede = el('div', 'lbl piede-carta');
-    art.append(testa, avvisoTempo, corpo, piede);
-    const carta = { i: -2, scena: k, el: art, stato, avvisoTempo };
+    wrapper.append(avvisoTempo, editorEl);
+    const stato = el('span'); // lo stato lo scrive la card del beat (mostraBrano)
+    const carta = { i: -2, scena: k, el: wrapper, stato, avvisoTempo, pillola };
     carta.editor = creaEditor({
-      root: corpo,
-      codice: mom.corpo.join('\n'),
+      root: editorEl,
+      codice: sc.corpo.join('\n'),
       suValuta: this.azioni.provaInCuffia,
       suFerma: this.azioni.fermaTutto,
       suFuoco: () => this.attiva(carta),
       suCambio: () => this.modifica(B.conCorpoScena(this.brano.modello, k, carta.editor.codice.split('\n')), false),
     });
-    nome.dataset.aiuto = 'rinomina';
-    nome.onclick = async () => {
-      const nuovo = await chiediNome({ titolo: 'rinomina la scena', valore: mom.nome, suggerimenti: ['intro', 'sviluppo', 'drop', 'break', 'outro'] });
-      if (nuovo && nuovo !== mom.nome) this.modifica(B.rinominaScena(this.brano.modello, k, nuovo), true, `scena «${mom.nome}» rinominato`);
-    };
-    const toglie = tasto('×', '', 'Togli questa scena');
-    toglie.onclick = () => this.modifica(B.togliScena(this.brano.modello, k), true, `scena «${mom.nome}» tolto`);
-    const cuffia = tasto('cuffia', '⌘↵');
-    carta.cuffia = cuffia;
-    cuffia.onclick = () => {
-      if (carta.el.classList.contains('in-cuffia')) return this.azioni.fermaCuffia();
-      this.attiva(carta);
-      this.azioni.provaInCuffia();
-    };
-    const live = tasto('go live', '⇧⌘↵', 'Fa partire il beat da questa scena (a fine frase, se il beat suona già)');
-    live.onclick = () => {
-      this.attiva(carta);
-      this.azioni.goLive();
-    };
-    testa.append(toglie, cuffia, live);
+    corpo.append(wrapper);
     this.carte.push(carta);
-    return art;
+    return carta;
   }
 
   attiva(carta) {
@@ -659,7 +795,9 @@ export class Cue {
     if (this.modo === 'brano') {
       const carta = this.carte.find((c) => (voce.scena !== undefined ? c.scena === voce.scena : c.scena === undefined && c.i === voce.sezione));
       if (!carta) return null;
+      if (voce.scena !== undefined) this.brano.scenaScelta = voce.scena;
       this.attiva(carta);
+      if (voce.scena !== undefined) this.mostraBrano(false);
       carta.el.hidden = false;
       carta.el.scrollIntoView({ block: 'nearest' });
     } else {

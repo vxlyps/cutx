@@ -525,6 +525,34 @@ export class Controller {
       }
       return;
     }
+    if (comando === 'prossimoBrano') {
+      // tocco = cambio linguetta (guardo il prossimo brano / torno all'attivo, come Tab); tenuto 1 s = passa al prossimo brano
+      this.ferma(this.passaTimer);
+      if (giu) {
+        const stato = { passato: false };
+        this.passaTenuto = stato;
+        this.riga('prossimo brano: tieni premuto per passare');
+        this.passaTimer = this.imposta(() => {
+          stato.passato = true;
+          if (this.azioni.passaBrano) this.azioni.passaBrano();
+          else this.riga('passare al prossimo brano: arriva presto');
+          this.cambiato();
+        }, PARACADUTE_MS);
+      } else if (this.passaTenuto) {
+        const stato = this.passaTenuto;
+        this.passaTenuto = null;
+        if (!stato.passato) {
+          const r = this.azioni.linguetta?.();
+          if (r) {
+            const testo = `${r.quale === 'attivo' ? '●' : '▸'} ${String(r.nome ?? 'nessun brano').toUpperCase()}`;
+            this.toccata = { n: null, quando: this.ora(), testo: `CUE · ${testo}` };
+            this.azioni.scritta?.(`CUE · ${testo}`);
+          }
+        }
+      }
+      this.cambiato();
+      return;
+    }
     if (!giu) return;
     switch (comando) {
       case 'cuffia':
@@ -668,6 +696,9 @@ export class Controller {
     else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
     if (this.pagina === 'A') {
       if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
+      // «prossimo brano»: acceso se sto guardando il ▸ prossimo; lampeggia mentre lo tengo o aspetta la fine della frase
+      if (this.azioni.linguettaAttuale?.() === 'prossimo') stati.set(nota('prossimoBrano'), true);
+      if ((this.passaTenuto && !this.passaTenuto.passato) || this.azioni.passaInAttesa?.()) stati.set(nota('prossimoBrano'), 'lampeggia');
       // ◀ ▶ accesi se c'è una scena da raggiungere in quella direzione
       if (this.azioni.scenaNome?.(-1)) stati.set(nota('scenaIndietro'), true);
       if (this.azioni.scenaNome?.(1)) stati.set(nota('scenaAvanti'), true);

@@ -47,6 +47,12 @@ Una serata è un **SET** di 4-5 brani o più: so quale apre e quale chiude, in m
 
 La manopola 1 resta il BEAT. Le scene con ◀ ▶. I colpi vanno sul selezionato, e se non c'è niente selezionato sul BEAT. Specchio e mappa aggiornati.
 
+## STATO DEI LAVORI
+
+1. **Nomi nuovi**: fatto (31/10/2026).
+2. **CUE a due linguette**: fatto (31/10/2026). Tab alterna; sul controller il **tasto 3** (tocco = cambia linguetta, tenuto 1 s = passa al prossimo brano, dal passo 4) al posto di CUFFIA + GO LIVE (che resta «manda la clip»). «Passa da CUE a LIVE» è ora Shift+Tab.
+3. SET e KIT: da fare. 4. Passa al prossimo brano: da fare. 5. Controller (CUFFIA tenuto + ◀ ▶ = scelgo il prossimo del SET): da fare.
+
 ## ORDINE DEI LAVORI
 
 Dopo questo: passo 7 (guardiano con il limiter), poi modalità piano (si progetta prima insieme), poi Pocket Operator.
@@ -79,9 +85,9 @@ Stesso formato di un brano, ma solo `@clip` (niente beat). Si legge dalla radice
 
 ## Comandi controller (da confermare)
 
-- **Tab (alterna ● attivo / ▸ prossimo)**: tasto alto del controller **CUFFIA tenuto + GO LIVE** (nessun tasto nuovo; il tasto 7, «piano», resta riservato). Da tastiera: Tab nel CUE.
+- **Tab (alterna ● attivo / ▸ prossimo)**: tasto alto 3 del controller, **tocco** (decisione di Valerio: CUFFIA + GO LIVE sarebbe una trappola, perché con CUFFIA premuto GO LIVE deve mandare la clip). Da tastiera: Tab.
 - **CUFFIA tenuto + ◀ ▶**: cambia il prossimo brano del SET (oggi scorre la libreria).
-- **Passa al prossimo brano**: il tasto 3 (oggi «passa la spina») diventa «passa».
+- **Passa al prossimo brano**: sempre il tasto 3, **tenuto 1 secondo** (lampeggia mentre aspetta la fine della frase, come il paracadute).
 - **◀ ▶ da soli**: scena indietro/avanti del beat (come adesso).
 
 ## Cosa non cambia

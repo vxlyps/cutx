@@ -2963,3 +2963,126 @@ input[type='checkbox'] {
 .editor .cm-line.cm-sez-in-arrivo.cm-sez-testa { text-decoration: underline dotted; }
 .testata-beat { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-family: var(--stencil); }
 .testata-beat.vuota { opacity: 0.55; }
+
+/* --- il CUE a due linguette, il BEAT con le scene a pillole, card e pulsanti più morbidi (31/10/2026) --- */
+.card {
+  border-radius: 10px;
+}
+.key {
+  border-radius: 8px;
+  border-bottom-width: 2px;
+}
+.key.piccolo {
+  border-radius: 7px;
+}
+.blocco-mappa {
+  border-radius: 8px;
+}
+.card.in-cuffia {
+  border-radius: 10px;
+}
+
+.linguette {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 8px;
+}
+.ling {
+  max-width: 46%;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--pannello);
+  color: var(--secondario);
+  border: 1px solid var(--bordo);
+  border-radius: 15px;
+  font: 12px var(--mono);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ling.on {
+  background: var(--testo);
+  color: var(--su-marcio);
+  border-color: var(--testo);
+}
+.ling.vuota:not(.on) {
+  opacity: 0.55;
+}
+.ling-tasto {
+  margin-left: auto;
+  color: var(--spento);
+}
+.brano-vuoto {
+  padding: 18px 4px;
+  color: var(--spento);
+}
+
+.beat-card {
+  border-left: 3px double var(--secondario);
+  gap: 8px;
+}
+.beat-card.senza-beat {
+  opacity: 0.7;
+}
+.beat-card .nome-beat {
+  font-family: var(--stencil);
+  letter-spacing: 0.1em;
+  color: var(--marcio);
+}
+.pillole {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pillola {
+  height: 26px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--secondario);
+  border: 1px solid var(--bordo);
+  border-radius: 13px;
+  font: 12px var(--mono);
+  cursor: pointer;
+}
+.pillola.scelta {
+  color: var(--testo);
+  border-color: var(--testo);
+}
+.pillola.live {
+  background: var(--marcio);
+  color: var(--su-marcio);
+  border-color: var(--marcio);
+  box-shadow: 0 0 10px rgba(159, 194, 58, 0.35);
+}
+.pillola.in-arrivo {
+  border: 1px dashed var(--marcio);
+  color: var(--marcio);
+}
+.pillola.cuffia {
+  background: var(--testo);
+  color: var(--su-marcio);
+}
+.pillola.nuova {
+  border-style: dashed;
+  color: var(--spento);
+}
+.beat-corpo {
+  max-height: 7.2em;
+  overflow: auto;
+  border-radius: 6px;
+}
+.beat-corpo.espanso {
+  max-height: none;
+}
+.beat-codice[hidden] {
+  display: none;
+}
+.card .lbl.sostituisce,
+.beat-card .lbl {
+  color: var(--secondario);
+}
+.card .lbl.sostituisce {
+  color: var(--marcio);
+}

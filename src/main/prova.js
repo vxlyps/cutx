@@ -195,6 +195,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
+  if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
+  if (parti.includes('cue-aspetto')) ok = (await sicura('cue-aspetto', provaCueAspetto)) && ok;
   if (parti.includes('beat')) ok = (await sicura('beat', provaBeat)) && ok;
   if (parti.includes('cue-controller')) ok = (await sicura('cue-controller', provaCueController)) && ok;
   if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
@@ -930,7 +932,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     // --- scorciatoie rimappabili ---
     await vai('scorciatoie');
     const righe = await js(`document.querySelectorAll('#scorciatoie-elenco .imp-riga').length`);
-    controlla('l\'elenco ha tutte le azioni', righe === 25, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set, scelta del livello)
+    controlla('l\'elenco ha tutte le azioni', righe === 26, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set, scelta del livello, linguetta del CUE)
     const cap = (id) => `#scorciatoie-elenco [data-azione="${id}"] .cap-gruppo`;
     await js(`document.querySelector('${cap('goLive')}').click()`);
     controlla('un clic sul tasto aspetta la combinazione nuova', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('premi un tasto'));
@@ -2646,6 +2648,78 @@ async function provaCueController({ finestre, scrivi }) {
   return ok;
 }
 
+// --- le linguette del CUE: ● attivo / ▸ prossimo, Tab, il tasto 3 del controller, il primo brano che va live, «sostituisce» (npx electron . --prova=linguette) ---
+async function provaLinguette({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const tasto3 = await js(`cutxProva.controllerMidi.tab.tasti[2]`);
+  await js(`window.cutx.salvaPreferenze({ controller: null })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
+  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*4").gain(.0001)\n// @clip basso\nnote("a1 a1 c2 e2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
+  const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(notte)})`);
+  await aspetta(1);
+  controlla('un brano aperto dalla libreria va nella linguetta «▸ prossimo»', (await ling('prossimo')).includes('▸ notte') && (await ling('attivo')) === '● –' && (await js('cutxProva.cue.linguetta')) === 'prossimo', `${await ling('prossimo')} | ${await ling('attivo')}`);
+  await js(`cutxProva.cue.scegliSezione(1)`); // la clip «basso» (dopo la scena)
+  await js(`document.getElementById('go-live').click()`);
+  await aspetta(3);
+  controlla('il primo brano mandato live diventa l\'attivo (● notte) e la linguetta passa lì', (await ling('attivo')).includes('● notte') && (await ling('prossimo')) === '▸ –' && (await js('cutxProva.cue.linguetta')) === 'attivo', `${await ling('attivo')} | ${await ling('prossimo')}`);
+  await js(`cutxProva.cue.apriModello('alba.cutx', ${JSON.stringify(alba)})`);
+  await aspetta(0.6);
+  controlla('il secondo brano va in «▸ prossimo» e si vede', (await ling('prossimo')).includes('▸ alba') && (await js('cutxProva.cue.linguetta')) === 'prossimo');
+  const stato = await js(`[...document.querySelectorAll('#carte .card.sezione:not(.preambolo)')].map((c) => c.querySelector('.lbl')?.textContent)`);
+  controlla('la clip «basso» di alba dice che sostituisce «basso» di notte, prima del go live', /sostituisce basso \(notte\)/.test(stato[0] ?? ''), JSON.stringify(stato));
+  controlla('«pad» (che non c\'è live) resta «pronta»', stato[1] === 'pronta', JSON.stringify(stato));
+  // Tab e il tasto 3 del controller alternano le linguette
+  await js(`cutxProva.cue.cambiaLinguetta('prossimo')`);
+  await midi(0x90, tasto3, 127);
+  await midi(0x90, tasto3, 0);
+  controlla('il tasto 3 (tocco) cambia linguetta: ▸ → ●', (await js('cutxProva.cue.linguetta')) === 'attivo');
+  await midi(0x90, tasto3, 127);
+  await midi(0x90, tasto3, 0);
+  controlla('e un altro tocco la riporta su ▸', (await js('cutxProva.cue.linguetta')) === 'prossimo');
+  await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab', key: 'Tab', bubbles: true }))`);
+  await aspetta(0.3);
+  controlla('Tab (fuori dagli editor) alterna le linguette', (await js('cutxProva.cue.linguetta')) === 'attivo');
+  await js(`document.getElementById('ling-prossimo').click()`);
+  controlla('un clic sulla linguetta la sceglie', (await js('cutxProva.cue.linguetta')) === 'prossimo');
+  await midi(0x90, tasto3, 127);
+  await aspetta(1.2);
+  await midi(0x90, tasto3, 0);
+  controlla('tenuto un secondo non cambia linguetta (passare al prossimo brano arriva col passo 4)', (await js('cutxProva.cue.linguetta')) === 'prossimo');
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- il CUE a due linguette: una foto (solo uno screenshot: npx electron . --prova=cue-aspetto) ---
+async function provaCueAspetto({ finestre, scrivi }) {
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  await js(`cutxProva.fermaTutto()`);
+  const radice = stash.radice();
+  const leggiBrano = async (f) => readFile(path.join(radice, 'libreria', f), 'utf8');
+  const uno = await leggiBrano('brano_1.cutx');
+  const due = (await leggiBrano('mayia.cutx').catch(() => uno));
+  await js(`cutxProva.cue.apriModello('brano_1.cutx', ${JSON.stringify(uno)}, 'attivo')`);
+  await js(`cutxProva.cue.apriModello('mayia.cutx', ${JSON.stringify(due)}, 'prossimo')`);
+  await js(`cutxProva.cue.cambiaLinguetta('attivo'); cutxProva.cue.scegliScena(2)`);
+  await aspetta(1);
+  const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'cue');
+  await mkdir(cartella, { recursive: true });
+  await writeFile(path.join(cartella, 'attivo.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  await js(`cutxProva.cue.cambiaLinguetta('prossimo')`);
+  await aspetta(0.5);
+  await writeFile(path.join(cartella, 'prossimo.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  scrivi(`OK    foto in ${cartella}`);
+  return true;
+}
+
 // --- la copia di sicurezza dello stash sul Mac e l'avvio senza SSD (npx electron . --prova=copia-stash) ---
 async function provaCopiaStash({ finestre, scrivi }) {
   let ok = true;
@@ -2710,21 +2784,21 @@ async function provaBeat({ finestre, scrivi }) {
   const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @scena sviluppo\ns("sine*4").gain(.0001)\n// @scena drop\ns("sine*8").gain(.0001)\n// @pezzo basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
   await aspetta(1.5);
-  controlla('il CUE mostra il beat con le tre scene e il pezzo', (await js(`document.querySelectorAll('#carte .card.scena').length`)) === 3 && (await js(`document.querySelectorAll('#carte .card.sezione:not(.scena):not(.preambolo)').length`)) === 1);
+  controlla('il CUE mostra il beat con le tre scene e il pezzo', (await js(`document.querySelectorAll('#carte .beat-card .pillola:not(.nuova)').length`)) === 3 && (await js(`document.querySelectorAll('#carte .card.sezione:not(.beat-card):not(.preambolo)').length`)) === 1);
   controlla('◀ ▶ spenti: non c\'è ancora un beat live', (await js(`cutxProva.controllerMidi.azioni.scenaNome(1)`)) === null);
   await js(`cutxProva.cue.scegliSezione(0)`);
   await tocca(5); // go live della prima scena
   await aspetta(3.5);
   let vive = await spineVive();
   controlla('go live di una scena: entra il livello «beat» (provenienza «notte ◆1»)', vive.length === 1 && vive[0].provenienza === 'notte ◆1' && vive[0].beat?.indice === 0, JSON.stringify(vive.map((l) => [l.nome, l.provenienza])));
-  controlla('la sua card è live', await js(`document.querySelector('#carte .card.scena.e-live .nome-scena')?.textContent.includes('intro') ?? false`));
+  controlla('la sua card è live', await js(`document.querySelector('#carte .beat-card .pillola.live')?.textContent.includes('intro') ?? false`));
   controlla('▶ acceso, ◀ spento', (await js(`cutxProva.controllerMidi.azioni.scenaNome(1)`)) === 'sviluppo' && (await js(`cutxProva.controllerMidi.azioni.scenaNome(-1)`)) === null);
   await js(`document.querySelector('[data-entra="2"]').click()`); // il cambio entra tra 2 cicli: la finestra «in attesa» è lunga abbastanza per guardarla
   await tocca(2); // ▶
   await aspetta(0.4);
   const prima = await js(`JSON.stringify(cutxProva.statoBeat() && { suona: cutxProva.statoBeat().suona?.beat.indice, pendente: cutxProva.statoBeat().pendente?.beat.indice })`);
   controlla('▶: il cambio aspetta la fine della frase (sviluppo in arrivo, intro ancora in corso)', prima === '{"suona":0,"pendente":1}', prima);
-  controlla('la card dello sviluppo dice che entra a fine frase', await js(`document.querySelector('#carte .card.scena.in-arrivo')?.textContent.includes('entra a fine frase') ?? false`));
+  controlla('la card dello sviluppo dice che entra a fine frase', await js(`(document.querySelector('#carte .beat-card .pillola.in-arrivo')?.textContent.includes('sviluppo') && document.querySelector('#carte .beat-card')?.textContent.includes('entra a fine frase')) ?? false`));
   await js(`document.querySelector('[data-entra="1"]').click()`);
   await tocca(2); // ▶ ancora, prima che entri: sostituisce il cambio in attesa (drop)
   await aspetta(3.5);

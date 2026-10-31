@@ -218,6 +218,7 @@ async function goLive() {
   const r = await live.richiesta({ tipo: 'entra', beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
+  if (!r.errore) cue.dopoGoLive(); // il primo brano mandato live diventa il brano attivo
   return r;
 }
 
@@ -506,6 +507,9 @@ const FA = {
   annullaSet: () => annullaSet('annulla'),
   rifaiSet: () => annullaSet('rifai'),
   // dal CUE al LIVE (il jam) e ritorno
+  cambiaLinguetta: () => {
+    cue.cambiaLinguetta();
+  },
   passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
   help: helpOnOff,
   esci: () => {
@@ -1345,6 +1349,12 @@ const controllerMidi = new Controller({
   tempo: (bpm) => live.manda({ tipo: 'tempo', bpm }),
   bpm: () => bpmSet() ?? 120,
   goLive: () => goLive(),
+  linguettaAttuale: () => cue.linguetta,
+  linguetta: () => {
+    const quale = cue.cambiaLinguetta();
+    const brano = cue.brano;
+    return { quale, nome: brano ? B.testa(brano.modello).brano || brano.file : null };
+  },
   scena: (delta) => muoviScena(delta),
   scenaNome: (delta) => {
     const l = statoBeat().pendente ?? statoBeat().suona;
