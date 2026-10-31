@@ -1,7 +1,7 @@
 // Processo principale: finestre, protocollo cutx://, permessi, guardiano dei motori.
 import { app, BrowserWindow, Menu, protocol, net, ipcMain, dialog, screen, session, shell, MessageChannelMain } from 'electron';
 import path from 'node:path';
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import * as stash from './stash.js';
@@ -32,6 +32,26 @@ if (PROVA || FOTO || SCHERMATE || CHIUSURA) {
   if (!existsSync(impostazioni)) {
     mkdirSync(dati, { recursive: true });
     writeFileSync(impostazioni, JSON.stringify({ stash: path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test') }));
+  }
+}
+
+// CUTX dev (lo lancia il CUTX.command del Desktop con CUTX_DEV=1): gira accanto a quella installata dal .dmg, con nome, dati e
+// registro a parte, e nel titolo DEV più il commit. Dello stash prende solo il percorso della prima volta (si lavora sugli stessi suoni).
+const DEV = process.env.CUTX_DEV === '1' && !(PROVA || FOTO || SCHERMATE || CHIUSURA);
+const TITOLO = DEV ? `CUTX DEV ${process.env.CUTX_COMMIT ?? ''}`.trim() : 'CUTX';
+if (DEV) {
+  const vera = path.join(app.getPath('appData'), 'CUTX');
+  app.setName('CUTX dev');
+  const dati = path.join(app.getPath('appData'), 'CUTX-dev');
+  app.setPath('userData', dati);
+  const impostazioni = path.join(dati, 'impostazioni.json');
+  if (!existsSync(impostazioni) && existsSync(path.join(vera, 'impostazioni.json'))) {
+    try {
+      const letta = JSON.parse(readFileSync(path.join(vera, 'impostazioni.json'), 'utf8'));
+      const stash = letta.stash ?? letta.valigetta;
+      mkdirSync(dati, { recursive: true });
+      if (stash) writeFileSync(impostazioni, JSON.stringify({ stash }));
+    } catch {}
   }
 }
 
@@ -170,10 +190,11 @@ function creaControllo() {
     minWidth: 1100,
     minHeight: 640,
     backgroundColor: '#000000',
-    title: 'CUTX',
+    title: TITOLO,
     webPreferences,
   });
   finestre.controllo = finestra;
+  if (DEV) finestra.on('page-title-updated', (e) => e.preventDefault()); // il titolo della pagina non cancella DEV
   seguiCaricamento('controllo', finestra);
   // Se l'interfaccia crasha la ricarico: i motori non se ne accorgono e lei riprende da loro.
   finestra.webContents.on('render-process-gone', (_e, dettagli) => {
@@ -250,13 +271,14 @@ function creaUscita() {
   const finestra = new BrowserWindow({
     ...(bordi ?? { width: 1280, height: 720 }),
     backgroundColor: '#050604',
-    title: 'CUTX · uscita',
+    title: DEV ? `${TITOLO} · uscita` : 'CUTX · uscita',
     show: false,
     webPreferences,
   });
   // Si apre senza prendere il fuoco: le mani restano sulla postazione.
   finestra.once('ready-to-show', () => finestra.showInactive());
   finestre.uscita = finestra;
+  if (DEV) finestra.on('page-title-updated', (e) => e.preventDefault());
   pronte.uscita = false;
   seguiCaricamento('uscita', finestra);
   let bordiNormali = finestra.getBounds();
