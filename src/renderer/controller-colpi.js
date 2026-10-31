@@ -22,6 +22,10 @@ export class GestoreColpi {
     return { colpi: this.colpi, errori };
   }
 
+  eStop(colpo) {
+    return colpo.nome === 'stop' && colpo.bersaglio === 'tutto';
+  }
+
   // La griglia di rilascio: lo stop torna di default sull'1 della battuta (il vuoto prima del drop), gli altri sulla griglia ¼ o ⅛.
   grigliaRilascio(colpo) {
     return colpo.nome === 'stop' && (this.c.azioni.stopTorna?.() ?? 'battuta') === 'battuta' ? 1 : this.griglia;
@@ -37,18 +41,18 @@ export class GestoreColpi {
     return (60000 / Math.max(20, bpm)) * 4 * this.griglia; // un ciclo = 4 battiti
   }
 
-  // I livelli su cui va un colpo «spina»: quelli con la manopola tenuta premuta, il livello scelto in pagina B, altrimenti la spina (il primo).
+  // I livelli su cui va un colpo «spina»: quelli con la manopola tenuta premuta, altrimenti il livello selezionato (in pagina B è quello che scolpisco), altrimenti la spina.
   bersagliSpina() {
     const c = this.c;
     this.senzaSpina = false;
     if (c.pagina === 'A') {
       const tenute = [...c.push].filter(([, s]) => s.giu).map(([n]) => c.livello(n)).filter(Boolean);
       if (tenute.length) return tenute;
-    } else if (c.bersaglio !== 'globale') {
-      const l = c.livello(c.bersaglio);
-      if (l) return [l];
     }
-    // la spina vera; se non c'è, il primo livello che suona (e lo specchio lo dice)
+    // il livello selezionato (bordo verde: ⌃1-9, clic, manopola tenuta, pagina B)
+    const scelto = c.posti().find((l) => l && l.id === c.azioni.selezionato?.());
+    if (scelto) return [scelto];
+    // niente di selezionato: la spina vera; se non c'è, il primo livello che suona (e lo specchio lo dice)
     const spina = c.livello(1);
     if (spina) return [spina];
     const primo = c.posti().find(Boolean);
@@ -80,7 +84,8 @@ export class GestoreColpi {
     // un tocco più breve della griglia: il rilascio aspetta (l'entrata c'è stata, il ritorno parte dalla griglia dopo)
     const trascorso = c.ora() - stato.quando;
     const ms = this.grigliaMs() * (this.grigliaRilascio(stato.colpo) / this.griglia);
-    if (trascorso < ms) c.imposta(() => this.togli(stato), ms - trascorso);
+    // lo stop non aspetta: taglia subito e al rilascio riparte all'1 (anche con un tocco brevissimo)
+    if (trascorso < ms && !this.eStop(stato.colpo)) c.imposta(() => this.togli(stato), ms - trascorso);
     else this.togli(stato);
     c.cambiato();
   }
@@ -110,7 +115,9 @@ export class GestoreColpi {
     const a = this.c.azioni;
     const griglia = this.griglia;
     if (colpo.bersaglio === 'tutto') {
-      a.globale?.(`colpo:${colpo.nome}`, rigaGlobaleAl(colpo, k), griglia);
+      // lo stop taglia SUBITO, come su un mixer (la riga resta visibile); gli altri entrano sulla griglia
+      if (this.eStop(colpo)) a.globale?.(`colpo:${colpo.nome}`, rigaGlobaleAl(colpo, k), 0, 'giu');
+      else a.globale?.(`colpo:${colpo.nome}`, rigaGlobaleAl(colpo, k), griglia);
     } else if (colpo.bersaglio === 'livello') {
       a.livelloTemp?.(`colpo:${colpo.nome}`, { nome: colpo.nome, codice: colpo.base, coda: vociAl(colpo, k).map((v) => v.testo) }, griglia);
     } else {
@@ -131,7 +138,7 @@ export class GestoreColpi {
     const { colpo } = stato;
     const a = this.c.azioni;
     const griglia = this.grigliaRilascio(colpo);
-    if (colpo.bersaglio === 'tutto') a.globale?.(`colpo:${colpo.nome}`, null, griglia);
+    if (colpo.bersaglio === 'tutto') a.globale?.(`colpo:${colpo.nome}`, null, griglia, this.eStop(colpo) ? 'su' : null);
     else if (colpo.bersaglio === 'livello') a.livelloTemp?.(`colpo:${colpo.nome}`, null, griglia);
     else {
       for (const l of stato.bersagli) {

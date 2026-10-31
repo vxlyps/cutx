@@ -9,11 +9,16 @@ function prova(livelli = []) {
   const log = [];
   let t = 0;
   const timer = [];
+  let selezionato = null;
   const azioni = {
     livelli: () => livelli,
+    selezionato: () => selezionato,
     volume: (id, v) => log.push(['volume', id, v]),
     muto: (id) => log.push(['muto', id]),
-    seleziona: (id) => log.push(['seleziona', id]),
+    seleziona: (id) => {
+      selezionato = id;
+      log.push(['seleziona', id]);
+    },
     coda: (id, riga) => log.push(['coda', id, riga]),
     master: (v) => log.push(['master', v]),
     tempo: (bpm) => log.push(['tempo', bpm]),
@@ -298,7 +303,7 @@ test('l\'effetto del fader si sceglie per pagina nelle impostazioni', () => {
   assert.equal(prova([]).c.effettoFader('A'), 'filtro');
 });
 
-test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo va in cuffia; al rilascio niente toggle', () => {
+test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, si sfoglia in silenzio (niente parte da solo); al rilascio niente toggle; un tocco ascolta, un altro smette', () => {
   const { c, log, avanza, azioni } = prova([L(1, 'drum')]);
   const sezioni = ['intro', 'drum', 'basso', 'melodia'];
   let k = 0;
@@ -312,10 +317,8 @@ test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, fermo me
   c.riceve(tasto(cuffia, true));
   c.riceve(giro(5, 1));
   c.riceve(giro(2, 1));
-  avanza(200);
-  assert.equal(log.filter((x) => x[0] === 'cuffiaScelta').length, 0, 'mentre scorro non parte');
-  avanza(600);
-  assert.deepEqual(log.filter((x) => x[0] === 'cuffiaScelta'), [['cuffiaScelta', 'basso']], 'fermo: quella parte in cuffia');
+  avanza(2000);
+  assert.equal(log.filter((x) => x[0] === 'cuffiaScelta').length, 0, 'neanche fermo a lungo parte qualcosa in cuffia');
   assert.equal(c.toccata.testo, 'CUE · basso', 'lo specchio dice dove sono');
   assert.equal(log.filter((x) => x[0] === 'volume').length, 0, 'le manopole non toccano i volumi mentre scorro');
   c.riceve(tasto(cuffia, false));
@@ -323,6 +326,13 @@ test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, fermo me
   // dopo, la manopola torna ai volumi
   c.riceve(giro(1, 2));
   assert.ok(log.some((x) => x[0] === 'volume'));
+  // un tocco su «cuffia» ascolta la sezione scelta (l'azione alterna: parte / smette)
+  c.riceve(tasto(cuffia, true));
+  c.riceve(tasto(cuffia, false));
+  assert.equal(log.filter((x) => x[0] === 'cuffia').length, 1);
+  c.riceve(tasto(cuffia, true));
+  c.riceve(tasto(cuffia, false));
+  assert.equal(log.filter((x) => x[0] === 'cuffia').length, 2, 'un altro tocco smette');
 });
 
 test('«cuffia» tenuto + ◀ ▶ momento: brano precedente e successivo della libreria', async () => {
@@ -442,7 +452,10 @@ function conColpi(livelli = [L(1, 'drum'), L(2, 'basso'), L(3, 'pad')]) {
   const t = prova(livelli);
   t.azioni.codaQ = (id, riga, g) => t.log.push(['codaQ', id, riga, g]);
   t.azioni.togliQ = (id, chiave, g) => t.log.push(['togliQ', id, chiave, g]);
-  t.azioni.globale = (chiave, riga, g) => t.log.push(['globale', chiave, riga, g]);
+  t.azioni.globale = (chiave, riga, g, taglio = null) => {
+    t.log.push(['globale', chiave, riga, g]);
+    if (taglio) t.log.push(['taglio', taglio]);
+  };
   t.azioni.livelloTemp = (chiave, def, g) => t.log.push(['livelloTemp', chiave, def, g]);
   t.azioni.colpiGriglia = () => 0.25;
   t.c.colpi.carica(COLPI_PREDEFINITI);
@@ -498,7 +511,8 @@ test('stop ed eco sono righe globali su tutto, anche con una manopola premuta', 
   const { c, log, avanza, tasti } = conColpi();
   c.riceve(push(3, true));
   c.riceve(tasto(tasti.stop, true));
-  assert.deepEqual(log.filter((x) => x[0] === 'globale'), [['globale', 'colpo:stop', 'all(x => x.gain(0))', 0.25]]);
+  assert.deepEqual(log.filter((x) => x[0] === 'globale'), [['globale', 'colpo:stop', 'all(x => x.gain(0))', 0]], 'lo stop taglia subito, senza griglia');
+  assert.deepEqual(log.filter((x) => x[0] === 'taglio'), [['taglio', 'giu']]);
   c.riceve(tasto(tasti.eco, true)); // si combinano
   assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], 'all(x => x.delay(.7).delayfeedback(.6))');
   avanza(3000);
@@ -552,6 +566,7 @@ test('in pagina B i colpi vanno sul livello scelto; un tasto senza colpo lo dice
   c.riceve(tasto(c.tab.tasti[2], true)); // bersaglio: livello 3
   c.riceve(tasto(tasti.mezzo, true));
   assert.deepEqual(log.filter((x) => x[0] === 'codaQ'), [['codaQ', 3, '.slow(2)', 0.25]]);
+  assert.ok(log.some((x) => x[0] === 'seleziona' && x[1] === 3), 'il livello scolpito è anche quello selezionato (bordo verde)');
   c.colpi.colpi.length = 2;
   c.riceve(tasto(tasti.eco, true));
   assert.ok(log.some((x) => x[0] === 'scritta' && /COLPO 8: NON ASSEGNATO/i.test(x[1])));
@@ -589,7 +604,8 @@ test('stop: di default torna sull\'1 della battuta (griglia 1 ciclo); con l\'opz
   t.avanza(3000);
   t.c.riceve(tasto(t.tasti.stop, false));
   assert.deepEqual(t.log.filter((x) => x[0] === 'globale').at(-1), ['globale', 'colpo:stop', null, 1], 'rilascio sulla battuta');
-  assert.equal(t.log.filter((x) => x[0] === 'globale').at(0)[3], 0.25, 'l\'entrata resta sulla griglia');
+  assert.equal(t.log.filter((x) => x[0] === 'globale').at(0)[3], 0, 'l\'entrata dello stop è subito');
+  assert.deepEqual(t.log.filter((x) => x[0] === 'taglio').map((x) => x[1]), ['giu', 'su'], 'taglia premendo, riparte lasciando');
   t.c.riceve(tasto(t.tasti.eco, true));
   t.avanza(3000);
   t.c.riceve(tasto(t.tasti.eco, false));
@@ -600,15 +616,32 @@ test('stop: di default torna sull\'1 della battuta (griglia 1 ciclo); con l\'opz
   u.avanza(3000);
   u.c.riceve(tasto(u.tasti.stop, false));
   assert.equal(u.log.filter((x) => x[0] === 'globale').at(-1)[3], 0.25, 'sul battito');
-  // un tocco breve: il ritorno aspetta una battuta intera dall'entrata (alla battuta dopo l'entrata)
+  // un tocco brevissimo: taglia e subito chiede il ritorno sull'1 successivo (niente attese in più)
   const v = conColpi();
   v.c.riceve(tasto(v.tasti.stop, true));
-  v.avanza(100);
+  v.avanza(30);
   v.c.riceve(tasto(v.tasti.stop, false));
-  v.avanza(900);
-  assert.equal(v.log.filter((x) => x[0] === 'globale').length, 1, 'ancora dentro');
-  v.avanza(1200);
+  assert.deepEqual(v.log.filter((x) => x[0] === 'taglio').map((x) => x[1]), ['giu', 'su']);
   assert.deepEqual(v.log.filter((x) => x[0] === 'globale').at(-1).slice(2), [null, 1]);
+});
+
+test('i colpi vanno sul livello selezionato (bordo verde); senza selezione, sulla spina; stop, sale ed eco restano su tutto', () => {
+  const { c, log, tasti, azioni, avanza } = conColpi();
+  c.riceve(tasto(tasti.mezzo, true));
+  c.riceve(tasto(tasti.mezzo, false));
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 1, 'niente selezionato: la spina (il primo)');
+  azioni.seleziona(3); // un clic su una card, o ⌃3
+  c.riceve(tasto(tasti.doppio, true));
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 3, 'selezionato: va sul pad');
+  assert.match(c.toccata.testo, /pad/);
+  c.riceve(tasto(tasti.doppio, false));
+  c.riceve(tasto(tasti.eco, true));
+  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[1], 'colpo:eco', 'eco resta su tutto');
+  // la manopola tenuta ha la precedenza sulla selezione
+  c.riceve(push(2, true));
+  avanza(500);
+  c.riceve(tasto(tasti.indietro, true));
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 2);
 });
 
 test('la spina sta sempre sulla manopola 1 (e sul tasto-livello 1 in pagina B); senza spina la manopola 1 resta libera', () => {

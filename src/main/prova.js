@@ -2500,17 +2500,30 @@ async function provaColpi({ finestre, scrivi }) {
   await aspetta(0.5);
   controlla('rilasciati: la riga esce e il muto non è scattato', !((await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? []).includes('.rev()') && (await attivi()).find((l) => l.id === pezzo.livello)?.muto === false);
 
+  // la manopola tenuta ha selezionato il pezzo (bordo verde): un colpo senza manopole va sul selezionato; deselezionato, torna sulla spina
+  controlla('il pezzo è selezionato (bordo verde) e lo specchio lo segna', (await js('cutxProva.pila.selezionato')) === pezzo.livello && (await js(`document.querySelectorAll('#livelli .card.selezionato').length`)) === 1);
+  const mezzo = await tastoColpo('mezzo');
+  await midi(0x90, mezzo, 127);
+  await aspetta(0.6);
+  controlla('«mezzo» senza manopole va sul livello selezionato (il pezzo)', ((await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? []).includes('.slow(2)') && !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).includes('.slow(2)'));
+  await midi(0x90, mezzo, 0);
+  await aspetta(1.2);
+  await js('cutxProva.pila.seleziona(null)'); // esc: niente selezionato → i colpi tornano sulla spina
+
   // stop: una riga globale su tutto (all(x => x.gain(0))), a tempo; rilascio a tempo
   const stop = await tastoColpo('stop');
   await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0x90, stop, 127);
-  await aspetta(2);
+  await aspetta(0.15);
+  controlla('«stop» taglia SUBITO (entro 150 ms, senza aspettare la griglia)', (await live()).tagliato === true);
+  await aspetta(1.85);
   const fermi = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[4] === 0);
   controlla('«stop»: riga globale all(x => x.gain(0)) visibile, e tutto va a gain 0', (await live()).globali.includes('all(x => x.gain(0))') && fermi.length > 6 && /all\(x => x\.gain\(0\)\)/.test(await js(`document.getElementById('globali').textContent`)), JSON.stringify((await live()).globali));
   await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0x90, stop, 0);
   await aspetta(3.2);
   const ripartiti = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello && e[4] !== 0);
+  controlla('rilasciato: il taglio si toglie all\'1 (non più tagliato dopo la battuta)', (await live()).tagliato === false);
   controlla('rilasciato: la riga sparisce', (await live()).globali.length === 0 && (await js(`document.getElementById('globali').hidden`)) === true);
   const primo = ripartiti[0];
   controlla('lo stop torna sull\'1 della battuta (il primo evento che riparte cade su un ciclo intero)', !!primo && Math.abs(primo[1] - Math.round(primo[1])) < 1e-6, JSON.stringify(primo));
@@ -2588,11 +2601,20 @@ async function provaCueController({ finestre, scrivi }) {
   controlla('e nello specchio compare «CUE · basso»', /CUE · basso/.test(await js(`document.querySelector('#specchio .spec-info')?.textContent ?? ''`)), await js(`document.querySelector('#specchio .spec-info')?.textContent`));
   controlla('mentre scorro non parte niente in cuffia', !(await cuffiaStato())?.codice);
   await aspetta(1.3);
-  const cs = await cuffiaStato();
-  controlla('fermo mezzo secondo: quella sezione parte in cuffia', !!cs?.codice && /c2 c2 eb2 g2/.test(cs.codice) && cs.nome === 'basso', JSON.stringify([cs?.nome, cs?.codice?.slice(0, 30)]));
+  controlla('fermo a lungo: non parte niente in cuffia (si sfoglia in silenzio)', !(await cuffiaStato())?.codice);
   await giro(1, 1);
   await midi(0x90, cuffia, 0); // lascio «cuffia»
   controlla('lascio «cuffia»: la sezione resta scelta (melodia) e la cuffia non si toglie', (await scelta()) === 'melodia' || (await scelta()) === 'basso');
+  const scelta1 = await scelta();
+  await midi(0x90, cuffia, 127); // un tocco su «cuffia»: ascolto la sezione scelta
+  await midi(0x90, cuffia, 0);
+  await aspetta(1.5);
+  const cs = await cuffiaStato();
+  controlla('un tocco su «cuffia»: la sezione scelta parte in cuffia', !!cs?.codice && cs.nome === scelta1, JSON.stringify([cs?.nome, scelta1]));
+  await midi(0x90, cuffia, 127);
+  await midi(0x90, cuffia, 0);
+  await aspetta(1);
+  controlla('un altro tocco: smette', !(await cuffiaStato())?.codice);
   await aspetta(1.3);
   const attesa = await scelta(); // la sezione scelta PRIMA del go live (dopo, la card live si richiude)
   await midi(0x90, golive, 127);

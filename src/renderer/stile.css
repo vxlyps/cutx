@@ -1245,7 +1245,8 @@ input[type='checkbox'] {
 }
 
 .card.livello.selezionato {
-  box-shadow: inset 3px 0 0 var(--marcio);
+  border-color: var(--marcio);
+  box-shadow: inset 4px 0 0 var(--marcio), 0 0 0 1px var(--marcio), 0 0 10px rgba(159, 194, 58, 0.35);
 }
 
 .livello.in-modifica {
@@ -2491,6 +2492,11 @@ input[type='checkbox'] {
   padding: 2px 0;
   border: 1px solid transparent;
   border-radius: 3px;
+}
+
+.specchio .spec-m.scelta {
+  border-color: var(--marcio);
+  box-shadow: inset 0 -3px 0 var(--marcio);
 }
 
 .specchio .spec-m.toccata {

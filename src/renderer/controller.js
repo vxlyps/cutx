@@ -9,7 +9,6 @@ import { GestoreColpi } from './controller-colpi.js';
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
 const PARACADUTE_MS = 1000;
 const X_VALIDO_MS = 1500; // il valore che sto girando vale finché giro (e un attimo dopo); poi torna a valere la coda, che è la verità
-const FERMO_MS = 500; // fermo così a lungo, la sezione scelta va in cuffia
 const LUCI_MS = 150;
 const CODA_OGNI_MS = 33; // le righe di coda partono al massimo 30 volte al secondo
 
@@ -41,7 +40,6 @@ export class Controller {
     this.paracaduteTimer = null;
     this.paracaduteTenuto = false;
     this.cuffiaTenuta = null; // { usato } mentre tengo premuto «cuffia»: girare una manopola scorre le sezioni del CUE, ◀ ▶ cambiano brano
-    this.fermoTimer = null;
     this.ultimoDiscreto = new Map(); // `${id}|${chiave}` → l'ultimo scatto mandato (velocità, altezza)
     this.lampi = new Map(); // nota → fino a quando resta accesa dopo l'azione (un lampo breve)
     this.toccata = null; // { n, quando }: l'ultima manopola toccata, per lo specchio
@@ -195,8 +193,15 @@ export class Controller {
     this.pagina = pagina;
     this.toccata = null;
     this.ultime.clear();
+    if (pagina === 'B') this.selezionaBersaglio();
     this.riga(pagina === 'A' ? 'pagina A · suona' : 'pagina B · scolpisci');
     this.cambiato();
+  }
+
+  // Pagina B: il livello che sto scolpendo è anche quello selezionato (bordo verde sulla card): a lui vanno i colpi.
+  selezionaBersaglio() {
+    const l = this.bersaglio === 'globale' ? null : this.livello(this.bersaglio);
+    if (l) this.azioni.seleziona?.(l.id);
   }
 
   alternaGlobale() {
@@ -207,6 +212,7 @@ export class Controller {
     }
     this.toccata = null;
     this.ultime.clear();
+    this.selezionaBersaglio();
     const l = this.bersaglio === 'globale' ? null : this.livello(this.bersaglio);
     this.riga(this.bersaglio === 'globale' ? 'pagina B · GLOBALE' : `pagina B · ${l ? l.nome : `livello ${this.bersaglio}`}`);
     this.azioni.scritta?.(this.bersaglio === 'globale' ? 'GLOBALE' : `SCOLPISCI · ${l?.nome?.toUpperCase() ?? ''}`);
@@ -266,10 +272,7 @@ export class Controller {
     if (nome === undefined || nome === null) return this.riga('CUE: niente sezioni da scorrere');
     this.toccata = { n: null, quando: this.ora(), testo: `CUE · ${nome}` };
     this.azioni.scritta?.(`CUE · ${nome.toUpperCase()}`);
-    this.ferma(this.fermoTimer);
-    this.fermoTimer = this.imposta(() => {
-      this.azioni.cuffiaScelta?.();
-    }, FERMO_MS);
+    // si sfoglia in silenzio: niente parte in cuffia da solo; la sezione scelta si ascolta con un tocco su «cuffia»
   }
 
   async cambiaBrano(verso) {
@@ -480,6 +483,7 @@ export class Controller {
       this.toccata = null;
       this.ultime.clear();
       const l = this.livello(n);
+      this.selezionaBersaglio();
       this.riga(`bersaglio: ${l ? l.nome : `livello ${n} (vuoto)`}`);
       this.cambiato();
       return;
@@ -495,7 +499,6 @@ export class Controller {
       else if (this.cuffiaTenuta) {
         const usato = this.cuffiaTenuta.usato;
         this.cuffiaTenuta = null;
-        this.ferma(this.fermoTimer);
         if (!usato) {
           this.azioni.cuffia?.();
           this.azioni.scritta?.(this.azioni.inCuffia?.() ? 'CUFFIA · STOP' : 'CUFFIA');
@@ -511,10 +514,12 @@ export class Controller {
       // tenuto un secondo: niente partenze per sbaglio
       this.ferma(this.paracaduteTimer);
       this.paracaduteTenuto = giu;
+      this.azioni.paracaduteCarica?.(giu); // il gatto si riempie come col clic
       if (giu) {
         this.riga('paracadute: tieni premuto');
         this.paracaduteTimer = this.imposta(() => {
           this.paracaduteTenuto = false;
+          this.azioni.paracaduteCarica?.(false);
           this.azioni.paracadute?.();
         }, PARACADUTE_MS);
       }
@@ -609,7 +614,7 @@ export class Controller {
     if (this.pagina === 'A') {
       for (let n = 1; n <= 7; n++) {
         const l = livelli[n - 1];
-        m.push(l ? { stile: 'fan', valore: l.muto ? null : l.volume, nome: l.nome, corto: corto(l.nome), testo: l.muto ? 'muto' : l.volume.toFixed(2), muto: l.muto } : null);
+        m.push(l ? { scelta: l.id === this.azioni.selezionato?.(), stile: 'fan', valore: l.muto ? null : l.volume, nome: l.nome, corto: corto(l.nome), testo: l.muto ? 'muto' : l.volume.toFixed(2), muto: l.muto } : null);
       }
       m.push({ stile: 'fan', valore: this.master, nome: 'generale', corto: 'gener', testo: this.master.toFixed(2) });
       return m;

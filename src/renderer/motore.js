@@ -516,6 +516,7 @@ const descrivi = (l) => ({
 // agiscono subito anche sui suoni già partiti, con una sfumata breve (niente click).
 const SFUMATA_S = 0.02; // costante di tempo: a regime in circa 80 ms
 const guadagni = new Map(); // id → { orbita, gain }
+let tagliato = false; // lo stop dei colpi è premuto: tutto è tagliato finché non torna l'1
 function guadagnoDi(l) {
   if (!guadagni.has(l.id)) {
     const controller = getSuperdoughAudioController();
@@ -526,18 +527,20 @@ function guadagnoDi(l) {
     const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
     const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 0, Q: 0.707 });
     const fade = new GainNode(ac, { gain: 1 });
+    const taglio = new GainNode(ac, { gain: tagliato ? 0 : 1 }); // lo «stop» come su un mixer: taglia tutto subito, a riposo è l'identità
     const micro = new GainNode(ac, { gain: 1 }); // la micro-dissolvenza del cambio ritmico della coda (a riposo è l'identità)
     o.output.disconnect();
     o.output.connect(lp);
     lp.connect(hp);
     hp.connect(gain);
-    gain.connect(fade);
+    gain.connect(taglio);
+    taglio.connect(fade);
     fade.connect(micro);
     controller.output.connectToDestination(micro, [0, 1]);
     // l'orecchio della striscia viva: il suono vero del livello (dopo effetti, volume e dissolvenza); solo una presa, non è nella catena
     const analisi = new AnalyserNode(ac, { fftSize: 4096, smoothingTimeConstant: 0 });
     micro.connect(analisi);
-    guadagni.set(l.id, { orbita, gain, lp, hp, fade, micro, analisi });
+    guadagni.set(l.id, { orbita, gain, lp, hp, taglio, fade, micro, analisi });
   }
   return guadagni.get(l.id);
 }
@@ -550,6 +553,24 @@ function applicaGuadagni() {
     g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume * rompi, ac.currentTime, SFUMATA_S);
   }
 }
+// Lo stop come su un mixer. giù: i GainNode di taglio vanno a zero in pochi ms; su: tornano a uno al ciclo `ciclo` (o subito).
+function tagliaTutto(giu, ciclo = null) {
+  tagliato = giu || (ciclo !== null && ciclo > (rip.ciclo(ac.currentTime) ?? 0));
+  const ora = ac.currentTime;
+  const quando = giu || ciclo === null || !rip.mappa ? ora : Math.max(ora, rip.tempo(ciclo));
+  for (const g of guadagni.values()) {
+    const p = g.taglio.gain;
+    p.cancelScheduledValues(ora);
+    p.setValueAtTime(p.value, ora);
+    if (giu) p.setTargetAtTime(0, ora, 0.004);
+    else {
+      p.setValueAtTime(0, Math.max(ora, quando - 0.002));
+      p.setTargetAtTime(1, quando, 0.003);
+    }
+  }
+  if (!giu) setTimeout(() => (tagliato = false), Math.max(0, (quando - ora) * 1000) + 100);
+}
+
 // Un livello uscito: dopo la coda (riverbero, delay) il suo guadagno e la sua orbita si buttano.
 function liberaGuadagno(id) {
   const g = guadagni.get(id);
@@ -788,6 +809,7 @@ function stato() {
     ricostruzioni,
     globali: [...globali.values()],
     breakFattore,
+    tagliato,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     dissolvenze: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, { fade: g.fade.gain.value, lp: g.lp.frequency.value, hp: g.hp.frequency.value }])) : undefined,
@@ -828,6 +850,9 @@ async function ricevi(da, m) {
     case 'togli':
       return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0);
     case 'globale': // una riga globale (all(x => …)) del fader o di un colpo; riga null la toglie
+      // lo stop: taglia SUBITO tutto quello che suona (anche le note già partite), e al rilascio il suono torna sull'inizio della griglia (l'1)
+      if (m.taglio === 'giu') tagliaTutto(true);
+      else if (m.taglio === 'su') tagliaTutto(false, Number(m.griglia) > 0 ? battitoDopo(Number(m.griglia)) : null);
       if (typeof m.riga === 'string' && m.riga.trim()) globali.set(String(m.chiave), m.riga.trim());
       else globali.delete(String(m.chiave));
       for (const l of livelli) {

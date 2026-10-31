@@ -51,7 +51,7 @@
 
 - Attivi solo finché tengo premuto. Entrano quantizzati (1/8 o 1/4, impostabile) e al rilascio tutto torna esattamente a tempo. Sono righe nella coda, visibili.
 - roll (sulla spina): .ply che cresce mentre tengo (2 → 4 → 8)
-- stop (su tutto): silenzio, rilascio quantizzato sull'1 della battuta (il vuoto prima del drop); in Impostazioni → controller si può scegliere «sul battito». Gli altri colpi entrano e escono sulla griglia ¼ o ⅛.
+- stop (su tutto): come su un mixer, premendo taglia SUBITO (niente griglia); lasciando riparte sull'1 della battuta dopo (anche con un tocco brevissimo) (il vuoto prima del drop); in Impostazioni → controller si può scegliere «sul battito». Gli altri colpi entrano e escono sulla griglia ¼ o ⅛.
 - mezzo (spina): .slow(2)
 - doppio (spina): .fast(2)
 - indietro (spina): .rev()
@@ -63,7 +63,7 @@
 
 ### A chi vanno i colpi
 
-- Premo un colpo e basta: va sulla spina.
+- Premo un colpo e basta: va sul livello selezionato (bordo verde: ⌃1-9, clic sulla card, manopola tenuta, pagina B); se non c'è niente di selezionato, sulla spina.
 - Tengo premuta la manopola di un pezzo e premo il colpo: va su quel pezzo. Più manopole premute insieme: va su tutti quei pezzi.
 - Stop, sale ed eco vanno sempre su tutto.
 - Sulle manopole: tocco breve = muto, tenuto premuto = selezione (per girare il filtro o per indirizzare un colpo). Il muto non deve scattare quando tengo premuto per selezionare.
@@ -78,7 +78,7 @@
 - Manopole 2-7 = pezzi live 2-7: gira = volume, premi = muto, tieni premuto e gira = filtro di quel pezzo. Il pezzo toccato per ultimo è il selezionato e su schermo si vede. Se entra un settimo pezzo, avvisami o prendi il posto del più vecchio in muto: proponimi tu.
 - Manopola 8 = volume generale.
 - Anelli LED = valore vero (si aggiornano anche quando CUTX cambia i valori da solo: dissolvenze, volume dal CUE…).
-- Tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia (tocco = accende/spegne al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE, fermo mezzo secondo la sezione parte in cuffia; tenuto + ◀ / ▶ = brano precedente/successivo della libreria), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
+- Tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia (tocco = ascolta la sezione selezionata / smette, al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE in silenzio, restano selezionate; tenuto + ◀ / ▶ = brano precedente/successivo della libreria), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
 - Tasti in basso: i colpi.
 - Fader: filtro del drop su tutto il live.
 

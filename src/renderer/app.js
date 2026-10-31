@@ -468,6 +468,10 @@ function paracaduteDoppio() {
   const ora = performance.now();
   if (ora - ultimoP < DOPPIO_MS) {
     ultimoP = 0;
+    // il gatto si anima come col clic (si riempie di verde), anche se la tastiera parte subito
+    const b = $('paracadute');
+    b.classList.add('carica');
+    setTimeout(() => b.classList.remove('carica'), 1000);
     return lanciaParacadute();
   }
   ultimoP = ora;
@@ -1299,7 +1303,6 @@ const controllerMidi = new Controller({
   },
   // muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo la sezione va in cuffia
   cueSposta: (delta) => cue.spostaSezione(delta),
-  cuffiaScelta: () => provaInCuffia(),
   cueBrano: async (verso) => {
     const i = libreria.findIndex((b) => b.file === cue.brano?.file);
     const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
@@ -1308,6 +1311,7 @@ const controllerMidi = new Controller({
     return cue.brano?.file === libreria[j].file ? libreria[j].nome : null;
   },
   seleziona: (id) => pila.seleziona(id),
+  selezionato: () => pila.selezionato,
   togliRiga: (id, chiave) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }),
   // il reset di una manopola (pagina B): la riga esce dalla coda; ⌘Z la rimette
   resetRiga: (id, chiave) => {
@@ -1323,7 +1327,7 @@ const controllerMidi = new Controller({
   },
   // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
   faderEffetto: (pagina) => preferenze.controller?.fader?.[pagina],
-  globale: (chiave, riga, griglia = 0) => live.manda({ tipo: 'globale', chiave, riga, griglia }),
+  globale: (chiave, riga, griglia = 0, taglio = null) => live.manda({ tipo: 'globale', chiave, riga, griglia, taglio }),
   // i colpi: righe di coda e livelli temporanei, sulla griglia scelta nelle impostazioni (1/4 o 1/8)
   colpiGriglia: () => preferenze.colpiGriglia ?? 0.25,
   stopTorna: () => preferenze.stopTorna ?? 'battuta',
@@ -1349,6 +1353,7 @@ const controllerMidi = new Controller({
   cuffia: () => (cuffia.stato.codice ? fermaCuffia() : provaInCuffia()),
   inCuffia: () => !!cuffia.stato.codice,
   paracadute: () => lanciaParacadute(),
+  paracaduteCarica: (on) => $('paracadute').classList.toggle('carica', on),
   scritta: (testo) => mostraScritta(testo),
   riga: (testo) => mostraRiga(testo),
   tocca: (id) => pila.tocca(id),

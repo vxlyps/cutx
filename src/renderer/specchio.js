@@ -77,7 +77,7 @@ export class Specchio {
     riga.className = 'spec-riga';
     manopole.forEach((m, i) => {
       const e = document.createElement('div');
-      e.className = `spec-m${m ? '' : ' libera'}${m?.muto ? ' muta' : ''}${toccata === i + 1 ? ' toccata' : ''}`;
+      e.className = `spec-m${m ? '' : ' libera'}${m?.scelta ? ' scelta' : ''}${m?.muto ? ' muta' : ''}${toccata === i + 1 ? ' toccata' : ''}`;
       const num = document.createElement('span');
       num.className = 'n';
       num.textContent = String(i + 1);
