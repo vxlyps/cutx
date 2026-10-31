@@ -3,7 +3,8 @@
 //   node_modules/.bin/electron strumenti/midi-spia            → solo ascolto per 30 secondi
 //   SPIA_GUIDA=1 node_modules/.bin/electron strumenti/midi-spia → giro guidato (circa 2 minuti e mezzo)
 //   SPIA_LED=1 …                                               → prova di accensione di anelli e tasti
-//   SPIA_MC=1 …                                                → giro in modalità Mackie (MC), poi torna in standard da solo
+//   SPIA_MC=1 …                                                → mette il controller in modalità Mackie (MC) e ci resta; registra i gesti
+//   SPIA_MCLED=1 …                                             → prova di LED in MC (anelli e tasti, quelli visti dal giro MC)
 // Il registro è in $TMPDIR/cutx-midi-spia-<modo>.log (o SPIA_OUT).
 const { app, BrowserWindow, session } = require('electron');
 const { execFile } = require('node:child_process');
@@ -12,7 +13,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 app.setPath('userData', path.join(os.tmpdir(), 'cutx-midi-spia-dati'));
-const MODO = process.env.SPIA_GUIDA ? 'guida' : process.env.SPIA_LED ? 'led' : process.env.SPIA_MC ? 'mc' : 'ascolto';
+const MODO = process.env.SPIA_GUIDA ? 'guida' : process.env.SPIA_LED ? 'led' : process.env.SPIA_MC ? 'mc' : process.env.SPIA_MCLED ? 'mcled' : 'ascolto';
 const OUT = process.env.SPIA_OUT || path.join(os.tmpdir(), `cutx-midi-spia-${MODO}.log`);
 fs.writeFileSync(OUT, '');
 const scrivi = (r) => {
@@ -128,11 +129,9 @@ app.whenReady().then(async () => {
     dillo('Fatto. Dimmi cosa hai visto.');
     await aspetta(2);
   } else if (process.env.SPIA_MC) {
-    // Modalità MACKIE (MC): si entra con CC 127 = 1 sul canale globale e si torna in standard con CC 127 = 0. Registra come si muovono
+    // Modalità MACKIE (MC): si entra con CC 127 = 1 sul canale globale e ci si resta (il modo si ricorda anche dopo aver scollegato). Registra come si muovono
     // manopole, tasti e fader, e prova gli anelli alla maniera Mackie (CC 48–55 sul canale 1).
     const manda = (...b) => w.webContents.executeJavaScript(`manda(${b.join(',')})`);
-    const indietro = () => manda(0xba, 127, 0);
-    process.on('exit', () => {});
     dillo('Passo alla modalità Mackie. Il led MC MODE si deve accendere.');
     await marca('passo in MC (CC 127 = 1, canale 11)');
     await manda(0xba, 127, 1);
@@ -168,12 +167,75 @@ app.whenReady().then(async () => {
       }
       await manda(0xb0, 0x30, 0);
     }
-    await marca('torno in standard (CC 127 = 0, canale 11)');
-    dillo('Torno alla modalità standard.');
-    await indietro();
-    await aspetta(3);
     await marca('fine');
-    dillo('Fatto. Se il led MC MODE è ancora acceso dimmelo.');
+    dillo('Fatto. Il controller resta in modalità Mackie.');
+    await aspetta(2);
+  } else if (process.env.SPIA_MCLED) {
+    // LED in modalità MC: i tasti con le note che il controller ha mandato nel giro MC (stesso numero per la risposta, come vuole Mackie),
+    // gli anelli con CC 0x30 + n sul canale 1. Il controller resta in MC.
+    const manda = (...b) => w.webContents.executeJavaScript(`manda(${b.join(',')})`);
+    await manda(0xba, 127, 1); // se per caso fosse in standard, lo rimette in MC
+    const log = fs.existsSync(path.join(os.tmpdir(), 'cutx-midi-spia-mc.log')) ? fs.readFileSync(path.join(os.tmpdir(), 'cutx-midi-spia-mc.log'), 'utf8').split('\n') : [];
+    const note = new Map(); // nome del passo → note in ordine di arrivo
+    let passo = null;
+    for (const r of log) {
+      if (r.startsWith('PASSO ')) {
+        passo = r.slice(6);
+        note.set(passo, []);
+      } else if (passo) {
+        const m = r.match(/^[\d.]+ ([0-9a-f]{2}) ([0-9a-f]{2}) ([0-9a-f]{2})$/);
+        if (m && (parseInt(m[1], 16) & 0xf0) === 0x90 && parseInt(m[3], 16) > 0 && !note.get(passo).includes(parseInt(m[2], 16))) note.get(passo).push(parseInt(m[2], 16));
+      }
+    }
+    const trova = (pezzo) => [...note].find(([k]) => k.includes(pezzo))?.[1] ?? [];
+    const alte = trova('riga alta');
+    const basse = trova('riga bassa');
+    const altre = [['push manopola uno', trova('premila e rilasciala')], ['layer A', trova('layer A')], ['layer B', trova('layer B')]];
+    scrivi(`NOTE riga alta: ${alte.join(',')} · riga bassa: ${basse.join(',')} · altre: ${altre.map(([n, v]) => `${n}=${v.join(',')}`).join(' ')}`);
+    dillo('Prova dei led in modalità Mackie. Guarda il controller.');
+    await aspetta(3);
+    const accendi = async (testo, nn) => {
+      await marca(testo);
+      dillo(testo);
+      for (const v of [127, 0]) {
+        await manda(0x90, nn, v);
+        await aspetta(v ? 1.6 : 0.6);
+      }
+    };
+    if (alte.length || basse.length) {
+      for (const [i, nn] of alte.entries()) await accendi(`Riga alta, tasto ${i + 1}, nota ${nn}`, nn);
+      for (const [i, nn] of basse.entries()) await accendi(`Riga bassa, tasto ${i + 1}, nota ${nn}`, nn);
+      for (const [nome, v] of altre) for (const nn of v) await accendi(`${nome}, nota ${nn}`, nn);
+    } else {
+      // nessun giro MC registrato: si prova a gruppi di otto note
+      for (let n = 0; n < 104; n += 8) {
+        await marca(`note da ${n} a ${n + 7}`);
+        dillo(`Note da ${n} a ${n + 7}`);
+        for (let k = n; k < n + 8; k++) await manda(0x90, k, 127);
+        await aspetta(2);
+        for (let k = n; k < n + 8; k++) await manda(0x90, k, 0);
+        await aspetta(0.5);
+      }
+    }
+    // anelli alla maniera Mackie
+    for (const [nome, vals] of [['punto', [1, 6, 11]], ['pan', [0x11, 0x16, 0x1b]], ['fan', [0x21, 0x26, 0x2b]], ['spread', [0x31, 0x36, 0x3b]]]) {
+      await marca(`anello uno: ${nome}`);
+      dillo(`Anello uno, ${nome}`);
+      for (const v of vals) {
+        await manda(0xb0, 0x30, v);
+        await aspetta(1.2);
+      }
+      await manda(0xb0, 0x30, 0);
+    }
+    await marca('tutti gli otto anelli, uno alla volta, punto al centro');
+    dillo('Gli otto anelli, uno alla volta');
+    for (let k = 0; k < 8; k++) {
+      await manda(0xb0, 0x30 + k, 6);
+      await aspetta(0.9);
+      await manda(0xb0, 0x30 + k, 0);
+    }
+    await marca('fine');
+    dillo('Fatto. Dimmi cosa si è acceso.');
     await aspetta(2);
   } else {
     await aspetta(Number(process.env.SPIA_S || 30));
