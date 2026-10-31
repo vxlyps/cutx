@@ -350,9 +350,28 @@ test('«cuffia» tenuto + ◀ ▶ momento: brano precedente e successivo della l
   assert.equal(c.toccata.testo, 'CUE · notte');
   c.riceve(tasto(c.tab.tasti[3], false));
   assert.equal(log.filter((x) => x[0] === 'cuffia').length, 0);
-  // senza «cuffia» tenuto, ◀ ▶ restano «arriva presto» (i momenti vengono col passo 5)
+  // senza «cuffia» tenuto, ◀ ▶ sono i momenti della spina (a fine frase); senza spina la scritta dice «niente»
+  c.azioni.momento = async (d) => {
+    log.push(['momento', d]);
+    return d > 0 ? { momento: 'drop' } : null;
+  };
   c.riceve(tasto(c.tab.tasti[1], true));
-  assert.ok(log.some((x) => x[0] === 'scritta' && /ARRIVA PRESTO/i.test(x[1])));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(log.filter((x) => x[0] === 'momento'), [['momento', 1]]);
+  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'MOMENTO ▶ DROP'));
+  c.riceve(tasto(c.tab.tasti[0], true));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'MOMENTO ◀ NIENTE'));
+});
+
+test('◀ ▶ sono accesi solo se c\'è un momento in quella direzione', () => {
+  const { c } = prova([L(1, 'spina')]);
+  c.azioni.momentoNome = (d) => (d > 0 ? 'drop' : null);
+  const luci = c.desiderate();
+  assert.equal(luci.get(`t${c.tab.tasti[1]}`)[2], 127, '▶ acceso');
+  assert.equal(luci.get(`t${c.tab.tasti[0]}`)[2], 0, '◀ spento');
 });
 
 test('gli effetti del fader: righe all(x => …), a zero (o aperto, per il filtro) niente', () => {

@@ -194,6 +194,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
+  if (parti.includes('spina')) ok = (await sicura('spina', provaSpina)) && ok;
   if (parti.includes('cue-controller')) ok = (await sicura('cue-controller', provaCueController)) && ok;
   if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
   if (parti.includes('striscia')) ok = (await sicura('striscia', provaStriscia)) && ok;
@@ -2618,6 +2619,70 @@ async function provaCueController({ finestre, scrivi }) {
     controlla('◀: torna al precedente', (await js('cutxProva.cue.brano?.file')) === primo, String(await js('cutxProva.cue.brano?.file')));
     await midi(0x90, cuffia, 0);
   } else scrivi(`INFO  libreria con ${n} brano: la prova del brano successivo/precedente non si fa (la logica è nei test)`);
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- la spina e i suoi momenti: go live di un momento, ◀ ▶ a fine frase, un cambio in attesa sostituito (npx electron . --prova=spina) ---
+async function provaSpina({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
+  const tocca = async (i) => {
+    await midi(0x90, await tasto(i), 127);
+    await midi(0x90, await tasto(i), 0);
+  };
+  const spineVive = async () => (await live()).livelli.filter((l) => l.nome === 'spina' && l.a === null);
+  await js(`window.cutx.salvaPreferenze({ controller: null })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @spina\n// @momento intro\ns("sine*2").gain(.0001)\n// @momento sviluppo\ns("sine*4").gain(.0001)\n// @momento drop\ns("sine*8").gain(.0001)\n// @pezzo basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1.5);
+  controlla('il CUE mostra la spina con i tre momenti e il pezzo', (await js(`document.querySelectorAll('#carte .card.momento').length`)) === 3 && (await js(`document.querySelectorAll('#carte .card.sezione:not(.momento):not(.preambolo)').length`)) === 1);
+  controlla('◀ ▶ spenti: non c\'è ancora una spina live', (await js(`cutxProva.controllerMidi.azioni.momentoNome(1)`)) === null);
+  await js(`cutxProva.cue.scegliSezione(0)`);
+  await tocca(5); // go live del primo momento
+  await aspetta(3.5);
+  let vive = await spineVive();
+  controlla('go live di un momento: entra il livello «spina» (provenienza «notte ◆1»)', vive.length === 1 && vive[0].provenienza === 'notte ◆1' && vive[0].spina?.indice === 0, JSON.stringify(vive.map((l) => [l.nome, l.provenienza])));
+  controlla('la sua card è live', await js(`document.querySelector('#carte .card.momento.e-live .nome-momento')?.textContent.includes('intro') ?? false`));
+  controlla('▶ acceso, ◀ spento', (await js(`cutxProva.controllerMidi.azioni.momentoNome(1)`)) === 'sviluppo' && (await js(`cutxProva.controllerMidi.azioni.momentoNome(-1)`)) === null);
+  await tocca(2); // ▶
+  await aspetta(0.4);
+  const prima = await js(`JSON.stringify(cutxProva.statoSpina() && { suona: cutxProva.statoSpina().suona?.spina.indice, pendente: cutxProva.statoSpina().pendente?.spina.indice })`);
+  controlla('▶: il cambio aspetta la fine della frase (sviluppo in arrivo, intro ancora in corso)', prima === '{"suona":0,"pendente":1}', prima);
+  controlla('la card dello sviluppo dice che entra a fine frase', await js(`document.querySelector('#carte .card.momento.in-arrivo')?.textContent.includes('entra a fine frase') ?? false`));
+  await tocca(2); // ▶ ancora, prima che entri: sostituisce il cambio in attesa (drop)
+  await aspetta(3.5);
+  vive = await spineVive();
+  controlla('▶ ▶ prima della fine frase: il cambio in attesa è sostituito, resta una spina sola, sul drop', vive.length === 1 && vive[0].spina?.indice === 2 && vive[0].provenienza === 'notte ◆3', JSON.stringify(vive.map((l) => [l.provenienza, l.da, l.a])));
+  const r = await js(`cutxProva.muoviMomento(1)`);
+  controlla('▶ sull\'ultimo momento: non cambia niente e lo dice', !r && (await spineVive()).length === 1 && /ultimo momento/.test(await js(`document.getElementById('cue-avviso')?.textContent ?? document.body.innerText`)));
+  await tocca(1); // ◀
+  await aspetta(3.5);
+  vive = await spineVive();
+  controlla('◀: torna allo sviluppo', vive.length === 1 && vive[0].spina?.indice === 1, JSON.stringify(vive.map((l) => l.provenienza)));
+  await js(`cutxProva.cue.scegliSezione(3)`);
+  await tocca(5); // il pezzo «basso»
+  await aspetta(3.5);
+  const nomi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).sort();
+  controlla('un pezzo entra accanto alla spina, senza toccarla', JSON.stringify(nomi) === '["basso","spina"]', JSON.stringify(nomi));
+  // armare il drop: un cambio di momento in attesa e un go live subito dopo, il pezzo entra insieme a lui
+  await js(`cutxProva.muoviMomento(1)`);
+  await aspetta(0.3);
+  await js(`cutxProva.cue.scegliSezione(3)`);
+  await tocca(5);
+  await aspetta(0.5);
+  const tutti = (await live()).livelli.filter((l) => l.a === null);
+  const nuovaSpina = tutti.find((l) => l.nome === 'spina');
+  const nuovoPezzo = tutti.find((l) => l.nome === 'basso');
+  controlla('armare il drop: il pezzo entra insieme al cambio di momento', !!nuovaSpina && !!nuovoPezzo && Math.abs(nuovaSpina.da - nuovoPezzo.da) < 1e-6, JSON.stringify([nuovaSpina?.da, nuovoPezzo?.da]));
   await js('cutxProva.fermaTutto()');
   return ok;
 }

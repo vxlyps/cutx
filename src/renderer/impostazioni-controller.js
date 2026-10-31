@@ -196,7 +196,7 @@ export class PaginaController {
     };
     m.replaceChildren(
       p('<b>Pagina A · suona</b> (tasto layer A). Le manopole 1–7 sono i livelli live nell\'ordine (la 1 diventerà la spina), la 8 il volume generale. Gira = volume · tocco = muto · tieni premuta e gira = filtro (scritto nella coda) · tenuta = scelta del livello.'),
-      p('Tasti in alto, da sinistra: ◀ momento · ▶ momento · passa la spina · <b>cuffia</b> · <b>go live</b> · <b>togli</b> · piano · <b>paracadute</b> (tenuto 1 s). I momenti, la spina e il piano arrivano nei passi dopo. Tasti in basso: i colpi (passo 4).'),
+      p('Tasti in alto, da sinistra: <b>◀ ▶ momento</b> (un momento della spina indietro o avanti, a fine frase; accesi se c\'è un momento da raggiungere) · passa la spina · <b>cuffia</b> · <b>go live</b> · <b>togli</b> · piano · <b>paracadute</b> (tenuto 1 s). «Passa la spina» e il piano arrivano nei passi dopo. Tasti in basso: i colpi (passo 4).'),
       p('<b>Pagina B · scolpisci</b> (tasto layer B). I tasti in alto 1–7 scelgono il livello; l\'8 resta il paracadute (tenuto 1 s, in tutte e due le pagine). Il «globale» si sceglie premendo di nuovo il tasto layer B (B una volta = il livello scelto, B di nuovo = globale, e così via). Manopole: volume · filtro · risonanza · eco · riverbero · (velocità) · sporco · (altezza), ognuna scritta nella coda del livello. Sul globale: 1 = BPM, 4 = eco di tutto, 5 = riverbero di tutto.'),
       p('Anelli: pagina A = punto (volume), pagina B = fan (il valore del parametro). Il tasto layer acceso dice la pagina. Il fader per ora si vede solo qui (il filtro del drop arriva dopo).'),
     );

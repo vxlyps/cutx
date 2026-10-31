@@ -211,10 +211,62 @@ async function goLive() {
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  // un momento della spina: se la spina suona già, la coda e il volume dei suoi livelli restano com'erano (le manopole contano)
+  // armare il drop: se un cambio di momento aspetta la fine della frase, il pezzo entra insieme a lui
+  const alle = p.spina ? null : statoSpina().pendente?.da ?? null;
+  const r = await live.richiesta({ tipo: 'entra', spina: p.spina, alle, codice: senzaCoda, coda: p.spina && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;
+}
+
+// --- la spina e i suoi momenti ---
+
+// La spina live: il livello «spina» che suona (e quello che sta per entrare, se un cambio aspetta la fine della frase).
+function statoSpina() {
+  const ciclo = mappa ? cicloDi(mappa, performance.timeOrigin + performance.now()) : 0;
+  const tutte = livelliLive.filter((l) => l.nome === 'spina' && l.spina);
+  const suona = tutte.filter((l) => (l.a === null || l.a > ciclo) && (l.da === null || l.da <= ciclo)).at(-1) ?? null;
+  const pendente = tutte.filter((l) => l.a === null && l.da !== null && l.da > ciclo).at(-1) ?? null;
+  return { suona, pendente };
+}
+
+// ◀ ▶: un momento indietro o avanti, a fine frase (come il go live). Parte dal momento che sta per entrare, se un cambio aspetta.
+async function muoviMomento(delta) {
+  if (inTest) return;
+  const { suona, pendente } = statoSpina();
+  const l = pendente ?? suona;
+  if (!l) return cue.avviso('non c\'è una spina nel live: manda un momento col go live');
+  const { base, indice, momenti } = l.spina;
+  const k = indice + delta;
+  if (k < 0 || k >= momenti.length) return cue.avviso(delta > 0 ? `«${momenti[indice].nome}» è l'ultimo momento` : `«${momenti[indice].nome}» è il primo momento`);
+  const m = momenti[k];
+  // il tempo del set è quello che suona adesso: il setcpm del brano non lo riporta indietro
+  const pre = B.senzaTempo(m.codice.slice(0, m.inizio));
+  const { codice: senzaCoda, coda } = separaCoda(pre + m.codice.slice(m.inizio));
+  const r = await live.richiesta({
+    tipo: 'entra',
+    spina: { base, indice: k, momenti },
+    codice: senzaCoda,
+    coda: coda.length ? coda : undefined,
+    inizio: pre.length,
+    nome: 'spina',
+    provenienza: `${base} ◆${k + 1}`,
+    cicli: entraTra,
+    dissolvenza: dissolvenza(dissEntra),
+  });
+  mostraErrore(r.errore, 'live');
+  return r.errore ? r : { momento: m.nome, indice: k };
+}
+
+// Cosa dice la spina al CUE (per le card dei momenti) e al controller (per lo specchio).
+function mostraSpina() {
+  const { suona, pendente } = statoSpina();
+  cue.aggiornaSpina(
+    suona || pendente
+      ? { base: (suona ?? pendente).spina.base, indice: suona ? suona.spina.indice : null, pendente: pendente ? pendente.spina.indice : null }
+      : null,
+  );
 }
 
 // Le dissolvenze (dissolvenza.js): quanti cicli, e se solo volume o anche filtro (impostazioni).
@@ -329,7 +381,11 @@ const oggi = () => new Date().toLocaleDateString('sv-SE');
 
 async function salvaLiveComeBrano() {
   if (!haStash) return cue.avviso('nessuno stash: sceglilo nella barra in alto');
-  const livelli = livelliLive.filter((l) => l.a === null && l.nome !== 'paracadute');
+  // la spina si salva col momento che suona adesso (non quello in attesa)
+  const { suona } = statoSpina();
+  const livelli = livelliLive
+    .filter((l) => l.a === null && l.nome !== 'paracadute' && !(l.spina && suona && l.id !== suona.id))
+    .map((l) => (l.spina ? { ...l, momento: { nome: l.spina.momenti[l.spina.indice].nome } } : l));
   if (!livelli.length) return cue.avviso('niente live da salvare');
   const nome = await chiediNome({ titolo: 'salva il live come brano', valore: `live ${oggi()}`, conferma: 'salva' });
   if (!nome) return;
@@ -766,7 +822,7 @@ function aggiornaIstantanea() {
   if (!ripreso || !live.viva || ripristinando) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   istantaneaLive = attivi.length
-    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ spina: l.spina, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
     : null;
 }
 
@@ -785,7 +841,7 @@ async function ripristinaLive() {
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, spina: l.spina ?? null, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
@@ -915,6 +971,7 @@ function mostraCue() {
   // live = sta suonando o sta per entrare
   const inLive = livelliLive.filter((l) => l.a === null).map((l) => ({ nome: l.nome, provenienza: l.provenienza }));
   cue.aggiornaStati({ live: inTest ? [] : inLive, cuffia: inTest ? null : etichetta(cuffia) });
+  mostraSpina();
   cue.aggiornaTempo({ set: bpmSet(), occupato: livelliLive.some((l) => l.a === null) });
   const b = $('cuffia-onoff');
   b.classList.toggle('on', cuffia.viva && cuffiaUdibile);
@@ -1124,6 +1181,8 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   motori: { live, cuffia },
+  statoSpina,
+  muoviMomento,
   pausaCuffia,
   pulisciCoda,
   togliRigaCoda,
@@ -1274,6 +1333,11 @@ const controllerMidi = new Controller({
   tempo: (bpm) => live.manda({ tipo: 'tempo', bpm }),
   bpm: () => bpmSet() ?? 120,
   goLive: () => goLive(),
+  momento: (delta) => muoviMomento(delta),
+  momentoNome: (delta) => {
+    const l = statoSpina().pendente ?? statoSpina().suona;
+    return l ? l.spina.momenti[l.spina.indice + delta]?.nome ?? null : null;
+  },
   togli: () => togliLivello(pila.selezionato ?? undefined),
   cuffia: () => (cuffia.stato.codice ? fermaCuffia() : provaInCuffia()),
   inCuffia: () => !!cuffia.stato.codice,

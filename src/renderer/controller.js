@@ -521,6 +521,19 @@ export class Controller {
         this.azioni.cuffia?.();
         this.azioni.scritta?.(this.azioni.inCuffia?.() ? 'CUFFIA · STOP' : 'CUFFIA');
         break;
+      case 'momentoIndietro':
+      case 'momentoAvanti': {
+        // un momento della spina indietro o avanti, a fine frase (come il go live)
+        const delta = comando === 'momentoAvanti' ? 1 : -1;
+        const simbolo = delta > 0 ? '▶' : '◀';
+        this.lampo(this.tab.tasti[n - 1]);
+        if (!this.azioni.momento) break;
+        Promise.resolve(this.azioni.momento(delta)).then((r) => {
+          if (r?.momento) this.azioni.scritta?.(`MOMENTO ${simbolo} ${String(r.momento).toUpperCase()}`);
+          else this.azioni.scritta?.(`MOMENTO ${simbolo} NIENTE`);
+        });
+        break;
+      }
       case 'goLive':
         this.lampo(this.tab.tasti[n - 1]);
         this.azioni.goLive?.();
@@ -646,6 +659,9 @@ export class Controller {
     else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
     if (this.pagina === 'A') {
       if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
+      // ◀ ▶ accesi se c'è un momento da raggiungere in quella direzione
+      if (this.azioni.momentoNome?.(-1)) stati.set(nota('momentoIndietro'), true);
+      if (this.azioni.momentoNome?.(1)) stati.set(nota('momentoAvanti'), true);
       if (this.azioni.inAttesa?.()) stati.set(nota('goLive'), 'lampeggia'); // il go live aspetta il suo ciclo
     } else if (this.bersaglio !== 'globale') {
       // il bersaglio acceso (col «globale» nessun tasto del livello è acceso)

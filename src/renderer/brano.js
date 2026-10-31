@@ -292,6 +292,7 @@ export function aggiungiSezione(testo, da, a, nome) {
   const { blocchi: bl } = blocchi(testo);
   if (da < bl[0].da) return { errore: 'la testa del brano non può diventare una sezione' };
   const blocco = bloccoDellaRiga(testo, da);
+  if (blocco.sezione <= -2) return { errore: 'la spina non si divide in sezioni: i momenti si scrivono con // @momento' };
   if (blocco.testa === da) return { errore: 'parti da una riga sotto il nome della sezione' };
   if (a >= blocco.a) return { errore: 'la selezione attraversa più sezioni' };
   const scelte = righe.slice(da, a + 1);

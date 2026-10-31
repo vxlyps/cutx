@@ -49,7 +49,7 @@ export class Cue {
       suValuta: azioni.provaInCuffia,
       suFerma: azioni.fermaTutto,
       suCambio: () => azioni.bozza?.(),
-      statoSezione: (nome) => this.statoSezione('scratch', nome),
+      statoSezione: (nome, tipo, k) => (tipo === 'momento' ? this.statoMomento('scratch', k) : this.statoSezione('scratch', nome)),
     });
     $('modo-libero').onclick = () => this.cambiaModo('libero');
     $('modo-brano').onclick = () => this.cambiaModo('brano');
@@ -97,6 +97,27 @@ export class Cue {
     }
   }
 
+  // Lo stato di un momento della spina: live (la spina suona proprio quel momento), in arrivo (è il prossimo, a fine frase) o in cuffia.
+  // Il livello della spina si chiama «spina» e la sua provenienza è «brano ◆n» (n = il numero del momento).
+  statoMomento(base, k) {
+    const sp = this.spina;
+    if (sp && sp.base === base) {
+      if (sp.pendente === k) return 'in-arrivo'; // prima del live: nell'elenco dei livelli il cambio in attesa risulta già live
+      if (sp.indice === k) return 'live';
+    }
+    const prov = `${base} ◆${k + 1}`;
+    return this.stati.cuffia?.nome === 'spina' && this.stati.cuffia.provenienza === prov ? 'cuffia' : '';
+  }
+
+  // L'app dice com'è la spina live: { base: nome del brano, indice: il momento che suona, pendente: il momento armato (o null) }.
+  aggiornaSpina(spina) {
+    const prima = JSON.stringify(this.spina ?? null);
+    this.spina = spina;
+    if (JSON.stringify(spina ?? null) === prima) return;
+    this.libero.ridisegnaSezioni();
+    if (this.brano) this.mostraBrano(false);
+  }
+
   statoSezione(provenienza, nome) {
     const di = (x) => x && x.nome === nome && (x.provenienza === provenienza || x.provenienza.startsWith(`${provenienza} §`));
     if (this.stati.live.some(di)) return 'live';
@@ -119,13 +140,21 @@ export class Cue {
     const testo = this.libero.codice;
     const { da, a, vuota } = this.libero.righeScelte();
     const b = B.leggi(testo);
-    if (!b.sezioni.length) {
+    if (!b.sezioni.length && !B.haSpina(b)) {
       const righe = testo.split('\n');
       const codice = vuota ? testo : righe.slice(da, a + 1).join('\n');
       const base = vuota ? 0 : this.libero.vista.state.doc.line(da + 1).from;
       return { nome: 'scratch', provenienza: 'scratch', codice, inizio: 0, bpmBrano: null, dove: { editor: this.libero, base } };
     }
     const blocco = B.bloccoDellaRiga(testo, da);
+    if (blocco.sezione === -2) {
+      // un momento della spina: va live come «spina», al momento giusto
+      const prima = vuota ? blocco.da : Math.max(da, blocco.da);
+      const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
+      const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
+      return { ...this.pezzoMomento(b, blocco.momento, 'scratch', righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
+    }
+    if (blocco.sezione === -3) return { errore: 'il cursore è sull\'intestazione della spina: mettilo in un momento' };
     if (blocco.sezione < 0) return { errore: 'il cursore è nel preambolo: mettilo in una sezione' };
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
     const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
@@ -133,9 +162,30 @@ export class Cue {
     return { nome: blocco.nome, provenienza: 'scratch', volume: blocco.info?.volume, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
   }
 
+  // Un momento della spina come pezzo da mandare: si chiama «spina», porta con sé tutti i momenti (per ◀ ▶) e quello da cui parte.
+  pezzoMomento(modello, k, base, righe = null) {
+    const momenti = modello.spina.momenti;
+    return {
+      nome: 'spina',
+      provenienza: `${base === 'scratch' ? 'scratch' : this.nomeBrano} ◆${k + 1}`,
+      spina: {
+        base: base === 'scratch' ? 'scratch' : this.nomeBrano,
+        indice: k,
+        momenti: momenti.map((m, j) => ({ nome: m.nome, codice: B.codiceMomento(modello, j).codice, inizio: B.codiceMomento(modello, j).inizio })),
+      },
+      momento: { nome: momenti[k].nome, i: k, n: momenti.length },
+      ...B.codiceMomento(modello, k, righe),
+    };
+  }
+
   pezzoBrano() {
     const carta = this.cartaAttiva;
     if (!this.brano || !carta) return { errore: 'scegli una sezione: clic nella sua card' };
+    if (carta.momento !== undefined) {
+      const { da, a, vuota } = carta.editor.righeScelte();
+      const righe = vuota ? null : this.brano.modello.spina.momenti[carta.momento].corpo.slice(da, a + 1);
+      return { ...this.pezzoMomento(this.brano.modello, carta.momento, 'brano', righe), bpmBrano: B.bpmDelBrano(this.brano.modello), dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from } };
+    }
     if (carta.i < 0) return { errore: 'il preambolo suona con ogni sezione: scegline una' };
     const m = this.brano.modello;
     const { da, a, vuota } = carta.editor.righeScelte();
@@ -319,6 +369,16 @@ export class Cue {
       el('span', 'spazio', live.map((s) => s.nome).join(' · ')),
       el('span', '', this.mostraLive ? 'live · richiudi' : 'live · apri'),
     );
+    // i momenti della spina: mai richiusi, il live si vede dal colore
+    for (const c of this.carte) {
+      if (c.momento === undefined) continue;
+      const stato = this.statoMomento(this.nomeBrano, c.momento);
+      c.el.classList.toggle('in-cuffia', stato === 'cuffia');
+      c.cuffia?.classList.toggle('on', stato === 'cuffia');
+      c.el.classList.toggle('e-live', stato === 'live');
+      c.el.classList.toggle('in-arrivo', stato === 'in-arrivo');
+      c.stato.textContent = stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● la spina suona qui' : stato === 'in-arrivo' ? '→ entra a fine frase' : 'pronto';
+    }
     for (const c of this.carte) {
       if (c.i < 0) continue;
       const stato = stati[c.i];
@@ -374,9 +434,12 @@ export class Cue {
     contenitore.replaceChildren();
     const m = this.brano.modello;
     const indiceAttivo = this.cartaAttiva?.i;
+    const momentoAttivo = this.cartaAttiva?.momento;
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
+    contenitore.append(this.testataSpina());
+    (m.spina?.momenti ?? []).forEach((_, k) => contenitore.append(this.cartaMomento(k)));
     m.sezioni.forEach((_, i) => contenitore.append(this.carta(i)));
-    this.cartaAttiva = this.carte.find((c) => c.i === indiceAttivo) ?? null;
+    this.cartaAttiva = momentoAttivo !== undefined ? this.carte.find((c) => c.momento === momentoAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.momento === undefined) ?? null;
     $('riga-live').onclick = () => {
       this.mostraLive = !this.mostraLive;
       this.mostraBrano(false);
@@ -488,6 +551,69 @@ export class Cue {
     return art;
   }
 
+  // L'intestazione della spina: una riga sottile con «+ momento» (anche per creare la spina in un brano che non ce l'ha).
+  testataSpina() {
+    const m = this.brano.modello;
+    const riga = el('div', `testata-spina${B.haSpina(m) ? '' : ' vuota'}`);
+    riga.dataset.aiuto = 'spina';
+    const aggiungi = tasto('+ momento', '', 'Aggiungi un momento alla spina (la base ritmica del brano)');
+    aggiungi.onclick = async () => {
+      const nome = await chiediNome({ titolo: 'nome del momento', suggerimenti: ['intro', 'sviluppo', 'drop', 'break', 'outro'] });
+      if (!nome) return;
+      this.modifica(B.aggiungiMomento(this.brano.modello, nome, []), true, `momento «${nome}» aggiunto`);
+      this.carte.find((c) => c.momento === (this.brano.modello.spina.momenti.length - 1))?.editor.focus();
+    };
+    riga.append(el('span', 'lbl', B.haSpina(m) ? 'spina · i momenti della base ritmica' : 'niente spina in questo brano'), el('div', 'spazio'), aggiungi);
+    return riga;
+  }
+
+  // Un momento della spina: una card come quella di un pezzo, ma col suo codice, la sua cuffia e «go live» che fa partire la spina da lì.
+  cartaMomento(k) {
+    const m = this.brano.modello;
+    const mom = m.spina.momenti[k];
+    const art = el('article', 'card sezione momento');
+    const testa = el('div', 'card-testa');
+    const nome = el('button', 'nome nome-sezione nome-momento', `◆ ${k + 1} ${mom.nome}`);
+    const stato = el('span', 'lbl', 'pronto');
+    testa.append(nome, stato, el('div', 'spazio'));
+    const corpo = el('div', 'editor editor-carta');
+    const avvisoTempo = el('p', 'avviso-audio');
+    avvisoTempo.hidden = true;
+    const piede = el('div', 'lbl piede-carta');
+    art.append(testa, avvisoTempo, corpo, piede);
+    const carta = { i: -2, momento: k, el: art, stato, avvisoTempo };
+    carta.editor = creaEditor({
+      root: corpo,
+      codice: mom.corpo.join('\n'),
+      suValuta: this.azioni.provaInCuffia,
+      suFerma: this.azioni.fermaTutto,
+      suFuoco: () => this.attiva(carta),
+      suCambio: () => this.modifica(B.conCorpoMomento(this.brano.modello, k, carta.editor.codice.split('\n')), false),
+    });
+    nome.dataset.aiuto = 'rinomina';
+    nome.onclick = async () => {
+      const nuovo = await chiediNome({ titolo: 'rinomina il momento', valore: mom.nome, suggerimenti: ['intro', 'sviluppo', 'drop', 'break', 'outro'] });
+      if (nuovo && nuovo !== mom.nome) this.modifica(B.rinominaMomento(this.brano.modello, k, nuovo), true, `momento «${mom.nome}» rinominato`);
+    };
+    const toglie = tasto('×', '', 'Togli questo momento');
+    toglie.onclick = () => this.modifica(B.togliMomento(this.brano.modello, k), true, `momento «${mom.nome}» tolto`);
+    const cuffia = tasto('cuffia', '⌘↵');
+    carta.cuffia = cuffia;
+    cuffia.onclick = () => {
+      if (carta.el.classList.contains('in-cuffia')) return this.azioni.fermaCuffia();
+      this.attiva(carta);
+      this.azioni.provaInCuffia();
+    };
+    const live = tasto('go live', '⇧⌘↵', 'Fa partire la spina da questo momento (a fine frase, se la spina suona già)');
+    live.onclick = () => {
+      this.attiva(carta);
+      this.azioni.goLive();
+    };
+    testa.append(toglie, cuffia, live);
+    this.carte.push(carta);
+    return art;
+  }
+
   attiva(carta) {
     this.cartaAttiva = carta;
     for (const c of this.carte) c.el.classList.toggle('attiva', c === carta);
@@ -496,33 +622,49 @@ export class Cue {
   // --- muoversi nel CUE senza mouse (controller): le sezioni di quello che ho davanti, e quella scelta ---
 
   // I nomi delle sezioni (in modalità brano quelle del brano aperto, in scratch quelle scritte con // @sezione).
+  // Le voci in cui ci si muove: prima i momenti della spina, poi i pezzi: [{ nome, momento? }].
+  vociNav() {
+    if (this.modo === 'brano') {
+      const m = this.brano?.modello;
+      return m ? [...(m.spina?.momenti ?? []).map((x, k) => ({ nome: x.nome, momento: k })), ...m.sezioni.map((s, i) => ({ nome: s.nome, sezione: i }))] : [];
+    }
+    return B.blocchi(this.libero.codice).blocchi.filter((b) => b.sezione >= 0 || b.sezione === -2).map((b) => (b.sezione === -2 ? { nome: b.nome, momento: b.momento } : { nome: b.nome, sezione: b.sezione }));
+  }
+
   sezioniNav() {
-    if (this.modo === 'brano') return this.brano ? this.brano.modello.sezioni.map((s) => s.nome) : [];
-    return B.leggi(this.libero.codice).sezioni.map((s) => s.nome);
+    return this.vociNav().map((v) => v.nome);
   }
 
   // L'indice della sezione scelta, o -1.
   indiceScelto() {
-    if (this.modo === 'brano') return this.cartaAttiva && this.cartaAttiva.i >= 0 ? this.cartaAttiva.i : -1;
+    const voci = this.vociNav();
+    if (this.modo === 'brano') {
+      const c = this.cartaAttiva;
+      if (!c) return -1;
+      return voci.findIndex((v) => (c.momento !== undefined ? v.momento === c.momento : v.sezione === c.i && c.i >= 0));
+    }
     const testo = this.libero.codice;
-    if (!B.leggi(testo).sezioni.length) return -1;
+    if (!voci.length) return -1;
     const { da } = this.libero.righeScelte();
-    return B.bloccoDellaRiga(testo, da).sezione;
+    const b = B.bloccoDellaRiga(testo, da);
+    return voci.findIndex((v) => (b.sezione === -2 ? v.momento === b.momento : v.sezione === b.sezione && b.sezione >= 0));
   }
 
   // Sceglie la sezione k (senza prendersi il fuoco della tastiera): in brano la card si evidenzia e si porta in vista, in scratch il cursore va al suo inizio.
   scegliSezione(k) {
-    const nomi = this.sezioniNav();
+    const voci = this.vociNav();
+    const nomi = voci.map((v) => v.nome);
     if (k < 0 || k >= nomi.length) return null;
+    const voce = voci[k];
     if (this.modo === 'brano') {
-      const carta = this.carte.find((c) => c.i === k);
+      const carta = this.carte.find((c) => (voce.momento !== undefined ? c.momento === voce.momento : c.momento === undefined && c.i === voce.sezione));
       if (!carta) return null;
       this.attiva(carta);
       carta.el.hidden = false;
       carta.el.scrollIntoView({ block: 'nearest' });
     } else {
       const { blocchi } = B.blocchi(this.libero.codice);
-      const b = blocchi.find((x) => x.sezione === k);
+      const b = blocchi.find((x) => (voce.momento !== undefined ? x.sezione === -2 && x.momento === voce.momento : x.sezione === voce.sezione));
       const vista = this.libero.vista;
       const riga = vista.state.doc.line(Math.min(b.testa + 1, vista.state.doc.lines));
       vista.dispatch({ selection: { anchor: riga.to }, scrollIntoView: true });
@@ -571,9 +713,10 @@ export class Cue {
     } else {
       const carta = this.cartaAttiva;
       if (!carta) return this.avviso('seleziona delle righe in una card');
+      if (carta.momento !== undefined) return this.avviso('la spina non si divide in sezioni: i momenti si scrivono con + momento');
       testo = B.scrivi(this.brano.modello);
       const { blocchi } = B.blocchi(testo);
-      const inizio = blocchi[carta.i + 1].da;
+      const inizio = blocchi.find((x) => x.sezione === carta.i).da;
       const scelte = carta.editor.righeScelte();
       da = inizio + scelte.da;
       a = inizio + scelte.a;

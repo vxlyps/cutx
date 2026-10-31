@@ -2943,3 +2943,13 @@ input[type='checkbox'] {
   font-weight: 700;
   flex: none;
 }
+
+/* la spina: i suoi momenti hanno un filo doppio a sinistra, diverso dai pezzi; il cambio che aspetta la fine della frase è tratteggiato */
+.card.momento { border-left: 3px double var(--secondario); }
+.card.momento.e-live { border-left-color: var(--marcio); }
+.card.momento.in-arrivo { outline: 1px dashed var(--marcio); outline-offset: -1px; }
+.card.momento.in-arrivo .lbl { color: var(--marcio); }
+.editor .cm-line.cm-spina.cm-sez-testa { border-left-style: double; }
+.editor .cm-line.cm-sez-in-arrivo.cm-sez-testa { text-decoration: underline dotted; }
+.testata-spina { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-family: var(--stencil); }
+.testata-spina.vuota { opacity: 0.55; }

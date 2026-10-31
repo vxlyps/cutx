@@ -3,7 +3,7 @@
 import { codemirrorSettings, initEditor } from '@strudel/codemirror';
 import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin } from '@codemirror/view';
-import { eSezione, leggiRigaSezione } from './brano.js';
+import { eSezione, eSpina, eMomento, leggiRigaSezione } from './brano.js';
 
 const ridisegna = StateEffect.define();
 
@@ -34,6 +34,7 @@ function fasceSezioni(statoSezione) {
     let classe = null; // null = preambolo o testa: niente fascia
     let inTesta = true;
     let haTesta = false;
+    let momento = -1; // l'indice dell'ultimo @momento
     let inCoda = false; // dopo `// @coda` fino alla prossima sezione (coda.js)
     for (let n = 1; n <= doc.lines; n++) {
       const riga = doc.line(n);
@@ -43,19 +44,24 @@ function fasceSezioni(statoSezione) {
         continue;
       }
       // i commenti subito sotto la testa sono la sua descrizione (come in brano.js)
-      if (inTesta && haTesta && /^\s*\/\//.test(riga.text) && !eSezione(riga.text)) {
+      if (inTesta && haTesta && /^\s*\/\//.test(riga.text) && !eSezione(riga.text) && !eSpina(riga.text) && !eMomento(riga.text)) {
         b.add(riga.from, riga.from, Decoration.line({ class: 'cm-testa-brano' }));
         continue;
       }
       inTesta = false;
-      if (eSezione(riga.text)) inCoda = false;
+      if (eSezione(riga.text) || eMomento(riga.text) || eSpina(riga.text)) inCoda = false;
       else if (/^\s*\/\/\s*@coda\s*$/.test(riga.text)) inCoda = true;
-      if (eSezione(riga.text)) {
-        const { nome } = leggiRigaSezione(riga.text);
-        const stato = statoSezione(nome);
-        classe = `cm-sez${stato ? ` cm-sez-${stato}` : ''}`;
+      if (eSpina(riga.text)) {
+        classe = 'cm-sez cm-spina';
         b.add(riga.from, riga.from, Decoration.line({ class: `${classe} cm-sez-testa` }));
-        const i = riga.text.indexOf(nome, riga.text.indexOf('@sezione') + 8);
+      } else if (eSezione(riga.text) || eMomento(riga.text)) {
+        const eMom = eMomento(riga.text);
+        if (eMom) momento++;
+        const { nome } = leggiRigaSezione(riga.text);
+        const stato = eMom ? statoSezione(nome, 'momento', momento) : statoSezione(nome);
+        classe = `cm-sez${eMom ? ' cm-spina' : ''}${stato ? ` cm-sez-${stato}` : ''}`;
+        b.add(riga.from, riga.from, Decoration.line({ class: `${classe} cm-sez-testa` }));
+        const i = riga.text.indexOf(nome, riga.text.search(/@(?:sezione|pezzo|momento)/) + 8);
         if (nome && i >= 0) b.add(riga.from + i, riga.from + i + nome.length, Decoration.mark({ class: 'cm-sez-nome' }));
       } else if (classe) {
         b.add(riga.from, riga.from, Decoration.line({ class: inCoda ? `${classe} cm-coda` : classe }));

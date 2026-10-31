@@ -36,7 +36,7 @@
   …codice…
   ```
 
-  I brani senza @spina funzionano come oggi (tutto è un pezzo).
+  I brani senza @spina funzionano come oggi (tutto è un pezzo). `@sezione` e `@pezzo` sono la stessa cosa. (Fatto, passo 5: ◀ ▶ dal controller, «+ momento» e le card dei momenti nel CUE, il pezzo che entra con un cambio in attesa; resta il «passa la spina».)
 - PASSA LA SPINA (cambio di canzone): la prossima canzone è nel CUE. Con "passa la spina", a fine frase entra la sua spina dal primo momento. I pezzi vecchi restano finché li tolgo io, o sfumano con la dissolvenza predefinita.
 - BPM tra canzoni: se la differenza è entro l'8% circa, rampa durante il passaggio; se è più grande, il tempo salta nell'istante in cui entra la spina nuova. Se tra i pezzi rimasti c'è qualcosa di ritmico che salterebbe, avvisami.
 

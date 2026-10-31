@@ -342,18 +342,30 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0 }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, spina = null, alle = null }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   avvisaSuoniMancanti(c.pattern, nome);
   // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
   // (con una griglia — i colpi — entra sul primo punto della griglia)
-  const da = subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  let da = subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  // armare il drop: se un cambio di momento è in attesa, il pezzo entra insieme a lui
+  if (Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
+  l.spina = spina; // la spina porta con sé i suoi momenti (◀ ▶ li scorrono) e quello da cui parte: { base, indice, momenti }
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
   for (const vecchio of livelli) {
     if (vecchio.nome !== l.nome || vecchio.a <= da) continue;
+    // un cambio già in attesa (non è ancora entrato) viene sostituito dal nuovo: non suona mai, e il nuovo prende il suo posto
+    if (vecchio.da >= da) {
+      vecchio.a = vecchio.da;
+      l.volume = vecchio.volume;
+      l.muto = vecchio.muto;
+      l.coda = vecchio.coda;
+      if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
+      continue;
+    }
     // con una dissolvenza i due livelli si scambiano: il vecchio continua e sfuma mentre il nuovo entra
     vecchio.a = Math.max(vecchio.da, da) + d.cicli;
     scambi.push(vecchio);
@@ -492,6 +504,7 @@ const descrivi = (l) => ({
   volume: l.volume,
   muto: l.muto,
   scritto: l.scritto,
+  spina: l.spina ?? null,
   sfuma: l.sfuma,
   primo: l.primo ?? null,
   ultimo: l.ultimo ?? null,
