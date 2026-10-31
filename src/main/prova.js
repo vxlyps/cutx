@@ -2674,7 +2674,7 @@ async function provaGuardiano({ finestre, scrivi }) {
   const entra = (nome, codice, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true, ...extra })})`);
   await entra('x', 's("sine*2").gain(.0001)');
   await aspetta(3);
-  const r = await entra('x', 's("sine*2").gain(.0001).withHaps((haps) => haps.map((h) => { if (h.whole.begin.valueOf() >= 3) throw new Error('boom pigro'); return h; }))');
+  const r = await entra('x', 's("sine*2").gain(.0001).withHaps((haps) => haps.map((h) => { if (h.whole.begin.valueOf() >= 3) throw new Error(\'boom pigro\'); return h; }))');
   controlla('un errore che viene fuori nei primi cicli non entra (e lo dice)', /boom pigro/.test(r.errore ?? ''), JSON.stringify(r));
   await aspetta(2.5);
   let vivi = (await live()).livelli.filter((l) => l.a === null);
