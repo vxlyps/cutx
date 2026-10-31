@@ -2525,6 +2525,35 @@ async function provaController({ finestre, scrivi }) {
   await aspetta(0.6);
   const l1 = (await attivi()).find((l) => l.id === uno.livello);
   controlla('pagina B: il tasto 1 sceglie il livello 1 e la manopola 4 scrive l\'eco nella sua coda', /^\.delay\(0\.\d+\)$/.test(l1?.coda?.find((x) => x.startsWith('.delay')) ?? ''), JSON.stringify(l1?.coda));
+  // passo 3: velocità a scatti, altezza in semitoni, fader
+  const melodia = await entra('melodia', { codice: 'note("c3 e3 g3 b3").s("sine*1").gain(.0001)' });
+  await aspetta(2.8);
+  const posto = (await attivi()).findIndex((l) => l.id === melodia.livello) + 1;
+  await midi(0x90, await tasto(posto), 127);
+  await midi(0x90, await tasto(posto), 0);
+  await giro(6, 3);
+  await aspetta(0.5);
+  controlla('pagina B, velocità: un scatto (3 passi) = .fast(2) nella coda', ((await attivi()).find((l) => l.id === melodia.livello)?.coda ?? []).includes('.fast(2)'), JSON.stringify((await attivi()).find((l) => l.id === melodia.livello)?.coda));
+  await giro(6, -3);
+  await aspetta(0.6);
+  controlla('e di nuovo ×1: la riga .fast sparisce', !((await attivi()).find((l) => l.id === melodia.livello)?.coda ?? []).some((r) => r.startsWith('.fast')));
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await aspetta(1.2);
+  const noteBase = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === melodia.livello && e[3] !== null);
+  await giro(8, 2);
+  await aspetta(0.6);
+  await chiedi(finestre.live, 'cutxRegistro(true)');
+  await aspetta(1.6);
+  const dopoAltezza = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === melodia.livello && e[3] !== null);
+  controlla('altezza: +2 semitoni nella coda (.transpose(2)) e le note cambiano', ((await attivi()).find((l) => l.id === melodia.livello)?.coda ?? []).includes('.transpose(2)') && dopoAltezza.length > 0 && JSON.stringify(dopoAltezza.at(-1)[3]) !== JSON.stringify(noteBase.at(-1)?.[3]), JSON.stringify([noteBase.at(-1)?.slice(3), dopoAltezza.at(-1)?.slice(3)]));
+  await midi(0xe8, 0x00, 0x40); // il fader a metà
+  await aspetta(0.5);
+  const meta = (await live()).filtroMaster;
+  controlla('fader a metà: il filtro del drop si chiude su tutto il live', meta > 150 && meta < 16000, String(meta));
+  await midi(0xe8, 0x7f, 0x7f);
+  await aspetta(0.6);
+  const aperto = (await live()).filtroMaster;
+  controlla('fader in alto: il filtro è aperto (identità)', aperto > 20000, String(aperto));
   await midi(0x90, 84, 127);
   controlla('il tasto layer A torna alla pagina A', (await js('cutxProva.controllerMidi.pagina')) === 'A');
 

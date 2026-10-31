@@ -1191,6 +1191,8 @@ const controllerMidi = new Controller({
     live.manda({ tipo: 'livello', livello: id, muto: l.muto });
   },
   seleziona: (id) => pila.seleziona(id),
+  togliRiga: (id, chiave) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }),
+  filtroMaster: (x) => live.manda({ tipo: 'filtro-master', x }),
   coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
   master: (volume) => live.manda({ tipo: 'master', volume }),
   tempo: (bpm) => live.manda({ tipo: 'tempo', bpm }),

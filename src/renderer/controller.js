@@ -2,7 +2,7 @@
 // e accende anelli e tasti con i valori veri. Ogni cosa che tocco diventa codice: le manopole scrivono nella coda del livello.
 // Non suona niente da solo e non decide niente: gira quello che giro io. Se il controller sparisce, CUTX va avanti uguale.
 import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioAnello, messaggioTasto, noteTasti, parole, tabella } from './controller-mc.js';
-import { PARAMETRI, PAGINA_B, PASSO_VOLUME, PASSO_X, TASTI_A, clamp01, corto, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
+import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, frequenzaMaster, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
@@ -35,6 +35,7 @@ export class Controller {
     this.sequenza = 0; // per fermare una prova luci quando ne parte un'altra
     this.paracaduteTimer = null;
     this.paracaduteTenuto = false;
+    this.ultimoDiscreto = new Map(); // `${id}|${chiave}` → l'ultimo scatto mandato (velocità, altezza)
     this.lampi = new Map(); // nota → fino a quando resta accesa dopo l'azione (un lampo breve)
     this.toccata = null; // { n, quando }: l'ultima manopola toccata, per lo specchio
     this.tab = tabella(azioni.calibrazione?.());
@@ -133,9 +134,19 @@ export class Controller {
         this.premiTasto(e.n, e.giu);
         break;
       case 'fader':
-        this.azioni.scritta?.(`FADER ${e.valore.toFixed(2)}`);
+        this.muoviFader(e.valore);
         break;
     }
+  }
+
+  // Il fader: il filtro del drop su tutto il live (in alto aperto, scendendo si chiude).
+  muoviFader(x) {
+    this.fader = x;
+    this.azioni.filtroMaster?.(x);
+    const f = frequenzaMaster(x);
+    const testo = `FADER · FILTRO ${f === null ? 'APERTO' : `${Math.round(f)} Hz`}`;
+    this.toccata = { n: null, quando: this.ora(), testo };
+    this.azioni.scritta?.(testo);
   }
 
   vaiA(pagina) {
@@ -190,9 +201,15 @@ export class Controller {
 
   // Il valore di partenza di un parametro: quello della coda, o letterale nel codice, o il predefinito.
   xDi(l, chiave) {
-    const p = PARAMETRI[chiave];
     const k = `${l.id}|${chiave}`;
     if (this.x.has(k)) return this.x.get(k);
+    if (chiave === 'velocita') {
+      const v = valoreDi(l.coda ?? [], 'fast');
+      const i = v === null ? -1 : SCATTI_VELOCITA.indexOf(v);
+      return i >= 0 ? i : SCATTO_NORMALE;
+    }
+    if (chiave === 'altezza') return Math.round(valoreDi(l.coda ?? [], 'transpose') ?? 0);
+    const p = PARAMETRI[chiave];
     const v = valoreDi(l.coda ?? [], p.chiave) ?? valoreLetterale(l.codice ?? '', p.chiave);
     const x = v === null ? p.predefinito : normalizzato(p, v);
     return x;
@@ -211,7 +228,35 @@ export class Controller {
     this.azioni.scritta?.(testo.toUpperCase());
   }
 
+  // Velocità (scatti al battito) e altezza (semitoni): valori discreti, scritti in coda come .fast(n) e .transpose(n); al valore neutro la riga sparisce.
+  cambiaDiscreto(l, chiave, passi, n) {
+    const k = `${l.id}|${chiave}`;
+    let testo;
+    if (chiave === 'velocita') {
+      const indice = Math.max(0, Math.min(SCATTI_VELOCITA.length - 1, this.xDi(l, chiave) + passi / PASSI_PER_SCATTO));
+      this.x.set(k, indice);
+      const v = SCATTI_VELOCITA[Math.round(indice)];
+      if (this.ultimoDiscreto.get(k) !== v) {
+        this.ultimoDiscreto.set(k, v);
+        if (Math.round(indice) === SCATTO_NORMALE) this.azioni.togliRiga?.(l.id, 'fast');
+        else this.mandaCoda(l.id, `.fast(${v})`);
+      }
+      testo = `${l.nome.toUpperCase()} · VELOCITÀ ${etichettaVelocita(v)}`;
+    } else {
+      const semitoni = Math.max(ALTEZZA_MIN, Math.min(ALTEZZA_MAX, Math.round(this.xDi(l, chiave) + passi)));
+      this.x.set(k, semitoni);
+      if (this.ultimoDiscreto.get(k) !== semitoni) {
+        this.ultimoDiscreto.set(k, semitoni);
+        if (semitoni === 0) this.azioni.togliRiga?.(l.id, 'transpose');
+        else this.mandaCoda(l.id, `.transpose(${semitoni})`);
+      }
+      testo = `${l.nome.toUpperCase()} · ALTEZZA ${etichettaAltezza(semitoni)}`;
+    }
+    this.tocca(l, chiave, testo, n);
+  }
+
   cambiaParametro(l, chiave, passi, n) {
+    if (chiave === 'velocita' || chiave === 'altezza') return this.cambiaDiscreto(l, chiave, passi, n);
     const p = PARAMETRI[chiave];
     const x = clamp01(this.xDi(l, chiave) + passi * PASSO_X);
     this.x.set(`${l.id}|${chiave}`, x);
@@ -413,6 +458,12 @@ export class Controller {
         m.push(null);
       } else if (chiave === 'volume') {
         m.push({ stile: 'fan', valore: l.volume, nome: 'volume', corto: 'volume', testo: l.volume.toFixed(2) });
+      } else if (chiave === 'velocita') {
+        const i = Math.round(this.xDi(l, chiave));
+        m.push({ stile: 'punto', valore: i / (SCATTI_VELOCITA.length - 1), nome: 'velocità', corto: 'veloc', testo: etichettaVelocita(SCATTI_VELOCITA[i]) });
+      } else if (chiave === 'altezza') {
+        const s = this.xDi(l, chiave);
+        m.push({ stile: 'punto', valore: (s - ALTEZZA_MIN) / (ALTEZZA_MAX - ALTEZZA_MIN), nome: 'altezza', corto: 'altezz', testo: etichettaAltezza(s) });
       } else {
         const x = this.xDi(l, chiave);
         const p = PARAMETRI[chiave];

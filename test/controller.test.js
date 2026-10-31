@@ -136,7 +136,8 @@ test('le luci: anelli solo per le manopole assegnate, col valore vero e lo stile
   const b = c.desiderate();
   assert.equal(b.get('a1')[2], 32 + 11, 'volume: fan');
   assert.equal(b.get('a2')[2], 11, 'filtro (aperto): punto, tutto a destra');
-  assert.deepEqual(b.get('a6'), [0xb0, 0x35, 0], 'velocità: non ancora assegnata, spenta');
+  assert.deepEqual(b.get('a6'), [0xb0, 0x35, 6], 'velocità ×1: il punto a metà');
+  assert.deepEqual(b.get('a8'), [0xb0, 0x37, 6], 'altezza 0 st: il punto a metà');
   c.bersaglio = 5; // un livello che non c'è
   assert.ok([...c.desiderate()].filter(([k]) => k.startsWith('a')).every(([, m]) => m[2] === 0), 'nessun bersaglio: tutti spenti');
 });
@@ -207,4 +208,56 @@ test('la calibrazione registra le note dei tasti nell\'ordine e le salva', () =>
   assert.equal(salvata.tasti[15], 75);
   assert.deepEqual(salvata.layer, { A: 80, B: 81 });
   assert.equal(c.calibrazione, null);
+});
+
+test('velocità a scatti: un terzo di scatto per passo, ×1 toglie la riga, il resto è .fast(n)', () => {
+  const { c, log, avanza, azioni } = prova([L(1, 'drum')]);
+  azioni.togliRiga = (id, chiave) => log.push(['togliRiga', id, chiave]);
+  c.riceve([0x90, c.tab.layer.B, 127]);
+  c.riceve(tasto(c.tab.tasti[0], true)); // bersaglio: livello 1
+  c.riceve(giro(6, 3)); // un scatto avanti: ×2
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 1, '.fast(2)']);
+  c.riceve(giro(6, 3)); // ×4
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 1, '.fast(4)']);
+  c.riceve(giro(6, 9)); // oltre il fondo: resta ×4
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 1, '.fast(4)']);
+  c.riceve(giro(6, -6)); // di nuovo ×1: la riga sparisce
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'togliRiga').at(-1), ['togliRiga', 1, 'fast']);
+  c.riceve(giro(6, -3)); // ×1/2
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 1, '.fast(0.5)']);
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /VELOCITÀ ×1\/2/);
+});
+
+test('altezza in semitoni: .transpose(n) fra -12 e +12, a 0 la riga sparisce', () => {
+  const { c, log, avanza, azioni } = prova([L(1, 'drum')]);
+  azioni.togliRiga = (id, chiave) => log.push(['togliRiga', id, chiave]);
+  c.riceve([0x90, c.tab.layer.B, 127]);
+  c.riceve(tasto(c.tab.tasti[0], true));
+  c.riceve(giro(8, 3));
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 1, '.transpose(3)']);
+  c.riceve(giro(8, 30));
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 1, '.transpose(12)']);
+  c.riceve(giro(8, -12));
+  avanza(100);
+  assert.deepEqual(log.filter((x) => x[0] === 'togliRiga').at(-1), ['togliRiga', 1, 'transpose']);
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /ALTEZZA 0 st/);
+});
+
+test('il fader è il filtro del drop su tutto il live: in alto aperto, scendendo si chiude', () => {
+  const { c, log, azioni } = prova([]);
+  const fader = [];
+  azioni.filtroMaster = (x) => fader.push(x);
+  c.riceve([0xe8, 0x7f, 0x7f]); // in alto
+  c.riceve([0xe8, 0x00, 0x20]); // a un quarto circa
+  assert.equal(fader[0], 1);
+  assert.ok(fader[1] > 0.2 && fader[1] < 0.3);
+  assert.match(log.filter((x) => x[0] === 'scritta').at(0)[1], /FILTRO APERTO/);
+  assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FILTRO \d+ Hz/);
 });

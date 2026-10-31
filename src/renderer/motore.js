@@ -2,6 +2,7 @@
 // - live: comanda il tempo, suona sulle casse, pubblica la mappa del tempo alla cuffia;
 // - cuffia: segue la mappa del live e suona sul jack, allo stesso istante.
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
+import { frequenzaMaster } from './controller-mappa.js';
 import { applica as applicaCoda, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, repl, setTime, signal, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
@@ -510,6 +511,22 @@ function liberaGuadagno(id) {
   }, 15000);
 }
 
+// Il filtro del drop su tutto il live: un passa-basso fra il volume generale e le casse, creato la prima volta che si tocca il fader.
+// Aperto (frequenza a Nyquist) è l'identità. Tutto il live ci passa; le prese di misura (onda, sentinella) restano prima.
+let filtroMaster = null;
+function filtroMasterA(x) {
+  if (!Number.isFinite(x)) return;
+  if (!filtroMaster) {
+    const g = getSuperdoughAudioController().output.destinationGain;
+    filtroMaster = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
+    g.disconnect(ac.destination);
+    g.connect(filtroMaster);
+    filtroMaster.connect(ac.destination);
+  }
+  const f = frequenzaMaster(x);
+  filtroMaster.frequency.setTargetAtTime(f === null ? ac.sampleRate / 2 : f, ac.currentTime, SFUMATA_S);
+}
+
 function aggiornaLivelli() {
   applicaGuadagni();
   rip.sorgenti = livelli;
@@ -587,7 +604,7 @@ rip.suEvento = (hap, t, sorgente) => {
   const inizio = hap.whole.begin.valueOf();
   sorgente.primo ??= inizio;
   sorgente.ultimo = inizio;
-  registro?.push([sorgente.id, inizio, hap.value?.cutoff ?? null]);
+  registro?.push([sorgente.id, inizio, hap.value?.cutoff ?? null, hap.value?.note ?? null]);
   if (!eco) return;
   sentinella.atteso(t);
   anello?.atteso(t);
@@ -684,6 +701,7 @@ function stato() {
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
     ricostruzioni,
+    filtroMaster: filtroMaster ? filtroMaster.frequency.value : null,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
     dissolvenze: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, { fade: g.fade.gain.value, lp: g.lp.frequency.value, hp: g.hp.frequency.value }])) : undefined,
@@ -735,6 +753,9 @@ async function ricevi(da, m) {
     }
     case 'coda':
       return cambiaCoda(m);
+    case 'filtro-master': // il fader del controller: un passa-basso su tutta l'uscita live (in alto = aperto, identità)
+      if (LIVE) filtroMasterA(Number(m.x));
+      return;
     case 'master': // il volume generale del live (la manopola 8 del controller): lineare, con una sfumata breve
       if (LIVE) getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(Math.max(0, Math.min(1.5, Number(m.volume))), ac.currentTime, SFUMATA_S);
       return;

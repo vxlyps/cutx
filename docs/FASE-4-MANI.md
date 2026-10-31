@@ -102,3 +102,26 @@ Ogni cosa che tocco compare in grande su schermo e, se attivo l'opzione, sul pro
 1 coda → 2 controller (comandi, mappa, anelli LED, pagine) → 3 manopole → 4 colpi → 5 spina e momenti → 6 passa la spina e BPM → 7 guardiano → 8 piano.
 
 Un passo alla volta, commit per ognuno, solo test brevi. Dopo il passo 2 mi fermo a provare il controller dal vivo prima di andare avanti.
+
+## DEFINIZIONI AGGIUNTE (31/10/2026)
+
+### CANCELLARE DA UMANO (proiettore)
+Oggi la scrittura sul proiettore è umana (raffiche, esitazioni, refusi rari), la cancellazione no. Deve sembrare una persona anche quando il codice sparisce (livello che esce, modifica che toglie testo, coda che si pulisce):
+- di solito a ritroso a raffica, più veloce della scrittura;
+- ogni tanto una parola intera alla volta (come ⌥⌫);
+- quando esce un livello intero, a volte selezione di un blocco (evidenziato un attimo) e via in un colpo;
+- stesse regolazioni della scrittura (velocità e imperfezione), stessa sincronia: la cancellazione finisce quando il suono esce davvero.
+
+### STRISCIA VIVA (sotto ogni card live; sul proiettore è un elemento del pubblico, accendibile dalle impostazioni)
+Sostituisce le tacchette di oggi, che non dicono niente di utile (si accendono anche su un livello con `.gain(.0001)` che non suona):
+- note vere del ciclo: trattini all'altezza della nota (più alti = più acuti, più luminosi = più forti), batterie come tacche, una testina che scorre;
+- a destra un misuratore del suono VERO di quel livello (dopo gli effetti e il suo guadagno). Se il livello è acceso ma non esce suono (gain bassissimo, campione mancante, filtro chiuso), il misuratore resta spento e compare «silenzio». Se esagera, avviso «troppo forte»;
+- durante entrata, uscita o dissolvenza, la striscia mostra quanto manca;
+- costo CPU basso: dire quanto pesa con 7 livelli.
+Prima di farla: proporre l'aspetto con uno screenshot.
+
+### PASSO 3 (finire le manopole)
+Fader = filtro del drop su tutto il live; pagina B completa (velocità a scatti ¼, ½, 1, 2, 4 al battito; sporco; altezza in semitoni); «globale» su pagina B (BPM, eco e riverbero di tutto). Poi passo 4, i colpi.
+
+### ORDINE
+Passo 3 → cancellare da umano → striscia viva (screenshot prima) → passo 4.

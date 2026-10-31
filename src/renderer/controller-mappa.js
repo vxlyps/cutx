@@ -11,9 +11,8 @@ export const PARAMETRI = {
   sporco: { nome: 'SPORCO', corto: 'sporco', chiave: 'distort', min: 0, max: 3, predefinito: 0, decimali: 2 },
 };
 
-// Pagina B, le otto manopole: volume (il livello), filtro, risonanza, eco, riverbero, velocità (a scatti: arriva coi colpi),
-// sporco, altezza (arriva dopo). null = non ancora.
-export const PAGINA_B = ['volume', 'filtro', 'risonanza', 'eco', 'riverbero', null, 'sporco', null];
+// Pagina B, le otto manopole: volume (il livello), filtro, risonanza, eco, riverbero, velocità (a scatti), sporco, altezza (semitoni).
+export const PAGINA_B = ['volume', 'filtro', 'risonanza', 'eco', 'riverbero', 'velocita', 'sporco', 'altezza'];
 
 // Pagina A, i tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia, go live, togli, piano/registra, paracadute (tenuto 1 s).
 export const TASTI_A = ['momentoIndietro', 'momentoAvanti', 'passaSpina', 'cuffia', 'goLive', 'togli', 'piano', 'paracadute'];
@@ -27,6 +26,21 @@ export function normalizzato(p, v) {
   const n = p.log ? Math.log(v / p.min) / Math.log(p.max / p.min) : (v - p.min) / (p.max - p.min);
   return Math.max(0, Math.min(1, n));
 }
+
+// Velocità a scatti (al battito): .fast(¼ ½ 1 2 4); un giro di manopola = un terzo di scatto, così non scatta per sbaglio.
+export const SCATTI_VELOCITA = [0.25, 0.5, 1, 2, 4];
+export const PASSI_PER_SCATTO = 3;
+export const SCATTO_NORMALE = 2; // l'indice di ×1: la riga .fast sparisce
+export const etichettaVelocita = (v) => (v < 1 ? `×1/${Math.round(1 / v)}` : `×${v}`);
+// Altezza in semitoni: .transpose(n), da -12 a +12; 0 = la riga sparisce.
+export const ALTEZZA_MIN = -12;
+export const ALTEZZA_MAX = 12;
+export const etichettaAltezza = (n) => `${n > 0 ? '+' : ''}${n} st`;
+
+// Il fader: il filtro del drop su tutto il live. In alto = aperto; scendendo, un passa-basso si chiude (150 Hz in fondo).
+export const FILTRO_MASTER_MIN = 150;
+export const FILTRO_MASTER_MAX = 16000;
+export const frequenzaMaster = (x) => (x >= 0.985 ? null : FILTRO_MASTER_MIN * (FILTRO_MASTER_MAX / FILTRO_MASTER_MIN) ** Math.max(0, x)); // null = aperto
 
 // Il valore come si legge (con l'unità dove serve): «800 Hz», «0.40».
 export function valoreTesto(p, x) {
