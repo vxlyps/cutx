@@ -31,6 +31,11 @@ test('etichette: il paracadute non compare mai, i nomi automatici si rinominano 
   assert.equal(nomePubblico('libero', risolvi({ testiPubblico: { etichette: { nomi: { libero: 'pezzo' } } } })), 'pezzo');
   assert.equal(nomePubblico('jam', risolvi({ testiPubblico: { etichette: { nomi: { jam: '' } } } })), null);
   assert.equal(nomePubblico('basso', risolvi({ testiPubblico: { etichette: { acceso: false } } })), null);
+  // «libero 2» è lo stesso nome automatico con il numero
+  const pezzo = risolvi({ testiPubblico: { etichette: { nomi: { libero: 'pezzo' } } } });
+  assert.equal(nomePubblico('libero 2', pezzo), 'pezzo 2');
+  assert.equal(nomePubblico('libero 3', cfg), 'libero 3');
+  assert.equal(nomePubblico('libero 2', risolvi({ testiPubblico: { etichette: { nomi: { libero: '' } } } })), null);
 });
 
 test('testo dell\'etichetta nei vari stati', () => {

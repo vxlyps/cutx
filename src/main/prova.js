@@ -2703,6 +2703,22 @@ async function provaCoda({ finestre, scrivi }) {
   const avvisoSuoni = await js(`document.getElementById('cue-avviso').textContent`);
   controlla('suono che non esiste: avviso con i nomi', /bd, sd/.test(avvisoSuoni) && /nello stash/.test(avvisoSuoni), JSON.stringify(avvisoSuoni));
 
+  // 10b. dal CUE libero ogni go live AGGIUNGE un livello (libero, libero 2…); sostituisce solo la modifica della card
+  await js(`cutxProva.fermaTutto()`);
+  await aspetta(0.8);
+  await js(`cutxProva.scriviCue('s("sine*4").gain(.0001)')`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(2.5);
+  await js(`cutxProva.scriviCue('s("sine*2").gain(.0001)')`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(2.5);
+  const nomiLibero = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome);
+  controlla('dal CUE libero il secondo go live aggiunge un livello (libero, libero 2)', nomiLibero.join('|') === 'libero|libero 2', JSON.stringify(nomiLibero));
+  await js(`cutxProva.scriviCue('s("sine*8").gain(.0001)')`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(2.5);
+  controlla('e il terzo (libero 3)', (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).join('|') === 'libero|libero 2|libero 3');
+
   // 11. una funzione già in coda si aggiorna (una riga sola); togliere una sola riga; ⌘Z la rimette
   await js(`cutxProva.fermaTutto()`);
   await aspetta(0.8);

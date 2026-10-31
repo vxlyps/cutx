@@ -161,6 +161,16 @@ function aggiungiCoda(voci) {
   return null;
 }
 
+// Dal CUE libero (testo senza sezioni) ogni go live AGGIUNGE un livello: «libero», «libero 2», «libero 3»… Per sostituire si modifica la card
+// (e una sezione con un suo nome, nel libero o in un brano, sostituisce quella con lo stesso nome).
+function nomeLiberoNuovo() {
+  const usati = new Set(livelliLive.filter((l) => l.a === null).map((l) => l.nome));
+  for (let n = 1; ; n++) {
+    const nome = n === 1 ? 'libero' : `libero ${n}`;
+    if (!usati.has(nome)) return nome;
+  }
+}
+
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
 async function goLive() {
   if (inTest) return;
@@ -186,7 +196,7 @@ async function goLive() {
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, inizio, nome: p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, inizio, nome: p.provenienza === 'libero' && p.nome === 'libero' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;

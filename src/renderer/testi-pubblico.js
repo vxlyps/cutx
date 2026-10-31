@@ -52,7 +52,13 @@ export function nomePubblico(nome, cfg) {
   if (nome === 'paracadute') return null; // il pubblico non deve sapere che mi sto salvando
   if (!cfg.etichette.acceso) return null;
   const nomi = cfg.etichette.nomi ?? {};
-  if (Object.hasOwn(nomi, nome)) return String(nomi[nome]).trim() || null;
+  // «libero 2», «libero 3»… sono lo stesso nome automatico con il numero
+  const m = /^(.*?)( \d+)?$/.exec(nome);
+  const base = Object.hasOwn(nomi, nome) ? nome : Object.hasOwn(nomi, m[1]) && m[2] ? m[1] : null;
+  if (base !== null) {
+    const rinominato = String(nomi[base]).trim();
+    return rinominato ? `${rinominato}${base === nome ? '' : m[2]}` : null;
+  }
   return nome;
 }
 
