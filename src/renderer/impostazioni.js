@@ -233,7 +233,7 @@ export class Impostazioni {
     const etichette = riga({
       chiave: 'etichette',
       nome: 'etichette dei livelli',
-      nota: 'il nome sopra ogni livello. Rinomina «libero» e «jam» (vuoto: nascosta). «paracadute» non compare mai',
+      nota: 'il nome sopra ogni livello. Rinomina «scratch» e «jam» (vuoto: nascosta). «paracadute» non compare mai',
       acceso: cfg.etichette.acceso,
       onOff: (x) => this.salvaTesti('etichette', { acceso: x }),
       ripristina: () => this.salvaTesti('etichette', null),

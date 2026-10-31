@@ -108,7 +108,7 @@ export class Anteprima {
     const ciclo = ((adesso - this.partenza) / 1000) * CPS;
     const base = { provenienza: '', coda: [], inizio: 0, a: null, volume: 1, muto: false, scritto: false, sfuma: null, richiesto: this.partenza, primo: null, ultimo: null };
     const livelli = [
-      { ...base, id: 1, nome: 'libero', codice: PREAMBOLO + BATTERIA, inizio: PREAMBOLO.length, da: null, coda: ['.lpf(1200)'], volume: 0.6 },
+      { ...base, id: 1, nome: 'scratch', codice: PREAMBOLO + BATTERIA, inizio: PREAMBOLO.length, da: null, coda: ['.lpf(1200)'], volume: 0.6 },
       { ...base, id: 2, nome: 'basso', codice: 'note("c1 c1 eb1 g1")\n  .s("sawtooth")', da: null, muto: true },
       // quello che sta per entrare: tra 3 cicli (6 secondi), così si vede il conto alla rovescia e come si scrive
       { ...base, id: 100 + giro, nome: 'melodia', codice: 'note("c3 e3 g3 b3")\n  .s("triangle")\n  .lpf(900)', da: Math.ceil(ciclo) + 3, richiesto: adesso },

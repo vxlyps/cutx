@@ -9,7 +9,7 @@ export const PREDEFINITI = {
   frase: { acceso: true, testo: '{n}' },
   neon: { acceso: true, testo: 'TECNOLOGIA CANAGLIA' }, // l'interruttore è la preferenza `insegna`
   titolo: { acceso: true, testo: 'CUTX · uscita' }, // la barra del titolo, se la finestra non è a tutto schermo
-  etichette: { acceso: true, nomi: { libero: 'libero', jam: 'jam' } }, // nome vuoto = quell'etichetta non si vede; «paracadute» mai
+  etichette: { acceso: true, nomi: { scratch: 'scratch', jam: 'jam' } }, // nome vuoto = quell'etichetta non si vede; «paracadute» mai
   muto: { acceso: true, testo: '· muto' },
   conto: { acceso: true, testo: 'tra {n} {cicli}' },
   scrittura: { acceso: true, testo: 'in scrittura' },
@@ -35,7 +35,11 @@ export function risolvi(preferenze = {}) {
   const r = {};
   for (const [k, base] of Object.entries(PREDEFINITI)) {
     r[k] = { ...base, ...(salvati[k] ?? {}) };
-    if (k === 'etichette') r[k].nomi = { ...base.nomi, ...(salvati[k]?.nomi ?? {}) };
+    if (k === 'etichette') {
+      r[k].nomi = { ...base.nomi, ...(salvati[k]?.nomi ?? {}) };
+      // prima si chiamava «libero»: un nome già scelto passa a «scratch»
+      if (salvati[k]?.nomi?.libero !== undefined && salvati[k]?.nomi?.scratch === undefined) r[k].nomi.scratch = salvati[k].nomi.libero;
+    }
   }
   r.neon.acceso = preferenze.insegna !== false;
   return r;
@@ -52,7 +56,7 @@ export function nomePubblico(nome, cfg) {
   if (nome === 'paracadute') return null; // il pubblico non deve sapere che mi sto salvando
   if (!cfg.etichette.acceso) return null;
   const nomi = cfg.etichette.nomi ?? {};
-  // «libero 2», «libero 3»… sono lo stesso nome automatico con il numero
+  // «scratch 2», «scratch 3»… sono lo stesso nome automatico con il numero
   const m = /^(.*?)( \d+)?$/.exec(nome);
   const base = Object.hasOwn(nomi, nome) ? nome : Object.hasOwn(nomi, m[1]) && m[2] ? m[1] : null;
   if (base !== null) {

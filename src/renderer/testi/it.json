@@ -84,8 +84,16 @@
       "testo": "Il brano aperto dalla libreria: mappa in alto, una card per sezione."
     },
     "modo-libero": {
-      "nome": "libero",
+      "nome": "scratch",
       "testo": "Un editor libero per scrivere da zero. Le righe // @sezione lo dividono in sezioni."
+    },
+    "striscia-cuffia": {
+      "nome": "in cuffia",
+      "testo": "Cosa stai ascoltando in cuffia. Il ■ accanto ferma quella voce."
+    },
+    "cuffia-stop": {
+      "nome": "stop",
+      "testo": "Ferma tutto quello che hai in cuffia. Il live non si tocca."
     },
     "manda-cuffia": {
       "nome": "cuffia",

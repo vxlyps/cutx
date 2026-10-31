@@ -49,7 +49,7 @@ export class Cue {
       suValuta: azioni.provaInCuffia,
       suFerma: azioni.fermaTutto,
       suCambio: () => azioni.bozza?.(),
-      statoSezione: (nome) => this.statoSezione('libero', nome),
+      statoSezione: (nome) => this.statoSezione('scratch', nome),
     });
     $('modo-libero').onclick = () => this.cambiaModo('libero');
     $('modo-brano').onclick = () => this.cambiaModo('brano');
@@ -123,14 +123,14 @@ export class Cue {
       const righe = testo.split('\n');
       const codice = vuota ? testo : righe.slice(da, a + 1).join('\n');
       const base = vuota ? 0 : this.libero.vista.state.doc.line(da + 1).from;
-      return { nome: 'libero', provenienza: 'libero', codice, inizio: 0, bpmBrano: null, dove: { editor: this.libero, base } };
+      return { nome: 'scratch', provenienza: 'scratch', codice, inizio: 0, bpmBrano: null, dove: { editor: this.libero, base } };
     }
     const blocco = B.bloccoDellaRiga(testo, da);
     if (blocco.sezione < 0) return { errore: 'il cursore è nel preambolo: mettilo in una sezione' };
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
     const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
     const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
-    return { nome: blocco.nome, provenienza: 'libero', volume: blocco.info?.volume, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
+    return { nome: blocco.nome, provenienza: 'scratch', volume: blocco.info?.volume, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
   }
 
   pezzoBrano() {
@@ -188,10 +188,10 @@ export class Cue {
     $('modo-brano').querySelector('i').textContent = nome ? `${nome}${this.brano.sporco ? ' •' : ''}` : '–';
     if (libero) {
       const p = this.pezzoLibero();
-      const stato = p.errore ? '' : this.statoSezione('libero', p.nome);
+      const stato = p.errore ? '' : this.statoSezione('scratch', p.nome);
       $('card-libero').classList.toggle('in-cuffia', stato === 'cuffia');
       $('libero-stato').textContent = stato === 'cuffia' ? '◖◗ lo stai sentendo' : stato === 'live' ? '● è live' : '';
-      $('libero-nome').textContent = this.fileLibero ? `libero · ${this.fileLibero}` : 'libero';
+      $('libero-nome').textContent = this.fileLibero ? `scratch · ${this.fileLibero}` : 'scratch';
     }
   }
 
@@ -324,6 +324,7 @@ export class Cue {
       const stato = stati[c.i];
       c.el.hidden = stato === 'live' && !this.mostraLive;
       c.el.classList.toggle('in-cuffia', stato === 'cuffia');
+      c.cuffia?.classList.toggle('on', stato === 'cuffia');
       c.el.classList.toggle('e-live', stato === 'live');
       c.stato.textContent = stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● live' : 'pronta';
     }
@@ -428,7 +429,10 @@ export class Cue {
       const dividi = tasto('dividi', '', 'Dividi dalla riga del cursore in giù');
       dividi.onclick = () => this.dividi(carta);
       const cuffia = tasto('cuffia', '⌘↵');
+      carta.cuffia = cuffia;
       cuffia.onclick = () => {
+        // già in cuffia: il tasto è acceso e lo spegne
+        if (carta.el.classList.contains('in-cuffia')) return this.azioni.fermaCuffia();
         this.attiva(carta);
         this.azioni.provaInCuffia();
       };

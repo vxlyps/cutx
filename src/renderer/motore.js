@@ -162,7 +162,7 @@ function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = 
   return {
     scritto,
     id: prossimoLivello++,
-    nome: nome ?? 'libero',
+    nome: nome ?? 'scratch',
     provenienza: provenienza ?? '',
     codice,
     pattern, // quello che suona: la base con la coda sopra

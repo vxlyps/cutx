@@ -192,6 +192,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('cuffia')) ok = (await sicura('cuffia', provaCuffia)) && ok;
+  if (parti.includes('cuffia-aspetto')) ok = (await sicura('cuffia-aspetto', provaCuffiaAspetto)) && ok;
   if (parti.includes('testi')) ok = (await sicura('testi', provaTesti)) && ok;
   if (parti.includes('finestra')) ok = (await sicura('finestra', provaFinestra)) && ok;
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
@@ -1878,7 +1880,7 @@ async function provaSolidita({ finestre, scrivi }) {
   await wc().executeJavaScript('cutxProva.goLive()');
   await aspetta(3);
   const prima = await live();
-  const idLibero = prima.livelli.find((l) => l.nome === 'libero')?.id;
+  const idLibero = prima.livelli.find((l) => l.nome === 'scratch')?.id;
   const idSecondo = prima.livelli.find((l) => l.nome === 'secondo')?.id;
   await js(`cutxProva.pila.azioni.volume(${idLibero}, 0.4); cutxProva.pila.azioni.muto(${idSecondo}, true)`);
   await aspetta(1);
@@ -1896,7 +1898,7 @@ async function provaSolidita({ finestre, scrivi }) {
   }, 25);
   controlla('il live si riavvia da solo (un processo nuovo)', !!tornato && finestre.live.webContents.getOSProcessId() !== pidPrima);
   const dopo = tornato || (await live());
-  controlla('e rimette gli stessi livelli, con volume e muto', dopo.livelli.some((l) => l.nome === 'libero' && l.a === null && Math.abs(l.volume - 0.4) < 0.01) && dopo.livelli.some((l) => l.nome === 'secondo' && l.a === null && l.muto === true), JSON.stringify(dopo.livelli?.map((l) => [l.nome, l.a, l.volume, l.muto])));
+  controlla('e rimette gli stessi livelli, con volume e muto', dopo.livelli.some((l) => l.nome === 'scratch' && l.a === null && Math.abs(l.volume - 0.4) < 0.01) && dopo.livelli.some((l) => l.nome === 'secondo' && l.a === null && l.muto === true), JSON.stringify(dopo.livelli?.map((l) => [l.nome, l.a, l.volume, l.muto])));
   controlla('allo stesso tempo (100 BPM)', await finche(async () => Math.abs((await live()).cps * 240 - 100) < 0.5, 6), String((await live()).cps * 240));
   controlla('il testo del CUE è quello di prima', (await js('cutxProva.cue.libero.codice')) === testoCue.replace(/\\n/g, '\n'), await js('cutxProva.cue.libero.codice'));
   controlla('un avviso lo dice', (await js(`document.getElementById('cue-avviso').textContent`)).includes('il live si è riavviato'), await js(`document.getElementById('cue-avviso').textContent`));
@@ -2383,6 +2385,99 @@ async function provaScrittura({ finestre, scrivi }) {
 }
 
 
+// --- la cuffia nel CUE: il tasto «cuffia» di ogni sezione si illumina, la striscia «in cuffia» con ■ e STOP (npx electron . --prova=cuffia) ---
+async function provaCuffia({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const cuffiaStato = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @sezione drum\ns("sine*2").gain(.0001)\n// @sezione basso\ns("sine*4").gain(.0001)\n';
+  await js(`cutxProva.fermaTutto(); cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1.5);
+  const alto = await js(`document.querySelector('.colonna.cue > .testa').offsetHeight`);
+  controlla('la testa del CUE sta su una riga (il tasto «scratch» non va a capo)', alto <= 64, String(alto));
+  controlla('i due modi del CUE sono «brano» e «scratch»', (await js(`[document.getElementById('modo-brano'), document.getElementById('modo-libero')].map((b) => b.textContent.trim().split(' ')[0]).join('|')`)) === 'brano|scratch');
+  controlla('niente in cuffia: la striscia lo dice e STOP è spento', (await js(`document.getElementById('striscia-voci').textContent`)).includes('niente in cuffia') && (await js(`document.getElementById('cuffia-stop').disabled`)) === true);
+  const tastoCuffia = (n) => `[...document.querySelectorAll('#carte .card.sezione')][${n}].querySelectorAll('.card-testa button')`;
+  const trovaCuffia = (n) => `[...${tastoCuffia(n)}].find((b) => b.textContent.trim().startsWith('cuffia'))`;
+  await js(`${trovaCuffia(1)}.click()`);
+  await aspetta(2);
+  controlla('il tasto «cuffia» della sezione si illumina', (await js(`${trovaCuffia(1)}.classList.contains('on')`)) === true);
+  controlla('e solo il suo', (await js(`${trovaCuffia(2)}.classList.contains('on')`)) === false);
+  controlla('la striscia mostra cosa senti, col suo ■', (await js(`document.getElementById('striscia-voci').textContent`)).includes('drum') && (await js(`document.querySelectorAll('#striscia-voci .stop-voce').length`)) === 1);
+  controlla('la cuffia suona', !!(await cuffiaStato())?.codice);
+  try {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'cuffia');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'reale.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } catch {}
+  await js(`${trovaCuffia(1)}.click()`);
+  await aspetta(1.2);
+  controlla('un secondo clic sul tasto acceso spegne la cuffia', !(await cuffiaStato())?.codice && (await js(`${trovaCuffia(1)}.classList.contains('on')`)) === false);
+  await js(`${trovaCuffia(2)}.click()`);
+  await aspetta(2);
+  await js(`document.querySelector('#striscia-voci .stop-voce').click()`);
+  await aspetta(1.2);
+  controlla('il ■ della voce la ferma', !(await cuffiaStato())?.codice && (await js(`document.getElementById('striscia-voci').textContent`)).includes('niente'));
+  await js(`${trovaCuffia(1)}.click()`);
+  await aspetta(2);
+  await js(`document.getElementById('cuffia-stop').click()`);
+  await aspetta(1.2);
+  controlla('STOP spegne tutta la cuffia, la pausa ⇧⌘K resta', !(await cuffiaStato())?.codice && (await js(`!!document.getElementById('cuffia-pausa')`)) === true);
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- la proposta grafica della striscia «in cuffia» (solo uno screenshot, niente funziona: npx electron . --prova=cuffia-aspetto) ---
+async function provaCuffiaAspetto({ finestre, scrivi }) {
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const brano = '// @brano notte\n// @bpm 140\nsetcpm(140/4)\n// @sezione drum\ns("bd*4, hh*8").bank("RolandTR909")\n// @sezione basso\nnote("c1 c1 eb1 g1").s("sawtooth").lpf(500)\n// @sezione melodia\nnote("c3 e3 g3 b3").s("triangle")\n';
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1.5);
+  await js(`(() => {
+    const cuffia = '<svg class="icona-cuffia" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.2" fill="currentColor"/><rect x="17" y="14" width="4" height="6" rx="1.2" fill="currentColor"/></svg>';
+    const stile = document.createElement('style');
+    stile.textContent = \`
+      .striscia-cuffia { display:flex; align-items:center; gap:14px; padding:8px 12px; border-bottom:1px solid var(--linea); background:#0a0d05; font-family:var(--mono); font-size:12px; }
+      .striscia-cuffia .titolo-s { color:var(--marcio); letter-spacing:.14em; text-transform:uppercase; font-size:11px; }
+      .striscia-cuffia .voce { display:flex; align-items:center; gap:8px; color:var(--testo); }
+      .striscia-cuffia .voce button { width:18px; height:18px; padding:0; border:1px solid var(--marcio); background:transparent; color:var(--marcio); font-size:9px; line-height:1; cursor:pointer; }
+      .striscia-cuffia .voce button::before { content:''; display:block; width:8px; height:8px; margin:auto; background:var(--marcio); }
+      .striscia-cuffia .voce em { font-style:normal; color:var(--secondario); }
+      .striscia-cuffia .vuota { color:var(--secondario); }
+      .striscia-cuffia .zitta { margin-left:auto; height:34px; padding:0 22px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; background:var(--marcio); color:#0b0f03; border:0; border-radius:3px; cursor:pointer; }
+      .icona-cuffia-b { border:0; background:transparent; color:var(--grigio, #5a5e52); padding:2px 4px; cursor:pointer; display:flex; }
+      .icona-cuffia-b.on { color:var(--marcio); filter:drop-shadow(0 0 4px rgba(159,194,58,.6)); }
+    \`;
+    document.head.append(stile);
+    const testa = document.querySelector('.colonna.cue > .testa');
+    const striscia = document.createElement('div');
+    striscia.className = 'striscia-cuffia';
+    striscia.innerHTML = '<span class="titolo-s">in cuffia</span>'
+      + '<span class="voce"><button title="ferma questa"></button>2 basso <em>· notte</em></span>'
+      + '<span class="voce"><button title="ferma questa"></button>prova libera <em>· scratch</em></span>'
+      + '<button class="zitta">zitta</button>';
+    testa.after(striscia);
+    const teste = [...document.querySelectorAll('#carte .card.sezione .card-testa')];
+    teste.forEach((t, k) => {
+      const b = document.createElement('button');
+      b.className = 'icona-cuffia-b' + (k === 1 ? ' on' : '');
+      b.title = k === 1 ? 'in cuffia: clic per fermarla' : 'manda in cuffia';
+      b.innerHTML = cuffia;
+      t.append(b);
+    });
+  })()`);
+  await aspetta(0.8);
+  const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'cuffia');
+  await mkdir(cartella, { recursive: true });
+  await writeFile(path.join(cartella, 'proposta.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  scrivi(`OK    foto in ${cartella}/proposta.png`);
+  return true;
+}
+
 // --- testi per il pubblico: cosa si vede sul proiettore e nell'anteprima delle impostazioni (npx electron . --prova=testi) ---
 async function provaTesti({ finestre, scrivi }) {
   let ok = true;
@@ -2434,13 +2529,13 @@ async function provaTesti({ finestre, scrivi }) {
   await prefs({}, { insegna: true });
 
   // etichette: rinominare, nascondere, e il paracadute mai
-  await entra('libero');
+  await entra('scratch');
   await aspetta(2.2);
-  await prefs({ etichette: { nomi: { libero: 'pezzo' } } });
+  await prefs({ etichette: { nomi: { scratch: 'pezzo' } } });
   const tag = async (nome) => uscita(`[...document.querySelectorAll('.livello')].map((b) => b.hidden || b.querySelector('.tag').hidden ? '' : b.querySelector('.tag').textContent).join('|')`);
-  controlla('«libero» rinominato in «pezzo»', /pezzo/.test(await tag()), await tag());
-  await prefs({ etichette: { nomi: { libero: '' } } });
-  controlla('nome vuoto: l\'etichetta di «libero» non si vede', !/libero|pezzo/.test(await tag()), await tag());
+  controlla('«scratch» rinominato in «pezzo»', /pezzo/.test(await tag()), await tag());
+  await prefs({ etichette: { nomi: { scratch: '' } } });
+  controlla('nome vuoto: l\'etichetta di «scratch» non si vede', !/scratch|pezzo/.test(await tag()), await tag());
   await entra('paracadute');
   await aspetta(2.2);
   controlla('«paracadute» non compare mai sul proiettore', !/paracadute/i.test(await tag()) && !/paracadute/i.test(await testo()), await tag());
@@ -2461,7 +2556,7 @@ async function provaTesti({ finestre, scrivi }) {
   const doc = `document.querySelector('#imp-anteprima iframe').contentDocument`;
   const livelliAnteprima = await js(`${doc}.querySelectorAll('.livello').length`);
   controlla('anteprima: la vera pagina del proiettore con i livelli di esempio', livelliAnteprima >= 3, String(livelliAnteprima));
-  controlla('anteprima: BPM e testi di esempio', /BPM/.test(await js(`${doc}.getElementById('bpm').textContent`)) && /libero/.test(await js(`${doc}.getElementById('scorri').textContent`)));
+  controlla('anteprima: BPM e testi di esempio', /BPM/.test(await js(`${doc}.getElementById('bpm').textContent`)) && /scratch/i.test(await js(`${doc}.getElementById('scorri').textContent`)));
   await prefs({ bpm: { acceso: false } });
   controlla('anteprima: segue subito le impostazioni', (await js(`${doc}.getElementById('bpm').hidden`)) === true);
   await prefs({ conto: { testo: 'fra {n} {cicli}' } });
@@ -2713,11 +2808,11 @@ async function provaCoda({ finestre, scrivi }) {
   await js(`cutxProva.goLive()`);
   await aspetta(2.5);
   const nomiLibero = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome);
-  controlla('dal CUE libero il secondo go live aggiunge un livello (libero, libero 2)', nomiLibero.join('|') === 'libero|libero 2', JSON.stringify(nomiLibero));
+  controlla('dal CUE libero il secondo go live aggiunge un livello (scratch, scratch 2)', nomiLibero.join('|') === 'scratch|scratch 2', JSON.stringify(nomiLibero));
   await js(`cutxProva.scriviCue('s("sine*8").gain(.0001)')`);
   await js(`cutxProva.goLive()`);
   await aspetta(2.5);
-  controlla('e il terzo (libero 3)', (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).join('|') === 'libero|libero 2|libero 3');
+  controlla('e il terzo (scratch 3)', (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).join('|') === 'scratch|scratch 2|scratch 3');
 
   // 11. una funzione già in coda si aggiorna (una riga sola); togliere una sola riga; ⌘Z la rimette
   await js(`cutxProva.fermaTutto()`);

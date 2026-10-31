@@ -63,6 +63,7 @@ let browser = null; // il browser a sinistra (più sotto): serve già al CUE che
 const cronologia = new Cronologia(20);
 const cue = new Cue(CODICE_INIZIALE, {
   provaInCuffia: () => provaInCuffia(),
+  fermaCuffia: () => fermaCuffia(),
   goLive: () => goLive(),
   fermaTutto: () => fermaTutto(),
   suoniStash: () => suoni,
@@ -117,6 +118,15 @@ function mostraErrore(errore, chi) {
   erroreInVista = !!errore;
 }
 
+// Ferma quello che hai in cuffia (non il live).
+function fermaCuffia() {
+  if (inTest) return;
+  pezzoCuffia = null;
+  dovaCuffia = null;
+  cuffia.manda({ tipo: 'ferma' });
+}
+
+// Il tasto «cuffia» di una card: se si sta già sentendo quella, spegne; altrimenti la manda in cuffia.
 function provaInCuffia() {
   if (inTest) return;
   const p = cue.pezzo();
@@ -162,12 +172,12 @@ function aggiungiCoda(voci) {
   return null;
 }
 
-// Dal CUE libero (testo senza sezioni) ogni go live AGGIUNGE un livello: «libero», «libero 2», «libero 3»… Per sostituire si modifica la card
+// Dal CUE libero (testo senza sezioni) ogni go live AGGIUNGE un livello: «scratch», «scratch 2», «scratch 3»… Per sostituire si modifica la card
 // (e una sezione con un suo nome, nel libero o in un brano, sostituisce quella con lo stesso nome).
 function nomeLiberoNuovo() {
   const usati = new Set(livelliLive.filter((l) => l.a === null).map((l) => l.nome));
   for (let n = 1; ; n++) {
-    const nome = n === 1 ? 'libero' : `libero ${n}`;
+    const nome = n === 1 ? 'scratch' : `scratch ${n}`;
     if (!usati.has(nome)) return nome;
   }
 }
@@ -197,7 +207,7 @@ async function goLive() {
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, inizio, nome: p.provenienza === 'libero' && p.nome === 'libero' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', codice: senzaCoda, coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   return r;
@@ -895,7 +905,37 @@ function mostraCue() {
   const b = $('cuffia-onoff');
   b.classList.toggle('on', cuffia.viva && cuffiaUdibile);
   b.querySelector('i').textContent = !cuffia.viva ? '–' : cuffiaUdibile ? 'on' : 'off';
-  $('manda-cuffia').classList.toggle('on', $('card-libero').classList.contains('in-cuffia'));
+  const scratchInCuffia = $('card-libero').classList.contains('in-cuffia');
+  $('manda-cuffia').classList.toggle('on', scratchInCuffia);
+  mostraStriscia(etichetta(cuffia));
+}
+
+// La striscia «in cuffia»: cosa stai ascoltando, ogni voce col suo ■ di stop, e uno stop per tutto.
+let chiaveStriscia = null;
+function mostraStriscia(voce) {
+  const chiave = inTest ? '' : voce ? `${voce.nome}|${voce.provenienza}` : '';
+  if (chiave === chiaveStriscia) return;
+  chiaveStriscia = chiave;
+  const contenitore = $('striscia-voci');
+  $('cuffia-stop').disabled = !chiave;
+  if (!chiave) {
+    contenitore.replaceChildren(Object.assign(document.createElement('span'), { className: 'lbl vuota', textContent: 'niente in cuffia' }));
+    return;
+  }
+  const riga = document.createElement('span');
+  riga.className = 'voce-cuffia';
+  const stop = document.createElement('button');
+  stop.className = 'key piccolo stop-voce';
+  stop.textContent = '■';
+  stop.title = 'ferma questa';
+  stop.setAttribute('aria-label', `ferma ${voce.nome}`);
+  stop.onclick = fermaCuffia;
+  const testo = document.createElement('span');
+  testo.textContent = voce.nome;
+  const da = document.createElement('em');
+  da.textContent = ` · ${voce.provenienza.replace(/ §\d+$/, '')}`;
+  riga.append(stop, testo, da);
+  contenitore.replaceChildren(riga);
 }
 
 function mostra() {
@@ -1037,7 +1077,8 @@ $('cuffia-onoff').onclick = () => cuffiaOnOff();
 $('cuffia-pausa').onclick = () => pausaCuffia();
 $('apri-impostazioni').onclick = () => impostazioni(true);
 $('chiudi-impostazioni').onclick = () => impostazioni(false);
-$('manda-cuffia').onclick = provaInCuffia;
+$('manda-cuffia').onclick = () => ($('card-libero').classList.contains('in-cuffia') ? fermaCuffia() : provaInCuffia());
+$('cuffia-stop').onclick = fermaCuffia;
 $('manda-live').onclick = goLive;
 $('go-live').onclick = goLive;
 $('frase').onclick = fraseDaCapo;

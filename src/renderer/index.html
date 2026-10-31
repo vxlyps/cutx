@@ -64,22 +64,26 @@
       <section class="colonna cue" aria-label="CUE">
         <div class="testa">
           <span class="titolo">CUE</span>
-          <span class="lbl">in cuffia</span>
           <div class="spazio"></div>
           <button id="cuffia-pausa" data-aiuto="cuffia-pausa" class="key">pausa <i>⇧⌘K</i></button>
           <button id="aggiungi-sezione" data-aiuto="aggiungi-sezione" class="key">+ sezione <i>⌘E</i></button>
           <button id="modo-brano" data-aiuto="modo-brano" class="key">brano <i>–</i></button>
+          <button id="modo-libero" data-aiuto="modo-libero" class="key on">scratch</button>
           <div id="cue-tempo" class="cue-tempo" data-aiuto="cue-tempo" hidden>
             <span id="cue-tempo-testo" class="lbl"></span>
             <button id="cue-porta" class="key piccolo acid">porta il set a –</button>
           </div>
-          <button id="modo-libero" data-aiuto="modo-libero" class="key on">libero</button>
+        </div>
+        <div id="striscia-cuffia" class="striscia-cuffia" data-aiuto="striscia-cuffia">
+          <span class="lbl">in cuffia</span>
+          <span id="striscia-voci" class="striscia-voci"></span>
+          <button id="cuffia-stop" data-aiuto="cuffia-stop" class="key">stop</button>
         </div>
         <p id="cue-avviso" class="avviso"></p>
         <div id="vista-libero" class="corpo">
           <article id="card-libero" class="card">
             <div class="card-testa">
-              <span id="libero-nome" class="nome">libero</span>
+              <span id="libero-nome" class="nome">scratch</span>
               <span id="libero-stato" class="lbl"></span>
               <div class="spazio"></div>
               <button id="manda-cuffia" data-aiuto="manda-cuffia" class="key">cuffia <i>⌘↵</i></button>

@@ -2298,3 +2298,48 @@ input[type='checkbox'] {
 .coda-x:hover {
   color: var(--errore, #e0674f);
 }
+
+/* la striscia «in cuffia» sotto la testa del CUE */
+.striscia-cuffia {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--linea);
+  font-size: 12px;
+  min-height: 46px;
+}
+
+.striscia-cuffia .striscia-voci {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.voce-cuffia {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.voce-cuffia em {
+  font-style: normal;
+  color: var(--secondario);
+}
+
+.stop-voce {
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 11px;
+}
+
+/* il CUE: il tempo del brano sta su una riga sua, non spinge in giù i tasti */
+.cue .testa .cue-tempo {
+  order: 10;
+  flex-basis: 100%;
+}

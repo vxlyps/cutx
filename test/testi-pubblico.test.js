@@ -15,7 +15,7 @@ test('le preferenze salvate stanno sopra i predefiniti, voce per voce; il neon s
   assert.equal(c.neon.acceso, false);
   assert.equal(c.bpm.testo, '{bpm}');
   assert.equal(c.bpm.acceso, true);
-  assert.equal(c.etichette.nomi.libero, 'libero');
+  assert.equal(c.etichette.nomi.scratch, 'scratch');
   assert.equal(c.etichette.nomi.jam, '');
 });
 
@@ -28,14 +28,14 @@ test('segnaposto', () => {
 test('etichette: il paracadute non compare mai, i nomi automatici si rinominano o si nascondono', () => {
   assert.equal(nomePubblico('paracadute', cfg), null);
   assert.equal(nomePubblico('basso', cfg), 'basso');
-  assert.equal(nomePubblico('libero', risolvi({ testiPubblico: { etichette: { nomi: { libero: 'pezzo' } } } })), 'pezzo');
+  assert.equal(nomePubblico('scratch', risolvi({ testiPubblico: { etichette: { nomi: { scratch: 'pezzo' } } } })), 'pezzo');
   assert.equal(nomePubblico('jam', risolvi({ testiPubblico: { etichette: { nomi: { jam: '' } } } })), null);
   assert.equal(nomePubblico('basso', risolvi({ testiPubblico: { etichette: { acceso: false } } })), null);
-  // «libero 2» è lo stesso nome automatico con il numero
-  const pezzo = risolvi({ testiPubblico: { etichette: { nomi: { libero: 'pezzo' } } } });
-  assert.equal(nomePubblico('libero 2', pezzo), 'pezzo 2');
-  assert.equal(nomePubblico('libero 3', cfg), 'libero 3');
-  assert.equal(nomePubblico('libero 2', risolvi({ testiPubblico: { etichette: { nomi: { libero: '' } } } })), null);
+  // «scratch 2» è lo stesso nome automatico con il numero
+  const pezzo = risolvi({ testiPubblico: { etichette: { nomi: { scratch: 'pezzo' } } } });
+  assert.equal(nomePubblico('scratch 2', pezzo), 'pezzo 2');
+  assert.equal(nomePubblico('scratch 3', cfg), 'scratch 3');
+  assert.equal(nomePubblico('scratch 2', risolvi({ testiPubblico: { etichette: { nomi: { scratch: '' } } } })), null);
 });
 
 test('testo dell\'etichetta nei vari stati', () => {
