@@ -7,7 +7,7 @@ const A = 's("bd*4").gain(.5)\n  .room(.3)';
 test('i pesi sono sempre gli stessi per lo stesso testo e vanno più lenti dopo . , ( e a fine riga', () => {
   assert.deepEqual([...pesi(A)], [...pesi(A)]);
   const w = pesi('ab.cd\nef  gh');
-  assert.ok(w[2] > w[0] + 1, 'pausa dopo il punto');
+  assert.ok(dettagli('ab.cd\nef  gh').attesa[3] >= 1.6, 'pausa dopo il punto');
   assert.ok(w[5] > w[0] + 4, 'pausa a fine riga');
   assert.ok(pesi('x\n  y')[2] < 0.2, 'indentazione quasi gratis');
   assert.ok([...pesi(A)].every((p) => p > 0));
@@ -34,7 +34,7 @@ test('un livello nuovo si scrive da zero, un carattere alla volta, fino in fondo
     lunghezza = v.prima.length;
   }
   const fine = vedi(p, p.totale);
-  assert.deepEqual(fine, { prima: A, nascosto: '', dopo: '', cursore: false, fatto: true });
+  assert.deepEqual(fine, { prima: A, nascosto: '', dopo: '', cursore: false, fatto: true, lampeggia: false });
 });
 
 test('una modifica non riscrive tutto: cursore al punto, cancella il vecchio, scrive il nuovo', () => {
@@ -100,4 +100,50 @@ test('il testo uguale non si anima', () => {
   assert.equal(p.totale, 0);
   assert.equal(vedi(p, 0).fatto, true);
   assert.ok(MS_PER_UNITA > 0);
+});
+
+import { OPZIONI, dettagli, norma } from '../src/renderer/scrittura.js';
+
+const LUNGO = 'stack(\n  s("bd*4, hh*8").gain(.8).room(.3),\n  note("c3 e3 g3 b3").s("sawtooth").lpf(900).delay(.25)\n)';
+
+test('le regolazioni stanno nei limiti, con i predefiniti: refusi spenti', () => {
+  assert.deepEqual(norma({}), OPZIONI);
+  assert.equal(OPZIONI.refusi, 0);
+  assert.equal(norma({ velocita: 99 }).velocita, 3);
+  assert.equal(norma({ imperfezione: -1 }).imperfezione, 0);
+  assert.equal(norma({ refusi: 'x' }).refusi, 0);
+});
+
+test('con l\'imperfezione c\'è più varietà e pause prima dei numeri; senza refusi il testo non cambia mai', () => {
+  const regolare = dettagli(LUNGO, { imperfezione: 0 });
+  const umana = dettagli(LUNGO, { imperfezione: 1 });
+  const somma = (a) => a.reduce((x, y) => x + y, 0);
+  assert.ok(somma(umana.attesa) > somma(regolare.attesa) + 5, 'più esitazioni');
+  const inizioNumero = [...LUNGO].map((c, i) => (/\d/.test(c) && !/[\d.]/.test(LUNGO[i - 1] ?? '') ? i : -1)).filter((i) => i >= 0);
+  const conPausa = inizioNumero.filter((i) => umana.attesa[i] >= 0.6).length;
+  assert.ok(conPausa >= inizioNumero.length * 0.5, `esita prima dei numeri (${conPausa}/${inizioNumero.length})`);
+  assert.ok(umana.sbagliato.every((x) => x === null) && umana.refuso.every((x) => x === 0), 'niente refusi se spenti');
+});
+
+test('i refusi: rari, un tasto vicino, e il testo finale è sempre giusto', () => {
+  const d = dettagli(LUNGO.repeat(4), { refusi: 1 });
+  const n = d.sbagliato.filter(Boolean).length;
+  assert.ok(n >= 1 && n <= 20, `refusi: ${n}`);
+  const p = piano('', LUNGO.repeat(4), { refusi: 1 });
+  let visto = false;
+  for (let x = 0; x < p.totale; x += 0.05) {
+    const v = vedi(p, x);
+    if ((v.prima + v.nascosto).length === LUNGO.repeat(4).length && v.prima + v.nascosto !== LUNGO.repeat(4)) visto = true; // un carattere sbagliato in vista
+    assert.ok(v.prima.length <= LUNGO.repeat(4).length);
+  }
+  assert.ok(visto, 'il refuso si vede');
+  assert.equal(vedi(p, p.totale).prima, LUNGO.repeat(4));
+});
+
+test('le pause lunghe fanno lampeggiare il cursore, e la velocità cambia la durata', () => {
+  const p = piano('', LUNGO, { imperfezione: 1 });
+  let lampeggia = false;
+  for (let x = 0; x < p.totale; x += 0.05) lampeggia ||= vedi(p, x).lampeggia === true;
+  assert.ok(lampeggia, 'ogni tanto lampeggia');
+  assert.ok(durataNaturaleMs(piano('', LUNGO, { velocita: 2 })) < durataNaturaleMs(piano('', LUNGO, { velocita: 1 })) * 0.6);
 });

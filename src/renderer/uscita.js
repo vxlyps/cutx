@@ -106,15 +106,15 @@ function blocco(chiave) {
 
 // Il testo che si sta scrivendo: la parte già scritta, il cursore e il resto *invisibile ma al suo posto*, così l'altezza del
 // livello è subito quella finale e il carattere non cambia mentre si scrive.
-function scrivi(b, scritto, cursore, nascosto = '', dopo = '') {
-  const chiave = `${scritto}|${nascosto}|${dopo}${cursore ? '▌' : ''}`;
+function scrivi(b, scritto, cursore, nascosto = '', dopo = '', lampeggia = false) {
+  const chiave = `${scritto}|${nascosto}|${dopo}${cursore ? (lampeggia ? '▌▌' : '▌') : ''}`;
   if (b.codice.dataset.testo === chiave) return;
   b.codice.dataset.testo = chiave;
   b.codice.dataset.evidenza = '';
   b.codice.textContent = scritto;
   if (cursore) {
     const c = document.createElement('span');
-    c.className = 'cursore';
+    c.className = lampeggia ? 'cursore lampeggia' : 'cursore';
     c.textContent = '_';
     b.codice.append(c);
   }
@@ -207,8 +207,8 @@ function disegna() {
     if (a.arriva && a.cursore) {
       // scrittura umana: da zero, o solo la differenza se sostituisce un livello (scrittura.js)
       const vecchio = sostituitoDa(l, viste);
-      const v = scrittore.stato(l.id, vecchio ? vecchio.codice.replace(/\s+$/, '') : '', a.testo, l.richiesto, epocaDi(mappa, l.da), epoca, vecchio?.id ?? null);
-      scrivi(b, v.prima, v.cursore, v.nascosto, v.dopo);
+      const v = scrittore.stato(l.id, vecchio ? vecchio.codice.replace(/\s+$/, '') : '', a.testo, l.richiesto, epocaDi(mappa, l.da), epoca, vecchio?.id ?? null, preferenze.scrittura);
+      scrivi(b, v.prima, v.cursore, v.nascosto, v.dopo, v.lampeggia);
       if (v.cursore) {
         const cur = b.codice.querySelector('.cursore');
         if (cur) {

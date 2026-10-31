@@ -993,7 +993,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     controlla('esc chiude le impostazioni', (await js(`document.getElementById('impostazioni').hidden`)) === true);
     if (prima) await js(`cutxProva.imp.dati.salvaConfig({ paracadute: ${JSON.stringify(prima)} })`);
   } finally {
-    await js(`window.cutx.salvaPreferenze(${JSON.stringify({ scorciatoie: archiviaPreferenze.scorciatoie ?? {}, suggerimenti: archiviaPreferenze.suggerimenti ?? true, riquadroHelp: archiviaPreferenze.riquadroHelp ?? true, gatto: true, insegna: true, lunghezzaFrase: archiviaPreferenze.lunghezzaFrase })})`);
+    await js(`window.cutx.salvaPreferenze(${JSON.stringify({ scorciatoie: archiviaPreferenze.scorciatoie ?? {}, suggerimenti: archiviaPreferenze.suggerimenti ?? true, riquadroHelp: archiviaPreferenze.riquadroHelp ?? true, gatto: true, insegna: true, scritturaAMacchina: true, lunghezzaFrase: archiviaPreferenze.lunghezzaFrase })})`);
   }
   return ok;
 }
@@ -2283,6 +2283,7 @@ async function provaScrittura({ finestre, scrivi }) {
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
   const uscita = () => chiedi(finestre.uscita, 'globalThis.cutxScrittura?.()');
+  await js('window.cutx.salvaPreferenze({ scritturaAMacchina: true, scrittura: { velocita: 1, imperfezione: 0.5, refusi: 0 }, testiPubblico: {} })');
   if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
   for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
   await aspetta(1.5);
@@ -2468,6 +2469,19 @@ async function provaTesti({ finestre, scrivi }) {
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');
+  // una foto del pannello, per guardarlo a occhio
+  try {
+    await prefs({});
+    await aspetta(4);
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'testi');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'proiezione.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await js(`document.getElementById('imp-scrittura').scrollIntoView()`);
+    await aspetta(0.5);
+    await writeFile(path.join(cartella, 'scrittura.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } catch (e) {
+    scrivi(`foto non riuscita: ${e.message}`);
+  }
   await js(`document.getElementById('chiudi-impostazioni').click()`);
   await prefs({}, { insegna: true });
   await js('cutxProva.fermaTutto()');

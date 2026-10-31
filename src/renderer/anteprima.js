@@ -70,6 +70,12 @@ export class Anteprima {
     this.live?.postMessage({ tipo: 'preferenze', p: this.preferenze() });
   }
 
+  // rifà l'esempio da capo (per rivedere come si scrive)
+  riparti() {
+    this.partenza = Date.now();
+    this.giro = -1;
+  }
+
   // chiamata quando cambiano le preferenze
   aggiorna() {
     this.mandaPreferenze();

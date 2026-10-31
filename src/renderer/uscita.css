@@ -151,6 +151,17 @@ body {
   color: var(--marcio);
 }
 
+/* una pausa vera: il cursore lampeggia */
+.codice .cursore.lampeggia {
+  animation: cursore-lampeggia 0.7s steps(1, end) infinite;
+}
+
+@keyframes cursore-lampeggia {
+  50% {
+    opacity: 0;
+  }
+}
+
 .battute {
   position: absolute;
   left: calc(64 * var(--u));

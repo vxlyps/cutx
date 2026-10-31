@@ -8,6 +8,7 @@ import { writeFile } from 'node:fs/promises';
 export const PREDEFINITE = {
   lunghezzaFrase: 16,
   scritturaAMacchina: true,
+  scrittura: { velocita: 1, imperfezione: 0.5, refusi: 0 }, // la scrittura umana sul proiettore (scrittura.js): quanto veloce, quanto imperfetta, quanti refusi
   paracadute: true,
   suggerimenti: true,
   riquadroHelp: true,

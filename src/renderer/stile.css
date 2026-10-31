@@ -2212,6 +2212,9 @@ input[type='checkbox'] {
 
 /* anteprima del proiettore nelle impostazioni */
 .anteprima {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   width: 100%;
   max-width: 640px;
   margin: 8px 0 14px;
@@ -2262,4 +2265,9 @@ input[type='checkbox'] {
 
 .imp-testi-riga .segnaposto {
   font-family: var(--mono);
+}
+
+.imp-testi-riga input[type='range'] {
+  width: 180px;
+  accent-color: var(--marcio);
 }

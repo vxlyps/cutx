@@ -7,6 +7,7 @@ import { creaEditor } from './editor.js';
 import { MODI, modoValido } from './sfondo.js';
 import { PREDEFINITI, SEGNAPOSTO, risolvi as risolviTesti } from './testi-pubblico.js';
 import { Anteprima } from './anteprima.js';
+import { OPZIONI, norma } from './scrittura.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,6 +92,51 @@ export class Impostazioni {
     await this.dati.salvaConfig({ paracadute: predefinito || codice.trim() === base.trim() ? '' : codice });
     $('paracadute-stato').textContent = 'salvato';
     setTimeout(() => ($('paracadute-stato').textContent = ''), 1500);
+  }
+
+  // --- scrittura umana: velocità, imperfezione, refusi ---
+
+  disegnaScrittura() {
+    const contenitore = $('imp-scrittura');
+    if (contenitore.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return; // sto trascinando
+    const p = this.dati.preferenze();
+    const o = norma(p.scrittura);
+    const salva = (parziale) => this.dati.salvaPreferenze({ scrittura: { ...norma(this.dati.preferenze().scrittura), ...parziale } });
+    const cursore = ({ chiave, nome, nota, min, max, passo, etichetta }) => {
+      const riga = crea('div', 'imp-riga imp-testi-riga');
+      riga.dataset.voce = chiave;
+      const t = crea('div', 'imp-testo');
+      t.append(crea('span', '', nome), crea('span', 'imp-nota', nota));
+      const comandi = crea('div', 'imp-controlli');
+      const i = crea('input');
+      i.type = 'range';
+      i.min = min;
+      i.max = max;
+      i.step = passo;
+      i.value = o[chiave];
+      const valore = crea('span', 'lbl', etichetta(o[chiave]));
+      let timer = null;
+      i.oninput = () => {
+        valore.textContent = etichetta(Number(i.value));
+        clearTimeout(timer);
+        timer = setTimeout(() => salva({ [chiave]: Number(i.value) }), 150);
+      };
+      const ripr = crea('button', 'key piccolo', 'ripristina');
+      ripr.onclick = () => salva({ [chiave]: OPZIONI[chiave] });
+      comandi.append(i, valore, ripr);
+      riga.append(t, comandi);
+      return riga;
+    };
+    const rivedi = crea('button', 'key', 'rivedi nell\'anteprima');
+    rivedi.onclick = () => this.anteprima.riparti();
+    const ultima = crea('div', 'imp-riga');
+    ultima.append(crea('div', 'imp-testo'), rivedi);
+    contenitore.replaceChildren(
+      cursore({ chiave: 'velocita', nome: 'velocità', nota: '1 = naturale (circa 14 caratteri al secondo); se non basta il tempo accelera da sola', min: 0.4, max: 2.5, passo: 0.1, etichetta: (v) => `${v.toFixed(1)}×` }),
+      cursore({ chiave: 'imperfezione', nome: 'imperfezione', nota: 'a raffiche, esitazioni prima dei numeri, qualche pausa a metà parola col cursore che lampeggia', min: 0, max: 1, passo: 0.05, etichetta: (v) => (v === 0 ? 'regolare' : `${Math.round(v * 100)}%`) }),
+      cursore({ chiave: 'refusi', nome: 'refusi', nota: 'un tasto sbagliato, corretto subito. Spenti di default; al massimo «ogni tanto»', min: 0, max: 1, passo: 0.05, etichetta: (v) => (v === 0 ? 'mai' : v >= 0.95 ? 'ogni tanto' : `${Math.round(v * 100)}%`) }),
+      ultima,
+    );
   }
 
   // --- testi per il pubblico ---
@@ -235,6 +281,7 @@ export class Impostazioni {
     const gruppo = (id, voci) => $(id).replaceChildren(...voci.map((v) => rigaInterruttore(v, p[v.chiave] !== false, (x) => this.dati.salvaPreferenze({ [v.chiave]: x }))));
     gruppo('imp-help', it.impostazioni.help);
     this.disegnaTesti();
+    this.disegnaScrittura();
     // le dissolvenze: cicli (0 = di botto), se solo volume o anche filtro, il filtro dell'uscita, il paracadute
     const sceltaPref = (nome, testo, valori, chiave, predefinito) => {
       const riga = crea('div', 'imp-riga');
