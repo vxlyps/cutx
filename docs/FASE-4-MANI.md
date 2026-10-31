@@ -1,6 +1,6 @@
 # FASE 4 · LE MANI
 
-È arrivato il controller: Behringer X-Touch Mini, collegato al Mac (8 encoder senza fine con anello LED e push, 16 tasti, 1 fader, tasti layer A/B). Va usato in modalità standard (non MC). Verificare sul dispositivo vero quali messaggi manda e come si accendono anelli e tasti da CUTX.
+È arrivato il controller: Behringer X-Touch Mini, collegato al Mac (8 encoder senza fine con anello LED e push, 16 tasti, 1 fader, tasti layer A/B). Va usato in modalità **MC (Mackie Control)**: in standard le manopole sono assolute con fine corsa (non restano allineate ai valori di CUTX) e i LED non rispondono in modo affidabile; in MC le manopole sono relative (senza fine) e anelli e tasti si accendono da CUTX (MC MODE ambra acceso: tasto MC in basso a sinistra tenuto premuto mentre si collega l'USB). Messaggi e accensione verificati sul dispositivo vero: vedi CLAUDE.md e Impostazioni → controller.
 
 ## PRINCIPI
 

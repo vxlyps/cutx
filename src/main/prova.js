@@ -2532,6 +2532,18 @@ async function provaColpi({ finestre, scrivi }) {
   await midi(0x90, roll, 0);
   await aspetta(1.5);
   controlla('rilasciato: la riga .ply esce', !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).some((r) => r.startsWith('.ply')));
+  // il paracadute dal tasto: tenuto un secondo (rilasciato prima non fa niente)
+  const tastoParacadute = await js(`cutxProva.controllerMidi.tab.tasti[7]`);
+  await midi(0x90, tastoParacadute, 127);
+  await aspetta(0.5);
+  await midi(0x90, tastoParacadute, 0);
+  await aspetta(1.2);
+  controlla('paracadute dal tasto: rilasciato prima di un secondo non parte', !(await attivi()).some((l) => l.nome === 'paracadute'));
+  await midi(0x90, tastoParacadute, 127);
+  await aspetta(1.4);
+  await midi(0x90, tastoParacadute, 0);
+  await aspetta(2.5);
+  controlla('paracadute dal tasto: tenuto un secondo parte (livello «paracadute» in arrivo/attivo)', (await live()).livelli.some((l) => l.nome === 'paracadute'), JSON.stringify((await live()).livelli.map((l) => l.nome)));
   await js('cutxProva.fermaTutto()');
   return ok;
 }
