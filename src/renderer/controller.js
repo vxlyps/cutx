@@ -7,6 +7,7 @@ import { valoreDi, valoreLetterale } from './coda.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
 const PARACADUTE_MS = 1000;
+const FERMO_MS = 500; // fermo così a lungo, la sezione scelta va in cuffia
 const LUCI_MS = 150;
 const CODA_OGNI_MS = 33; // le righe di coda partono al massimo 30 volte al secondo
 
@@ -35,6 +36,8 @@ export class Controller {
     this.sequenza = 0; // per fermare una prova luci quando ne parte un'altra
     this.paracaduteTimer = null;
     this.paracaduteTenuto = false;
+    this.cuffiaTenuta = null; // { usato } mentre tengo premuto «cuffia»: girare una manopola scorre le sezioni del CUE, ◀ ▶ cambiano brano
+    this.fermoTimer = null;
     this.ultimoDiscreto = new Map(); // `${id}|${chiave}` → l'ultimo scatto mandato (velocità, altezza)
     this.lampi = new Map(); // nota → fino a quando resta accesa dopo l'azione (un lampo breve)
     this.toccata = null; // { n, quando }: l'ultima manopola toccata, per lo specchio
@@ -166,6 +169,8 @@ export class Controller {
 
   giraManopola(n, passi) {
     if (!passi) return;
+    // «cuffia» tenuto + una manopola qualsiasi: scorro le sezioni del CUE; fermo mezzo secondo, quella parte in cuffia
+    if (this.cuffiaTenuta && this.pagina === 'A') return this.scorriCue(passi);
     if (this.pagina === 'A') {
       if (n === 8) return this.giraMaster(passi);
       const l = this.livello(n);
@@ -190,6 +195,26 @@ export class Controller {
       return;
     }
     this.cambiaParametro(l, chiave, passi, n);
+  }
+
+  scorriCue(passi) {
+    this.cuffiaTenuta.usato = true;
+    const nome = this.azioni.cueSposta?.(Math.sign(passi) * Math.min(3, Math.abs(passi)));
+    if (nome === undefined || nome === null) return this.riga('CUE: niente sezioni da scorrere');
+    this.toccata = { n: null, quando: this.ora(), testo: `CUE · ${nome}` };
+    this.azioni.scritta?.(`CUE · ${nome.toUpperCase()}`);
+    this.ferma(this.fermoTimer);
+    this.fermoTimer = this.imposta(() => {
+      this.azioni.cuffiaScelta?.();
+    }, FERMO_MS);
+  }
+
+  async cambiaBrano(verso) {
+    this.cuffiaTenuta.usato = true;
+    const nome = await this.azioni.cueBrano?.(verso);
+    if (!nome) return this.riga(verso > 0 ? "CUE: è l'ultimo brano" : 'CUE: è il primo brano');
+    this.toccata = { n: null, quando: this.ora(), testo: `CUE · ${nome}` };
+    this.azioni.scritta?.(`BRANO · ${nome.toUpperCase()}`);
   }
 
   giraMaster(passi) {
@@ -347,6 +372,24 @@ export class Controller {
       return;
     }
     const comando = TASTI_A[n - 1];
+    // «cuffia»: un tocco la accende o la spegne (al rilascio); tenuto, le manopole scorrono il CUE e ◀ ▶ cambiano brano
+    if (comando === 'cuffia') {
+      if (giu) this.cuffiaTenuta = { usato: false };
+      else if (this.cuffiaTenuta) {
+        const usato = this.cuffiaTenuta.usato;
+        this.cuffiaTenuta = null;
+        this.ferma(this.fermoTimer);
+        if (!usato) {
+          this.azioni.cuffia?.();
+          this.azioni.scritta?.(this.azioni.inCuffia?.() ? 'CUFFIA · STOP' : 'CUFFIA');
+        }
+      }
+      return;
+    }
+    if (this.cuffiaTenuta && giu && (comando === 'momentoIndietro' || comando === 'momentoAvanti')) {
+      this.cambiaBrano(comando === 'momentoAvanti' ? 1 : -1);
+      return;
+    }
     if (comando === 'paracadute') {
       // tenuto un secondo: niente partenze per sbaglio
       this.ferma(this.paracaduteTimer);

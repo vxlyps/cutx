@@ -2863,3 +2863,9 @@ input[type='checkbox'] {
   padding: 0 6px;
   font-size: 11px;
 }
+
+/* la sezione scelta nel CUE (con il mouse o col controller): bordo chiaro, non verde (il verde è solo il live) */
+.card.sezione.attiva:not(.in-cuffia):not(.e-live) {
+  border-color: var(--testo);
+  box-shadow: inset 3px 0 0 var(--testo);
+}

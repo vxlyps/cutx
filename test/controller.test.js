@@ -94,6 +94,8 @@ test('i tasti: go live, togli, cuffia; il paracadute solo tenuto un secondo', ()
   c.riceve(tasto(t(6), true));
   assert.ok(log.some((x) => x[0] === 'togli'));
   c.riceve(tasto(t(4), true));
+  assert.ok(!log.some((x) => x[0] === 'cuffia'), 'al rilascio, non alla pressione');
+  c.riceve(tasto(t(4), false));
   assert.ok(log.some((x) => x[0] === 'cuffia'));
   c.riceve(tasto(t(8), true));
   avanza(500);
@@ -260,4 +262,61 @@ test('il fader è il filtro del drop su tutto il live: in alto aperto, scendendo
   assert.ok(fader[1] > 0.2 && fader[1] < 0.3);
   assert.match(log.filter((x) => x[0] === 'scritta').at(0)[1], /FILTRO APERTO/);
   assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FILTRO \d+ Hz/);
+});
+
+test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo va in cuffia; al rilascio niente toggle', () => {
+  const { c, log, avanza, azioni } = prova([L(1, 'drum')]);
+  const sezioni = ['intro', 'drum', 'basso', 'melodia'];
+  let k = 0;
+  azioni.cueSposta = (d) => {
+    k = Math.max(0, Math.min(sezioni.length - 1, k + d));
+    log.push(['cueSposta', d]);
+    return sezioni[k];
+  };
+  azioni.cuffiaScelta = () => log.push(['cuffiaScelta', sezioni[k]]);
+  const cuffia = c.tab.tasti[3];
+  c.riceve(tasto(cuffia, true));
+  c.riceve(giro(5, 1));
+  c.riceve(giro(2, 1));
+  avanza(200);
+  assert.equal(log.filter((x) => x[0] === 'cuffiaScelta').length, 0, 'mentre scorro non parte');
+  avanza(600);
+  assert.deepEqual(log.filter((x) => x[0] === 'cuffiaScelta'), [['cuffiaScelta', 'basso']], 'fermo: quella parte in cuffia');
+  assert.equal(c.toccata.testo, 'CUE · basso', 'lo specchio dice dove sono');
+  assert.equal(log.filter((x) => x[0] === 'volume').length, 0, 'le manopole non toccano i volumi mentre scorro');
+  c.riceve(tasto(cuffia, false));
+  assert.equal(log.filter((x) => x[0] === 'cuffia').length, 0, 'rilasciando la sezione resta scelta, la cuffia non si spegne né si toglie');
+  // dopo, la manopola torna ai volumi
+  c.riceve(giro(1, 2));
+  assert.ok(log.some((x) => x[0] === 'volume'));
+});
+
+test('«cuffia» tenuto + ◀ ▶ momento: brano precedente e successivo della libreria', async () => {
+  const { c, log, azioni } = prova([]);
+  const brani = ['alba', 'notte', 'zenit'];
+  let i = 1;
+  azioni.cueBrano = async (verso) => {
+    const j = i + verso;
+    if (j < 0 || j >= brani.length) return null;
+    i = j;
+    return brani[i];
+  };
+  c.riceve(tasto(c.tab.tasti[3], true));
+  c.riceve(tasto(c.tab.tasti[1], true)); // ▶
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(c.toccata.testo, 'CUE · zenit');
+  c.riceve(tasto(c.tab.tasti[1], true)); // ancora ▶: è l'ultimo
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(log.some((x) => x[0] === 'scritta' && /BRANO · ZENIT/.test(x[1])));
+  c.riceve(tasto(c.tab.tasti[0], true)); // ◀
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(c.toccata.testo, 'CUE · notte');
+  c.riceve(tasto(c.tab.tasti[3], false));
+  assert.equal(log.filter((x) => x[0] === 'cuffia').length, 0);
+  // senza «cuffia» tenuto, ◀ ▶ restano «arriva presto» (i momenti vengono col passo 5)
+  c.riceve(tasto(c.tab.tasti[1], true));
+  assert.ok(log.some((x) => x[0] === 'scritta' && /ARRIVA PRESTO/i.test(x[1])));
 });

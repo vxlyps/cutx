@@ -1193,6 +1193,16 @@ const controllerMidi = new Controller({
     l.muto = !l.muto;
     live.manda({ tipo: 'livello', livello: id, muto: l.muto });
   },
+  // muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo la sezione va in cuffia
+  cueSposta: (delta) => cue.spostaSezione(delta),
+  cuffiaScelta: () => provaInCuffia(),
+  cueBrano: async (verso) => {
+    const i = libreria.findIndex((b) => b.file === cue.brano?.file);
+    const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
+    if (j < 0 || j >= libreria.length || j === i) return null;
+    await cue.apri(libreria[j].file);
+    return cue.brano?.file === libreria[j].file ? libreria[j].nome : null;
+  },
   seleziona: (id) => pila.seleziona(id),
   togliRiga: (id, chiave) => live.manda({ tipo: 'coda', livello: id, togli: [chiave], origine: 'manopola' }),
   filtroMaster: (x) => live.manda({ tipo: 'filtro-master', x }),

@@ -493,6 +493,58 @@ export class Cue {
     for (const c of this.carte) c.el.classList.toggle('attiva', c === carta);
   }
 
+  // --- muoversi nel CUE senza mouse (controller): le sezioni di quello che ho davanti, e quella scelta ---
+
+  // I nomi delle sezioni (in modalità brano quelle del brano aperto, in scratch quelle scritte con // @sezione).
+  sezioniNav() {
+    if (this.modo === 'brano') return this.brano ? this.brano.modello.sezioni.map((s) => s.nome) : [];
+    return B.leggi(this.libero.codice).sezioni.map((s) => s.nome);
+  }
+
+  // L'indice della sezione scelta, o -1.
+  indiceScelto() {
+    if (this.modo === 'brano') return this.cartaAttiva && this.cartaAttiva.i >= 0 ? this.cartaAttiva.i : -1;
+    const testo = this.libero.codice;
+    if (!B.leggi(testo).sezioni.length) return -1;
+    const { da } = this.libero.righeScelte();
+    return B.bloccoDellaRiga(testo, da).sezione;
+  }
+
+  // Sceglie la sezione k (senza prendersi il fuoco della tastiera): in brano la card si evidenzia e si porta in vista, in scratch il cursore va al suo inizio.
+  scegliSezione(k) {
+    const nomi = this.sezioniNav();
+    if (k < 0 || k >= nomi.length) return null;
+    if (this.modo === 'brano') {
+      const carta = this.carte.find((c) => c.i === k);
+      if (!carta) return null;
+      this.attiva(carta);
+      carta.el.hidden = false;
+      carta.el.scrollIntoView({ block: 'nearest' });
+    } else {
+      const { blocchi } = B.blocchi(this.libero.codice);
+      const b = blocchi.find((x) => x.sezione === k);
+      const vista = this.libero.vista;
+      const riga = vista.state.doc.line(Math.min(b.testa + 1, vista.state.doc.lines));
+      vista.dispatch({ selection: { anchor: riga.to }, scrollIntoView: true });
+    }
+    this.mostraModo();
+    return nomi[k];
+  }
+
+  // Un passo avanti o indietro fra le sezioni (senza girare intorno); ritorna il nome della sezione scelta, o null.
+  spostaSezione(delta) {
+    const n = this.sezioniNav().length;
+    if (!n) return null;
+    const ora = this.indiceScelto();
+    const k = Math.max(0, Math.min(n - 1, (ora < 0 ? (delta > 0 ? -1 : n) : ora) + delta));
+    return this.scegliSezione(k);
+  }
+
+  nomeSezioneScelta() {
+    const k = this.indiceScelto();
+    return k >= 0 ? this.sezioniNav()[k] : null;
+  }
+
   async rinomina(i) {
     const m = this.brano.modello;
     const nome = await chiediNome({ titolo: 'rinomina la sezione', valore: m.sezioni[i].nome, suggerimenti: B.NOMI_SEZIONE });
@@ -616,6 +668,7 @@ export class Cue {
     }
     try {
       this.apriModello(file, await window.cutx.leggiBrano(file));
+      if (this.sceltaIniziale !== false) this.scegliSezione(0);
     } catch (e) {
       this.avviso(`non riesco ad aprire ${file}: ${e.message}`);
     }

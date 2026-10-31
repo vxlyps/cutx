@@ -193,6 +193,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('cue-controller')) ok = (await sicura('cue-controller', provaCueController)) && ok;
   if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
   if (parti.includes('striscia')) ok = (await sicura('striscia', provaStriscia)) && ok;
   if (parti.includes('striscia-aspetto')) ok = (await sicura('striscia-aspetto', provaStrisciaAspetto)) && ok;
@@ -2431,6 +2432,73 @@ async function provaScrittura({ finestre, scrivi }) {
   return ok;
 }
 
+
+// --- muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo va in cuffia, go live manda la scelta (npx electron . --prova=cue-controller) ---
+async function provaCueController({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const cuffiaStato = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const giro = (n, passi) => midi(0xb0, 15 + n, passi > 0 ? passi : 0x40 | -passi);
+  const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
+  await js(`window.cutx.salvaPreferenze({ controller: null })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @sezione intro\ns("sine*2").gain(.0001)\n// @sezione basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @sezione melodia\nnote("c4 e4 g4 b4").s("triangle").gain(.0001)\n';
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano'); cutxProva.cue.attiva(null)`);
+  await aspetta(1);
+  const scelta = () => js(`cutxProva.cue.nomeSezioneScelta()`);
+  const cuffia = await tasto(4);
+  const golive = await tasto(5);
+  await midi(0x90, cuffia, 127); // tengo «cuffia»
+  await giro(3, 1);
+  controlla('«cuffia» tenuto + manopola: scorro le sezioni (la prima è «intro»)', (await scelta()) === 'intro', String(await scelta()));
+  await giro(7, 1);
+  controlla('una manopola qualsiasi: la sezione dopo («basso»)', (await scelta()) === 'basso', String(await scelta()));
+  controlla('la sezione scelta si vede chiaramente nel CUE (bordo chiaro)', (await js(`document.querySelector('#carte .card.sezione.attiva .nome-sezione')?.textContent`)).includes('basso'));
+  await aspetta(0.3);
+  controlla('e nello specchio compare «CUE · basso»', /CUE · basso/.test(await js(`document.querySelector('#specchio .spec-info')?.textContent ?? ''`)), await js(`document.querySelector('#specchio .spec-info')?.textContent`));
+  controlla('mentre scorro non parte niente in cuffia', !(await cuffiaStato())?.codice);
+  await aspetta(1.3);
+  const cs = await cuffiaStato();
+  controlla('fermo mezzo secondo: quella sezione parte in cuffia', !!cs?.codice && /c2 c2 eb2 g2/.test(cs.codice) && cs.nome === 'basso', JSON.stringify([cs?.nome, cs?.codice?.slice(0, 30)]));
+  await giro(1, 1);
+  await midi(0x90, cuffia, 0); // lascio «cuffia»
+  controlla('lascio «cuffia»: la sezione resta scelta (melodia) e la cuffia non si toglie', (await scelta()) === 'melodia' || (await scelta()) === 'basso');
+  await aspetta(1.3);
+  await midi(0x90, golive, 127);
+  await midi(0x90, golive, 0);
+  await aspetta(3);
+  const nomi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome);
+  const attesa = await scelta();
+  controlla('GO LIVE manda la sezione scelta', nomi.length === 1 && nomi[0] === attesa, JSON.stringify({ nomi, attesa }));
+  // brano successivo / precedente
+  const n = await js('cutxProva.libreria().length');
+  if (n >= 2) {
+    await midi(0x90, cuffia, 127);
+    await midi(0x90, await tasto(2), 127); // ▶: da un brano che non è in libreria, il primo
+    await midi(0x90, await tasto(2), 0);
+    await aspetta(1.5);
+    const primo = await js('cutxProva.cue.brano?.file');
+    controlla('«cuffia» tenuto + ▶: un brano della libreria si carica nel CUE', !!primo && primo !== 'notte.cutx', String(primo));
+    await midi(0x90, await tasto(2), 127); // ▶ ancora: il successivo
+    await midi(0x90, await tasto(2), 0);
+    await aspetta(1.5);
+    const secondo = await js('cutxProva.cue.brano?.file');
+    controlla('▶ ancora: il brano dopo', !!secondo && secondo !== primo, JSON.stringify([primo, secondo]));
+    await midi(0x90, await tasto(1), 127); // ◀
+    await midi(0x90, await tasto(1), 0);
+    await aspetta(1.5);
+    controlla('◀: torna al precedente', (await js('cutxProva.cue.brano?.file')) === primo, String(await js('cutxProva.cue.brano?.file')));
+    await midi(0x90, cuffia, 0);
+  } else scrivi(`INFO  libreria con ${n} brano: la prova del brano successivo/precedente non si fa (la logica è nei test)`);
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
 
 // --- le card live si compattano da sole quando i livelli non ci stanno: 8 livelli a 1280x800 e 1440x900, tutti visibili senza scorrere (npx electron . --prova=compatte) ---
 async function provaCompatte({ finestre, scrivi }) {
