@@ -335,7 +335,7 @@ test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, si sfogl
   assert.equal(log.filter((x) => x[0] === 'cuffia').length, 2, 'un altro tocco smette');
 });
 
-test('«cuffia» tenuto + ◀ ▶ momento: brano precedente e successivo della libreria', async () => {
+test('«cuffia» tenuto + ◀ ▶ scena: brano precedente e successivo della libreria', async () => {
   const { c, log, azioni } = prova([]);
   const brani = ['alba', 'notte', 'zenit'];
   let i = 1;
@@ -360,25 +360,25 @@ test('«cuffia» tenuto + ◀ ▶ momento: brano precedente e successivo della l
   assert.equal(c.toccata.testo, 'CUE · notte');
   c.riceve(tasto(c.tab.tasti[3], false));
   assert.equal(log.filter((x) => x[0] === 'cuffia').length, 0);
-  // senza «cuffia» tenuto, ◀ ▶ sono i momenti della spina (a fine frase); senza spina la scritta dice «niente»
-  c.azioni.momento = async (d) => {
-    log.push(['momento', d]);
-    return d > 0 ? { momento: 'drop' } : null;
+  // senza «cuffia» tenuto, ◀ ▶ sono le scene del beat (a fine frase); senza beat la scritta dice «niente»
+  c.azioni.scena = async (d) => {
+    log.push(['scena', d]);
+    return d > 0 ? { scena: 'drop' } : null;
   };
   c.riceve(tasto(c.tab.tasti[1], true));
   await Promise.resolve();
   await Promise.resolve();
-  assert.deepEqual(log.filter((x) => x[0] === 'momento'), [['momento', 1]]);
-  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'MOMENTO ▶ DROP'));
+  assert.deepEqual(log.filter((x) => x[0] === 'scena'), [['scena', 1]]);
+  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'SCENA ▶ DROP'));
   c.riceve(tasto(c.tab.tasti[0], true));
   await Promise.resolve();
   await Promise.resolve();
-  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'MOMENTO ◀ NIENTE'));
+  assert.ok(log.some((x) => x[0] === 'scritta' && x[1] === 'SCENA ◀ NIENTE'));
 });
 
-test('◀ ▶ sono accesi solo se c\'è un momento in quella direzione', () => {
-  const { c } = prova([L(1, 'spina')]);
-  c.azioni.momentoNome = (d) => (d > 0 ? 'drop' : null);
+test('◀ ▶ sono accesi solo se c\'è una scena in quella direzione', () => {
+  const { c } = prova([L(1, 'beat')]);
+  c.azioni.scenaNome = (d) => (d > 0 ? 'drop' : null);
   const luci = c.desiderate();
   assert.equal(luci.get(`t${c.tab.tasti[1]}`)[2], 127, '▶ acceso');
   assert.equal(luci.get(`t${c.tab.tasti[0]}`)[2], 0, '◀ spento');
@@ -470,7 +470,7 @@ test('i colpi: gli otto del file, nell\'ordine dei tasti 9–16', () => {
   assert.equal(c.tab.tasti[15], 95, 'REC');
 });
 
-test('un colpo «spina» da solo va sulla spina (il livello 1), entra sulla griglia e al rilascio torna com\'era', () => {
+test('un colpo «beat» da solo va sul beat (il livello 1), entra sulla griglia e al rilascio torna com\'era', () => {
   const { c, log, avanza, tasti } = conColpi();
   c.riceve(tasto(tasti.doppio, true));
   assert.deepEqual(log.filter((x) => x[0] === 'codaQ'), [['codaQ', 1, '.fast(2)', 0.25]]);
@@ -491,7 +491,7 @@ test('un colpo che sostituisce una riga già in coda la rimette com\'era al rila
   assert.equal(log.filter((x) => x[0] === 'togliQ').length, 0);
 });
 
-test('con la manopola di un pezzo tenuta premuta il colpo va su quel pezzo (più manopole: tutti) e il muto non scatta', () => {
+test('con la manopola di una clip tenuta premuta il colpo va su quella clip (più manopole: tutti) e il muto non scatta', () => {
   const { c, log, avanza, tasti } = conColpi();
   c.riceve(push(3, true));
   c.riceve(tasto(tasti.indietro, true));
@@ -625,11 +625,11 @@ test('stop: di default torna sull\'1 della battuta (griglia 1 ciclo); con l\'opz
   assert.deepEqual(v.log.filter((x) => x[0] === 'globale').at(-1).slice(2), [null, 1]);
 });
 
-test('i colpi vanno sul livello selezionato (bordo verde); senza selezione, sulla spina; stop, sale ed eco restano su tutto', () => {
+test('i colpi vanno sul livello selezionato (bordo verde); senza selezione, sul beat; stop, sale ed eco restano su tutto', () => {
   const { c, log, tasti, azioni, avanza } = conColpi();
   c.riceve(tasto(tasti.mezzo, true));
   c.riceve(tasto(tasti.mezzo, false));
-  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 1, 'niente selezionato: la spina (il primo)');
+  assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 1, 'niente selezionato: il beat (il primo)');
   azioni.seleziona(3); // un clic su una card, o ⌃3
   c.riceve(tasto(tasti.doppio, true));
   assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 3, 'selezionato: va sul pad');
@@ -644,15 +644,15 @@ test('i colpi vanno sul livello selezionato (bordo verde); senza selezione, sull
   assert.equal(log.filter((x) => x[0] === 'codaQ').at(-1)[1], 2);
 });
 
-test('la spina sta sempre sulla manopola 1 (e sul tasto-livello 1 in pagina B); senza spina la manopola 1 resta libera', () => {
-  const spina = L(9, 'spina');
-  const pezzi = [L(1, 'basso'), L(2, 'pad')];
+test('il beat sta sempre sulla manopola 1 (e sul tasto-livello 1 in pagina B); senza beat la manopola 1 resta libera', () => {
+  const beat = L(9, 'beat');
+  const clip = [L(1, 'basso'), L(2, 'pad')];
   const { c } = prova([]);
-  c.azioni.posti = () => [spina, pezzi[0], pezzi[1], null, null, null, null];
-  assert.equal(c.livello(1).nome, 'spina');
+  c.azioni.posti = () => [beat, clip[0], clip[1], null, null, null, null];
+  assert.equal(c.livello(1).nome, 'beat');
   assert.equal(c.livello(3).nome, 'pad');
-  assert.equal(c.manopole()[0].nome, 'spina');
-  c.azioni.posti = () => [null, pezzi[0], pezzi[1], null, null, null, null];
+  assert.equal(c.manopole()[0].nome, 'beat');
+  c.azioni.posti = () => [null, clip[0], clip[1], null, null, null, null];
   assert.equal(c.livello(1), null);
   assert.equal(c.manopole()[0], null, 'anello spento');
   assert.equal(c.manopole()[1].nome, 'basso');

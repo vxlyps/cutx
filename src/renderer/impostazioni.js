@@ -261,7 +261,7 @@ export class Impostazioni {
       voce('commenti', 'commenti // nel codice', 'acceso: il pubblico legge anche le righe di commento', { testo: false }),
       voce('preambolo', 'preambolo del brano', 'acceso: si vedono le righe sopra la sezione (setcpm del brano…). Spento: solo sul mio schermo. Un setcpm scritto dal vivo si vede sempre', { testo: false }),
       voce('controller', 'scritta del controller', 'fase 4: la scritta grande di quello che tocco'),
-      voce('momento', 'nome del momento', 'fase 4: intro, drop… della spina'),
+      voce('scena', 'nome della scena', 'fase 4: intro, drop… del beat'),
       (() => {
         const r = crea('div', 'imp-riga');
         const t = crea('div', 'imp-testo');

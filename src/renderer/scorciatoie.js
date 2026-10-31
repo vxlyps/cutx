@@ -22,7 +22,7 @@ export const AZIONI = [
   { id: 'impostazioni', nome: 'impostazioni', predefinita: 'Meta+Comma' },
   { id: 'salva', nome: 'salva il brano', predefinita: 'Meta+KeyS' },
   { id: 'salvaLive', nome: 'salva il live come brano', predefinita: 'Shift+Meta+KeyS' },
-  { id: 'aggiungiSezione', nome: '+ sezione dalle righe selezionate', predefinita: 'Meta+KeyE' },
+  { id: 'aggiungiSezione', nome: '+ clip dalle righe selezionate', predefinita: 'Meta+KeyE' },
   { id: 'fraseDaCapo', nome: 'frase da capo al prossimo ciclo', predefinita: 'Meta+Digit0' },
   { id: 'paracadute', nome: 'paracadute (due volte di fila)', predefinita: 'Meta+KeyP' },
   { id: 'uscitaIntera', nome: 'apri / chiudi l\'uscita', predefinita: 'Ctrl+Meta+KeyF' },

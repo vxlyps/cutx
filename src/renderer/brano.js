@@ -7,16 +7,16 @@
 //   // @suoni jungle_break, voce ┘
 //   // Una descrizione, se c'è: i commenti subito sotto la testa stanno con la testa
 //   setcpm(140/4)                ← preambolo: valutato con ogni sezione
-//   // @spina                    ← la base ritmica, con i suoi momenti (opzionale, una sola; i brani senza @spina vanno come sempre)
-//   // @momento intro            ← ogni momento è una versione del codice della spina
+//   // @beat                     ← la base ritmica, con le sue scene (opzionale, uno solo; i brani senza @beat vanno come sempre)
+//   // @scena intro              ← ogni scena è una versione del codice del beat
 //   s("bd*4")
-//   // @momento drop
+//   // @scena drop
 //   s("bd*4, hh*8")
-//   // @pezzo basso · volume 0.8 ← da qui un pezzo (@sezione è lo stesso), fino al prossimo
-//   // @sezione intro            ← da qui una sezione, fino alla prossima
-//   s("bd*4")
-//   // @sezione basso · volume 0.8 · muto   ← informazioni della sezione (dal live)
+//   // @clip basso · volume 0.8 · muto   ← da qui una clip, fino alla prossima (informazioni della clip, dal live)
 //   note("c1*8").s("supersaw")
+//
+// I nomi vecchi (@spina, @momento, @pezzo, @sezione) si leggono ancora; CUTX scrive sempre quelli nuovi (aggiornaTag).
+// Internamente le clip si chiamano ancora «sezioni» (modello.sezioni, blocchi, B.codice…).
 //
 // Il brano si tiene riga per riga, così com'è: riscriverlo dà esattamente il testo di partenza.
 // Le funzioni qui non toccano niente fuori: prendono un brano e ne restituiscono uno nuovo.
@@ -26,23 +26,24 @@ import { unisci as unisciCoda } from './coda.js';
 export const NOMI_SEZIONE = ['intro', 'drum', 'basso', 'melodia', 'break', 'drop', 'outro'];
 
 const TESTA = /^\/\/ @(brano|bpm|data|origine|suoni)(?:\s+(.*))?$/;
-const SEZIONE = /^\s*\/\/\s*@(?:sezione|pezzo)\b\s*(.*)$/;
-const SPINA = /^\s*\/\/\s*@spina\b\s*(.*)$/;
-const MOMENTO = /^\s*\/\/\s*@momento\b\s*(.*)$/;
+// i nomi nuovi sono @beat, @scena, @clip; i vecchi (@spina, @momento, @pezzo, @sezione) si leggono ancora
+const SEZIONE = /^\s*\/\/\s*@(?:clip|sezione|pezzo)\b\s*(.*)$/;
+const BEAT = /^\s*\/\/\s*@(?:beat|spina)\b\s*(.*)$/;
+const SCENA = /^\s*\/\/\s*@(?:scena|momento)\b\s*(.*)$/;
 // Un commento (anche "//" da solo): quelli subito sotto la testa sono la descrizione del brano, fanno parte della testa.
 const COMMENTO = /^\s*\/\//;
 const ORDINE_TESTA = ['brano', 'bpm', 'data', 'origine', 'suoni'];
 const SEP = ' · ';
 
 export const eSezione = (riga) => SEZIONE.test(riga);
-export const eSpina = (riga) => SPINA.test(riga);
-export const eMomento = (riga) => MOMENTO.test(riga);
+export const eBeat = (riga) => BEAT.test(riga);
+export const eScena = (riga) => SCENA.test(riga);
 // l'inizio di qualsiasi blocco del brano dopo il preambolo
-const eInizioBlocco = (riga) => eSezione(riga) || eSpina(riga);
+const eInizioBlocco = (riga) => eSezione(riga) || eBeat(riga);
 
 // "intro · volume 0.8 · muto" → { nome: 'intro', info: { volume: 0.8, muto: true } }
 export function leggiRigaSezione(riga) {
-  const resto = (riga.match(SEZIONE) ?? riga.match(MOMENTO) ?? riga.match(SPINA))?.[1]?.trim() ?? '';
+  const resto = (riga.match(SEZIONE) ?? riga.match(SCENA) ?? riga.match(BEAT))?.[1]?.trim() ?? '';
   const [nome, ...pezzi] = resto.split(/\s+·\s+/);
   const info = {};
   for (const p of pezzi) {
@@ -58,7 +59,7 @@ export function rigaSezione(nome, info = {}) {
   const pezzi = Object.entries(info)
     .filter(([, v]) => v !== false && v !== undefined && v !== null)
     .map(([k, v]) => (v === true ? k : `${k} ${v}`));
-  return `// @sezione ${[nome, ...pezzi].join(SEP)}`;
+  return `// @clip ${[nome, ...pezzi].join(SEP)}`;
 }
 
 // --- leggere e scrivere ---
@@ -73,16 +74,16 @@ export function leggi(testo) {
   if (testa.length) while (i < righe.length && COMMENTO.test(righe[i]) && !eSezione(righe[i])) testa.push(righe[i++]);
   const preambolo = [];
   while (i < righe.length && !eInizioBlocco(righe[i])) preambolo.push(righe[i++]);
-  // la spina: la base ritmica con i suoi momenti (opzionale)
-  let spina = null;
-  if (i < righe.length && eSpina(righe[i])) {
-    spina = { riga: righe[i++], intro: [], momenti: [] };
-    while (i < righe.length && !eSezione(righe[i]) && !eMomento(righe[i])) spina.intro.push(righe[i++]);
-    while (i < righe.length && eMomento(righe[i])) {
+  // il beat: la base ritmica con le sue scene (opzionale)
+  let beat = null;
+  if (i < righe.length && eBeat(righe[i])) {
+    beat = { riga: righe[i++], intro: [], scene: [] };
+    while (i < righe.length && !eSezione(righe[i]) && !eScena(righe[i])) beat.intro.push(righe[i++]);
+    while (i < righe.length && eScena(righe[i])) {
       const riga = righe[i++];
       const corpo = [];
-      while (i < righe.length && !eSezione(righe[i]) && !eMomento(righe[i])) corpo.push(righe[i++]);
-      spina.momenti.push({ riga, ...leggiRigaSezione(riga), corpo });
+      while (i < righe.length && !eSezione(righe[i]) && !eScena(righe[i])) corpo.push(righe[i++]);
+      beat.scene.push({ riga, ...leggiRigaSezione(riga), corpo });
     }
   }
   const sezioni = [];
@@ -92,12 +93,20 @@ export function leggi(testo) {
     while (i < righe.length && !eSezione(righe[i])) corpo.push(righe[i++]);
     sezioni.push({ riga, ...leggiRigaSezione(riga), corpo });
   }
-  return { testa, preambolo, spina, sezioni };
+  return { testa, preambolo, beat, sezioni };
 }
 
 export function scrivi(brano) {
-  const spina = brano.spina ? [brano.spina.riga, ...brano.spina.intro, ...brano.spina.momenti.flatMap((m) => [m.riga, ...m.corpo])] : [];
-  return [...brano.testa, ...brano.preambolo, ...spina, ...brano.sezioni.flatMap((s) => [s.riga, ...s.corpo])].join('\n');
+  const beat = brano.beat ? [brano.beat.riga, ...brano.beat.intro, ...brano.beat.scene.flatMap((m) => [m.riga, ...m.corpo])] : [];
+  return [...brano.testa, ...brano.preambolo, ...beat, ...brano.sezioni.flatMap((s) => [s.riga, ...s.corpo])].join('\n');
+}
+
+// Un testo con i tag vecchi → gli stessi con i nomi nuovi (@spina → @beat, @momento → @scena, @pezzo e @sezione → @clip); il resto non si tocca.
+export function aggiornaTag(testo) {
+  return String(testo)
+    .split('\n')
+    .map((r) => r.replace(/^(\s*\/\/\s*)@(spina)\b/, '$1@beat').replace(/^(\s*\/\/\s*)@momento\b/, '$1@scena').replace(/^(\s*\/\/\s*)@(pezzo|sezione)\b/, '$1@clip'))
+    .join('\n');
 }
 
 // I valori della testa: { brano, bpm, data, origine, suoni: [] }
@@ -164,33 +173,33 @@ export function codice(brano, i, righe = null) {
   return { codice: pre ? `${pre}\n${corpo}` : corpo, inizio };
 }
 
-// --- la spina e i suoi momenti ---
+// --- il beat e le sue scene ---
 
-export const haSpina = (brano) => !!brano.spina?.momenti.length;
+export const haBeat = (brano) => !!brano.beat?.scene.length;
 
-// Il codice di un momento: preambolo + le righe del momento (o solo quelle scelte), come per una sezione.
-export function codiceMomento(brano, k, righe = null) {
+// Il codice di una scena: preambolo + le righe della scena (o solo quelle scelte), come per una sezione.
+export function codiceScena(brano, k, righe = null) {
   const pre = brano.preambolo.join('\n');
-  const corpo = (righe ?? brano.spina.momenti[k].corpo).join('\n');
+  const corpo = (righe ?? brano.beat.scene[k].corpo).join('\n');
   return { codice: pre ? `${pre}\n${corpo}` : corpo, inizio: pre ? pre.length + 1 : 0 };
 }
 
-const conMomenti = (brano, momenti) => ({ ...brano, spina: { ...(brano.spina ?? { riga: '// @spina', intro: [] }), momenti } });
+const conScene = (brano, scene) => ({ ...brano, beat: { ...(brano.beat ?? { riga: '// @beat', intro: [] }), scene } });
 
-export const conCorpoMomento = (brano, k, corpo) => conMomenti(brano, brano.spina.momenti.map((m, j) => (j === k ? { ...m, corpo } : m)));
+export const conCorpoScena = (brano, k, corpo) => conScene(brano, brano.beat.scene.map((m, j) => (j === k ? { ...m, corpo } : m)));
 
-export const rinominaMomento = (brano, k, nome) =>
-  conMomenti(brano, brano.spina.momenti.map((m, j) => (j === k ? { ...m, nome, riga: rigaMomento(nome, m.info) } : m)));
+export const rinominaScena = (brano, k, nome) =>
+  conScene(brano, brano.beat.scene.map((m, j) => (j === k ? { ...m, nome, riga: rigaScena(nome, m.info) } : m)));
 
-export const rigaMomento = (nome, info = {}) => rigaSezione(nome, info).replace('// @sezione', '// @momento');
+export const rigaScena = (nome, info = {}) => rigaSezione(nome, info).replace('// @clip', '// @scena');
 
 // Un momento nuovo in fondo alla spina (e la spina, se non c'era).
-export const aggiungiMomento = (brano, nome, corpo = []) =>
-  conMomenti(brano, [...(brano.spina?.momenti ?? []), { riga: rigaMomento(nome), nome, info: {}, corpo }]);
+export const aggiungiScena = (brano, nome, corpo = []) =>
+  conScene(brano, [...(brano.beat?.scene ?? []), { riga: rigaScena(nome), nome, info: {}, corpo }]);
 
-export function togliMomento(brano, k) {
-  const momenti = brano.spina.momenti.filter((_, j) => j !== k);
-  return momenti.length ? conMomenti(brano, momenti) : { ...brano, spina: null };
+export function togliScena(brano, k) {
+  const scene = brano.beat.scene.filter((_, j) => j !== k);
+  return scene.length ? conScene(brano, scene) : { ...brano, beat: null };
 }
 
 // --- operazioni sulle sezioni ---
@@ -261,12 +270,12 @@ export function blocchi(testo) {
   let riga = b.testa.length;
   out.push({ sezione: -1, nome: null, testa: null, da: riga, a: riga + b.preambolo.length });
   riga += b.preambolo.length;
-  if (b.spina) {
-    // la spina: l'intestazione (sezione −3) e ogni momento (sezione −2, con `momento` = il suo indice)
-    out.push({ sezione: -3, nome: null, testa: riga, da: riga + 1, a: riga + 1 + b.spina.intro.length });
-    riga += 1 + b.spina.intro.length;
-    b.spina.momenti.forEach((m, k) => {
-      out.push({ sezione: -2, momento: k, nome: m.nome, info: m.info, testa: riga, da: riga + 1, a: riga + 1 + m.corpo.length });
+  if (b.beat) {
+    // il beat: l'intestazione (sezione −3) e ogni scena (sezione −2, con `scena` = il suo indice)
+    out.push({ sezione: -3, nome: null, testa: riga, da: riga + 1, a: riga + 1 + b.beat.intro.length });
+    riga += 1 + b.beat.intro.length;
+    b.beat.scene.forEach((m, k) => {
+      out.push({ sezione: -2, scena: k, nome: m.nome, info: m.info, testa: riga, da: riga + 1, a: riga + 1 + m.corpo.length });
       riga += 1 + m.corpo.length;
     });
   }
@@ -286,15 +295,15 @@ export function bloccoDellaRiga(testo, n) {
 // "+ sezione": le righe da..a (comprese, contate da 0) diventano la sezione `nome`.
 // Se stanno in mezzo a un blocco, le righe scelte si spostano subito dopo quel blocco,
 // così quelle di prima e di dopo restano dov'erano. Ritorna { testo, riga } dove riga è la
-// nuova riga @sezione, oppure { errore } se la selezione attraversa più sezioni.
+// nuova riga @sezione, oppure { errore } se la selezione attraversa più clip.
 export function aggiungiSezione(testo, da, a, nome) {
   const righe = testo.split('\n');
   const { blocchi: bl } = blocchi(testo);
-  if (da < bl[0].da) return { errore: 'la testa del brano non può diventare una sezione' };
+  if (da < bl[0].da) return { errore: 'la testa del brano non può diventare una clip' };
   const blocco = bloccoDellaRiga(testo, da);
-  if (blocco.sezione <= -2) return { errore: 'la spina non si divide in sezioni: i momenti si scrivono con // @momento' };
-  if (blocco.testa === da) return { errore: 'parti da una riga sotto il nome della sezione' };
-  if (a >= blocco.a) return { errore: 'la selezione attraversa più sezioni' };
+  if (blocco.sezione <= -2) return { errore: 'il beat non si divide in clip: le scene si scrivono con // @scena' };
+  if (blocco.testa === da) return { errore: 'parti da una riga sotto il nome della clip' };
+  if (a >= blocco.a) return { errore: 'la selezione attraversa più clip' };
   const scelte = righe.slice(da, a + 1);
   // Tutto il corpo di una sezione: basta rinominarla.
   if (blocco.sezione >= 0 && da === blocco.da && a === blocco.a - 1) {
@@ -314,16 +323,16 @@ export function aggiungiSezione(testo, da, a, nome) {
 // che vengono dal brano da cui erano partiti, si tolgono: non devono contraddirlo.
 export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
   const visti = new Map();
-  // la spina live (un livello con `momento`): si salva come @spina con il momento che suona adesso
-  const laSpina = livelli.find((l) => l.spina);
-  const spina = laSpina
+  // il beat live (un livello con `scena`): si salva come @beat con la scena che suona adesso
+  const laBeat = livelli.find((l) => l.beat);
+  const beat = laBeat
     ? {
-        riga: '// @spina',
+        riga: '// @beat',
         intro: [],
-        momenti: [{ riga: rigaMomento(laSpina.momento?.nome ?? 'momento'), nome: laSpina.momento?.nome ?? 'momento', info: {}, corpo: unisciCoda((bpm ? senzaTempo(laSpina.codice) : laSpina.codice).replace(/\n+$/, ''), laSpina.coda).split('\n') }],
+        scene: [{ riga: rigaScena(laBeat.scena?.nome ?? 'scena'), nome: laBeat.scena?.nome ?? 'scena', info: {}, corpo: unisciCoda((bpm ? senzaTempo(laBeat.codice) : laBeat.codice).replace(/\n+$/, ''), laBeat.coda).split('\n') }],
       }
     : null;
-  const sezioni = livelli.filter((l) => !l.spina).map((l) => {
+  const sezioni = livelli.filter((l) => !l.beat).map((l) => {
     // due livelli con lo stesso nome restano distinti: basso, basso 2…
     visti.set(l.nome, (visti.get(l.nome) ?? 0) + 1);
     const n = visti.get(l.nome) > 1 ? `${l.nome} ${visti.get(l.nome)}` : l.nome;
@@ -332,7 +341,7 @@ export function daLivelli(livelli, { nome, bpm, data, suoni = [] }) {
     if (l.muto) info.muto = true;
     return { riga: rigaSezione(n, info), nome: n, info, corpo: unisciCoda((bpm ? senzaTempo(l.codice) : l.codice).replace(/\n+$/, ''), l.coda).split('\n') };
   });
-  const vuoto = { testa: [], preambolo: bpm ? ['', `setcpm(${bpm}/4)`, ''] : [], spina, sezioni };
+  const vuoto = { testa: [], preambolo: bpm ? ['', `setcpm(${bpm}/4)`, ''] : [], beat, sezioni };
   return scrivi(conTesta(vuoto, { brano: nome, bpm, data, suoni })) + '\n';
 }
 

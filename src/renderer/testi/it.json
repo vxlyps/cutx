@@ -75,17 +75,17 @@
       "testo": "Lo scrive nel CUE, dove sta il cursore."
     },
     "aggiungi-sezione": {
-      "nome": "+ sezione",
-      "testo": "Le righe selezionate diventano una sezione del brano, col nome che scegli.",
+      "nome": "+ clip",
+      "testo": "Le righe selezionate diventano una clip del brano, col nome che scegli.",
       "azione": "aggiungiSezione"
     },
     "modo-brano": {
       "nome": "brano",
-      "testo": "Il brano aperto dalla libreria: mappa in alto, una card per sezione."
+      "testo": "Il brano aperto dalla libreria: mappa in alto, una card per clip."
     },
     "modo-libero": {
       "nome": "scratch",
-      "testo": "Un editor libero per scrivere da zero. Le righe // @sezione lo dividono in sezioni."
+      "testo": "Un editor libero per scrivere da zero. Le righe // @clip lo dividono in clip."
     },
     "globali": {
       "nome": "righe globali",
@@ -120,7 +120,7 @@
     },
     "sezione-volume": {
       "nome": "volume d'ingresso",
-      "testo": "Il volume con cui la sezione entra nel live: clic o trascina. Si scrive nell'intestazione @sezione, quindi resta nel brano."
+      "testo": "Il volume con cui la clip entra nel live: clic o trascina. Si scrive nell'intestazione @clip, quindi resta nel brano."
     },
     "entra-1": {
       "nome": "entra tra 1 ciclo",
@@ -170,12 +170,12 @@
       "testo": "Clic e scrivi: il live suona la versione di prima finché non applichi con ⌘↵ al ciclo dopo. Esc annulla."
     },
     "mappa-sezione": {
-      "nome": "sezione",
-      "testo": "Clic: vai alla sezione. Doppio clic: rinomina. Trascina per spostarla."
+      "nome": "clip",
+      "testo": "Clic: vai alla clip. Doppio clic: rinomina. Trascina per spostarla."
     },
     "rinomina": {
       "nome": "rinomina",
-      "testo": "Cambia il nome della sezione."
+      "testo": "Cambia il nome della clip."
     },
     "scheda-ableton": {
       "nome": "ableton",
@@ -270,7 +270,7 @@
       "tracce",
       "importa"
     ],
-    "cosaSuccede": "CUTX legge il progetto e non lo modifica mai. Ogni traccia diventa una o più sezioni di un brano: una per ogni clip diversa, nell'ordine in cui compaiono nell'arrangiamento. Le note MIDI diventano codice con un synth di CUTX; l'audio suona dai file originali, che si copiano nello stash.",
+    "cosaSuccede": "CUTX legge il progetto e non lo modifica mai. Ogni traccia diventa una o più clip di un brano: una per ogni clip diversa, nell'ordine in cui compaiono nell'arrangiamento. Le note MIDI diventano codice con un synth di CUTX; l'audio suona dai file originali, che si copiano nello stash.",
     "modoCodice": "synth di CUTX (le note, modificabili)",
     "modoAudio": "audio di Ableton (il suono originale)",
     "effettoCodice": "Le note diventano codice Strudel col synth «{synth}»: lo puoi modificare e suonarci sopra dal vivo.",
@@ -278,8 +278,8 @@
     "effettoAudio": "Suona i file audio del progetto, ritagliati dove stanno nelle clip. Niente codice delle note: è l'audio originale.",
     "effettoStem": "Suona lo stem «{stem}»: ogni sezione è il suo pezzo, contando dalla battuta {battuta} dello stem.",
     "effettoSenzaStem": "Scegli lo stem che hai esportato da Ableton: finché non lo scegli, la traccia resta col synth di CUTX.",
-    "intro3": "le sezioni sono nell'ordine dell'arrangiamento",
-    "creato": "creato il brano «{titolo}»: {sezioni} sezioni, {suoni} suoni copiati, aperto nel CUE"
+    "intro3": "le clip sono nell'ordine dell'arrangiamento",
+    "creato": "creato il brano «{titolo}»: {sezioni} clip, {suoni} suoni copiati, aperto nel CUE"
   },
   "ableton": {
     "vuota": "Porta in CUTX i tuoi progetti Ableton: scegli la cartella dove li tieni e li trovi qui, pronti da importare come brani."

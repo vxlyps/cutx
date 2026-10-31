@@ -78,9 +78,9 @@ test('rinomina, unisci, dividi, sposta: niente si perde e il file resta valido',
 
   b = B.rinomina(b, 0, 'cassa');
   assert.equal(b.sezioni[0].nome, 'cassa');
-  assert.equal(b.sezioni[0].riga, '// @sezione cassa');
+  assert.equal(b.sezioni[0].riga, '// @clip cassa');
   b = B.rinomina(b, 2, 'drop forte');
-  assert.equal(b.sezioni[2].riga, '// @sezione drop forte · volume 0.8 · muto');
+  assert.equal(b.sezioni[2].riga, '// @clip drop forte · volume 0.8 · muto');
 
   b = B.sposta(b, 2, 0);
   assert.deepEqual(
@@ -121,17 +121,17 @@ test('+ sezione dalle righe scelte', () => {
   const t = 'setcpm(1)\ns("a")\ns("b")\n// @sezione x\ns("c")\ns("d")\ns("e")';
   // in mezzo al preambolo: le righe scelte vanno subito dopo, prima di x
   let r = B.aggiungiSezione(t, 1, 1, 'drum');
-  assert.equal(r.testo, 'setcpm(1)\ns("b")\n// @sezione drum\ns("a")\n// @sezione x\ns("c")\ns("d")\ns("e")');
+  assert.equal(r.testo, 'setcpm(1)\ns("b")\n// @clip drum\ns("a")\n// @sezione x\ns("c")\ns("d")\ns("e")');
   assert.equal(r.riga, 2);
   // in mezzo a una sezione: x tiene c ed e, d diventa basso subito dopo
   r = B.aggiungiSezione(t, 5, 5, 'basso');
-  assert.equal(r.testo, 'setcpm(1)\ns("a")\ns("b")\n// @sezione x\ns("c")\ns("e")\n// @sezione basso\ns("d")');
+  assert.equal(r.testo, 'setcpm(1)\ns("a")\ns("b")\n// @sezione x\ns("c")\ns("e")\n// @clip basso\ns("d")');
   // in fondo a una sezione: niente si sposta
   r = B.aggiungiSezione(t, 5, 6, 'basso');
-  assert.equal(r.testo, 'setcpm(1)\ns("a")\ns("b")\n// @sezione x\ns("c")\n// @sezione basso\ns("d")\ns("e")');
+  assert.equal(r.testo, 'setcpm(1)\ns("a")\ns("b")\n// @sezione x\ns("c")\n// @clip basso\ns("d")\ns("e")');
   // tutta la sezione: si rinomina
   r = B.aggiungiSezione(t, 4, 6, 'intro');
-  assert.equal(r.testo, 'setcpm(1)\ns("a")\ns("b")\n// @sezione intro\ns("c")\ns("d")\ns("e")');
+  assert.equal(r.testo, 'setcpm(1)\ns("a")\ns("b")\n// @clip intro\ns("c")\ns("d")\ns("e")');
   // attraverso due blocchi: no
   assert.ok(B.aggiungiSezione(t, 2, 4, 'no').errore);
   // la riga @sezione stessa: no
@@ -274,16 +274,16 @@ test('una riga // @sezione dopo la testa non è una descrizione', () => {
   assert.equal(b.sezioni.length, 1);
 });
 
-// --- la spina e i momenti ---
-const CON_SPINA = `// @brano notte
+// --- il beat e le scene ---
+const CON_BEAT = `// @brano notte
 // @bpm 120
 
 setcpm(120/4)
 
-// @spina
-// @momento intro
+// @beat
+// @scena intro
 s("bd*2")
-// @momento drop
+// @scena drop
 s("bd*4, hh*8")
 // @pezzo reese · volume 0.6
 note("c2").s("sawtooth")
@@ -291,57 +291,70 @@ note("c2").s("sawtooth")
 note("c3").s("sine")
 `;
 
-test('un brano con spina: i momenti si leggono e si riscrivono identici', () => {
-  const b = B.leggi(CON_SPINA);
-  assert.equal(b.spina.momenti.length, 2);
-  assert.deepEqual(b.spina.momenti.map((m) => m.nome), ['intro', 'drop']);
-  assert.deepEqual(b.spina.momenti[1].corpo, ['s("bd*4, hh*8")']);
+test('un brano con beat: le scene si leggono e si riscrivono identici', () => {
+  const b = B.leggi(CON_BEAT);
+  assert.equal(b.beat.scene.length, 2);
+  assert.deepEqual(b.beat.scene.map((m) => m.nome), ['intro', 'drop']);
+  assert.deepEqual(b.beat.scene[1].corpo, ['s("bd*4, hh*8")']);
   assert.deepEqual(b.sezioni.map((s) => s.nome), ['reese', 'pad'], '@pezzo e @sezione sono la stessa cosa');
   assert.equal(b.sezioni[0].info.volume, 0.6);
-  assert.equal(B.scrivi(b), CON_SPINA);
-  assert.ok(B.haSpina(b));
+  assert.equal(B.scrivi(b), CON_BEAT);
+  assert.ok(B.haBeat(b));
 });
 
-test('un brano senza spina va come sempre (tutto è un pezzo)', () => {
+test('un brano senza beat va come sempre (tutto è un pezzo)', () => {
   const b = B.leggi('// @brano x\nsetcpm(120/4)\n// @sezione uno\ns("bd")\n');
-  assert.equal(b.spina, null);
+  assert.equal(b.beat, null);
   assert.equal(b.sezioni.length, 1);
-  assert.equal(B.haSpina(b), false);
+  assert.equal(B.haBeat(b), false);
   assert.equal(B.scrivi(b), '// @brano x\nsetcpm(120/4)\n// @sezione uno\ns("bd")\n');
 });
 
-test('il codice di un momento è preambolo + le sue righe, e i blocchi del testo includono la spina', () => {
-  const b = B.leggi(CON_SPINA);
-  const c = B.codiceMomento(b, 1);
+test('il codice di una scena è preambolo + le sue righe, e i blocchi del testo includono il beat', () => {
+  const b = B.leggi(CON_BEAT);
+  const c = B.codiceScena(b, 1);
   assert.equal(c.codice, `${b.preambolo.join('\n')}\ns("bd*4, hh*8")`);
   assert.equal(c.codice.slice(c.inizio), 's("bd*4, hh*8")');
-  const { blocchi } = B.blocchi(CON_SPINA);
-  assert.deepEqual(blocchi.map((x) => [x.sezione, x.momento ?? null, x.nome]), [[-1, null, null], [-3, null, null], [-2, 0, 'intro'], [-2, 1, 'drop'], [0, null, 'reese'], [1, null, 'pad']]);
-  const righe = CON_SPINA.split('\n');
+  const { blocchi } = B.blocchi(CON_BEAT);
+  assert.deepEqual(blocchi.map((x) => [x.sezione, x.scena ?? null, x.nome]), [[-1, null, null], [-3, null, null], [-2, 0, 'intro'], [-2, 1, 'drop'], [0, null, 'reese'], [1, null, 'pad']]);
+  const righe = CON_BEAT.split('\n');
   const dropRiga = righe.indexOf('s("bd*4, hh*8")');
-  assert.equal(B.bloccoDellaRiga(CON_SPINA, dropRiga).momento, 1);
-  assert.equal(B.bloccoDellaRiga(CON_SPINA, righe.indexOf('note("c2").s("sawtooth")')).sezione, 0);
+  assert.equal(B.bloccoDellaRiga(CON_BEAT, dropRiga).scena, 1);
+  assert.equal(B.bloccoDellaRiga(CON_BEAT, righe.indexOf('note("c2").s("sawtooth")')).sezione, 0);
 });
 
-test('aggiungere, rinominare, cambiare e togliere momenti (e la spina nasce se manca)', () => {
+test('aggiungere, rinominare, cambiare e togliere scene (e il beat nasce se manca)', () => {
   let b = B.leggi('// @brano x\n// @sezione uno\ns("bd")\n');
-  b = B.aggiungiMomento(b, 'intro', ['s("bd*2")']);
-  assert.equal(B.scrivi(b), '// @brano x\n// @spina\n// @momento intro\ns("bd*2")\n// @sezione uno\ns("bd")\n');
-  b = B.aggiungiMomento(b, 'drop', ['s("bd*4")']);
-  b = B.rinominaMomento(b, 0, 'inizio');
-  b = B.conCorpoMomento(b, 1, ['s("bd*8")']);
-  assert.match(B.scrivi(b), /@momento inizio\ns\("bd\*2"\)\n\/\/ @momento drop\ns\("bd\*8"\)\n\/\/ @sezione uno/);
-  b = B.togliMomento(B.togliMomento(b, 0), 0);
-  assert.equal(b.spina, null, 'senza momenti la spina sparisce');
+  b = B.aggiungiScena(b, 'intro', ['s("bd*2")']);
+  assert.equal(B.scrivi(b), '// @brano x\n// @beat\n// @scena intro\ns("bd*2")\n// @sezione uno\ns("bd")\n');
+  b = B.aggiungiScena(b, 'drop', ['s("bd*4")']);
+  b = B.rinominaScena(b, 0, 'inizio');
+  b = B.conCorpoScena(b, 1, ['s("bd*8")']);
+  assert.match(B.scrivi(b), /@scena inizio\ns\("bd\*2"\)\n\/\/ @scena drop\ns\("bd\*8"\)\n\/\/ @sezione uno/);
+  b = B.togliScena(B.togliScena(b, 0), 0);
+  assert.equal(b.beat, null, 'senza scene il beat sparisce');
 });
 
-test('salvare il live con una spina: @spina col momento che suona adesso, e i pezzi', () => {
+test('salvare il live con un beat: @beat con la scena che suona adesso, e i pezzi', () => {
   const testo = B.daLivelli(
-    [{ nome: 'spina', spina: true, momento: { nome: 'drop' }, codice: 's("bd*4")', coda: ['.lpf(900)'], volume: 1 }, { nome: 'reese', codice: 'note("c2")', coda: [], volume: 0.6 }],
+    [{ nome: 'beat', beat: true, scena: { nome: 'drop' }, codice: 's("bd*4")', coda: ['.lpf(900)'], volume: 1 }, { nome: 'reese', codice: 'note("c2")', coda: [], volume: 0.6 }],
     { nome: 'live', bpm: 120, data: '2026-11-01' },
   );
   const b = B.leggi(testo);
-  assert.deepEqual(b.spina.momenti.map((m) => m.nome), ['drop']);
-  assert.match(b.spina.momenti[0].corpo.join('\n'), /s\("bd\*4"\)\n\/\/ @coda\n\.lpf\(900\)/);
+  assert.deepEqual(b.beat.scene.map((m) => m.nome), ['drop']);
+  assert.match(b.beat.scene[0].corpo.join('\n'), /s\("bd\*4"\)\n\/\/ @coda\n\.lpf\(900\)/);
   assert.deepEqual(b.sezioni.map((s) => s.nome), ['reese']);
+});
+
+test('i tag vecchi si leggono (@spina, @momento, @pezzo, @sezione) e aggiornaTag li porta ai nomi nuovi', () => {
+  const vecchio = '// @brano x\nsetcpm(1)\n// @spina\n// @momento intro\ns("a")\n// @momento drop\ns("b")\n// @pezzo basso · volume 0.5\nnote("c1")\n// @sezione pad\nnote("c3")\n';
+  const b = B.leggi(vecchio);
+  assert.deepEqual(b.beat.scene.map((m) => m.nome), ['intro', 'drop']);
+  assert.deepEqual(b.sezioni.map((s) => s.nome), ['basso', 'pad']);
+  assert.equal(b.sezioni[0].info.volume, 0.5);
+  assert.equal(B.scrivi(b), vecchio, 'riscritto identico, così com\'è');
+  const nuovo = B.aggiornaTag(vecchio);
+  assert.equal(nuovo, '// @brano x\nsetcpm(1)\n// @beat\n// @scena intro\ns("a")\n// @scena drop\ns("b")\n// @clip basso · volume 0.5\nnote("c1")\n// @clip pad\nnote("c3")\n');
+  assert.equal(B.scrivi(B.leggi(nuovo)), nuovo);
+  assert.equal(B.aggiornaTag(nuovo), nuovo, 'già nuovo: non cambia');
 });

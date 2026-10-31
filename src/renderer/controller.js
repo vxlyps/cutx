@@ -225,7 +225,7 @@ export class Controller {
     return this.livello(this.bersaglio)?.nome ?? `livello ${this.bersaglio}`;
   }
 
-  // I sette posti delle manopole: 1 = la spina (null se non c'è), 2–7 = i pezzi. Senza `posti` (nei test) i livelli vanno uno dopo l'altro.
+  // I sette posti delle manopole: 1 = il beat (null se non c'è), 2–7 = le clip. Senza `posti` (nei test) i livelli vanno uno dopo l'altro.
   posti() {
     return this.azioni.posti ? this.azioni.posti() : Array.from({ length: 7 }, (_, i) => this.azioni.livelli()[i] ?? null);
   }
@@ -269,7 +269,7 @@ export class Controller {
   scorriCue(passi) {
     this.cuffiaTenuta.usato = true;
     const nome = this.azioni.cueSposta?.(Math.sign(passi) * Math.min(3, Math.abs(passi)));
-    if (nome === undefined || nome === null) return this.riga('CUE: niente sezioni da scorrere');
+    if (nome === undefined || nome === null) return this.riga('CUE: niente clip da scorrere');
     this.toccata = { n: null, quando: this.ora(), testo: `CUE · ${nome}` };
     this.azioni.scritta?.(`CUE · ${nome.toUpperCase()}`);
     // si sfoglia in silenzio: niente parte in cuffia da solo; la sezione scelta si ascolta con un tocco su «cuffia»
@@ -506,8 +506,8 @@ export class Controller {
       }
       return;
     }
-    if (this.cuffiaTenuta && giu && (comando === 'momentoIndietro' || comando === 'momentoAvanti')) {
-      this.cambiaBrano(comando === 'momentoAvanti' ? 1 : -1);
+    if (this.cuffiaTenuta && giu && (comando === 'scenaIndietro' || comando === 'scenaAvanti')) {
+      this.cambiaBrano(comando === 'scenaAvanti' ? 1 : -1);
       return;
     }
     if (comando === 'paracadute') {
@@ -531,16 +531,16 @@ export class Controller {
         this.azioni.cuffia?.();
         this.azioni.scritta?.(this.azioni.inCuffia?.() ? 'CUFFIA · STOP' : 'CUFFIA');
         break;
-      case 'momentoIndietro':
-      case 'momentoAvanti': {
-        // un momento della spina indietro o avanti, a fine frase (come il go live)
-        const delta = comando === 'momentoAvanti' ? 1 : -1;
+      case 'scenaIndietro':
+      case 'scenaAvanti': {
+        // una scena del beat indietro o avanti, a fine frase (come il go live)
+        const delta = comando === 'scenaAvanti' ? 1 : -1;
         const simbolo = delta > 0 ? '▶' : '◀';
         this.lampo(this.tab.tasti[n - 1]);
-        if (!this.azioni.momento) break;
-        Promise.resolve(this.azioni.momento(delta)).then((r) => {
-          if (r?.momento) this.azioni.scritta?.(`MOMENTO ${simbolo} ${String(r.momento).toUpperCase()}`);
-          else this.azioni.scritta?.(`MOMENTO ${simbolo} NIENTE`);
+        if (!this.azioni.scena) break;
+        Promise.resolve(this.azioni.scena(delta)).then((r) => {
+          if (r?.scena) this.azioni.scritta?.(`SCENA ${simbolo} ${String(r.scena).toUpperCase()}`);
+          else this.azioni.scritta?.(`SCENA ${simbolo} NIENTE`);
         });
         break;
       }
@@ -668,9 +668,9 @@ export class Controller {
     else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
     if (this.pagina === 'A') {
       if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
-      // ◀ ▶ accesi se c'è un momento da raggiungere in quella direzione
-      if (this.azioni.momentoNome?.(-1)) stati.set(nota('momentoIndietro'), true);
-      if (this.azioni.momentoNome?.(1)) stati.set(nota('momentoAvanti'), true);
+      // ◀ ▶ accesi se c'è una scena da raggiungere in quella direzione
+      if (this.azioni.scenaNome?.(-1)) stati.set(nota('scenaIndietro'), true);
+      if (this.azioni.scenaNome?.(1)) stati.set(nota('scenaAvanti'), true);
       if (this.azioni.inAttesa?.()) stati.set(nota('goLive'), 'lampeggia'); // il go live aspetta il suo ciclo
     } else if (this.bersaglio !== 'globale') {
       // il bersaglio acceso (col «globale» nessun tasto del livello è acceso)

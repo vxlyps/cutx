@@ -174,7 +174,7 @@ export class Browser {
     for (const b of brani) {
       const riga = crea('div', 'voce cliccabile brano');
       riga.classList.toggle('aperto', b.file === aperto);
-      riga.title = `${b.file} · ${b.sezioni} ${b.sezioni === 1 ? 'sezione' : 'sezioni'}${b.data ? ` · ${b.data}` : ''}`;
+      riga.title = `${b.file} · ${b.sezioni} ${b.sezioni === 1 ? 'clip' : 'clip'}${b.data ? ` · ${b.data}` : ''}`;
       riga.append(crea('span', 'nome', b.nome), crea('span', 'lbl', `${b.sezioni}§${b.bpm ? ` · ${b.bpm}` : ''}`));
       riga.onclick = () => this.azioni.apriBrano(b.file);
       this.elenco.append(riga);

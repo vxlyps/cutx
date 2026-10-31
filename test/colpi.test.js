@@ -26,7 +26,7 @@ test('il file dei colpi: gli otto predefiniti, nell\'ordine dei tasti', () => {
   const { colpi, errori } = leggiColpi(COLPI_PREDEFINITI);
   assert.deepEqual(errori, []);
   assert.deepEqual(colpi.map((c) => c.nome), ['roll', 'spezza', 'mezzo', 'doppio', 'indietro', 'stop', 'sale', 'eco']);
-  assert.deepEqual(colpi.map((c) => c.bersaglio), ['spina', 'spina', 'spina', 'spina', 'spina', 'tutto', 'livello', 'tutto']);
+  assert.deepEqual(colpi.map((c) => c.bersaglio), ['beat', 'beat', 'beat', 'beat', 'beat', 'tutto', 'livello', 'tutto']);
   const roll = colpi[0];
   assert.equal(roll.passi, 3);
   assert.deepEqual(vociAl(roll, 2), [{ chiave: 'ply', testo: '.ply(8)' }]);
@@ -40,7 +40,7 @@ test('il file dei colpi: gli otto predefiniti, nell\'ordine dei tasti', () => {
 });
 
 test('righe sbagliate: si dice quale e perché, le altre vanno', () => {
-  const { colpi, errori } = leggiColpi(['// c', 'uno · spina · .fast(2)', 'due · nessuno · .rev()', 'tre · spina · fast(2)', 'quattro', 'cinque · livello · .gain(1)', '', 'sei · tutto · .lpf(900)'].join('\n'));
+  const { colpi, errori } = leggiColpi(['// c', 'uno · beat · .fast(2)', 'due · nessuno · .rev()', 'tre · beat · fast(2)', 'quattro', 'cinque · livello · .gain(1)', '', 'sei · tutto · .lpf(900)'].join('\n'));
   assert.deepEqual(colpi.map((c) => c.nome), ['uno', 'sei']);
   assert.equal(errori.length, 4);
   assert.deepEqual(errori.map((e) => e.riga), [3, 4, 5, 6]);
@@ -50,4 +50,10 @@ test('righe sbagliate: si dice quale e perché, le altre vanno', () => {
 test('un gradino dura due battiti', () => {
   assert.equal(gradinoMs(120), 1000);
   assert.equal(gradinoMs(60), 2000);
+});
+
+test('il bersaglio «spina» dei file vecchi vale «beat»', () => {
+  const { colpi, errori } = leggiColpi('mezzo · spina · .slow(2)\ndoppio · beat · .fast(2)');
+  assert.deepEqual(errori, []);
+  assert.deepEqual(colpi.map((c) => c.bersaglio), ['beat', 'beat']);
 });

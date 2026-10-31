@@ -195,7 +195,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
   if (parti.includes('colpi')) ok = (await sicura('colpi', provaColpi)) && ok;
   if (parti.includes('copia-stash')) ok = (await sicura('copia-stash', provaCopiaStash)) && ok;
-  if (parti.includes('spina')) ok = (await sicura('spina', provaSpina)) && ok;
+  if (parti.includes('beat')) ok = (await sicura('beat', provaBeat)) && ok;
   if (parti.includes('cue-controller')) ok = (await sicura('cue-controller', provaCueController)) && ok;
   if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
   if (parti.includes('striscia')) ok = (await sicura('striscia', provaStriscia)) && ok;
@@ -371,7 +371,7 @@ async function provaBrani({ finestre, scrivi }) {
   await js('cutxProva.selezionaRighe(1, 1)');
   await premi('E', 'meta');
   await rispondi('drum');
-  const atteso = 'setcpm(130/4)\n// @sezione drum\ns("prova_stem").gain(.0001)\n// @sezione melodia\nnote("c3 e3").s("triangle").gain(.0001)\nnote("g2").s("sine").gain(.0001)';
+  const atteso = 'setcpm(130/4)\n// @clip drum\ns("prova_stem").gain(.0001)\n// @clip melodia\nnote("c3 e3").s("triangle").gain(.0001)\nnote("g2").s("sine").gain(.0001)';
   const libero = await js('cutxProva.cue.libero.codice');
   controlla('+ sezione (⌘E) crea le sezioni dalle righe scelte', libero === atteso, JSON.stringify(libero));
 
@@ -424,7 +424,7 @@ async function provaBrani({ finestre, scrivi }) {
   await premi('S', 'meta');
   const risalvato = await leggi(amano);
   const corpo = (t) => t.slice(t.indexOf('// preambolo'));
-  controlla('risalvato: sotto la testa è identico', corpo(risalvato) === corpo(NOTTE));
+  controlla('risalvato: sotto la testa è identico (coi nomi nuovi dei tag: @clip)', corpo(risalvato) === corpo(NOTTE.replace(/@(sezione|pezzo)/g, '@clip')));
   controlla('risalvato: la testa tiene il BPM e aggiorna data e suoni', risalvato.startsWith(`// @brano notte a mano\n// @bpm 140\n// @data ${oggi}\n// @suoni\n`), JSON.stringify(risalvato.slice(0, 90)));
 
   for (const f of creati) await rm(path.join(cartella, f), { force: true });
@@ -1169,7 +1169,7 @@ async function provaAbleton({ finestre, scrivi }) {
     controlla('il synth si cambia dal menu', (await js('cutxProva.importa.risultato().testo')).includes('.s("square")'));
     await js(`(() => { const i = document.querySelector('#importa-sezioni .nome-sezione'); i.value = 'intro'; i.dispatchEvent(new Event('change')); })()`);
     const testoBrano = await js('cutxProva.importa.risultato().testo');
-    controlla('il nome di una sezione si cambia', testoBrano.includes('// @sezione intro') && testoBrano.includes('// @origine '), testoBrano.slice(0, 200));
+    controlla('il nome di una sezione si cambia', testoBrano.includes('// @clip intro') && testoBrano.includes('// @origine '), testoBrano.slice(0, 200));
     await js(`(() => { const i = document.getElementById('importa-titolo'); i.value = 'tre notti'; i.dispatchEvent(new Event('change')); })()`);
     controlla('il nome del brano si cambia', (await js('cutxProva.importa.risultato().testo')).startsWith('// @brano tre notti'));
 
@@ -2455,24 +2455,24 @@ async function provaColpi({ finestre, scrivi }) {
   };
   await js(`window.cutx.salvaPreferenze({ controller: null, colpiGriglia: 0.25, testiPubblico: {} })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  await js(`cutxProva.motori.live.manda({ tipo: 'tempo', bpm: 120 })`); // niente livello di partenza: la spina è il primo che entra
+  await js(`cutxProva.motori.live.manda({ tipo: 'tempo', bpm: 120 })`); // niente livello di partenza: il beat è il primo che entra
   await aspetta(1);
   const entra = (nome, codice) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true })})`);
-  const spina = await entra('spina', 's("sine*16").gain(.0001)');
+  const beat = await entra('beat', 's("sine*16").gain(.0001)');
   const pezzo = await entra('pezzo', 's("sine*8").gain(.0001)');
   await aspetta(3);
   const nomi = await js('cutxProva.controllerMidi.colpi.colpi.map((c) => c.nome).join()');
   controlla('colpi.cutx caricato dallo stash: gli otto colpi nell\'ordine dei tasti', nomi === 'roll,spezza,mezzo,doppio,indietro,stop,sale,eco', nomi);
 
-  // doppio sulla spina: la riga .fast(2) entra sul battito, il ritmo raddoppia; al rilascio torna a tempo
+  // doppio sul beat: la riga .fast(2) entra sul battito, il ritmo raddoppia; al rilascio torna a tempo
   const sulla16 = (c) => Math.abs(c * 16 - Math.round(c * 16)) < 1e-6;
   const doppio = await tastoColpo('doppio');
   await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0x90, doppio, 127);
   await aspetta(2.5);
-  const durante = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello);
-  const conRiga = (await attivi()).find((l) => l.id === spina.livello)?.coda ?? [];
-  controlla('«doppio» sulla spina: la riga .fast(2) si vede nella sua coda', conRiga.includes('.fast(2)'), JSON.stringify(conRiga));
+  const durante = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === beat.livello);
+  const conRiga = (await attivi()).find((l) => l.id === beat.livello)?.coda ?? [];
+  controlla('«doppio» sul beat: la riga .fast(2) si vede nella sua coda', conRiga.includes('.fast(2)'), JSON.stringify(conRiga));
   const nuovo = durante.find((e) => !sulla16(e[1]));
   const B = nuovo ? Math.floor(nuovo[1] * 4) / 4 : null;
   controlla('il ritmo raddoppia esattamente su un battito (¼ di ciclo), senza sovrapporsi', B !== null && durante.filter((e) => e[1] < B - 1e-9).every((e) => sulla16(e[1])) && durante.filter((e) => !sulla16(e[1])).length > 4, JSON.stringify({ B, n: durante.length }));
@@ -2481,9 +2481,9 @@ async function provaColpi({ finestre, scrivi }) {
   await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0x90, doppio, 0);
   await aspetta(2.5);
-  const dopo = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello);
+  const dopo = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === beat.livello);
   const fine = dopo.slice(-12);
-  controlla('al rilascio la riga esce e tutto torna a tempo (di nuovo sulla griglia di prima)', !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).some((r) => r.startsWith('.fast')) && fine.every((e) => sulla16(e[1])), JSON.stringify(fine.slice(-4)));
+  controlla('al rilascio la riga esce e tutto torna a tempo (di nuovo sulla griglia di prima)', !((await attivi()).find((l) => l.id === beat.livello)?.coda ?? []).some((r) => r.startsWith('.fast')) && fine.every((e) => sulla16(e[1])), JSON.stringify(fine.slice(-4)));
 
   // con la manopola di un pezzo tenuta premuta il colpo va su quel pezzo
   const posto = (await attivi()).findIndex((l) => l.id === pezzo.livello) + 1;
@@ -2492,23 +2492,23 @@ async function provaColpi({ finestre, scrivi }) {
   await midi(0x90, indietro, 127);
   await aspetta(0.6);
   const codaPezzo = (await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? [];
-  const codaSpina = (await attivi()).find((l) => l.id === spina.livello)?.coda ?? [];
-  controlla('con la manopola del pezzo premuta, «indietro» va su quel pezzo e non sulla spina', codaPezzo.includes('.rev()') && !codaSpina.includes('.rev()'), JSON.stringify([codaPezzo, codaSpina]));
+  const codaBeat = (await attivi()).find((l) => l.id === beat.livello)?.coda ?? [];
+  controlla('con la manopola del pezzo premuta, «indietro» va su quel pezzo e non sul beat', codaPezzo.includes('.rev()') && !codaBeat.includes('.rev()'), JSON.stringify([codaPezzo, codaBeat]));
   await midi(0x90, indietro, 0);
   await aspetta(1.2);
   await midi(0x90, 31 + posto, 0);
   await aspetta(0.5);
   controlla('rilasciati: la riga esce e il muto non è scattato', !((await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? []).includes('.rev()') && (await attivi()).find((l) => l.id === pezzo.livello)?.muto === false);
 
-  // la manopola tenuta ha selezionato il pezzo (bordo verde): un colpo senza manopole va sul selezionato; deselezionato, torna sulla spina
+  // la manopola tenuta ha selezionato il pezzo (bordo verde): un colpo senza manopole va sul selezionato; deselezionato, torna sul beat
   controlla('il pezzo è selezionato (bordo verde) e lo specchio lo segna', (await js('cutxProva.pila.selezionato')) === pezzo.livello && (await js(`document.querySelectorAll('#livelli .card.selezionato').length`)) === 1);
   const mezzo = await tastoColpo('mezzo');
   await midi(0x90, mezzo, 127);
   await aspetta(0.6);
-  controlla('«mezzo» senza manopole va sul livello selezionato (il pezzo)', ((await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? []).includes('.slow(2)') && !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).includes('.slow(2)'));
+  controlla('«mezzo» senza manopole va sul livello selezionato (il pezzo)', ((await attivi()).find((l) => l.id === pezzo.livello)?.coda ?? []).includes('.slow(2)') && !((await attivi()).find((l) => l.id === beat.livello)?.coda ?? []).includes('.slow(2)'));
   await midi(0x90, mezzo, 0);
   await aspetta(1.2);
-  await js('cutxProva.pila.seleziona(null)'); // esc: niente selezionato → i colpi tornano sulla spina
+  await js('cutxProva.pila.seleziona(null)'); // esc: niente selezionato → i colpi tornano sul beat
 
   // stop: una riga globale su tutto (all(x => x.gain(0))), a tempo; rilascio a tempo
   const stop = await tastoColpo('stop');
@@ -2522,7 +2522,7 @@ async function provaColpi({ finestre, scrivi }) {
   await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0x90, stop, 0);
   await aspetta(3.2);
-  const ripartiti = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello && e[4] !== 0);
+  const ripartiti = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === beat.livello && e[4] !== 0);
   controlla('rilasciato: il taglio si toglie all\'1 (non più tagliato dopo la battuta)', (await live()).tagliato === false);
   controlla('rilasciato: la riga sparisce', (await live()).globali.length === 0 && (await js(`document.getElementById('globali').hidden`)) === true);
   const primo = ripartiti[0];
@@ -2544,13 +2544,13 @@ async function provaColpi({ finestre, scrivi }) {
   const roll = await tastoColpo('roll');
   await midi(0x90, roll, 127);
   await aspetta(0.6);
-  const r1 = ((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).find((r) => r.startsWith('.ply'));
+  const r1 = ((await attivi()).find((l) => l.id === beat.livello)?.coda ?? []).find((r) => r.startsWith('.ply'));
   await aspetta(2.4);
-  const r2 = ((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).find((r) => r.startsWith('.ply'));
+  const r2 = ((await attivi()).find((l) => l.id === beat.livello)?.coda ?? []).find((r) => r.startsWith('.ply'));
   controlla('«roll»: il .ply cresce mentre tengo premuto (2 → 4 o 8)', r1 === '.ply(2)' && (r2 === '.ply(4)' || r2 === '.ply(8)'), JSON.stringify([r1, r2]));
   await midi(0x90, roll, 0);
   await aspetta(1.5);
-  controlla('rilasciato: la riga .ply esce', !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).some((r) => r.startsWith('.ply')));
+  controlla('rilasciato: la riga .ply esce', !((await attivi()).find((l) => l.id === beat.livello)?.coda ?? []).some((r) => r.startsWith('.ply')));
   // il paracadute dal tasto: tenuto un secondo (rilasciato prima non fa niente)
   const tastoParacadute = await js(`cutxProva.controllerMidi.tab.tasti[7]`);
   // anche in pagina B il tasto 8 è il paracadute: qui si prova da B
@@ -2689,8 +2689,8 @@ async function provaCopiaStash({ finestre, scrivi }) {
   return ok;
 }
 
-// --- la spina e i suoi momenti: go live di un momento, ◀ ▶ a fine frase, un cambio in attesa sostituito (npx electron . --prova=spina) ---
-async function provaSpina({ finestre, scrivi }) {
+// --- il beat e le sue scene: go live di una scena, ◀ ▶ a fine frase, un cambio in attesa sostituito (npx electron . --prova=beat) ---
+async function provaBeat({ finestre, scrivi }) {
   let ok = true;
   const controlla = (nome, vero, dettagli = '') => {
     scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
@@ -2704,64 +2704,66 @@ async function provaSpina({ finestre, scrivi }) {
     await midi(0x90, await tasto(i), 127);
     await midi(0x90, await tasto(i), 0);
   };
-  const spineVive = async () => (await live()).livelli.filter((l) => l.nome === 'spina' && l.a === null);
+  const spineVive = async () => (await live()).livelli.filter((l) => l.nome === 'beat' && l.a === null);
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @spina\n// @momento intro\ns("sine*2").gain(.0001)\n// @momento sviluppo\ns("sine*4").gain(.0001)\n// @momento drop\ns("sine*8").gain(.0001)\n// @pezzo basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @scena sviluppo\ns("sine*4").gain(.0001)\n// @scena drop\ns("sine*8").gain(.0001)\n// @pezzo basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
   await aspetta(1.5);
-  controlla('il CUE mostra la spina con i tre momenti e il pezzo', (await js(`document.querySelectorAll('#carte .card.momento').length`)) === 3 && (await js(`document.querySelectorAll('#carte .card.sezione:not(.momento):not(.preambolo)').length`)) === 1);
-  controlla('◀ ▶ spenti: non c\'è ancora una spina live', (await js(`cutxProva.controllerMidi.azioni.momentoNome(1)`)) === null);
+  controlla('il CUE mostra il beat con le tre scene e il pezzo', (await js(`document.querySelectorAll('#carte .card.scena').length`)) === 3 && (await js(`document.querySelectorAll('#carte .card.sezione:not(.scena):not(.preambolo)').length`)) === 1);
+  controlla('◀ ▶ spenti: non c\'è ancora un beat live', (await js(`cutxProva.controllerMidi.azioni.scenaNome(1)`)) === null);
   await js(`cutxProva.cue.scegliSezione(0)`);
-  await tocca(5); // go live del primo momento
+  await tocca(5); // go live della prima scena
   await aspetta(3.5);
   let vive = await spineVive();
-  controlla('go live di un momento: entra il livello «spina» (provenienza «notte ◆1»)', vive.length === 1 && vive[0].provenienza === 'notte ◆1' && vive[0].spina?.indice === 0, JSON.stringify(vive.map((l) => [l.nome, l.provenienza])));
-  controlla('la sua card è live', await js(`document.querySelector('#carte .card.momento.e-live .nome-momento')?.textContent.includes('intro') ?? false`));
-  controlla('▶ acceso, ◀ spento', (await js(`cutxProva.controllerMidi.azioni.momentoNome(1)`)) === 'sviluppo' && (await js(`cutxProva.controllerMidi.azioni.momentoNome(-1)`)) === null);
+  controlla('go live di una scena: entra il livello «beat» (provenienza «notte ◆1»)', vive.length === 1 && vive[0].provenienza === 'notte ◆1' && vive[0].beat?.indice === 0, JSON.stringify(vive.map((l) => [l.nome, l.provenienza])));
+  controlla('la sua card è live', await js(`document.querySelector('#carte .card.scena.e-live .nome-scena')?.textContent.includes('intro') ?? false`));
+  controlla('▶ acceso, ◀ spento', (await js(`cutxProva.controllerMidi.azioni.scenaNome(1)`)) === 'sviluppo' && (await js(`cutxProva.controllerMidi.azioni.scenaNome(-1)`)) === null);
+  await js(`document.querySelector('[data-entra="2"]').click()`); // il cambio entra tra 2 cicli: la finestra «in attesa» è lunga abbastanza per guardarla
   await tocca(2); // ▶
   await aspetta(0.4);
-  const prima = await js(`JSON.stringify(cutxProva.statoSpina() && { suona: cutxProva.statoSpina().suona?.spina.indice, pendente: cutxProva.statoSpina().pendente?.spina.indice })`);
+  const prima = await js(`JSON.stringify(cutxProva.statoBeat() && { suona: cutxProva.statoBeat().suona?.beat.indice, pendente: cutxProva.statoBeat().pendente?.beat.indice })`);
   controlla('▶: il cambio aspetta la fine della frase (sviluppo in arrivo, intro ancora in corso)', prima === '{"suona":0,"pendente":1}', prima);
-  controlla('la card dello sviluppo dice che entra a fine frase', await js(`document.querySelector('#carte .card.momento.in-arrivo')?.textContent.includes('entra a fine frase') ?? false`));
+  controlla('la card dello sviluppo dice che entra a fine frase', await js(`document.querySelector('#carte .card.scena.in-arrivo')?.textContent.includes('entra a fine frase') ?? false`));
+  await js(`document.querySelector('[data-entra="1"]').click()`);
   await tocca(2); // ▶ ancora, prima che entri: sostituisce il cambio in attesa (drop)
   await aspetta(3.5);
   vive = await spineVive();
-  controlla('▶ ▶ prima della fine frase: il cambio in attesa è sostituito, resta una spina sola, sul drop', vive.length === 1 && vive[0].spina?.indice === 2 && vive[0].provenienza === 'notte ◆3', JSON.stringify(vive.map((l) => [l.provenienza, l.da, l.a])));
-  const r = await js(`cutxProva.muoviMomento(1)`);
-  controlla('▶ sull\'ultimo momento: non cambia niente e lo dice', !r && (await spineVive()).length === 1 && /ultimo momento/.test(await js(`document.getElementById('cue-avviso')?.textContent ?? document.body.innerText`)));
+  controlla('▶ ▶ prima della fine frase: il cambio in attesa è sostituito, resta un solo beat, sul drop', vive.length === 1 && vive[0].beat?.indice === 2 && vive[0].provenienza === 'notte ◆3', JSON.stringify(vive.map((l) => [l.provenienza, l.da, l.a])));
+  const r = await js(`cutxProva.muoviScena(1)`);
+  controlla('▶ sull\'ultimo scena: non cambia niente e lo dice', !r && (await spineVive()).length === 1 && /ultima scena/.test(await js(`document.getElementById('cue-avviso')?.textContent ?? document.body.innerText`)));
   await tocca(1); // ◀
   await aspetta(3.5);
   vive = await spineVive();
-  controlla('◀: torna allo sviluppo', vive.length === 1 && vive[0].spina?.indice === 1, JSON.stringify(vive.map((l) => l.provenienza)));
+  controlla('◀: torna allo sviluppo', vive.length === 1 && vive[0].beat?.indice === 1, JSON.stringify(vive.map((l) => l.provenienza)));
   await js(`cutxProva.cue.scegliSezione(3)`);
   await tocca(5); // il pezzo «basso»
   await aspetta(3.5);
   const nomi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).sort();
-  controlla('un pezzo entra accanto alla spina, senza toccarla', JSON.stringify(nomi) === '["basso","spina"]', JSON.stringify(nomi));
-  // la spina sta sempre sulla manopola 1 e in cima al LIVE, anche se è entrata dopo un pezzo; senza spina la manopola 1 è libera
+  controlla('un pezzo entra accanto al beat, senza toccarla', JSON.stringify(nomi) === '["basso","beat"]', JSON.stringify(nomi));
+  // il beat sta sempre sulla manopola 1 e in cima al LIVE, anche se è entrata dopo un pezzo; senza beat la manopola 1 è libera
   await js('cutxProva.fermaTutto()');
   await aspetta(1);
   await js(`cutxProva.cue.scegliSezione(3)`);
   await tocca(5); // prima il pezzo
   await aspetta(3.5);
-  controlla('senza spina la manopola 1 è libera e il pezzo sta sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '[null,"basso",null,null,null,null,null]');
+  controlla('senza beat la manopola 1 è libera e il pezzo sta sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '[null,"basso",null,null,null,null,null]');
   controlla('e l\'anello 1 è spento', (await js(`cutxProva.controllerMidi.manopole()[0]`)) === null);
   await js(`cutxProva.cue.scegliSezione(0)`);
-  await tocca(5); // poi la spina
+  await tocca(5); // poi il beat
   await aspetta(3.5);
-  controlla('entrata dopo il pezzo, la spina va comunque sulla manopola 1 e il pezzo sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '["spina","basso",null,null,null,null,null]');
-  controlla('la sua card è la prima in cima al LIVE, col numero ①', (await js(`document.querySelector('#livelli .card.livello .nome')?.textContent`)) === 'spina' && (await js(`document.querySelector('#livelli .card.livello .manopola, #livelli .card.livello [class*=manopola]')?.textContent`)) === '①');
-  // armare il drop: un cambio di momento in attesa e un go live subito dopo, il pezzo entra insieme a lui
-  await js(`cutxProva.muoviMomento(1)`);
+  controlla('entrata dopo il pezzo, il beat va comunque sulla manopola 1 e il pezzo sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '["beat","basso",null,null,null,null,null]');
+  controlla('la sua card è la prima in cima al LIVE, col numero ①', (await js(`document.querySelector('#livelli .card.livello .nome')?.textContent`)) === 'beat' && (await js(`document.querySelector('#livelli .card.livello .manopola, #livelli .card.livello [class*=manopola]')?.textContent`)) === '①');
+  // armare il drop: un cambio di scena in attesa e un go live subito dopo, il pezzo entra insieme a lui
+  await js(`cutxProva.muoviScena(1)`);
   await aspetta(0.3);
   await js(`cutxProva.cue.scegliSezione(3)`);
   await tocca(5);
   await aspetta(0.5);
   const tutti = (await live()).livelli.filter((l) => l.a === null);
-  const nuovaSpina = tutti.find((l) => l.nome === 'spina');
+  const nuovaBeat = tutti.find((l) => l.nome === 'beat');
   const nuovoPezzo = tutti.find((l) => l.nome === 'basso');
-  controlla('armare il drop: il pezzo entra insieme al cambio di momento', !!nuovaSpina && !!nuovoPezzo && Math.abs(nuovaSpina.da - nuovoPezzo.da) < 1e-6, JSON.stringify([nuovaSpina?.da, nuovoPezzo?.da]));
+  controlla('armare il drop: il pezzo entra insieme al cambio di scena', !!nuovaBeat && !!nuovoPezzo && Math.abs(nuovaBeat.da - nuovoPezzo.da) < 1e-6, JSON.stringify([nuovaBeat?.da, nuovoPezzo?.da]));
   await js('cutxProva.fermaTutto()');
   return ok;
 }
@@ -3074,7 +3076,7 @@ async function provaController({ finestre, scrivi }) {
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'`);
   await aspetta(0.5);
   const entra = (nome, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*8").gain(.0001).lpf(800)', nome, provenienza: 'prova', cicli: 1, ...extra })})`);
-  const uno = await entra('spina'); // la spina sta sulla manopola 1; «due» è un pezzo sulla 2
+  const uno = await entra('beat'); // il beat sta sulla manopola 1; «due» è un pezzo sulla 2
   const due = await entra('due');
   await aspetta(2.8);
   await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${due.livello}, volume: 0.5 })`);
@@ -3188,7 +3190,7 @@ async function provaController({ finestre, scrivi }) {
   await midi(0xe8, 0x00, 0x60);
   await aspetta(0.6);
   const rotto = (await live()).breakFattore;
-  controlla('break: i pezzi (tranne la spina) scendono, la riga lo dice come commento', rotto < 0.7 && /\/\/ break/.test((await live()).globali[0] ?? ''), JSON.stringify([rotto, (await live()).globali]));
+  controlla('break: i pezzi (tranne il beat) scendono, la riga lo dice come commento', rotto < 0.7 && /\/\/ break/.test((await live()).globali[0] ?? ''), JSON.stringify([rotto, (await live()).globali]));
   await midi(0xe8, 0x00, 0x00);
   await aspetta(0.5);
   controlla('break a zero: tutto torna al volume di prima, niente riga', (await live()).breakFattore === 1 && (await live()).globali.length === 0);
@@ -3909,7 +3911,7 @@ async function provaAnnulla({ finestre, scrivi }) {
   await aspetta(0.6);
   const testoCue = await js('cutxProva.cue.libero.codice');
   const inviati = await js('globalThis.__inviati ?? []');
-  controlla('livello tolto: ⌘Z lo riporta nel CUE come sezione', /@sezione basso/.test(testoCue) && testoCue.includes('sine*8'), testoCue);
+  controlla('livello tolto: ⌘Z lo riporta nel CUE come sezione', /@clip basso/.test(testoCue) && testoCue.includes('sine*8'), testoCue);
   controlla('e non manda niente al live (a parte i ping): lo rimanda chi suona', inviati.filter((t) => t !== 'ping').length === 0 && !(await live()).livelli.some((l) => l.nome === 'basso' && l.a === Infinity), JSON.stringify(inviati));
 
   // brano chiuso: aprirne un altro lo chiude; ⌘Z lo riapre com'era

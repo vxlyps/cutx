@@ -4,9 +4,9 @@ import { PREDEFINITI, convertiIntervalli, filtraCodice, nomePubblico, risolvi, r
 
 const cfg = risolvi({});
 
-test('i predefiniti scelti: tutto acceso tranne commenti, preambolo, scritta del controller e momento', () => {
+test('i predefiniti scelti: tutto acceso tranne commenti, preambolo, scritta del controller e scena', () => {
   for (const k of ['logo', 'bpm', 'frase', 'neon', 'muto', 'conto', 'scrittura', 'coda', 'etichette']) assert.equal(cfg[k].acceso, true, k);
-  for (const k of ['commenti', 'preambolo', 'controller', 'momento']) assert.equal(cfg[k].acceso, false, k);
+  for (const k of ['commenti', 'preambolo', 'controller', 'scena']) assert.equal(cfg[k].acceso, false, k);
   assert.equal(cfg.neon.testo, 'TECNOLOGIA CANAGLIA');
 });
 

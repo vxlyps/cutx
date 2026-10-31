@@ -6,6 +6,7 @@
 // Ogni livello si modifica sul posto: suona la versione di prima finché ⌘↵ non applica le
 // modifiche al ciclo successivo; esc annulla. In fondo c'è il jam, per improvvisare.
 import { creaEditor } from './editor.js';
+import { eNomeBeat } from './nomi.js';
 import { attivi, riempi } from './evidenzia.js';
 import { aspetto, epocaDi } from './aspetto.js';
 import { resta } from './dissolvenza.js';
@@ -66,8 +67,8 @@ export class Pila {
       }
     }
     this.contenitore.querySelector('.vuoto')?.remove();
-    // la spina sta sempre in cima (anche mentre esce), poi i livelli come sono arrivati
-    const ordine = [...this.livelli].sort((a, b) => (b.nome === 'spina') - (a.nome === 'spina'));
+    // il beat sta sempre in cima (anche mentre esce), poi i livelli come sono arrivati
+    const ordine = [...this.livelli].sort((a, b) => eNomeBeat(b.nome) - eNomeBeat(a.nome));
     for (const l of ordine) {
       if (!this.carte.has(l.id)) this.carte.set(l.id, this.carta(l));
       const c = this.carte.get(l.id);
@@ -98,7 +99,7 @@ export class Pila {
       if (!ora) this.chiudiModifica(nome);
       else if (m.carta.livello.id !== ora.id) this.chiudiModifica(nome);
     }
-    if (!this.livelli.length) this.contenitore.append(el('div', 'vuoto', 'niente live · scegli una sezione nel CUE e premi go live ⇧⌘↵, o scrivi nel jam'));
+    if (!this.livelli.length) this.contenitore.append(el('div', 'vuoto', 'niente live · scegli una clip nel CUE e premi go live ⇧⌘↵, o scrivi nel jam'));
   }
 
   // ⌘Z su una modifica live: la versione di prima va nell'editor del livello, non applicata. La applica chi suona.
@@ -119,19 +120,19 @@ export class Pila {
   }
 
   // I livelli che suonano o stanno per entrare, nell'ordine in cui si vedono: ⌥1–9 li mette in muto.
-  // La spina (se c'è) è sempre la prima; poi i pezzi nell'ordine di entrata.
+  // Il beat (se c'è) è sempre la prima; poi le clip nell'ordine di entrata.
   attivi() {
     const vivi = this.livelli.filter((l) => l.a === null);
-    const spina = vivi.filter((l) => l.nome === 'spina').at(-1);
-    return spina ? [spina, ...vivi.filter((l) => l !== spina)] : vivi;
+    const beat = vivi.filter((l) => eNomeBeat(l.nome)).at(-1);
+    return beat ? [beat, ...vivi.filter((l) => l !== beat)] : vivi;
   }
 
-  // I sette posti delle manopole: 1 = la spina (null se non c'è: la manopola resta libera), 2–7 = i pezzi nell'ordine di entrata.
+  // I sette posti delle manopole: 1 = il beat (null se non c'è: la manopola resta libera), 2–7 = le clip nell'ordine di entrata.
   posti() {
     const vivi = this.attivi();
-    const spina = vivi[0]?.nome === 'spina' ? vivi[0] : null;
-    const altri = spina ? vivi.slice(1) : vivi;
-    return Array.from({ length: 7 }, (_, i) => (i === 0 ? spina : altri[i - 1] ?? null));
+    const beat = eNomeBeat(vivi[0]?.nome) ? vivi[0] : null;
+    const altri = beat ? vivi.slice(1) : vivi;
+    return Array.from({ length: 7 }, (_, i) => (i === 0 ? beat : altri[i - 1] ?? null));
   }
 
   carta(l) {

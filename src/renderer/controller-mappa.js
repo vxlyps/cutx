@@ -14,8 +14,8 @@ export const PARAMETRI = {
 // Pagina B, le otto manopole: volume (il livello), filtro, risonanza, eco, riverbero, velocità (a scatti), sporco, altezza (semitoni).
 export const PAGINA_B = ['volume', 'filtro', 'risonanza', 'eco', 'riverbero', 'velocita', 'sporco', 'altezza'];
 
-// Pagina A, i tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia, go live, togli, piano/registra, paracadute (tenuto 1 s).
-export const TASTI_A = ['momentoIndietro', 'momentoAvanti', 'passaSpina', 'cuffia', 'goLive', 'togli', 'piano', 'paracadute'];
+// Pagina A, i tasti in alto: ◀ scena, ▶ scena, prossimo brano, cuffia, go live, togli, piano/registra, paracadute (tenuto 1 s).
+export const TASTI_A = ['scenaIndietro', 'scenaAvanti', 'prossimoBrano', 'cuffia', 'goLive', 'togli', 'piano', 'paracadute'];
 
 // Dal numero 0..1 al valore e ritorno.
 export function valoreDa(p, x) {
@@ -45,7 +45,7 @@ export const FILTRO_MASTER_MAX = 16000;
 export const EFFETTI_FADER = {
   filtro: { nome: 'FILTRO', descrizione: 'passa-basso su tutto (in alto aperto, scendendo si chiude)' },
   lavaggio: { nome: 'LAVAGGIO', descrizione: 'passa-alto su tutto, sempre più sottile' },
-  break: { nome: 'BREAK', descrizione: 'abbassa tutti i pezzi tranne la spina (finché non c\'è, tutti tranne il livello 1)' },
+  break: { nome: 'BREAK', descrizione: 'abbassa tutti le clip tranne il beat (finché non c\'è, tutti tranne il livello 1)' },
   riser: { nome: 'RISER', descrizione: 'rumore + passa-alto che sale' },
   eco: { nome: 'ECO', descrizione: 'lancio nel delay sempre più forte' },
   cattedrale: { nome: 'CATTEDRALE', descrizione: 'un riverbero che affoga tutto' },
@@ -76,7 +76,7 @@ export function calcolaFader(effetto, x) {
     case 'break': {
       if (v <= SOGLIA_FADER) return spento();
       const fattore = Math.round((1 - 0.85 * v) * 100) / 100;
-      return { attivo: true, riga: `// break · tutti tranne la spina a ${Math.round(fattore * 100)}%`, fattore, testo: `${Math.round(fattore * 100)}%` };
+      return { attivo: true, riga: `// break · tutti tranne il beat a ${Math.round(fattore * 100)}%`, fattore, testo: `${Math.round(fattore * 100)}%` };
     }
     case 'riser': {
       if (v <= SOGLIA_FADER) return spento();

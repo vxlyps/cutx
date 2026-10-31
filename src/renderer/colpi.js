@@ -5,7 +5,7 @@
 //   nome · bersaglio · funzione Strudel
 //   nome · livello · codice del livello · catena
 //
-// - bersaglio `spina`: le righe vanno nella coda della spina (finché non c'è, il livello 1) o dei pezzi con la manopola tenuta premuta;
+// - bersaglio `beat`: le righe vanno nella coda del beat (finché non c'è, il livello 1) o delle clip con la manopola tenuta premuta;
 // - bersaglio `tutto`: una riga globale all(x => …), per ogni livello;
 // - bersaglio `livello`: un livello temporaneo (il codice) con la catena in coda (il «sale»: rumore con un passa-alto che sale);
 // - {2,4,8}: valori a gradini, avanzano ogni PASSO_BATTITI battiti finché tengo premuto (il «roll»: .ply che cresce).
@@ -13,19 +13,19 @@
 
 export const PASSO_BATTITI = 2; // ogni quanti battiti avanza un valore a gradini
 export const SEPARATORE = ' · ';
-export const BERSAGLI = ['spina', 'tutto', 'livello'];
+export const BERSAGLI = ['beat', 'tutto', 'livello'];
 
 export const COLPI_PREDEFINITI = `// colpi.cutx — una riga per colpo: nome · bersaglio · funzione Strudel
 // I primi otto sono i tasti della fila bassa del controller, da sinistra (DROP REPLACE REWIND FORWARD CYCLE STOP PLAY REC).
-// bersaglio: spina (le righe vanno nella coda della spina, o dei pezzi con la manopola tenuta premuta)
+// bersaglio: beat (le righe vanno nella coda del beat, o delle clip con la manopola tenuta premuta)
 //            tutto (una riga globale all(x => …) su ogni livello)
 //            livello (un livello temporaneo: nome · livello · codice · catena)
 // {2,4,8} = valori a gradini: avanzano ogni 2 battiti finché tieni premuto.
-roll · spina · .ply({2,4,8})
-spezza · spina · .degradeBy(.4).sometimesBy(.3, x => x.ply(2))
-mezzo · spina · .slow(2)
-doppio · spina · .fast(2)
-indietro · spina · .rev()
+roll · beat · .ply({2,4,8})
+spezza · beat · .degradeBy(.4).sometimesBy(.3, x => x.ply(2))
+mezzo · beat · .slow(2)
+doppio · beat · .fast(2)
+indietro · beat · .rev()
 stop · tutto · .gain(0)
 sale · livello · s("white*16").decay(.12).sustain(0) · .hpf({400,900,2000,4500,9000}).gain({.08,.12,.16,.2,.26})
 eco · tutto · .delay(.7).delayfeedback(.6)
@@ -92,7 +92,8 @@ export function leggiColpi(testo) {
       const r = riga.trim();
       if (!r || r.startsWith('//')) return;
       const campi = r.split(SEPARATORE).map((x) => x.trim());
-      const [nome, bersaglio, ...resto] = campi;
+      const [nome, bersaglioScritto, ...resto] = campi;
+      const bersaglio = bersaglioScritto === 'spina' ? 'beat' : bersaglioScritto; // «spina» è il nome vecchio del beat
       const errore = (m) => errori.push({ riga: i + 1, testo: r, errore: m });
       if (campi.length < 3 || !nome) return errore('servono almeno tre campi: nome · bersaglio · funzione');
       if (!BERSAGLI.includes(bersaglio)) return errore(`il bersaglio dev'essere ${BERSAGLI.join(', ')}`);

@@ -1,7 +1,7 @@
 // I colpi sui tasti della fila bassa (DROP … REC): si suonano tenendo premuto. Entrano sulla griglia (1/4 o 1/8, nelle impostazioni) e al rilascio tutto
-// torna esattamente a tempo sulla stessa griglia. Ogni colpo è codice visibile: una riga nella coda dei pezzi (spina), una riga globale all(x => …)
+// torna esattamente a tempo sulla stessa griglia. Ogni colpo è codice visibile: una riga nella coda delle clip (beat), una riga globale all(x => …)
 // su tutto, o un livello temporaneo (il «sale»). Le definizioni stanno in colpi.cutx nello stash (colpi.js).
-// Bersagli: un colpo da solo va sulla spina (finché non c'è, il livello 1); con la manopola di un pezzo tenuta premuta va su quel pezzo (più manopole:
+// Bersagli: un colpo da solo va sul beat (finché non c'è, il livello 1); con la manopola di una clip tenuta premuta va su quella clip (più manopole:
 // tutti); in pagina B va sul livello scelto. «tutto» e «livello» vanno sempre su tutto.
 import { gradinoMs, leggiColpi, rigaCodaAl, rigaGlobaleAl, vociAl } from './colpi.js';
 import { leggiVoce } from './coda.js';
@@ -41,10 +41,10 @@ export class GestoreColpi {
     return (60000 / Math.max(20, bpm)) * 4 * this.griglia; // un ciclo = 4 battiti
   }
 
-  // I livelli su cui va un colpo «spina»: quelli con la manopola tenuta premuta, altrimenti il livello selezionato (in pagina B è quello che scolpisco), altrimenti la spina.
-  bersagliSpina() {
+  // I livelli su cui va un colpo «beat»: quelli con la manopola tenuta premuta, altrimenti il livello selezionato (in pagina B è quello che scolpisco), altrimenti il beat.
+  bersagliBeat() {
     const c = this.c;
-    this.senzaSpina = false;
+    this.senzaBeat = false;
     if (c.pagina === 'A') {
       const tenute = [...c.push].filter(([, s]) => s.giu).map(([n]) => c.livello(n)).filter(Boolean);
       if (tenute.length) return tenute;
@@ -52,11 +52,11 @@ export class GestoreColpi {
     // il livello selezionato (bordo verde: ⌃1-9, clic, manopola tenuta, pagina B)
     const scelto = c.posti().find((l) => l && l.id === c.azioni.selezionato?.());
     if (scelto) return [scelto];
-    // niente di selezionato: la spina vera; se non c'è, il primo livello che suona (e lo specchio lo dice)
-    const spina = c.livello(1);
-    if (spina) return [spina];
+    // niente di selezionato: il beat vero; se non c'è, il primo livello che suona (e lo specchio lo dice)
+    const beat = c.livello(1);
+    if (beat) return [beat];
     const primo = c.posti().find(Boolean);
-    this.senzaSpina = !!primo;
+    this.senzaBeat = !!primo;
     return primo ? [primo] : [];
   }
 
@@ -72,7 +72,7 @@ export class GestoreColpi {
       this.attivi.set(i, stato);
       this.applica(stato, 0, true);
       if (colpo.passi > 1) this.avanza(stato);
-      c.toccata = { n: null, quando: c.ora(), testo: `COLPO · ${colpo.nome.toUpperCase()}${stato.bersagli.length ? ` · ${stato.bersagli.map((l) => l.nome).join(' + ')}${colpo.bersaglio === 'spina' && this.senzaSpina ? ' (non c\'è la spina)' : ''}` : colpo.bersaglio === 'tutto' ? ' · TUTTO' : ''}` };
+      c.toccata = { n: null, quando: c.ora(), testo: `COLPO · ${colpo.nome.toUpperCase()}${stato.bersagli.length ? ` · ${stato.bersagli.map((l) => l.nome).join(' + ')}${colpo.bersaglio === 'beat' && this.senzaBeat ? ' (non c\'è il beat)' : ''}` : colpo.bersaglio === 'tutto' ? ' · TUTTO' : ''}` };
       c.azioni.scritta?.(c.toccata.testo);
       c.cambiato();
       return;
@@ -121,7 +121,7 @@ export class GestoreColpi {
     } else if (colpo.bersaglio === 'livello') {
       a.livelloTemp?.(`colpo:${colpo.nome}`, { nome: colpo.nome, codice: colpo.base, coda: vociAl(colpo, k).map((v) => v.testo) }, griglia);
     } else {
-      if (primaVolta) stato.bersagli = this.bersagliSpina();
+      if (primaVolta) stato.bersagli = this.bersagliBeat();
       if (primaVolta && !stato.bersagli.length) this.c.riga('nessun livello per il colpo');
       for (const l of stato.bersagli) {
         for (const v of colpo.voci) {

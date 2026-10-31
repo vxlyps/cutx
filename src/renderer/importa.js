@@ -330,7 +330,7 @@ export class Importa {
     const mappa = {};
     for (const p of ant.provvisori.filter((x) => s.suoni.includes(x.nome))) {
       const f = this.files.get(p.relativo || p.assoluto);
-      if (!f?.id) return this.azioni.avviso('manca il file audio di questa sezione');
+      if (!f?.id) return this.azioni.avviso('manca il file audio di questa clip');
       mappa[p.nome] = [`cutx://app/anteprima/${f.id}`];
     }
     if (Object.keys(mappa).length) await this.azioni.registraSuoni(mappa);
@@ -352,7 +352,7 @@ export class Importa {
   disegnaSezioni(c) {
     const lista = $('importa-sezioni');
     lista.replaceChildren();
-    $('importa-conteggio').textContent = `${c.sezioni.length} ${c.sezioni.length === 1 ? 'sezione' : 'sezioni'}`;
+    $('importa-conteggio').textContent = `${c.sezioni.length} clip`;
     c.sezioni.forEach((s, i) => {
       const r = crea('div', 'sezione-riga');
       r.append(crea('span', 'lbl numero-sezione', String(i + 1)));
@@ -362,7 +362,7 @@ export class Importa {
       const nome = crea('input', 'nome-sezione');
       nome.value = s.nome;
       nome.spellcheck = false;
-      nome.setAttribute('aria-label', `nome della sezione ${i + 1}`);
+      nome.setAttribute('aria-label', `nome della clip ${i + 1}`);
       nome.onchange = () => {
         const v = nome.value.trim();
         const sv = this.scelte.tracce[s.traccia].varianti[s.id];
@@ -406,7 +406,7 @@ export class Importa {
     const risparmio = ritagliati.reduce((n, x) => n + (x.dimensione - x.peso), 0);
     const avvisi = c.avvisi.length;
     $('importa-riepilogo').textContent =
-      `${c.sezioni.length} sezioni · ${c.suoni.length} ${c.suoni.length === 1 ? 'suono' : 'suoni'} da copiare` +
+      `${c.sezioni.length} clip · ${c.suoni.length} ${c.suoni.length === 1 ? 'suono' : 'suoni'} da copiare` +
       (ritagliati.length ? ` (${ritagliati.length} ritagliati, −${mb(risparmio)})` : '') +
       (avvisi ? ` · ${avvisi} ${avvisi === 1 ? 'avviso' : 'avvisi'}` : '');
   }

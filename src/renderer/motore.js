@@ -3,6 +3,7 @@
 // - cuffia: segue la mappa del live e suona sul jack, allo stesso istante.
 // Ognuno valuta il codice da solo. L'interfaccia manda il codice e non aspetta niente.
 import { eventiDaHap } from './striscia.js';
+import { eNomeBeat } from './nomi.js';
 import { applica as applicaCoda, applicaGlobali, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
@@ -225,15 +226,15 @@ function micro(l, ciclo) {
 
 // Le righe globali (il fader, i colpi «su tutto»): all(x => x.lpf(1920)). Il motore le mette su ogni livello, dopo la sua coda.
 const globali = new Map(); // chiave → riga
-let breakFattore = 1; // il «break» del fader: tutti i pezzi tranne la spina (per ora il primo livello) a questa frazione del volume
+let breakFattore = 1; // il «break» del fader: tutti le clip tranne il beat (per ora il primo livello) a questa frazione del volume
 function mandaGlobali() {
   const m = { tipo: 'globali', righe: [...globali.values()] };
   manda('controllo', m);
   manda('uscita', m);
 }
-const idSpina = () => livelli.find((x) => x.a === Infinity)?.id ?? null;
-// la spina vera (il livello «spina», anche mentre cambia momento); se non c'è, il primo livello come prima
-const eSpinaVera = (l) => l.nome === 'spina' || (!livelli.some((x) => x.nome === 'spina' && x.a === Infinity) && l.id === idSpina());
+const idBeat = () => livelli.find((x) => x.a === Infinity)?.id ?? null;
+// il beat vero (il livello «beat», anche mentre cambia scena); se non c'è, il primo livello come prima
+const eBeatVera = (l) => eNomeBeat(l.nome) || (!livelli.some((x) => eNomeBeat(x.nome) && x.a === Infinity) && l.id === idBeat());
 
 function metteCoda(l) {
   const r0 = applicaCoda(l.base, l.coda, { scivolate: l.scivolate, segnale: signal });
@@ -344,17 +345,17 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, spina = null, alle = null }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   avvisaSuoniMancanti(c.pattern, nome);
   // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
   // (con una griglia — i colpi — entra sul primo punto della griglia)
   let da = subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
-  // armare il drop: se un cambio di momento è in attesa, il pezzo entra insieme a lui
+  // armare il drop: se un cambio di scena è in attesa, la clip entra insieme a lui
   if (Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
-  l.spina = spina; // la spina porta con sé i suoi momenti (◀ ▶ li scorrono) e quello da cui parte: { base, indice, momenti }
+  l.beat = beat; // il beat porta con sé le sue scene (◀ ▶ li scorrono) e quello da cui parte: { base, indice, scene }
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
   for (const vecchio of livelli) {
@@ -506,7 +507,7 @@ const descrivi = (l) => ({
   volume: l.volume,
   muto: l.muto,
   scritto: l.scritto,
-  spina: l.spina ?? null,
+  beat: l.beat ?? null,
   sfuma: l.sfuma,
   primo: l.primo ?? null,
   ultimo: l.ultimo ?? null,
@@ -549,7 +550,7 @@ function applicaGuadagni() {
   for (const l of livelli) {
     const g = guadagnoDi(l);
     l.orbita = g.orbita;
-    const rompi = breakFattore < 1 && !eSpinaVera(l) ? breakFattore : 1;
+    const rompi = breakFattore < 1 && !eBeatVera(l) ? breakFattore : 1;
     g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume * rompi, ac.currentTime, SFUMATA_S);
   }
 }
@@ -865,7 +866,7 @@ async function ricevi(da, m) {
       }
       pianificaCoda();
       return mandaGlobali();
-    case 'break': // il break del fader: i pezzi (tranne la spina) a una frazione del volume
+    case 'break': // il break del fader: le clip (tranne il beat) a una frazione del volume
       breakFattore = Math.max(0, Math.min(1, Number(m.fattore)));
       return applicaGuadagni();
     case 'salva-livello': // un clic sulla card che sta sfumando
