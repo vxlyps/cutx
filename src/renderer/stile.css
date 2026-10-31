@@ -2686,3 +2686,180 @@ input[type='checkbox'] {
 .card.livello .conto {
   display: none;
 }
+
+/* le card compatte: quando i livelli non ci stanno, tutti visibili senza scorrere */
+.coda-conteggio {
+  display: none;
+  font-size: 11px;
+  color: var(--marcio);
+  letter-spacing: 0.06em;
+}
+
+#livelli[data-compatto]:not([data-compatto='0']) .card.livello:not(.aperta) {
+  gap: 4px;
+  padding: 6px 10px;
+}
+
+#livelli[data-compatto]:not([data-compatto='0']) .card.livello:not(.aperta) .coda-conteggio {
+  display: inline;
+}
+
+#livelli[data-compatto]:not([data-compatto='0']) .card.livello:not(.aperta) .coda-blocco,
+#livelli[data-compatto]:not([data-compatto='0']) .card.livello:not(.aperta) .piede-carta {
+  display: none;
+}
+
+/* fase 1: il codice su due righe, sfumato */
+#livelli[data-compatto='1'] .card.livello:not(.aperta) .codice,
+#livelli[data-compatto='2'] .card.livello:not(.aperta) .codice {
+  max-height: calc(2 * 1.7em);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent);
+  mask-image: linear-gradient(180deg, #000 55%, transparent);
+}
+
+/* fase 2: una riga sola */
+#livelli[data-compatto='2'] .card.livello:not(.aperta) .codice {
+  max-height: 1.7em;
+  -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+  mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+
+/* fase 3: niente codice, solo intestazione e striscia */
+#livelli[data-compatto='3'] .card.livello:not(.aperta) .codice,
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .codice {
+  display: none;
+}
+
+#livelli[data-compatto]:not([data-compatto='0']) .card.livello:not(.aperta) .striscia-viva {
+  margin-top: 2px;
+  height: 22px;
+}
+
+/* anche il jam si fa piccolo: una riga, e si apre quando ci scrivo */
+.corpo.compatto #jam .card-testa .lbl {
+  display: none;
+}
+
+.corpo.compatto #jam:not(:focus-within) .editor-carta {
+  max-height: 1.7em;
+  overflow: hidden;
+}
+
+.corpo.compatto #jam {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  gap: 4px;
+}
+
+/* fase 4: ogni livello su una riga sola (nome, striscia, volume, muto, togli) */
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  min-height: 0;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .card-testa {
+  display: contents;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .barra-arrivo,
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .errore,
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .card-testa .lbl,
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .card-testa .spazio,
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .card-testa .conto {
+  display: none;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .nome {
+  order: 1;
+  min-width: 0;
+  max-width: 110px;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .punto {
+  order: 0;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .manopola-n {
+  order: 2;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .coda-conteggio {
+  order: 3;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .striscia-viva {
+  order: 5;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  height: 20px;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .sv-misura {
+  width: 118px;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .volume {
+  order: 6;
+  width: 46px;
+  flex: none;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .card-testa .key {
+  order: 7;
+}
+
+/* ultima risorsa: le card aperte tengono il codice su quattro righe */
+#livelli[data-aperte='semi'] .card.livello.aperta .codice {
+  max-height: calc(4 * 1.7em);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent);
+  mask-image: linear-gradient(180deg, #000 70%, transparent);
+}
+
+#livelli[data-aperte='semi'] .card.livello.aperta .coda-blocco {
+  display: none;
+}
+
+#livelli[data-aperte='semi'] .card.livello.aperta .coda-conteggio {
+  display: inline;
+}
+
+/* le righe compatte si allineano: la striscia comincia sempre allo stesso punto */
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .nome {
+  flex: none;
+  width: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .coda-conteggio {
+  display: inline-block;
+  flex: none;
+  width: 52px;
+}
+
+/* compatte: card più vicine e righe più basse */
+#livelli[data-compatto]:not([data-compatto='0']) {
+  gap: 4px;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) {
+  padding: 2px 8px;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .striscia-viva {
+  height: 18px;
+}
+
+#livelli.livelli[data-compatto='4'] .card.livello:not(.aperta) .card-testa .key {
+  height: 22px;
+  min-width: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+}

@@ -29,6 +29,9 @@ export class Pila {
     this.carte = new Map(); // id → carta
     this.inizioUscita = new Map(); // id → epoca in cui ho visto partire l'uscita
     this.scritturaAMacchina = true;
+    this.compattaAttiva = true; // quando i livelli non ci stanno le card si compattano da sole
+    this.fase = 0; // 0 = card intere … 3 = solo intestazione e striscia, 4 = tutto su una riga
+    this.firmaAdatta = '';
     this.strisce = new Map(); // id del livello → { ciclo: eventi } (le note vere, dal motore live)
     this.selezionato = null; // id del livello scelto con un clic sulla card: a lui vanno le code da sole (e, col controller, i colpi)
     this.modifiche = new Map(); // nome del livello → { editor, carta } mentre lo modifico
@@ -78,6 +81,7 @@ export class Pila {
       const righe = righeVisibili(l.coda, l.volume);
       this.disegnaRigheCoda(c, righe, l.coda?.length ?? 0);
       c.righeCoda = righe;
+      c.conteggio.textContent = l.coda?.length ? `coda ${l.coda.length}` : '';
       c.coda.classList.toggle('con-errore', !!l.codaErrore);
       c.codaTesto.title = l.codaErrore ?? '';
       c.el.classList.toggle('muto', l.muto);
@@ -85,6 +89,7 @@ export class Pila {
       if (this.contenitore.children[this.livelli.indexOf(l)] !== c.el) this.contenitore.append(c.el);
     }
     this.mostraSelezione();
+    this.adatta();
     // una modifica aperta passa al livello nuovo con lo stesso nome (quello appena applicato)
     for (const [nome, m] of this.modifiche) {
       const ora = this.attivoDi(nome);
@@ -120,6 +125,7 @@ export class Pila {
     const art = el('article', 'card livello');
     const testa = el('div', 'card-testa');
     const nome = el('span', 'nome');
+    const conteggio = el('span', 'coda-conteggio');
     const manopola = el('span', 'manopola-n');
     manopola.title = 'la manopola del controller che comanda questo livello';
     const provenienza = el('span', 'lbl');
@@ -134,7 +140,7 @@ export class Pila {
     const togli = el('button', 'key piccolo', '×');
     togli.dataset.aiuto = 'livello-togli';
     togli.setAttribute('aria-label', 'Togli a fine ciclo');
-    testa.append(el('span', 'punto', '●'), nome, manopola, provenienza, stato, el('div', 'spazio'), conto, volume, muto, togli);
+    testa.append(el('span', 'punto', '●'), nome, manopola, conteggio, provenienza, stato, el('div', 'spazio'), conto, volume, muto, togli);
     const barra = el('div', 'barra-arrivo');
     const pieno = el('div');
     barra.append(pieno);
@@ -154,7 +160,7 @@ export class Pila {
     const piede = el('div', 'lbl piede-carta');
     const errore = el('p', 'errore');
     art.append(testa, barra, codice, editor, coda, striscia.radice, piede, errore);
-    const c = { el: art, livello: l, nome, manopola, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, striscia, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
+    const c = { el: art, livello: l, nome, manopola, conteggio, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, striscia, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
     pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
@@ -184,10 +190,14 @@ export class Pila {
     return c;
   }
 
-  // La manopola ha toccato questo livello: la card si illumina un attimo.
+  // La manopola ha toccato questo livello: la card si illumina un attimo (e, se le card sono compatte, si apre intera per qualche secondo).
   tocca(id) {
     const c = this.carte.get(id);
     if (!c) return;
+    c.apertaFino = performance.now() + 3500;
+    clearTimeout(this.timerAdatta);
+    this.timerAdatta = setTimeout(() => this.adatta(true), 3600);
+    this.adatta(true);
     c.el.classList.add('toccata');
     clearTimeout(c.toccataTimer);
     c.toccataTimer = setTimeout(() => c.el.classList.remove('toccata'), 650);
@@ -197,6 +207,36 @@ export class Pila {
   seleziona(id) {
     this.selezionato = id;
     this.mostraSelezione();
+    this.adatta();
+  }
+
+  // Le card si compattano da sole quando i livelli non ci stanno (tutti visibili, senza scorrere): prima il codice su due righe sfumato e la
+  // coda come conteggio, poi il codice su una riga, poi solo intestazione e striscia. Restano intere la card scelta (clic, ⌃1–9, manopola
+  // tenuta), quella appena toccata e quella in modifica. Si rifà solo se cambia qualcosa che conta.
+  adatta(forza = false) {
+    const corpo = this.contenitore.parentElement;
+    if (!corpo) return;
+    const ora = performance.now();
+    const aperta = (c) => c.livello.id === this.selezionato || c.apertaFino > ora || this.modifiche.has(c.livello.nome);
+    const firma = [
+      this.compattaAttiva,
+      corpo.clientHeight,
+      corpo.clientWidth,
+      this.selezionato,
+      [...this.carte.values()].map((c) => `${c.livello.id}:${c.livello.codice.length}:${c.livello.coda?.length ?? 0}:${aperta(c) ? 1 : 0}:${c.livello.a === null ? 0 : 1}`).join(','),
+    ].join('|');
+    if (!forza && firma === this.firmaAdatta) return;
+    this.firmaAdatta = firma;
+    for (const c of this.carte.values()) c.el.classList.toggle('aperta', aperta(c));
+    const imposta = (f) => {
+      this.contenitore.dataset.compatto = String(Math.min(f, 4));
+      this.contenitore.dataset.aperte = f === 5 ? 'semi' : ''; // ultima risorsa: anche le card aperte accorciano il codice
+      corpo.classList.toggle('compatto', f > 0);
+    };
+    imposta(0);
+    let fase = 0;
+    while (this.compattaAttiva && corpo.scrollHeight > corpo.clientHeight + 1 && fase < 5) imposta(++fase);
+    this.fase = fase;
   }
 
   mostraSelezione() {

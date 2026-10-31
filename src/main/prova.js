@@ -193,6 +193,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('annulla')) ok = (await sicura('annulla', provaAnnulla)) && ok;
   if (parti.includes('pausa')) ok = (await sicura('pausa', provaPausa)) && ok;
   if (parti.includes('scrittura')) ok = (await sicura('scrittura', provaScrittura)) && ok;
+  if (parti.includes('compatte')) ok = (await sicura('compatte', provaCompatte)) && ok;
   if (parti.includes('striscia')) ok = (await sicura('striscia', provaStriscia)) && ok;
   if (parti.includes('striscia-aspetto')) ok = (await sicura('striscia-aspetto', provaStrisciaAspetto)) && ok;
   if (parti.includes('specchio-aspetto')) ok = (await sicura('specchio-aspetto', provaSpecchioAspetto)) && ok;
@@ -2431,6 +2432,53 @@ async function provaScrittura({ finestre, scrivi }) {
 }
 
 
+// --- le card live si compattano da sole quando i livelli non ci stanno: 8 livelli a 1280x800 e 1440x900, tutti visibili senza scorrere (npx electron . --prova=compatte) ---
+async function provaCompatte({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(120/4)\\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const nomi = ['drum', 'basso', 'melodia', 'pad', 'arp', 'stab', 'voce', 'fx'];
+  for (const [i, nome] of nomi.entries()) {
+    const codice = `note("c${(i % 4) + 1} e3 g3 b3")\n  .s("sawtooth").lpf(${400 + i * 100})\n  .gain(.03).room(.3)\n  .delay(.2)`;
+    await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true, coda: i % 2 ? ['.lpf(900)', '.delay(.4)', '.room(.5)'] : [] })})`);
+  }
+  await aspetta(4);
+  const misura = () => js(`(() => { const c = document.querySelector('#livelli').parentElement; const carte = [...document.querySelectorAll('#livelli .card.livello')]; const fondo = c.getBoundingClientRect().bottom; return { fase: cutxProva.pila.fase, scroll: c.scrollHeight, alto: c.clientHeight, n: carte.length, tutteDentro: carte.every((x) => x.getBoundingClientRect().bottom <= fondo + 1), jam: Math.round(document.getElementById('jam').getBoundingClientRect().bottom <= fondo + 1) }; })()`);
+  for (const [l, a] of [[1280, 800], [1440, 900]]) {
+    finestre.controllo.setContentSize(l, a);
+    await aspetta(1.5);
+    await js('cutxProva.pila.compattaAttiva = false; cutxProva.pila.adatta(true)');
+    const prima = await misura();
+    await js('cutxProva.pila.compattaAttiva = true; cutxProva.pila.adatta(true)');
+    await aspetta(0.4);
+    const dopo = await misura();
+    scrivi(`INFO  ${l}x${a}: senza compattare ${prima.scroll}px su ${prima.alto}px (${prima.n} livelli, ${prima.tutteDentro ? 'tutti dentro' : 'una parte fuori'}); compatte (fase ${dopo.fase}) ${dopo.scroll}px su ${dopo.alto}px`);
+    controlla(`${l}x${a}: 8 livelli, tutti visibili senza scorrere (fase ${dopo.fase})`, dopo.n >= 8 && dopo.scroll <= dopo.alto + 1 && dopo.tutteDentro && dopo.jam === 1, JSON.stringify(dopo));
+    if (l === 1280) {
+      // la card scelta si apre intera
+      await js(`cutxProva.pila.seleziona(cutxProva.pila.livelli.find((x) => x.nome === 'melodia').id)`);
+      await aspetta(0.4);
+      const aperta = await js(`(() => { const c = [...document.querySelectorAll('#livelli .card.livello')].find((x) => x.querySelector('.nome').textContent === 'melodia'); const altra = [...document.querySelectorAll('#livelli .card.livello')].find((x) => x.querySelector('.nome').textContent === 'basso'); return { aperta: c.classList.contains('aperta'), alta: c.getBoundingClientRect().height, altra: altra.getBoundingClientRect().height, righe: Math.round(c.querySelector('.codice').getBoundingClientRect().height / 24) }; })()`);
+      controlla('la card scelta resta intera (più alta delle compatte)', aperta.aperta && aperta.alta > aperta.altra + 20, JSON.stringify(aperta));
+      const comunque = await misura();
+      controlla('e tutte le altre stanno ancora senza scorrere', comunque.scroll <= comunque.alto + 1, JSON.stringify(comunque));
+      await js('cutxProva.pila.selezionato = null; cutxProva.pila.adatta(true)');
+    }
+  }
+  try {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'compatte');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'otto-livelli.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  } catch {}
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
 // --- la striscia viva: note vere del ciclo, misuratore del suono vero, silenzio, troppo forte, proiettore, e quanto pesa con 7 livelli (npx electron . --prova=striscia) ---
 async function provaStriscia({ finestre, scrivi }) {
   let ok = true;
@@ -2453,6 +2501,7 @@ async function provaStriscia({ finestre, scrivi }) {
   ];
   for (const [nome, codice] of livelli) await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1, scritto: true })})`);
   await aspetta(8);
+  await js('cutxProva.pila.compattaAttiva = false; cutxProva.pila.adatta(true)'); // qui si misurano le card intere: le compatte hanno la loro prova
   const carta = (nome) => `[...document.querySelectorAll('#livelli .card.livello')].find((c) => c.querySelector('.nome').textContent === '${nome}')`;
   const testoMisura = (nome) => js(`${carta(nome)}?.querySelector('.sv-testo')?.textContent`);
   const eventi = (nome) => js(`(() => { const id = ${carta(nome)}?.dataset?.id; const l = cutxProva.pila.livelli.find((x) => x.nome === '${nome}'); const e = cutxProva.pila.strisce.get(l.id) ?? {}; return Object.values(e).find((x) => x?.length) ?? []; })()`);
@@ -2497,6 +2546,7 @@ async function provaStriscia({ finestre, scrivi }) {
     const somma = (tipi) => m.filter((x) => tipi.includes(x.type)).reduce((t, x) => t + (x.cpu?.percentCPUUsage ?? 0), 0);
     return { totale: somma(['Browser', 'Tab', 'GPU', 'Utility']), schede: somma(['Tab']) };
   };
+  await js('cutxProva.pila.compattaAttiva = true; cutxProva.pila.adatta(true)');
   await js(`window.cutx.salvaPreferenze({ striscia: true })`);
   await aspetta(2);
   const con = await cpu(8);
