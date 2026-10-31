@@ -127,6 +127,18 @@ export class PaginaController {
     }
     gSelect.onchange = () => c.azioni.colpiScegliGriglia?.(Number(gSelect.value));
     griglia.append(gTesto, gSelect);
+    const stop = crea('div', 'imp-riga');
+    const sTesto = crea('div', 'imp-testo');
+    sTesto.append(crea('span', '', 'stop torna'), crea('span', 'imp-nota', 'il vuoto prima del drop: rilasciando lo stop, tutto riparte sull\'1 della battuta (o, se preferisci, sul primo battito)'));
+    const sSelect = crea('select');
+    for (const [v, t] of [['battuta', 'sulla battuta (l\'1)'], ['battito', 'sul battito']]) {
+      const o = crea('option', '', t);
+      o.value = v;
+      o.selected = (c.azioni.stopTorna?.() ?? 'battuta') === v;
+      sSelect.append(o);
+    }
+    sSelect.onchange = () => c.azioni.stopScegli?.(sSelect.value);
+    stop.append(sTesto, sSelect);
     const elenco = crea('div', 'ctl-colpi-elenco');
     c.colpi.colpi.forEach((colpo, i) => {
       const r = crea('div', 'ctl-colpo');
@@ -137,7 +149,7 @@ export class PaginaController {
     for (const e of c.colpi.errori) elenco.append(crea('p', 'ctl-errore', `colpi.cutx riga ${e.riga}: ${e.errore} — ${e.testo}`));
     const ricarica = crea('button', 'key', 'ricarica colpi.cutx');
     ricarica.onclick = () => c.azioni.ricaricaColpi?.();
-    colpi.replaceChildren(griglia, elenco, ricarica);
+    colpi.replaceChildren(griglia, stop, elenco, ricarica);
 
     const luci = $('ctl-luci');
     const stampa = crea('span', 'lbl', this.stato);
@@ -185,7 +197,7 @@ export class PaginaController {
     m.replaceChildren(
       p('<b>Pagina A · suona</b> (tasto layer A). Le manopole 1–7 sono i livelli live nell\'ordine (la 1 diventerà la spina), la 8 il volume generale. Gira = volume · tocco = muto · tieni premuta e gira = filtro (scritto nella coda) · tenuta = scelta del livello.'),
       p('Tasti in alto, da sinistra: ◀ momento · ▶ momento · passa la spina · <b>cuffia</b> · <b>go live</b> · <b>togli</b> · piano · <b>paracadute</b> (tenuto 1 s). I momenti, la spina e il piano arrivano nei passi dopo. Tasti in basso: i colpi (passo 4).'),
-      p('<b>Pagina B · scolpisci</b> (tasto layer B). I tasti in alto 1–7 scelgono il livello, l\'8 il «globale». Manopole: volume · filtro · risonanza · eco · riverbero · (velocità) · sporco · (altezza), ognuna scritta nella coda del livello. Sul globale: 1 = BPM, 4 = eco di tutto, 5 = riverbero di tutto.'),
+      p('<b>Pagina B · scolpisci</b> (tasto layer B). I tasti in alto 1–7 scelgono il livello; l\'8 resta il paracadute (tenuto 1 s, in tutte e due le pagine). Il «globale» si sceglie premendo di nuovo il tasto layer B (B una volta = il livello scelto, B di nuovo = globale, e così via). Manopole: volume · filtro · risonanza · eco · riverbero · (velocità) · sporco · (altezza), ognuna scritta nella coda del livello. Sul globale: 1 = BPM, 4 = eco di tutto, 5 = riverbero di tutto.'),
       p('Anelli: pagina A = punto (volume), pagina B = fan (il valore del parametro). Il tasto layer acceso dice la pagina. Il fader per ora si vede solo qui (il filtro del drop arriva dopo).'),
     );
   }

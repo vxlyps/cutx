@@ -2934,3 +2934,12 @@ input[type='checkbox'] {
   color: var(--errore, #e0674f);
   font-size: 12px;
 }
+
+/* lo specchio in pagina B sul «globale»: ben chiaro (bianco pieno), il resto è un livello */
+.specchio .spec-info.globale {
+  background: var(--testo);
+  color: #050604;
+  padding: 0 6px;
+  font-weight: 700;
+  flex: none;
+}

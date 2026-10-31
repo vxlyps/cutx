@@ -51,7 +51,7 @@
 
 - Attivi solo finché tengo premuto. Entrano quantizzati (1/8 o 1/4, impostabile) e al rilascio tutto torna esattamente a tempo. Sono righe nella coda, visibili.
 - roll (sulla spina): .ply che cresce mentre tengo (2 → 4 → 8)
-- stop (su tutto): silenzio, rilascio quantizzato sull'1
+- stop (su tutto): silenzio, rilascio quantizzato sull'1 della battuta (il vuoto prima del drop); in Impostazioni → controller si può scegliere «sul battito». Gli altri colpi entrano e escono sulla griglia ¼ o ⅛.
 - mezzo (spina): .slow(2)
 - doppio (spina): .fast(2)
 - indietro (spina): .rev()
@@ -77,13 +77,13 @@
 - Manopole 2-7 = pezzi live 2-7: gira = volume, premi = muto, tieni premuto e gira = filtro di quel pezzo. Il pezzo toccato per ultimo è il selezionato e su schermo si vede. Se entra un settimo pezzo, avvisami o prendi il posto del più vecchio in muto: proponimi tu.
 - Manopola 8 = volume generale.
 - Anelli LED = valore vero (si aggiornano anche quando CUTX cambia i valori da solo: dissolvenze, volume dal CUE…).
-- Tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia (tenuto premuto + giri una manopola = sfoglio i pezzi del CUE e li sento in cuffia), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s).
+- Tasti in alto: ◀ momento, ▶ momento, passa la spina, cuffia (tocco = accende/spegne al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE, fermo mezzo secondo la sezione parte in cuffia; tenuto + ◀ / ▶ = brano precedente/successivo della libreria), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
 - Tasti in basso: i colpi.
 - Fader: filtro del drop su tutto il live.
 
 ### Pagina B · SCOLPISCI
 
-- Tasti in alto: scelgo spina, pezzo 2-7 o globale.
+- Tasti in alto: 1–7 scelgono il livello (spina o pezzo 2-7); **il tasto 8 è il paracadute in tutte e due le pagine** (tenuto 1 s). Il «globale» si sceglie premendo di nuovo il tasto layer B: B una volta = il livello scelto, B di nuovo = globale, e così via. Lo specchio dice «SCOLPISCI · GLOBALE» (in bianco pieno) o «SCOLPISCI · nome del livello».
 - Manopole: volume, filtro, risonanza, eco, riverbero, velocità (a scatti 1/4, 1/2, 1, 2, 4), sporco (distorsione), altezza.
 - Su "globale": BPM, eco e riverbero di tutto.
 - Tasti in basso: gli stessi colpi.

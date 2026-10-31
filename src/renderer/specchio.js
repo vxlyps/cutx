@@ -55,8 +55,9 @@ export class Specchio {
     if (!visibile) return;
     const manopole = controller.manopole();
     const toccata = controller.toccata && ora - controller.toccata.quando < EVIDENZA_MS ? controller.toccata.n : null;
-    const info = controller.toccata?.testo ?? (controller.pagina === 'A' ? 'SUONA' : 'SCOLPISCI');
-    const firma = JSON.stringify([controller.pagina, manopole, toccata, info]);
+    const info = controller.toccata?.testo ?? (controller.pagina === 'A' ? 'SUONA' : `SCOLPISCI · ${controller.nomeBersaglio().toUpperCase()}`);
+    const globale = controller.pagina === 'B' && controller.bersaglio === 'globale';
+    const firma = JSON.stringify([controller.pagina, manopole, toccata, info, globale]);
     if (firma === this.firma) return;
     this.firma = firma;
     const testata = document.createElement('div');
@@ -70,6 +71,7 @@ export class Specchio {
     const nome = document.createElement('span');
     nome.className = 'spec-info';
     nome.textContent = info;
+    if (globale) nome.classList.add('globale');
     testata.append(nome);
     const riga = document.createElement('div');
     riga.className = 'spec-riga';

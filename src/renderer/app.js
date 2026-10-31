@@ -1260,6 +1260,8 @@ const controllerMidi = new Controller({
   globale: (chiave, riga, griglia = 0) => live.manda({ tipo: 'globale', chiave, riga, griglia }),
   // i colpi: righe di coda e livelli temporanei, sulla griglia scelta nelle impostazioni (1/4 o 1/8)
   colpiGriglia: () => preferenze.colpiGriglia ?? 0.25,
+  stopTorna: () => preferenze.stopTorna ?? 'battuta',
+  stopScegli: (v) => window.cutx.salvaPreferenze({ stopTorna: v }),
   colpiScegliGriglia: (v) => window.cutx.salvaPreferenze({ colpiGriglia: v }),
   ricaricaColpi: () => caricaColpi(),
   codaQ: (id, riga, griglia) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola', griglia }),

@@ -22,6 +22,11 @@ export class GestoreColpi {
     return { colpi: this.colpi, errori };
   }
 
+  // La griglia di rilascio: lo stop torna di default sull'1 della battuta (il vuoto prima del drop), gli altri sulla griglia ¼ o ⅛.
+  grigliaRilascio(colpo) {
+    return colpo.nome === 'stop' && (this.c.azioni.stopTorna?.() ?? 'battuta') === 'battuta' ? 1 : this.griglia;
+  }
+
   get griglia() {
     return Number(this.c.azioni.colpiGriglia?.()) > 0 ? Number(this.c.azioni.colpiGriglia()) : 0.25;
   }
@@ -69,7 +74,7 @@ export class GestoreColpi {
     c.ferma(stato.timer);
     // un tocco più breve della griglia: il rilascio aspetta (l'entrata c'è stata, il ritorno parte dalla griglia dopo)
     const trascorso = c.ora() - stato.quando;
-    const ms = this.grigliaMs();
+    const ms = this.grigliaMs() * (this.grigliaRilascio(stato.colpo) / this.griglia);
     if (trascorso < ms) c.imposta(() => this.togli(stato), ms - trascorso);
     else this.togli(stato);
     c.cambiato();
@@ -120,7 +125,7 @@ export class GestoreColpi {
   togli(stato) {
     const { colpo } = stato;
     const a = this.c.azioni;
-    const griglia = this.griglia;
+    const griglia = this.grigliaRilascio(colpo);
     if (colpo.bersaglio === 'tutto') a.globale?.(`colpo:${colpo.nome}`, null, griglia);
     else if (colpo.bersaglio === 'livello') a.livelloTemp?.(`colpo:${colpo.nome}`, null, griglia);
     else {

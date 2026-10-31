@@ -2505,9 +2505,13 @@ async function provaColpi({ finestre, scrivi }) {
   await aspetta(2);
   const fermi = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[4] === 0);
   controlla('«stop»: riga globale all(x => x.gain(0)) visibile, e tutto va a gain 0', (await live()).globali.includes('all(x => x.gain(0))') && fermi.length > 6 && /all\(x => x\.gain\(0\)\)/.test(await js(`document.getElementById('globali').textContent`)), JSON.stringify((await live()).globali));
+  await chiedi(finestre.live, 'cutxRegistro(true)');
   await midi(0x90, stop, 0);
-  await aspetta(2);
+  await aspetta(3.2);
+  const ripartiti = (await chiedi(finestre.live, 'cutxRegistro(false)')).filter((e) => e[0] === spina.livello && e[4] !== 0);
   controlla('rilasciato: la riga sparisce', (await live()).globali.length === 0 && (await js(`document.getElementById('globali').hidden`)) === true);
+  const primo = ripartiti[0];
+  controlla('lo stop torna sull\'1 della battuta (il primo evento che riparte cade su un ciclo intero)', !!primo && Math.abs(primo[1] - Math.round(primo[1])) < 1e-6, JSON.stringify(primo));
 
   // sale: un livello di rumore con il passa-alto che sale, visibile come codice
   const sale = await tastoColpo('sale');
@@ -2534,6 +2538,8 @@ async function provaColpi({ finestre, scrivi }) {
   controlla('rilasciato: la riga .ply esce', !((await attivi()).find((l) => l.id === spina.livello)?.coda ?? []).some((r) => r.startsWith('.ply')));
   // il paracadute dal tasto: tenuto un secondo (rilasciato prima non fa niente)
   const tastoParacadute = await js(`cutxProva.controllerMidi.tab.tasti[7]`);
+  // anche in pagina B il tasto 8 è il paracadute: qui si prova da B
+  await midi(0x90, 85, 127);
   await midi(0x90, tastoParacadute, 127);
   await aspetta(0.5);
   await midi(0x90, tastoParacadute, 0);

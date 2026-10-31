@@ -120,7 +120,7 @@ test('pagina B: i tasti scelgono il bersaglio e le manopole scrivono la coda', (
   assert.deepEqual(log.filter((x) => x[0] === 'coda').at(-1), ['coda', 2, '.delay(0.13)']);
   c.riceve(giro(1, 5)); // volume del bersaglio
   assert.deepEqual(log.filter((x) => x[0] === 'volume').at(-1), ['volume', 2, 0.6]);
-  c.riceve(tasto(c.tab.tasti[7], true)); // globale
+  c.riceve([0x90, c.tab.layer.B, 127]); // B di nuovo: globale
   assert.equal(c.bersaglio, 'globale');
   c.riceve(giro(1, 3));
   assert.deepEqual(log.filter((x) => x[0] === 'tempo').at(-1), ['tempo', 123]);
@@ -536,4 +536,58 @@ test('in pagina B i colpi vanno sul livello scelto; un tasto senza colpo lo dice
   c.colpi.colpi.length = 2;
   c.riceve(tasto(tasti.eco, true));
   assert.ok(log.some((x) => x[0] === 'scritta' && /COLPO 8: NON ASSEGNATO/i.test(x[1])));
+});
+
+test('pagina B: B di nuovo alterna livello scelto e globale; il tasto 8 è sempre il paracadute (tenuto 1 s)', () => {
+  const { c, log, avanza } = prova([L(1, 'drum'), L(2, 'basso')]);
+  c.riceve([0x90, c.tab.layer.B, 127]);
+  c.riceve(tasto(c.tab.tasti[1], true)); // livello 2
+  assert.equal(c.bersaglio, 2);
+  c.riceve([0x90, c.tab.layer.B, 127]); // B di nuovo: globale
+  assert.equal(c.bersaglio, 'globale');
+  assert.equal(c.nomeBersaglio(), 'GLOBALE');
+  const luci = c.desiderate();
+  for (let i = 0; i < 7; i++) assert.equal(luci.get(`t${c.tab.tasti[i]}`)[2], 0, 'col globale nessun tasto-livello è acceso');
+  c.riceve([0x90, c.tab.layer.B, 127]); // B ancora: torna al livello 2
+  assert.equal(c.bersaglio, 2);
+  assert.equal(c.desiderate().get(`t${c.tab.tasti[1]}`)[2], 127);
+  // il paracadute in pagina B: tenuto un secondo; rilasciato prima non parte
+  c.riceve(tasto(c.tab.tasti[7], true));
+  assert.equal(c.bersaglio, 2, 'il tasto 8 non sceglie più il globale');
+  assert.equal(c.desiderate().get(`t${c.tab.tasti[7]}`)[2], 1, 'lampeggia mentre lo tengo');
+  avanza(500);
+  c.riceve(tasto(c.tab.tasti[7], false));
+  avanza(1000);
+  assert.equal(log.filter((x) => x[0] === 'paracadute').length, 0);
+  c.riceve(tasto(c.tab.tasti[7], true));
+  avanza(1100);
+  assert.equal(log.filter((x) => x[0] === 'paracadute').length, 1);
+});
+
+test('stop: di default torna sull\'1 della battuta (griglia 1 ciclo); con l\'opzione «battito» sulla griglia; gli altri colpi sulla griglia', () => {
+  const t = conColpi();
+  t.c.riceve(tasto(t.tasti.stop, true));
+  t.avanza(3000);
+  t.c.riceve(tasto(t.tasti.stop, false));
+  assert.deepEqual(t.log.filter((x) => x[0] === 'globale').at(-1), ['globale', 'colpo:stop', null, 1], 'rilascio sulla battuta');
+  assert.equal(t.log.filter((x) => x[0] === 'globale').at(0)[3], 0.25, 'l\'entrata resta sulla griglia');
+  t.c.riceve(tasto(t.tasti.eco, true));
+  t.avanza(3000);
+  t.c.riceve(tasto(t.tasti.eco, false));
+  assert.equal(t.log.filter((x) => x[0] === 'globale').at(-1)[3], 0.25, 'eco: rilascio sulla griglia');
+  const u = conColpi();
+  u.azioni.stopTorna = () => 'battito';
+  u.c.riceve(tasto(u.tasti.stop, true));
+  u.avanza(3000);
+  u.c.riceve(tasto(u.tasti.stop, false));
+  assert.equal(u.log.filter((x) => x[0] === 'globale').at(-1)[3], 0.25, 'sul battito');
+  // un tocco breve: il ritorno aspetta una battuta intera dall'entrata (alla battuta dopo l'entrata)
+  const v = conColpi();
+  v.c.riceve(tasto(v.tasti.stop, true));
+  v.avanza(100);
+  v.c.riceve(tasto(v.tasti.stop, false));
+  v.avanza(900);
+  assert.equal(v.log.filter((x) => x[0] === 'globale').length, 1, 'ancora dentro');
+  v.avanza(1200);
+  assert.deepEqual(v.log.filter((x) => x[0] === 'globale').at(-1).slice(2), [null, 1]);
 });

@@ -185,14 +185,38 @@ export class Controller {
     this.azioni.riser?.(null);
   }
 
-    vaiA(pagina) {
-    if (pagina === this.pagina) return;
+  // Il tasto layer: cambia pagina. In pagina B premuto di nuovo alterna il livello scelto e il «globale» (B una volta = il livello, B di nuovo = globale, e così via).
+  vaiA(pagina) {
+    if (pagina === this.pagina) {
+      if (pagina === 'B') this.alternaGlobale();
+      return;
+    }
     this.rilasciaFader();
     this.pagina = pagina;
     this.toccata = null;
     this.ultime.clear();
     this.riga(pagina === 'A' ? 'pagina A · suona' : 'pagina B · scolpisci');
     this.cambiato();
+  }
+
+  alternaGlobale() {
+    if (this.bersaglio === 'globale') this.bersaglio = this.ultimoLivello ?? 1;
+    else {
+      this.ultimoLivello = this.bersaglio;
+      this.bersaglio = 'globale';
+    }
+    this.toccata = null;
+    this.ultime.clear();
+    const l = this.bersaglio === 'globale' ? null : this.livello(this.bersaglio);
+    this.riga(this.bersaglio === 'globale' ? 'pagina B · GLOBALE' : `pagina B · ${l ? l.nome : `livello ${this.bersaglio}`}`);
+    this.azioni.scritta?.(this.bersaglio === 'globale' ? 'GLOBALE' : `SCOLPISCI · ${l?.nome?.toUpperCase() ?? ''}`);
+    this.cambiato();
+  }
+
+  // Cosa sta scolpendo la pagina B, in parole: «basso» o «GLOBALE».
+  nomeBersaglio() {
+    if (this.bersaglio === 'globale') return 'GLOBALE';
+    return this.livello(this.bersaglio)?.nome ?? `livello ${this.bersaglio}`;
   }
 
   livello(n) {
@@ -443,12 +467,16 @@ export class Controller {
   // --- tasti ---
 
   premiTasto(n, giu) {
-    if (n <= 8 && this.pagina === 'B') {
+    // pagina B: i tasti 1–7 scelgono il livello; l'8 resta il paracadute (sempre raggiungibile); il «globale» si sceglie premendo di nuovo il tasto layer B
+    if (n <= 7 && this.pagina === 'B') {
       if (!giu) return;
-      this.bersaglio = n === 8 ? 'globale' : n;
+      this.bersaglio = n;
+      this.ultimoLivello = n;
+      this.toccata = null;
       this.ultime.clear();
-      const l = n === 8 ? null : this.livello(n);
-      this.riga(n === 8 ? 'bersaglio: globale' : `bersaglio: ${l ? l.nome : `livello ${n} (vuoto)`}`);
+      const l = this.livello(n);
+      this.riga(`bersaglio: ${l ? l.nome : `livello ${n} (vuoto)`}`);
+      this.cambiato();
       return;
     }
     if (n > 8) {
@@ -612,15 +640,16 @@ export class Controller {
     for (const i of this.colpi.attivi.keys()) stati.set(this.tab.tasti[8 + i], true); // un colpo si vede acceso finché lo tengo
     const livelli = this.azioni.livelli();
     stati.set(this.tab.layer[this.pagina], true); // la pagina
+    const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
+    // il paracadute c'è in tutte e due le pagine (tasto 8, tenuto un secondo)
+    if (this.paracaduteTenuto) stati.set(nota('paracadute'), 'lampeggia');
+    else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
     if (this.pagina === 'A') {
-      const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
       if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
       if (this.azioni.inAttesa?.()) stati.set(nota('goLive'), 'lampeggia'); // il go live aspetta il suo ciclo
-      if (this.paracaduteTenuto) stati.set(nota('paracadute'), 'lampeggia');
-      else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
-    } else {
-      // il bersaglio acceso; i tasti dei livelli che non ci sono restano spenti
-      stati.set(this.tab.tasti[this.bersaglio === 'globale' ? 7 : this.bersaglio - 1], true);
+    } else if (this.bersaglio !== 'globale') {
+      // il bersaglio acceso (col «globale» nessun tasto del livello è acceso)
+      stati.set(this.tab.tasti[this.bersaglio - 1], true);
     }
     const ora = this.ora();
     for (const [nota, fino] of this.lampi) {
