@@ -3061,6 +3061,7 @@ async function provaSynth({ finestre, scrivi }) {
   };
   const codiceSynth = () => js(`document.querySelector('.synth-pre').value`);
   const stato = (k) => js(`cutxProva.synth.stato[${JSON.stringify(k)}]`);
+  const clic = (sel) => js(`document.querySelector(${JSON.stringify(sel)}).click()`);
   const mouse = async (tipo, x, y) => finestre.controllo.webContents.sendInputEvent({ type: tipo, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
   await js(`window.addEventListener('error', (e) => (window.__err = (window.__err || '') + ' || ' + e.error?.stack))`);
   await js(`cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ synthUltimo: null }); cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' })`);
@@ -3168,7 +3169,7 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('e arriva alla cuffia, in fondo, senza essere toccato', ((await cuffiaStato())?.codice ?? '').includes('.lpf(sine.range(300, 2400).slow(8))'));
   const buono = (await cuffiaStato())?.codice;
   await scrivi_('note("c3 e3"\n  .s("square")');
-  controlla('un errore di forma: lo dice e il suono di prima continua', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('parentesi') && (await cuffiaStato())?.codice === buono);
+  controlla('un errore di forma: lo dice e il suono di prima continua', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('parentesi') && (await cuffiaStato())?.codice === buono, `${await js(`document.querySelector('.synth-avviso').textContent`)} | ${(await cuffiaStato())?.codice === buono}`);
   await scrivi_('note("c3 e3")\n  .s("square").lpf(30000).gain(.02)');
   controlla('un valore fuori dai limiti: lo dice e il suono di prima continua', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('fuori limiti') && (await cuffiaStato())?.codice === buono);
   await scrivi_('note("c3 e3")\n  .s("square").nonEsiste(3).gain(.02)');
@@ -3180,6 +3181,93 @@ async function provaSynth({ finestre, scrivi }) {
   await premi('Z', 'meta');
   await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.cambia('gain', 0.02); cutxProva.synth.cambia('q', 12)`);
   await aspetta(0.6);
+
+
+  // il pianoroll: stesse note della mini-notazione e di Strudel, disegno col mouse, scala, accordi, cicli
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' })`);
+  await clic('.synth-schede .key:nth-child(2)');
+  await aspetta(0.4);
+  const rollEventi = () => js(`JSON.stringify(cutxProva.synth.roll.eventi)`);
+  controlla('la scheda «note» mostra il pianoroll e il testo mini', (await js(`!document.querySelector('.synth-note').hidden && document.querySelector('.synth-pannello').hidden`)) === true && (await js(`document.querySelector('.roll-mini-testo').value`)) === 'c3 eb3 g3 bb3');
+  controlla('le quattro note del suono di partenza sono nel pianoroll', (await js(`cutxProva.synth.roll.eventi.length`)) === 4);
+  const cella = (passo, nota) => js(`(() => { const r = cutxProva.synth.roll; const b = r.canvas.getBoundingClientRect(); return { x: b.left + 52 + (${passo} + 0.5) * r.larghezza, y: b.top + (r.alto - ${nota} + 0.5) * 13 }; })()`);
+  const clicca = async (passo, nota, ...mod) => {
+    const p = await cella(passo, nota);
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1, modifiers: mod });
+    wc.sendInputEvent({ type: 'mouseUp', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1, modifiers: mod });
+    await aspetta(0.3);
+  };
+  const trascina = async (passo, nota, finoA) => {
+    const p = await cella(passo, nota);
+    const q = await cella(finoA, nota);
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1 });
+    for (let k = 1; k <= 6; k++) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(p.x + ((q.x - p.x) * k) / 6), y: Math.round(p.y) });
+    wc.sendInputEvent({ type: 'mouseUp', x: Math.round(q.x), y: Math.round(q.y), button: 'left', clickCount: 1 });
+    await aspetta(0.3);
+  };
+  await js(`cutxProva.synth.roll.pulisci()`);
+  await aspetta(0.3);
+  controlla('«pulisci» toglie le note: il testo diventa ~', (await js(`document.querySelector('.roll-mini-testo').value`)) === '~' && (await js(`cutxProva.synth.stato.note`)) === '~');
+  await clicca(0, 48);
+  controlla('un clic su una cella mette una nota (c3, 1/4)', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]' && (await js(`cutxProva.synth.stato.note`)) === 'c3@4 ~@12');
+  await trascina(8, 52, 13);
+  controlla('trascinando a destra la nota si allunga (6 scatti)', (await rollEventi()).includes('{"i":8,"l":6,"n":52}'));
+  controlla('e il codice ha le note nuove', (await codiceSynth()).includes('note("c3@4 ~@4 e3@6 ~@2")'), await codiceSynth());
+  await clicca(0, 48, 'alt');
+  controlla('⌥-clic su una nota la toglie', !(await rollEventi()).includes('"n":48'));
+  await premi('Z', 'meta');
+  controlla('⌘Z la rimette', (await rollEventi()).includes('"n":48'));
+  // scala e accordi
+  await js(`cutxProva.synth.roll.pulisci()`);
+  await js(`(() => { const r = cutxProva.synth.roll; r.scalaEl.value = 'maggiore'; r.scalaEl.dispatchEvent(new Event('change')); })()`);
+  await clicca(0, 49);
+  controlla('con la scala di do maggiore, un do# si aggancia al do', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());
+  await js(`(() => { const r = cutxProva.synth.roll; r.accordoEl.value = 'magg'; r.accordoEl.dispatchEvent(new Event('change')); r.lunghezzaEl.value = '8'; r.lunghezzaEl.dispatchEvent(new Event('change')); })()`);
+  await clicca(8, 53);
+  controlla('con l\'accordo maggiore un clic mette tre note insieme (fa la sa do)', (await js(`cutxProva.synth.roll.eventi.filter((e) => e.i === 8).map((e) => e.n).join(',')`)) === '53,57,60', await rollEventi());
+  controlla('l\'accordo è un accordo nella mini-notazione', (await js(`cutxProva.synth.stato.note`)).includes('[f3,a3,c4]@8'), await js(`cutxProva.synth.stato.note`));
+  await js(`(() => { const r = cutxProva.synth.roll; r.scalaEl.value = 'cromatica'; r.scalaEl.dispatchEvent(new Event('change')); r.accordoEl.value = 'nota'; r.accordoEl.dispatchEvent(new Event('change')); r.lunghezzaEl.value = '4'; r.lunghezzaEl.dispatchEvent(new Event('change')); })()`);
+  // il testo mini: l'altra metà
+  const scriviMini = async (testo) => {
+    await js(`(() => { const e = document.querySelector('.roll-mini-testo'); e.value = ${JSON.stringify(testo)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+    await aspetta(0.4);
+  };
+  await scriviMini('c3@4 ~@4 e3@8');
+  controlla('scrivendo la mini-notazione il pianoroll segue', (await rollEventi()) === '[{"i":0,"l":4,"n":48},{"i":8,"l":8,"n":52}]', await rollEventi());
+  controlla('e il codice ha le stesse note', (await codiceSynth()).includes('note("c3@4 ~@4 e3@8")'));
+  await scriviMini('<c3 e3> g3');
+  controlla('le alternanze sono cicli: <c3 e3> vale 2 cicli', (await js(`cutxProva.synth.roll.cicli`)) === 2 && (await js(`cutxProva.synth.roll.eventi.length`)) === 4);
+  await scriviMini('c3 e3 g3');
+  controlla('le terzine si vedono ma non si modificano (fuori griglia)', (await js(`cutxProva.synth.roll.editabile`)) === false && (await js(`document.querySelector('.roll-messaggio').textContent`)).includes('fuori griglia'));
+  await scriviMini('c3?');
+  controlla('quello che il pianoroll non legge resta com\'è nel testo, con un avviso', (await js(`cutxProva.synth.roll.editabile`)) === false && (await js(`cutxProva.synth.stato.note`)) === 'c3?' && (await codiceSynth()).includes('note("c3?")'));
+  // cicli: 2 cicli ripetono il pattern, un'aggiunta nel secondo lo cambia
+  await scriviMini('c3@4 ~@12');
+  await clic('.roll-cicli .key:nth-child(2)');
+  controlla('passando a 2 cicli il suono non cambia (il pattern si ripete)', (await js(`cutxProva.synth.roll.cicli`)) === 2 && (await js(`cutxProva.synth.stato.note`)) === 'c3@4 ~@12');
+  await clicca(16 + 8, 55);
+  controlla('una nota nel secondo ciclo: il testo diventa un\'alternanza', (await js(`cutxProva.synth.stato.note`)) === '<[c3@4 ~@12] [c3@4 ~@4 g3@4 ~@4]>', await js(`cutxProva.synth.stato.note`));
+  // Strudel e il pianoroll dicono la stessa cosa (le note vere, dal motore della cuffia)
+  const haps = async (n) => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, ${n})`);
+  const vero = await haps(2);
+  const atteso = await js(`cutxProva.synth.roll.eventi.map((e) => ({ i: e.i, l: e.l, n: e.n }))`);
+  const ordina_ = (a) => JSON.stringify([...a].sort((x, y) => x.i - y.i || x.n - y.n));
+  controlla('le note che Strudel suona sono quelle del pianoroll (2 cicli, alternanza)', ordina_(vero ?? []) === ordina_(atteso), `${ordina_(vero ?? [])} / ${ordina_(atteso)}`);
+  for (const [nome, eventi, cicli] of [
+    ['riposi, tenute e accordi', [{ i: 0, l: 3, n: 48 }, { i: 0, l: 3, n: 55 }, { i: 5, l: 1, n: 60 }, { i: 9, l: 7, n: 52 }], 1],
+    ['quattro cicli', [{ i: 0, l: 16, n: 48 }, { i: 20, l: 2, n: 52 }, { i: 33, l: 5, n: 55 }, { i: 62, l: 2, n: 59 }], 4],
+    ['note sovrapposte', [{ i: 0, l: 16, n: 48 }, { i: 4, l: 8, n: 52 }, { i: 6, l: 3, n: 55 }], 1],
+  ]) {
+    await js(`cutxProva.synth.roll.opz.cambia(${JSON.stringify(eventi)}, ${cicli})`);
+    await aspetta(0.3);
+    const v = await haps(cicli);
+    controlla(`Strudel suona proprio quelle note: ${nome}`, ordina_(v ?? []) === ordina_(eventi), `${ordina_(v ?? [])} / ${ordina_(eventi)}`);
+  }
+  await clic('.synth-schede .key:nth-child(1)');
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.cambia('q', 12)`);
+  await aspetta(0.4);
 
   // ogni forma e ogni effetto sono codice Strudel vero: nessun parametro inventato (la cuffia valuta, e se c'è un errore lo dice)
   const forme = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];
@@ -3196,7 +3284,6 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('di nuovo ▶ dopo i controlli', ((await cuffiaStato())?.provenienza ?? '') === 'synth');
 
   // A/B (due slot), init, mutate
-  const clic = (sel) => js(`document.querySelector(${JSON.stringify(sel)}).click()`);
   await js(`cutxProva.synth.cambia('cutoff', 500)`);
   controlla('A è acceso, B è vuoto', (await js(`document.querySelector('.synth-slot-a').classList.contains('on')`)) === true && (await js(`document.querySelector('.synth-slot-b').classList.contains('vuoto')`)) === true);
   controlla('il tasto copia dice dove copia', (await js(`document.querySelector('.synth-copia').textContent`)).includes('B'));
@@ -3342,6 +3429,12 @@ async function provaSynth({ finestre, scrivi }) {
     const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
     await mkdir(cartella, { recursive: true });
     await writeFile(path.join(cartella, 'blocco1.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await js(`cutxProva.synth.roll.opz.cambia([{ i: 0, l: 4, n: 48 }, { i: 0, l: 4, n: 55 }, { i: 4, l: 2, n: 51 }, { i: 8, l: 4, n: 58 }, { i: 12, l: 3, n: 53 }, { i: 16, l: 6, n: 55 }, { i: 24, l: 8, n: 60 }], 2)`);
+    await clic('.synth-schede .key:nth-child(2)');
+    await aspetta(0.5);
+    await writeFile(path.join(cartella, 'blocco2-note.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' }); window.cutx.salvaPreferenze({ synthUltimo: null })`);
+    await clic('.synth-schede .key:nth-child(1)');
     await premi('1', 'meta');
   } catch {}
   controlla('nessun errore non gestito nella pagina durante la prova', !(await js('window.__err')), String(await js('window.__err')));

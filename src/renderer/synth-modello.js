@@ -93,7 +93,7 @@ export function iniziale() {
 
 // Una nota in mini-notazione: nomi, spazi, [ ] < > , ~ * / . ! _ ? e numeri. Niente altro (viene scritta dentro una stringa del codice).
 const NOTE_VALIDE = /^[A-Za-z0-9# [\]<>,~*/.!_?:@%-]*$/;
-export const noteValide = (testo) => typeof testo === 'string' && testo.length > 0 && testo.length <= 400 && NOTE_VALIDE.test(testo) && !/["'\\]/.test(testo);
+export const noteValide = (testo) => typeof testo === 'string' && testo.length > 0 && testo.length <= 1500 && NOTE_VALIDE.test(testo) && !/["'\\]/.test(testo);
 
 const arrotonda = (v, dec) => {
   const f = 10 ** dec;

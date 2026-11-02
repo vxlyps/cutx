@@ -629,6 +629,7 @@ const synth = new VistaSynth($('vista-synth'), {
     return errore;
   },
   ferma: () => fermaCuffia(),
+  ciclo: () => (mappa ? cicloDi(mappa, performance.timeOrigin + performance.now()) : null),
   suonaOra: () => pezzoCuffia?.etichetta?.provenienza === 'synth',
   destinazioni: () => [
     { id: 'attivo', nome: it.synth.destinazioni.attivo, ok: !!cue.slot.attivo },

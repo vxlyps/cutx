@@ -323,3 +323,81 @@
 .ctl.a-mano .ctl-nome {
   color: var(--avviso);
 }
+
+/* le due schede (suono, note) e il pianoroll */
+.synth-sinistra {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.synth-schede {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px 0;
+}
+
+.synth-note {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roll-barra {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.roll-cicli {
+  display: flex;
+  gap: 3px;
+}
+
+.roll-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.roll-mini {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.roll-mini-testo {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  width: auto;
+}
+
+.roll-mini-testo.errore {
+  border-color: var(--avviso);
+}
+
+.roll-messaggio {
+  color: var(--avviso);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.roll-scorri {
+  overflow-x: auto;
+  border: 1px solid var(--linea);
+  background: var(--pannello);
+}
+
+.roll-canvas {
+  display: block;
+  outline: none;
+  cursor: crosshair;
+}

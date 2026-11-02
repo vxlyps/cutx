@@ -82,7 +82,7 @@ test('lo schema di prova decide le note; «clip» usa le note della clip', () =>
 });
 
 test('le note non possono rompere il codice', () => {
-  for (const cattive of ['c3");process.exit()//', "c3'", 'c3\\', '', 'c3\nx', 'x'.repeat(500)]) assert.equal(noteValide(cattive), false, cattive);
+  for (const cattive of ['c3");process.exit()//', "c3'", 'c3\\', '', 'c3\nx', 'x'.repeat(2000)]) assert.equal(noteValide(cattive), false, cattive);
   for (const buone of ['c3 e3 g3', 'c3*2 ~ [e3,g3]', '<c3 d3>!2', '-1 0 7']) assert.equal(noteValide(buone), true, buone);
 });
 

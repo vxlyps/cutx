@@ -1,9 +1,11 @@
 // La vista SYNTH: pannello a manopole (oscillatore, filtro, ampiezza, effetti), barra, codice sempre visibile.
 // Ogni manopola è un parametro di Strudel (synth-modello.js); il codice si riscrive mentre giro (synth-codice.js).
 // Qui non suona niente da sola: la cuffia la comanda app.js, attraverso le funzioni di `opz`.
-import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, pulisci, pulisciValore } from './synth-modello.js';
+import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, noteValide, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
-import { clip, codice, funzioniDi, leggiCodice } from './synth-codice.js';
+import { PianoRoll } from './synth-roll.js';
+import { conCicli, eventiDaMini, miniDaEventi } from './synth-note.js';
+import { clip, codice, funzioniDi, leggiCodice, noteEffettive } from './synth-codice.js';
 import it from './testi/it.json';
 
 const T = it.synth;
@@ -52,6 +54,7 @@ export class VistaSynth {
     this.timerSalva = null;
     this.timerRuota = null;
     this.quanto = 30; // quanto cambia mutate (0–100)
+    this.cicliScelti = 1; // quanti cicli mostra il pianoroll (almeno quelli del pattern)
     this.scrivendo = false; // sto scrivendo nel pannello del codice: il pannello non lo riscrive sotto le dita
     this.erroreCodice = null; // il codice scritto non si legge: resta com'è finché non si corregge
     this.timerCodice = null;
@@ -157,8 +160,29 @@ export class VistaSynth {
     this.manoEl.dataset.aiuto = 'synth-mano';
     lato.append(this.codiceEl, this.manoEl, this.avvisoEl);
 
-    corpo.append(pannello, lato);
+    // a sinistra due schede: il suono (manopole) e le note (pianoroll)
+    const sinistra = crea('div', 'synth-sinistra');
+    const schede = crea('div', 'synth-schede');
+    this.schede = {};
+    for (const id of ['suono', 'note']) {
+      const b = crea('button', 'key piccolo', T.schede[id]);
+      b.onclick = () => this.mostraScheda(id);
+      this.schede[id] = b;
+      schede.append(b);
+    }
+    this.noteEl = crea('div', 'synth-note');
+    this.noteEl.hidden = true;
+    this.roll = new PianoRoll(this.noteEl, {
+      cambia: (eventi, cicli) => this.cambiaNote(eventi, cicli),
+      testo: (testoMini, fine) => this.daMini(testoMini, fine),
+      nota: (n) => this.opz.nota?.(n, this),
+      ciclo: () => this.opz.ciclo?.() ?? null,
+    });
+    sinistra.append(schede, pannello, this.noteEl);
+    corpo.append(sinistra, lato);
     this.r.replaceChildren(barra, corpo);
+    this.scheda = 'suono';
+    this.mostraScheda('suono');
   }
 
   tasto(testo, scorciatoia, fa, classe = '') {
@@ -258,6 +282,39 @@ export class VistaSynth {
     });
   }
 
+  mostraScheda(id) {
+    this.scheda = id;
+    this.pannelloEl ??= this.r.querySelector('.synth-pannello');
+    this.pannelloEl.hidden = id !== 'suono';
+    this.noteEl.hidden = id !== 'note';
+    for (const [k, b] of Object.entries(this.schede)) b.classList.toggle('on', k === id);
+    if (id === 'note') this.roll.disegna();
+  }
+
+  // Dal pianoroll: le note nuove (e quanti cicli si vedono). Due cicli uguali si scrivono come uno solo: i cicli scelti si ricordano qui.
+  cambiaNote(eventi, cicli) {
+    this.cicliScelti = cicli;
+    const mini = miniDaEventi(eventi, cicli);
+    this.chiaveNote = null;
+    if (mini === noteEffettive(this.stato) && this.stato.anteprima === 'clip') return this.disegna();
+    this.passo(() => this.imponi({ ...this.stato, note: mini, anteprima: 'clip' }));
+  }
+
+  // Il testo mini-notazione scritto a mano → le note (e il pianoroll). Un testo che non si può scrivere in un codice resta com'è.
+  daMini(testoMini, fine) {
+    const t = String(testoMini).trim();
+    if (!noteValide(t)) {
+      this.roll.miniEl.classList.add('errore');
+      return;
+    }
+    this.roll.miniEl.classList.remove('errore');
+    if (t === this.stato.note && this.stato.anteprima === 'clip') return;
+    if (!this.miniInCorso) this.inGesto = false; // tutta la scrittura nel campo è un passo solo di ⌘Z
+    this.miniInCorso = !fine;
+    this.imponi({ ...this.stato, note: t, anteprima: 'clip' });
+    if (fine) this.inGesto = false;
+  }
+
   // Il codice scritto a mano → manopole. Se non si legge, o va fuori dai limiti, il suono di prima continua e lo dice.
   daCodice() {
     const r = leggiCodice(this.codiceEl.value, this.stato);
@@ -332,6 +389,7 @@ export class VistaSynth {
     this.nomeEl.value = this.nome;
     this.storia = [];
     this.ripeti = [];
+    this.cicliScelti = 1;
     this.disegna();
   }
 
@@ -342,6 +400,7 @@ export class VistaSynth {
     this.nomeEl.value = this.nome;
     this.registra();
     this.slot = { A: pulisci({ ...stato, anteprima: 'clip' }), B: null, lato: 'A' };
+    this.cicliScelti = 1;
     this.inGesto = false;
     this.avviso('');
     this.cambiato();
@@ -472,6 +531,7 @@ export class VistaSynth {
       this.codiceEl.value = codice(s);
       this.codiceEl.classList.remove('errore');
     }
+    this.disegnaNote(s);
     const nomiMano = new Set(s.mano.map((m) => /^\.(\w+)/.exec(m)?.[1]));
     this.manoEl.textContent = s.mano.length || s.testa ? `${T.msg.aMano}: ${[s.testa, ...s.mano].filter(Boolean).join(' ')}` : '';
     this.manoEl.hidden = !this.manoEl.textContent;
@@ -488,6 +548,20 @@ export class VistaSynth {
     this.pesoEl.textContent = formatta(peso >= COSTO_AVVISO ? T.barra.pesante : T.barra.peso, { n: peso, max: COSTO_MAX });
     this.pesoEl.classList.toggle('pesante', peso >= COSTO_AVVISO);
     this.aggiornaDestinazioni();
+  }
+
+  disegnaNote(s) {
+    const mini = noteEffettive(s);
+    const chiave = `${s.testa}|${mini}|${this.cicliScelti}`;
+    if (chiave === this.chiaveNote) return;
+    this.chiaveNote = chiave;
+    const r = s.testa ? null : eventiDaMini(mini);
+    if (s.testa) this.roll.imposta({ eventi: [], cicli: 1, editabile: false, messaggio: it.synth.note.noteMano, mini: '' });
+    else if (r.errore) this.roll.imposta({ eventi: [], cicli: 1, editabile: false, messaggio: r.errore, mini });
+    else {
+      const cicli = r.fuoriGriglia ? r.cicli : Math.max(r.cicli, this.cicliScelti);
+      this.roll.imposta({ eventi: cicli > r.cicli ? conCicli(r.eventi, r.cicli, cicli) : r.eventi, cicli, editabile: !r.fuoriGriglia, messaggio: r.fuoriGriglia ? it.synth.note.fuoriGriglia : '', mini });
+    }
   }
 
   aggiornaDestinazioni() {
@@ -507,6 +581,7 @@ export class VistaSynth {
   aggiorna() {
     this.avviata = true;
     this.playEl.classList.toggle('on', !!this.opz.suonaOra());
+    this.roll.testina(this.scheda === 'note' && !!this.opz.suonaOra());
     this.aggiornaDestinazioni();
   }
 }

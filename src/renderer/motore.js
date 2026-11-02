@@ -1090,6 +1090,12 @@ window.cutx.suStashCambiato(configura);
 
 // Per la prova automatica di robustezza (npm run prova).
 globalThis.cutxStato = stato;
+// Per le prove: le note vere che escono da un codice, per capire se il pianoroll e Strudel dicono la stessa cosa.
+globalThis.cutxHaps = async (codice, da, a) => {
+  const c = await compila(codice);
+  if (c.errore) return { errore: c.errore };
+  return c.pattern.queryArc(da, a).map((h) => ({ i: +(h.whole.begin.valueOf() * 16).toFixed(3), l: +((h.whole.end.valueOf() - h.whole.begin.valueOf()) * 16).toFixed(3), n: typeof h.value.note === 'number' ? h.value.note : noteToMidi(h.value.note) }));
+};
 // Per le prove: azzera i massimi e i conti della sentinella, così si misura una fase alla volta.
 globalThis.cutxAzzeraMisure = () => {
   giroMax = 0;

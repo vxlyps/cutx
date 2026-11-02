@@ -283,6 +283,34 @@
     "clip-togli": {
       "nome": "togli la clip",
       "testo": "Toglie la clip dal brano (⌘Z la riprende). Se suona live, prima la toglie dal live. Il brano resta da salvare con ⌘S."
+    },
+    "roll": {
+      "nome": "pianoroll",
+      "testo": "Clic su una cella: mette una nota (trascina per allungarla). Clic su una nota: la sposti; dal bordo la allunghi. ⌥-clic, clic destro o ⌫ la tolgono. Il testo mini sopra è la stessa cosa."
+    },
+    "roll-cicli": {
+      "nome": "cicli",
+      "testo": "Quanti cicli dura il pattern: 1, 2, 4 o 8. Passando a più cicli il pattern si ripete, così il suono non cambia."
+    },
+    "roll-lunghezza": {
+      "nome": "lunghezza",
+      "testo": "Quanto è lunga una nota nuova (griglia 1/16)."
+    },
+    "roll-scala": {
+      "nome": "scala",
+      "testo": "Le note nuove si agganciano ai gradi della scala."
+    },
+    "roll-accordo": {
+      "nome": "accordo",
+      "testo": "Un clic mette tutto l'accordo sopra la nota scelta."
+    },
+    "roll-ottava": {
+      "nome": "ottava",
+      "testo": "Sposta in su o in giù la parte di tastiera che si vede (anche con la rotella)."
+    },
+    "roll-mini": {
+      "nome": "mini-notazione",
+      "testo": "Le note come le scrive Strudel. Cambia qui o nel pianoroll: restano allineati. Quello che il pianoroll non legge (? / euclidei) resta com'è."
     }
   },
   "impostazioni": {
@@ -484,6 +512,41 @@
       "pad": "PAD",
       "keys": "KEYS",
       "fx": "FX"
+    },
+    "schede": {
+      "suono": "suono",
+      "note": "note"
+    },
+    "note": {
+      "lunghezze": {
+        "1": "1/16",
+        "2": "1/8",
+        "4": "1/4",
+        "8": "1/2",
+        "16": "1"
+      },
+      "lunghezza": "lunghezza",
+      "scala": "scala",
+      "accordo": "accordo",
+      "pulisci": "pulisci",
+      "mini": "mini",
+      "nessunaScala": "nessuna",
+      "radici": [
+        "C",
+        "C#",
+        "D",
+        "Eb",
+        "E",
+        "F",
+        "F#",
+        "G",
+        "Ab",
+        "A",
+        "Bb",
+        "B"
+      ],
+      "fuoriGriglia": "fuori griglia: si modifica nel testo",
+      "noteMano": "note a mano nel codice"
     }
   }
 }
