@@ -44,18 +44,24 @@ const pronto = (async () => {
   );
   await registerSynthSounds();
   await initAudio();
-  if (LIVE) installaLimiter();
+  installaLimiter();
 })();
 
-// IL GUARDIANO — il limiter sull'uscita del live (limiter.js): sta fra il volume generale e le casse.
+// IL GUARDIANO — il limiter sull'uscita (limiter.js): sta fra il volume generale e le casse (o le cuffie: ce l'ha anche la cuffia,
+// perché il SYNTH può fare risonanze e distorsioni che farebbero male). La cuffia ha in più un volume proprio, prudente nel SYNTH.
 let limiter = null; // { compressore, analisi }
+let volumeCuffia = null; // cuffia: GainNode prima del limiter
 function installaLimiter() {
   if (limiter) return;
   const uscita = getSuperdoughAudioController().output;
   const l = creaLimiter(ac);
   const analisi = new AnalyserNode(ac, { fftSize: 2048, smoothingTimeConstant: 0 }); // solo per le prove: il picco vero in uscita
   uscita.destinationGain.disconnect(ac.destination); // le altre prese (onda, sentinella) restano
-  uscita.destinationGain.connect(l.ingresso);
+  if (LIVE) uscita.destinationGain.connect(l.ingresso);
+  else {
+    volumeCuffia = new GainNode(ac, { gain: 1 });
+    uscita.destinationGain.connect(volumeCuffia).connect(l.ingresso);
+  }
   l.uscita.connect(ac.destination);
   l.uscita.connect(analisi);
   limiter = { compressore: l.compressore, analisi };
@@ -1041,6 +1047,9 @@ async function ricevi(da, m) {
       return ac.resume();
     case 'mix':
       mix = m.valore;
+      return;
+    case 'volume-cuffia': // il SYNTH ascolta piano (0,5); il CUE torna a 1. Con una sfumata breve, mai uno scalino
+      if (volumeCuffia) volumeCuffia.gain.setTargetAtTime(Math.max(0, Math.min(1, Number(m.volume))), ac.currentTime, SFUMATA_S);
       return;
     case 'udibile': // cuffia on/off: il motore continua a girare, si spegne solo l'uscita
       getSuperdoughAudioController().output.destinationGain.gain.value = m.on ? 1 : 0;
