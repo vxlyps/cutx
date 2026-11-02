@@ -22,6 +22,9 @@
 // Le funzioni qui non toccano niente fuori: prendono un brano e ne restituiscono uno nuovo.
 
 import { unisci as unisciCoda } from './coda.js';
+import { gruppiClip, ordineClip } from './categorie.js';
+
+export { gruppiClip, ordineClip };
 
 export const NOMI_SEZIONE = ['intro', 'drum', 'basso', 'melodia', 'break', 'drop', 'outro'];
 
@@ -251,6 +254,15 @@ export function conInfo(brano, i, info) {
 export function conSezioneInFondo(brano, nome, info, codice) {
   const corpo = codice.replace(/\s+$/, '').split('\n');
   return conSezioni(brano, [...brano.sezioni, { riga: rigaSezione(nome, info), nome, info, corpo }]);
+}
+
+// Una clip tolta (il × sulla card).
+export function togli(brano, i) {
+  if (i < 0 || i >= brano.sezioni.length) return brano;
+  return conSezioni(
+    brano,
+    brano.sezioni.filter((_, j) => j !== i),
+  );
 }
 
 // La sezione i si prende il corpo della successiva.

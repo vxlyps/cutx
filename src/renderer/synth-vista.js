@@ -1,7 +1,8 @@
 // La vista SYNTH: pannello a manopole (oscillatore, filtro, ampiezza, effetti), barra, codice sempre visibile.
 // Ogni manopola è un parametro di Strudel (synth-modello.js); il codice si riscrive mentre giro (synth-codice.js).
 // Qui non suona niente da sola: la cuffia la comanda app.js, attraverso le funzioni di `opz`.
-import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, pulisci, pulisciValore, sorprendi } from './synth-modello.js';
+import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, pulisci, pulisciValore } from './synth-modello.js';
+import { CATEGORIE } from './categorie.js';
 import { clip, codice } from './synth-codice.js';
 import it from './testi/it.json';
 
@@ -49,6 +50,7 @@ export class VistaSynth {
     this.timerAnteprima = null;
     this.timerSalva = null;
     this.timerRuota = null;
+    this.quanto = 30; // quanto cambia mutate (0–100)
     this.controlli = new Map();
     this.costruisci();
     this.disegna();
@@ -75,10 +77,33 @@ export class VistaSynth {
     for (const [id, nome] of Object.entries(T.anteprime)) this.anteprimaEl.append(new Option(nome, id));
     this.anteprimaEl.onchange = () => this.passo(() => this.imponi({ ...this.stato, anteprima: this.anteprimaEl.value }));
 
-    this.abEl = this.tasto('A', T.barra.ab, () => this.scambiaAB(), 'synth-ab');
-    this.copiaEl = this.tasto(T.barra.copia, '', () => this.copiaInAltro(), 'synth-copia');
+    // A e B sono due slot: quello acceso è il suono che senti e che modifichi
+    this.slotEl = crea('div', 'synth-slot');
+    this.slotEl.dataset.aiuto = 'synth-slot';
+    this.slotA = crea('button', 'key synth-slot-a', T.barra.slotA);
+    this.slotB = crea('button', 'key synth-slot-b', T.barra.slotB);
+    this.slotA.onclick = () => this.scegliSlot('A');
+    this.slotB.onclick = () => this.scegliSlot('B');
+    this.slotEl.append(this.slotA, this.slotB);
+    this.copiaEl = this.tasto('', '', () => this.copiaInAltro(), 'synth-copia');
+    this.copiaEl.dataset.aiuto = 'synth-copia';
     this.initEl = this.tasto(T.barra.init, '', () => this.riparti());
-    this.sorprendiEl = this.tasto(T.barra.sorprendimi, '', () => this.sorprendimi());
+    this.mutateEl = this.tasto(T.barra.mutate, '', () => this.mutate());
+    this.mutateEl.dataset.aiuto = 'synth-mutate';
+    this.quantoEl = crea('input', 'synth-quanto');
+    this.quantoEl.type = 'range';
+    this.quantoEl.min = '0';
+    this.quantoEl.max = '100';
+    this.quantoEl.value = String(this.quanto);
+    this.quantoEl.dataset.aiuto = 'synth-quanto';
+    this.quantoEl.setAttribute('aria-label', T.barra.quanto);
+    this.quantoEl.oninput = () => (this.quanto = Number(this.quantoEl.value));
+    this.quantoEl.onchange = () => this.salvaSoon();
+    this.categoriaEl = crea('select', 'synth-select');
+    this.categoriaEl.setAttribute('aria-label', T.barra.categoria);
+    this.categoriaEl.dataset.aiuto = 'synth-categoria';
+    for (const [id, nome] of Object.entries(T.categorie)) this.categoriaEl.append(new Option(nome, id));
+    this.categoriaEl.onchange = () => this.passo(() => this.imponi({ ...this.stato, categoria: this.categoriaEl.value }));
 
     this.destinazioneEl = crea('select', 'synth-select');
     this.destinazioneEl.setAttribute('aria-label', T.barra.destinazione);
@@ -90,8 +115,8 @@ export class VistaSynth {
     this.avvisoEl = crea('span', 'synth-avviso');
     this.avvisoEl.setAttribute('role', 'status');
 
-    barra.append(this.nomeEl, this.playEl, this.anteprimaEl, crea('span', 'sep'), this.abEl, this.copiaEl, this.initEl, this.sorprendiEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
-    for (const [el, chiave] of [[this.playEl, 'synth-play'], [this.abEl, 'synth-ab'], [this.copiaEl, 'synth-copia'], [this.initEl, 'synth-init'], [this.sorprendiEl, 'synth-sorprendi'], [this.cueEl, 'synth-cue']]) el.dataset.aiuto = chiave;
+    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
+    for (const [el, chiave] of [[this.playEl, 'synth-play'], [this.initEl, 'synth-init'], [this.cueEl, 'synth-cue']]) el.dataset.aiuto = chiave;
 
     const corpo = crea('div', 'synth-corpo');
     const pannello = crea('div', 'synth-pannello');
@@ -105,7 +130,8 @@ export class VistaSynth {
     }
 
     const lato = crea('aside', 'synth-codice');
-    lato.append(crea('h2', 'lbl', T.barra.codice));
+    this.titoloCodice = crea('h2', 'lbl', T.barra.codice);
+    lato.append(this.titoloCodice);
     this.codiceEl = crea('pre', 'synth-pre');
     this.codiceEl.dataset.aiuto = 'synth-codice';
     lato.append(this.codiceEl, this.avvisoEl);
@@ -256,7 +282,7 @@ export class VistaSynth {
   }
 
   contenuto() {
-    return { A: this.slot.A, B: this.slot.B, lato: this.slot.lato, nome: this.nome };
+    return { A: this.slot.A, B: this.slot.B, lato: this.slot.lato, nome: this.nome, quanto: this.quanto };
   }
 
   // Lo stato di prima (dalle preferenze o da una clip).
@@ -264,6 +290,8 @@ export class VistaSynth {
     if (!c || typeof c !== 'object') return;
     this.slot = { A: pulisci(c.A), B: c.B ? pulisci(c.B) : null, lato: c.lato === 'B' && c.B ? 'B' : 'A' };
     if (typeof c.nome === 'string' && c.nome.trim()) this.nome = c.nome.slice(0, 60);
+    if (Number.isFinite(c.quanto)) this.quanto = Math.min(100, Math.max(0, c.quanto));
+    this.quantoEl.value = String(this.quanto);
     this.nomeEl.value = this.nome;
     this.storia = [];
     this.ripeti = [];
@@ -304,15 +332,18 @@ export class VistaSynth {
     return true;
   }
 
-  scambiaAB() {
+  // Lo slot acceso: la prima volta che si accende B parte uguale ad A. Si sente subito, se la prova suona.
+  scegliSlot(lato) {
+    if (lato === this.slot.lato) return;
     this.passo(() => {
       this.registra();
-      if (!this.slot.B) this.slot.B = this.slot.A; // la prima volta B parte uguale ad A
-      this.slot.lato = this.slot.lato === 'A' ? 'B' : 'A';
+      if (!this.slot.B) this.slot.B = this.slot.A;
+      this.slot.lato = lato;
       this.cambiato();
     });
   }
 
+  // Copia lo slot acceso nell'altro.
   copiaInAltro() {
     this.passo(() => {
       this.registra();
@@ -331,8 +362,13 @@ export class VistaSynth {
     });
   }
 
-  sorprendimi() {
-    this.passo(() => this.imponi(sorprendi(Math.random, this.stato)));
+  mutate() {
+    this.passo(() => this.imponi(mutate(this.stato, this.quanto / 100, Math.random)));
+  }
+
+  salvaSoon() {
+    clearTimeout(this.timerSalva);
+    this.timerSalva = setTimeout(() => this.opz.salva?.(this.contenuto()), PAUSA_SALVA_MS);
   }
 
   programmaAnteprima() {
@@ -365,7 +401,7 @@ export class VistaSynth {
   mandaCue() {
     const dest = this.destinazioneEl.value;
     const testo = clip(this.stato);
-    const errore = this.opz.mandaCue(dest, this.nome, testo);
+    const errore = this.opz.mandaCue(dest, this.nome, testo, this.stato.categoria);
     this.avviso(errore ?? formatta(T.msg.mandata, { nome: this.nome, dove: T.destinazioni[dest] }));
   }
 
@@ -397,9 +433,12 @@ export class VistaSynth {
     this.codiceEl.textContent = codice(s);
     this.anteprimaEl.value = s.anteprima;
     this.anteprimaEl.querySelector('option[value="clip"]').disabled = !this.aperta && s.anteprima !== 'clip';
-    this.abEl.firstChild.textContent = this.slot.lato;
-    this.abEl.classList.toggle('on', this.slot.lato === 'B');
-    this.copiaEl.disabled = !this.slot.B;
+    this.slotA.classList.toggle('on', this.slot.lato === 'A');
+    this.slotB.classList.toggle('on', this.slot.lato === 'B');
+    this.slotB.classList.toggle('vuoto', !this.slot.B);
+    this.copiaEl.firstChild.textContent = formatta(T.barra.copia, { lato: this.slot.lato === 'A' ? 'B' : 'A' });
+    this.categoriaEl.value = s.categoria;
+    this.titoloCodice.textContent = formatta(T.barra.codiceSlot, { lato: this.slot.lato });
     const peso = costo(s);
     this.pesoEl.textContent = formatta(peso >= COSTO_AVVISO ? T.barra.pesante : T.barra.peso, { n: peso, max: COSTO_MAX });
     this.pesoEl.classList.toggle('pesante', peso >= COSTO_AVVISO);

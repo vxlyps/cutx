@@ -442,7 +442,7 @@ export class Cue {
   }
 
   // Una clip nuova in fondo al brano attivo o al prossimo (dal synth). Ritorna l'errore, o null. Il brano resta da salvare.
-  aggiungiClip(dove, nome, codice) {
+  aggiungiClip(dove, nome, codice, categoria = '') {
     const slot = this.slot[dove];
     if (!slot) return it.synth.msg.nessunBranoApertoSlot.replace('{dove}', it.synth.destinazioni[dove]);
     const nomi = new Set(slot.modello.sezioni.map((x) => x.nome));
@@ -450,7 +450,7 @@ export class Cue {
     for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
     const prima = this.linguetta;
     this.linguetta = dove; // modifica() lavora sul brano della linguetta in vista: ci si sposta il tempo di scrivere
-    this.modifica(B.conSezioneInFondo(slot.modello, unico, {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
+    this.modifica(B.conSezioneInFondo(slot.modello, unico, categoria ? { [categoria]: true } : {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
     this.linguetta = prima;
     this.mostraModo();
     return null;
@@ -614,7 +614,11 @@ export class Cue {
     contenitore.append(this.cartaApertura());
     contenitore.append(this.cartaBeat());
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
-    m.sezioni.forEach((_, i) => contenitore.append(this.carta(i)));
+    // le clip sono raggruppate per tipo (bass, lead, arp…) con un piccolo titolo; quelle senza tipo in fondo. Se nessuna ha un tipo, niente titoli.
+    for (const g of B.gruppiClip(m.sezioni)) {
+      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.categoria ? it.synth.categorie[g.categoria] : it.synth.msg.altre));
+      for (const i of g.indici) contenitore.append(this.carta(i));
+    }
     this.cartaAttiva = aperturaAttiva ? this.carte.find((c) => c.apertura) ?? null : scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
     $('riga-live').onclick = () => {
       this.mostraLive = !this.mostraLive;
@@ -727,7 +731,10 @@ export class Cue {
       apriSynth.hidden = !haRigaSynth(righe.join('\n'));
       apriSynth.onclick = () => this.azioni.apriNelSynth?.(carta.editor.codice, m.sezioni[i].nome);
       carta.apriSynth = apriSynth;
-      testa.append(unisci, dividi, apriSynth, volume, cuffia, live);
+      const togliClip = tasto('×', '', 'Togli la clip dal brano');
+      togliClip.dataset.aiuto = 'clip-togli';
+      togliClip.onclick = () => this.togliClip(i);
+      testa.append(unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
     }
     this.carte.push(carta);
     return art;
@@ -913,7 +920,7 @@ export class Cue {
   vociNav() {
     if (this.modo === 'brano') {
       const m = this.brano?.modello;
-      return m ? [...(m.beat?.scene ?? []).map((x, k) => ({ nome: x.nome, scena: k })), ...m.sezioni.map((s, i) => ({ nome: s.nome, sezione: i }))] : [];
+      return m ? [...(m.beat?.scene ?? []).map((x, k) => ({ nome: x.nome, scena: k })), ...B.ordineClip(m.sezioni).map((i) => ({ nome: m.sezioni[i].nome, sezione: i }))] : [];
     }
     return B.blocchi(this.libero.codice).blocchi.filter((b) => b.sezione >= 0 || b.sezione === -2).map((b) => (b.sezione === -2 ? { nome: b.nome, scena: b.scena } : { nome: b.nome, sezione: b.sezione }));
   }
@@ -1014,6 +1021,17 @@ export class Cue {
   nomeSezioneScelta() {
     const k = this.indiceControllo();
     return k >= 0 ? this.vociControllo()[k] : null;
+  }
+
+  // Il × sulla card: la clip esce dal brano (⌘Z la riprende). Se suona live, prima esce dal live. Il brano resta da salvare.
+  togliClip(i) {
+    const m = this.brano.modello;
+    const nome = m.sezioni[i]?.nome;
+    if (nome === undefined) return;
+    if (this.statoSezione(this.nomeBrano, nome) === 'live') this.azioni.togliDalLive?.(this.nomeBrano, nome);
+    if (this.cartaAttiva?.i === i) this.cartaAttiva = null;
+    this.modifica(B.togli(m, i), true, `clip «${nome}» tolta`);
+    this.avviso(`clip «${nome}» tolta · ⌘Z la riprende`);
   }
 
   async rinomina(i) {

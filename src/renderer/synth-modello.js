@@ -2,6 +2,8 @@
 // Modulo puro (niente DOM, niente audio): lo provano i test. Il codice si genera da qui (synth-codice.js).
 // I parametri sono verificati sul codice di superdough 1.3.0 (vedi docs/SYNTH.md): niente nomi inventati.
 
+import { eCategoria } from './categorie.js';
+
 export const FORME = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];
 const RUMORI = ['white', 'pink', 'brown', 'crackle'];
 export const eRumore = (forma) => RUMORI.includes(forma);
@@ -78,11 +80,12 @@ export const GRUPPI = [
 const PER_CHIAVE = new Map(PARAMETRI.map((p) => [p.k, p]));
 export const parametro = (k) => PER_CHIAVE.get(k);
 
-// Il suono «init» (con le impostazioni della clip: note, anteprima).
+// Il suono «init» (con le impostazioni della clip: note, anteprima, tipo).
 export function iniziale() {
   const s = Object.fromEntries(PARAMETRI.map((p) => [p.k, p.def]));
   s.anteprima = 'arpeggio'; // quale schema di prova si sente (e finisce nella clip)
   s.note = NOTE_ANTEPRIMA.arpeggio; // le note della clip (mini-notazione)
+  s.categoria = ''; // bass, lead, arp, pad, keys, fx o niente: i limiti di MUTATE e il gruppo della clip nel CUE
   return s;
 }
 
@@ -154,6 +157,7 @@ export function pulisci(grezzo) {
   for (const p of PARAMETRI) if (p.k in g) s[p.k] = pulisciValore(p, g[p.k]);
   if (ANTEPRIME.includes(g.anteprima)) s.anteprima = g.anteprima;
   if (noteValide(g.note)) s.note = g.note.trim();
+  if (eCategoria(g.categoria)) s.categoria = g.categoria;
   // il supersaw ha fino a 7 voci, gli altri fino a 5
   if (s.forma !== 'supersaw') s.voci = Math.min(s.voci, LAYER_MAX);
   return sotto(s);
@@ -193,53 +197,102 @@ export function daPosizione(p, s, t) {
   return pulisciValore({ ...p, min, max }, v);
 }
 
-// --- «sorprendimi»: un suono a caso ma musicale, dentro limiti sensati ---
+// --- MUTATE: un suono a caso ma musicale, dentro i limiti del tipo (bass, lead, arp, pad, keys, fx) ---
+// Ogni parametro ha un intervallo { r: [min, max] }, una lista di scelte { c: [...] }, e se può restare neutro { p: probabilità } in più.
 // rng() dà un numero fra 0 e 1 (di prova: uno ripetibile).
-export function sorprendi(rng = Math.random, base = iniziale()) {
-  const uno = (lista) => lista[Math.floor(rng() * lista.length) % lista.length];
-  const tra = (a, b) => a + (b - a) * rng();
-  const logTra = (a, b) => a * (b / a) ** rng();
+const R = (a, b) => ({ r: [a, b] });
+const C = (...scelte) => ({ c: scelte });
+const P = (p, spec) => ({ p, ...spec });
+
+// Il tipo «nessuno»: i limiti larghi di sempre.
+const BASE = {
+  forma: C('sawtooth', 'sawtooth', 'square', 'triangle', 'supersaw', 'supersaw', 'pulse', 'sine'),
+  voci: R(1, 3), vociSaw: R(3, 6), detune: R(0.05, 0.4), spread: R(0.3, 0.9), pw: R(0.2, 0.8),
+  fm: P(0.25, R(0.5, 4)), fmh: C(0.5, 1, 1, 2, 3), ottava: C(-1, 0, 0, 0, 1), sub: P(0.3, C(1)), pan: R(0.35, 0.65),
+  tipo: C('lpf', 'lpf', 'lpf', 'bpf', 'hpf'), cutoff: R(250, 6000), cutoffHp: R(100, 1500), q: R(0.5, 12), ftype: C('12db', '12db', '24db', 'ladder'),
+  fenv: P(0.6, R(1, 5)), fattacco: R(0.005, 0.2), fdecay: R(0.05, 0.6), fsustain: R(0, 0.5), frelease: R(0.1, 1), vowel: P(0.08, C('a', 'e', 'i', 'o', 'u')),
+  attack: R(0.003, 0.25), decay: R(0.05, 0.6), sustain: R(0.2, 0.9), release: R(0.1, 1.5),
+  penv: P(0.2, R(2, 12)), pdecay: R(0.03, 0.3),
+  shape: P(0.25, R(0.1, 0.5)), distort: P(0.2, R(0.3, 2)), crush: P(0.08, R(6, 11)), coarse: P(0, R(2, 4)),
+  phaser: P(0.2, R(0.5, 3)), phaserdepth: R(0.3, 0.9), tremolo: P(0.15, C(2, 4, 8)), tremolodepth: R(0.2, 0.7),
+  delay: P(0.4, R(0.15, 0.45)), delaysync: C('1/8', '3/16', '1/4'), delayfeedback: R(0.25, 0.6), room: P(0.4, R(0.1, 0.4)), roomsize: R(1, 4),
+};
+
+// I limiti di ogni tipo: quello che cambia rispetto a BASE.
+export const PROFILI = {
+  bass: {
+    forma: C('sawtooth', 'square', 'supersaw', 'triangle'), voci: R(1, 2), vociSaw: R(2, 4), ottava: C(-1), sub: P(0.5, C(1)),
+    tipo: C('lpf'), cutoff: R(150, 1200), q: R(0.5, 8), fenv: P(0.5, R(1, 4)),
+    attack: R(0.001, 0.02), decay: R(0.1, 0.4), sustain: R(0.4, 0.9), release: R(0.05, 0.3),
+    distort: P(0.35, R(0.3, 3)), delay: P(0.05, R(0.1, 0.2)), room: P(0.1, R(0.05, 0.15)), phaser: P(0, R(0.5, 1)), tremolo: P(0, C(2)),
+  },
+  lead: {
+    forma: C('sawtooth', 'square', 'supersaw', 'pulse'), ottava: C(0, 1), tipo: C('lpf'), cutoff: R(1200, 8000), q: R(1, 10),
+    attack: R(0.001, 0.05), decay: R(0.1, 0.5), sustain: R(0.5, 1), release: R(0.1, 0.6),
+    delay: P(0.6, R(0.15, 0.4)), room: P(0.4, R(0.1, 0.35)), vowel: P(0.05, C('a', 'e', 'i', 'o', 'u')),
+  },
+  arp: {
+    forma: C('sawtooth', 'square', 'pulse', 'triangle'), ottava: C(0, 1), tipo: C('lpf', 'lpf', 'bpf'), cutoff: R(800, 6000), q: R(1, 10),
+    fenv: P(0.9, R(1.5, 5)), fdecay: R(0.05, 0.3), attack: R(0.001, 0.01), decay: R(0.05, 0.25), sustain: R(0, 0.3), release: R(0.05, 0.3),
+    delay: P(0.65, R(0.2, 0.45)), delaysync: C('1/8', '3/16'), room: P(0.3, R(0.1, 0.3)),
+  },
+  pad: {
+    forma: C('supersaw', 'sawtooth', 'triangle', 'sine'), voci: R(2, 4), vociSaw: R(3, 7), detune: R(0.15, 0.6), ottava: C(0, 0, 1), sub: P(0.2, C(1)),
+    tipo: C('lpf'), cutoff: R(600, 5000), q: R(0.5, 4), fenv: P(0.4, R(0.5, 2)), attack: R(0.4, 2), decay: R(0.5, 2), sustain: R(0.6, 1), release: R(1, 4),
+    room: P(0.9, R(0.3, 0.8)), roomsize: R(3, 8), phaser: P(0.4, R(0.3, 2)), delay: P(0.3, R(0.15, 0.35)),
+  },
+  keys: {
+    forma: C('triangle', 'sine', 'square'), fm: P(0.7, R(0.5, 3)), fmh: C(1, 2, 3, 4), ottava: C(0), tipo: C('lpf'), cutoff: R(1500, 6000),
+    fenv: P(0.3, R(0.5, 2)), attack: R(0.001, 0.01), decay: R(0.3, 1.2), sustain: R(0.1, 0.5), release: R(0.2, 1),
+    room: P(0.5, R(0.1, 0.4)), phaser: P(0.3, R(0.3, 2)), tremolo: P(0.25, C(2, 4)),
+  },
+  fx: {
+    forma: C(...FORME), voci: R(1, 4), ottava: C(-1, 0, 1, 2), cutoff: R(200, 12000), q: R(1, 18),
+    penv: P(0.6, R(-24, 24)), pdecay: R(0.02, 0.8), attack: R(0.001, 0.5), decay: R(0.05, 1), sustain: R(0, 0.8), release: R(0.1, 3),
+    crush: P(0.3, R(3, 10)), distort: P(0.4, R(0.5, 4)), delay: P(0.6, R(0.2, 0.6)), delayfeedback: R(0.3, 0.75), room: P(0.6, R(0.2, 0.7)), shape: P(0.3, R(0.2, 0.7)),
+  },
+};
+
+// Un valore dalla sua specifica: intervallo (logaritmico se la manopola lo è), scelta, o neutro con la sua probabilità.
+function campiona(spec, p, rng) {
+  if (spec.p !== undefined && rng() >= spec.p) return p.def;
+  if (spec.c) return spec.c[Math.floor(rng() * spec.c.length) % spec.c.length];
+  const [a, b] = spec.r;
+  return p.log ? a * (b / a) ** rng() : a + (b - a) * rng();
+}
+
+// Un suono nuovo del tipo dato (o dei limiti larghi): il resto (note, schema, tipo, gain, pezzi scritti a mano) resta quello di `base`.
+export function sorprendi(rng = Math.random, base = iniziale(), categoria = base.categoria ?? '') {
+  const prof = { ...BASE, ...(PROFILI[categoria] ?? {}) };
   const s = { ...base };
-  const nota = (k, v) => (s[k] = pulisciValore(parametro(k), v));
-  nota('forma', uno(['sawtooth', 'sawtooth', 'square', 'triangle', 'supersaw', 'supersaw', 'pulse', 'sine']));
-  nota('voci', s.forma === 'supersaw' ? 3 + Math.floor(rng() * 4) : 1 + Math.floor(rng() * 3));
-  nota('detune', tra(0.05, 0.4));
-  nota('spread', tra(0.3, 0.9));
-  nota('pw', tra(0.2, 0.8));
-  nota('fm', rng() < 0.25 ? tra(0.5, 4) : 0);
-  nota('fmh', uno([0.5, 1, 1, 2, 3]));
-  nota('ottava', uno([-1, 0, 0, 0, 1]));
-  nota('sub', rng() < 0.3 ? 1 : 0);
-  nota('pan', tra(0.35, 0.65));
-  nota('tipo', uno(['lpf', 'lpf', 'lpf', 'bpf', 'hpf']));
-  nota('cutoff', s.tipo === 'hpf' ? logTra(100, 1500) : logTra(250, 6000));
-  nota('q', tra(0.5, 12));
-  nota('ftype', uno(['12db', '12db', '24db', 'ladder']));
-  nota('fenv', rng() < 0.6 ? tra(1, 5) : 0);
-  nota('fattacco', logTra(0.005, 0.2));
-  nota('fdecay', logTra(0.05, 0.6));
-  nota('fsustain', tra(0, 0.5));
-  nota('frelease', logTra(0.1, 1));
-  nota('vowel', rng() < 0.08 ? uno(['a', 'e', 'i', 'o', 'u']) : '');
-  nota('attack', logTra(0.003, 0.25));
-  nota('decay', logTra(0.05, 0.6));
-  nota('sustain', tra(0.2, 0.9));
-  nota('release', logTra(0.1, 1.5));
-  nota('gain', 0.7);
-  nota('penv', rng() < 0.2 ? tra(2, 12) : 0);
-  nota('pdecay', logTra(0.03, 0.3));
-  nota('shape', rng() < 0.25 ? tra(0.1, 0.5) : 0);
-  nota('distort', rng() < 0.2 ? tra(0.3, 2) : 0);
-  nota('crush', rng() < 0.08 ? 6 + Math.floor(rng() * 6) : 16);
-  nota('coarse', 1);
-  nota('phaser', rng() < 0.2 ? tra(0.5, 3) : 0);
-  nota('phaserdepth', tra(0.3, 0.9));
-  nota('tremolo', rng() < 0.15 ? uno([2, 4, 8]) : 0);
-  nota('tremolodepth', tra(0.2, 0.7));
-  nota('delay', rng() < 0.4 ? tra(0.15, 0.45) : 0);
-  nota('delaysync', uno(['1/8', '3/16', '1/4']));
-  nota('delayfeedback', tra(0.25, 0.6));
-  nota('room', rng() < 0.4 ? tra(0.1, 0.4) : 0);
-  nota('roomsize', tra(1, 4));
+  const metti = (k, spec) => (s[k] = pulisciValore(parametro(k), campiona(spec, parametro(k), rng)));
+  metti('forma', prof.forma);
+  metti('voci', s.forma === 'supersaw' ? prof.vociSaw : prof.voci);
+  metti('tipo', prof.tipo);
+  for (const p of PARAMETRI) {
+    if (['forma', 'voci', 'tipo', 'gain', 'delaysync'].includes(p.k)) continue;
+    const spec = p.k === 'cutoff' && s.tipo === 'hpf' ? prof.cutoffHp : prof[p.k];
+    if (spec) metti(p.k, spec);
+  }
+  metti('delaysync', prof.delaysync);
   return pulisci(s);
+}
+
+// MUTATE: il suono attuale spostato verso un suono nuovo dello stesso tipo, di una frazione `quanto` (0 = niente, 1 = suono nuovo).
+// Ogni manopola fa la sua frazione di strada; scelte e interruttori cambiano con probabilità `quanto`.
+export function mutate(s, quanto, rng = Math.random, categoria = s.categoria ?? '') {
+  const q = Math.min(1, Math.max(0, Number(quanto) || 0));
+  if (q >= 0.999) return sorprendi(rng, s, categoria);
+  const nuovo = sorprendi(rng, s, categoria);
+  const out = { ...s };
+  for (const p of PARAMETRI) {
+    if (p.k === 'gain') continue;
+    if (p.tipo === 'scelta' || p.tipo === 'bool') {
+      if (rng() < q) out[p.k] = nuovo[p.k];
+    } else {
+      const t = aPosizione(p, s, s[p.k]) + (aPosizione(p, nuovo, nuovo[p.k]) - aPosizione(p, s, s[p.k])) * q;
+      out[p.k] = daPosizione(p, nuovo, t);
+    }
+  }
+  return pulisci(out);
 }

@@ -3236,3 +3236,9 @@ input[type='checkbox'] {
   min-height: 5.5em;
   border-radius: 6px;
 }
+
+/* i piccoli titoli dei gruppi di clip nel CUE (bass, lead, arp…) */
+.gruppo-clip {
+  margin: 10px 2px 4px;
+  letter-spacing: 0.16em;
+}

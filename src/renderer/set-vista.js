@@ -93,12 +93,12 @@ export class Serata {
   }
 
   // Una clip nuova in fondo al kit (dal synth). Ritorna l'errore, o null.
-  aggiungiClipKit(nome, codice) {
+  aggiungiClipKit(nome, codice, categoria = '') {
     if (!this.kit) return it.synth.msg.nessunKit;
     const nomi = new Set(this.kit.modello.sezioni.map((x) => x.nome));
     let unico = nome;
     for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
-    this.kit.modello = B.conSezioneInFondo(this.kit.modello, unico, {}, codice);
+    this.kit.modello = B.conSezioneInFondo(this.kit.modello, unico, categoria ? { [categoria]: true } : {}, codice);
     this.salvaKitSoon();
     this.azioni.ridisegna();
     return null;

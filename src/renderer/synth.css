@@ -269,3 +269,28 @@
 .vista-scelta .key {
   padding: 0 9px;
 }
+
+/* A e B: due slot, quello acceso si vede */
+.synth-slot {
+  display: flex;
+}
+
+.synth-slot .key {
+  min-width: 36px;
+  justify-content: center;
+  border-radius: 3px 0 0 3px;
+}
+
+.synth-slot .key + .key {
+  border-radius: 0 3px 3px 0;
+  border-left-width: 0;
+}
+
+.synth-slot .key.vuoto:not(.on) {
+  color: var(--spento);
+}
+
+.synth-quanto {
+  width: 90px;
+  accent-color: var(--testo);
+}

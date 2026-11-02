@@ -3167,29 +3167,55 @@ async function provaSynth({ finestre, scrivi }) {
   }
   controlla('di nuovo ▶ dopo i controlli', ((await cuffiaStato())?.provenienza ?? '') === 'synth');
 
-  // A/B, init, sorprendimi
+  // A/B (due slot), init, mutate
+  const clic = (sel) => js(`document.querySelector(${JSON.stringify(sel)}).click()`);
   await js(`cutxProva.synth.cambia('cutoff', 500)`);
-  await js(`document.querySelector('.synth-ab').click()`);
-  controlla('A/B: la prima volta B parte uguale ad A', (await js(`cutxProva.synth.slot.lato`)) === 'B' && (await stato('cutoff')) === 500);
+  controlla('A è acceso, B è vuoto', (await js(`document.querySelector('.synth-slot-a').classList.contains('on')`)) === true && (await js(`document.querySelector('.synth-slot-b').classList.contains('vuoto')`)) === true);
+  controlla('il tasto copia dice dove copia', (await js(`document.querySelector('.synth-copia').textContent`)).includes('B'));
+  await clic('.synth-slot-b');
+  controlla('B: la prima volta parte uguale ad A, ed è lo slot acceso', (await js(`cutxProva.synth.slot.lato`)) === 'B' && (await stato('cutoff')) === 500 && (await js(`document.querySelector('.synth-slot-b').classList.contains('on')`)) === true && (await js(`document.querySelector('.synth-slot-a').classList.contains('on')`)) === false);
   await js(`cutxProva.synth.cambia('cutoff', 4000)`);
-  await js(`document.querySelector('.synth-ab').click()`);
+  controlla('si modifica B: il codice dice B e ha il filtro nuovo', (await codiceSynth()).includes('.lpf(4000)') && (await js(`document.querySelector('.synth-codice h2').textContent`)).toLowerCase().includes('b'));
+  await clic('.synth-slot-a');
   controlla('tornando su A il filtro è com\'era', (await stato('cutoff')) === 500 && (await codiceSynth()).includes('.lpf(500)'));
-  await js(`document.querySelector('.synth-ab').click()`);
+  await clic('.synth-slot-b');
   controlla('e B ha il suo', (await stato('cutoff')) === 4000);
-  await js(`document.querySelector('.synth-ab').click()`);
+  // si sente subito: con la prova che suona, passare da B ad A manda il codice nuovo in cuffia
+  await js(`cutxProva.synth.suona()`);
+  await aspetta(0.8);
+  await clic('.synth-slot-a');
+  await aspetta(0.8);
+  controlla('passando da B ad A si sente subito (la cuffia riceve il codice di A)', ((await cuffiaStato())?.codice ?? '').includes('.lpf(500)'));
+  await clic('.synth-copia');
+  controlla('copia: A finisce anche in B', (await js(`cutxProva.synth.slot.B.cutoff`)) === 500);
+  await js(`cutxProva.synth.cambia('cutoff', 500)`);
+  await clic('.synth-slot-a');
   await js(`[...document.querySelectorAll('.synth-barra .key')].find((b) => b.textContent.startsWith('init')).click()`);
   controlla('init riparte da zero', (await stato('cutoff')) === 2400 && (await stato('q')) === 1);
   await premi('Z', 'meta');
   controlla('⌘Z annulla anche init', (await stato('q')) === 12);
-  await js(`[...document.querySelectorAll('.synth-barra .key')].find((b) => b.textContent.startsWith('sorprendimi')).click()`);
-  const sorpresa = await js(`JSON.stringify(cutxProva.synth.stato)`);
-  controlla('sorprendimi cambia il suono', sorpresa !== (await js(`JSON.stringify(cutxProva.synth.storia.at(-1).A)`)));
+  const statoPrima = await js(`JSON.stringify(cutxProva.synth.stato)`);
+  await js(`cutxProva.synth.quanto = 100; cutxProva.synth.mutate()`);
+  controlla('mutate al massimo dà un suono nuovo', (await js(`JSON.stringify(cutxProva.synth.stato)`)) !== statoPrima);
   await premi('Z', 'meta');
-  controlla('⌘Z annulla sorprendimi', (await stato('q')) === 12);
+  controlla('⌘Z annulla mutate', (await js(`JSON.stringify(cutxProva.synth.stato)`)) === statoPrima);
+  await js(`cutxProva.synth.quanto = 0; cutxProva.synth.mutate()`);
+  controlla('mutate a zero non cambia niente', (await js(`JSON.stringify(cutxProva.synth.stato)`)) === statoPrima);
+  await js(`cutxProva.synth.quanto = 30`);
+  // il tipo del suono: mutate resta nei suoi limiti
+  await js(`cutxProva.synth.categoriaEl.value = 'bass'; cutxProva.synth.categoriaEl.dispatchEvent(new Event('change'))`);
+  controlla('si sceglie il tipo BASS', (await stato('categoria')) === 'bass');
+  let dentro = true;
+  for (let i = 0; i < 12; i++) {
+    await js(`cutxProva.synth.quanto = 100; cutxProva.synth.mutate()`);
+    dentro &&= (await js(`(() => { const s = cutxProva.synth.stato; return s.cutoff <= 1200 && s.tipo === 'lpf' && s.ottava === -1 && s.categoria === 'bass'; })()`)) === true;
+  }
+  controlla('12 mutate del BASS restano nei limiti (ottava bassa, filtro chiuso)', dentro);
+  await js(`cutxProva.synth.categoriaEl.value = ''; cutxProva.synth.categoriaEl.dispatchEvent(new Event('change'))`);
 
   // → CUE: la clip finisce in fondo al brano (attivo o prossimo) o al kit, con la riga @synth; «synth» sulla card la riapre esatta
   const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip drum\ns("sine*2").gain(.0001)\n';
-  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), forma: 'sine', gain: 0.02, cutoff: 777, anteprima: 'tenuta' }, B: null, lato: 'A', nome: 'bass test' })`);
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), forma: 'sine', gain: 0.02, cutoff: 777, anteprima: 'tenuta', categoria: 'bass' }, B: null, lato: 'A', nome: 'bass test' })`);
   const destinazioni = await js(`JSON.stringify([...document.querySelectorAll('.synth-barra select')].at(-1).options.length ? [...[...document.querySelectorAll('.synth-barra select')].at(-1).options].map((o) => [o.value, o.disabled]) : [])`);
   controlla('senza il brano attivo, «attivo» è spento', /\["attivo",true\]/.test(destinazioni), destinazioni);
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}, 'attivo')`);
@@ -3198,6 +3224,7 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`document.querySelector('.synth-cue').click()`);
   const sez = await js(`cutxProva.cue.slot.attivo.modello.sezioni.map((x) => x.nome + ':' + x.corpo[0].slice(0, 9)).join('|')`);
   controlla('→ CUE aggiunge la clip in fondo al brano attivo, con la riga // @synth', sez === 'drum:s("sine*2|bass test:// @synth', String(sez));
+  controlla('e nel file la riga della clip porta il tipo: // @clip bass test · bass', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).riga`)) === '// @clip bass test · bass', String(await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).riga`)));
   controlla('e il brano risulta da salvare', (await js(`cutxProva.cue.slot.attivo.sporco`)) === true);
   await js(`document.querySelector('.synth-cue').click()`);
   controlla('mandandola di nuovo il nome non si ripete', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).nome`)) === 'bass test 2');
@@ -3216,7 +3243,9 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.cue.cambiaModo('brano')`);
   await aspetta(0.6);
   const bottoni = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)))`);
-  controlla('sulla card della clip del synth c\'è «synth», su quella scritta a mano no', bottoni === '[false,false,true,true]' || bottoni === '[false,true,true]', bottoni);
+  controlla('sulla card della clip del synth c\'è «synth», su quella scritta a mano no', bottoni === '[false,true,true,false]', bottoni);
+  controlla('le clip sono raggruppate per tipo con i loro titoli (BASS, altre)', (await js(`[...document.querySelectorAll('#carte .gruppo-clip')].map((e) => e.textContent).join('|')`)) === 'BASS|altre');
+  controlla('lo scorrimento del controller segue i gruppi (le bass prima, poi le senza tipo)', (await js(`cutxProva.cue.sezioniNav().join('|')`)) === 'bass test|bass test 2|drum', String(await js(`cutxProva.cue.sezioniNav().join('|')`)));
   await js(`cutxProva.synth.cambia('cutoff', 3000)`);
   await js(`[...document.querySelectorAll('#carte .card.sezione')].find((c) => c.textContent.includes('bass test') && [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)).querySelector('.card-testa button:not([hidden])') && [...document.querySelectorAll('#carte .card-testa button')].filter((b) => b.textContent.trim() === 'synth' && !b.hidden)[0].click()`);
   await aspetta(0.6);
@@ -3265,6 +3294,15 @@ async function provaSynth({ finestre, scrivi }) {
   }
   await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`);
   const livelloSynth = (await liveStato())?.livelli?.find((l) => l.codice?.includes('@synth'));
+  // × sulla card: se la clip è live prima esce dal live; la clip esce dal brano; ⌘Z la riprende
+  const nPrima = await js(`cutxProva.cue.slot.attivo.modello.sezioni.length`);
+  await js(`[...document.querySelectorAll('#carte .card.sezione')].find((x) => x.querySelector('.nome-sezione')?.textContent.includes('volume test')).querySelector('[data-aiuto="clip-togli"]').click()`);
+  await aspetta(4);
+  controlla('× toglie la clip dal brano (da salvare)', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.length`)) === nPrima - 1 && (await js(`cutxProva.cue.slot.attivo.sporco`)) === true);
+  controlla('e se era live, la toglie anche dal live', !((await liveStato())?.livelli ?? []).some((l) => l.codice?.includes('@synth') && l.a === null));
+  await js(`cutxProva.cronologia.annulla()`);
+  await aspetta(0.5);
+  controlla('⌘Z riprende la clip', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.length`)) === nPrima);
   controlla('la clip del synth è live', !!livelloSynth);
   controlla('e non è quasi muta: col volume generale a 0,1 il picco è udibile', picco > 0.01, `picco ${picco.toFixed(4)}`);
   scrivi(`(picco della clip del synth con volume generale 0,1: ${picco.toFixed(4)})`);

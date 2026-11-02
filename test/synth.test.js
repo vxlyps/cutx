@@ -178,3 +178,63 @@ test('la clip porta le note che suonano davvero, e la riga resta corta', () => {
   assert.ok(rigaSynth(s).length < 200, String(rigaSynth(s).length));
   assert.match(testo, /^\/\/ @synth \{.*\}\nnote\("c3"\)/);
 });
+
+import { CATEGORIE, categoriaDi, gruppiClip, ordineClip } from '../src/renderer/categorie.js';
+import { PROFILI, mutate } from '../src/renderer/synth-modello.js';
+
+test('ogni tipo resta nei suoi limiti, per 200 semi', () => {
+  const lim = {
+    bass: (s) => s.cutoff <= 1200 && s.tipo === 'lpf' && s.ottava === -1 && s.release <= 0.3 && s.attack <= 0.02 && ['sawtooth', 'square', 'supersaw', 'triangle'].includes(s.forma),
+    lead: (s) => s.cutoff >= 1200 && s.sustain >= 0.5 && s.attack <= 0.05 && ['sawtooth', 'square', 'supersaw', 'pulse'].includes(s.forma),
+    arp: (s) => s.decay <= 0.25 && s.sustain <= 0.3 && s.attack <= 0.01,
+    pad: (s) => s.attack >= 0.4 && s.release >= 1 && s.sustain >= 0.6,
+    keys: (s) => s.decay >= 0.3 && ['triangle', 'sine', 'square'].includes(s.forma) && s.ottava === 0,
+    fx: () => true,
+  };
+  for (const c of CATEGORIE) {
+    assert.ok(PROFILI[c], c);
+    for (let n = 1; n <= 200; n++) {
+      const s = sorprendi(seme(n), { ...iniziale(), categoria: c });
+      assert.deepEqual(s, pulisci(s), `${c} seme ${n}`);
+      assert.ok(costo(s) <= COSTO_MAX, `${c} seme ${n} costo ${costo(s)}`);
+      assert.equal(s.categoria, c);
+      assert.ok(lim[c](s), `${c} seme ${n}: ${JSON.stringify(s)}`);
+    }
+  }
+});
+
+test('mutate: poco = vicino, tanto = nuovo, il tipo e le note restano', () => {
+  const base = pulisci({ ...iniziale(), categoria: 'lead', note: 'c3 e3', anteprima: 'clip', cutoff: 3000 });
+  const distanza = (a, b) => PARAMETRI.filter((p) => p.tipo === 'num').reduce((t, p) => t + Math.abs(aPosizione(p, a, a[p.k]) - aPosizione(p, b, b[p.k])), 0);
+  let poco = 0;
+  let tanto = 0;
+  for (let n = 1; n <= 100; n++) {
+    const a = mutate(base, 0.1, seme(n));
+    const b = mutate(base, 0.9, seme(n));
+    poco += distanza(base, a);
+    tanto += distanza(base, b);
+    assert.deepEqual(a, pulisci(a));
+    assert.equal(a.categoria, 'lead');
+    assert.equal(a.note, 'c3 e3');
+    assert.equal(b.anteprima, 'clip');
+    assert.equal(a.gain, base.gain);
+    assert.ok(costo(a) <= COSTO_MAX && costo(b) <= COSTO_MAX);
+  }
+  assert.ok(poco < tanto * 0.4, `${poco} vs ${tanto}`);
+  assert.deepEqual(mutate(base, 0, seme(5)), base);
+  assert.deepEqual(mutate(base, 1, seme(5)), sorprendi(seme(5), base, 'lead'));
+});
+
+test('i tipi nel file: la riga della clip e i gruppi del CUE', () => {
+  assert.equal(categoriaDi({ bass: true, volume: 0.8 }), 'bass');
+  assert.equal(categoriaDi({ volume: 1 }), '');
+  assert.equal(categoriaDi({ bass: 3 }), '');
+  const clip = [{ info: {} }, { info: { pad: true } }, { info: { bass: true } }, { info: {} }, { info: { bass: true } }];
+  assert.deepEqual(gruppiClip(clip), [
+    { categoria: 'bass', indici: [2, 4] },
+    { categoria: 'pad', indici: [1] },
+    { categoria: '', indici: [0, 3] },
+  ]);
+  assert.deepEqual(ordineClip(clip), [2, 4, 1, 0, 3]);
+  assert.deepEqual(gruppiClip([{ info: {} }, { info: {} }]), [{ categoria: null, indici: [0, 1] }]); // senza tipi: niente gruppi né titoli
+});

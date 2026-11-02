@@ -74,6 +74,10 @@ let browser = null; // il browser a sinistra (più sotto): serve già al CUE che
 // ⌘Z fuori dagli editor (cronologia.js): un annulla non cambia mai direttamente il live
 const cronologia = new Cronologia(20);
 const cue = new Cue(CODICE_INIZIALE, {
+  togliDalLive: (brano, nome) => {
+    const l = livelliLive.find((x) => x.nome === nome && x.a === null && x.provenienza?.startsWith(`${brano} §`));
+    if (l) togliLivello(l.id);
+  },
   apriNelSynth: (codice, nome) => apriNelSynth(codice, nome),
   provaInCuffia: () => provaInCuffia(),
   fermaCuffia: () => fermaCuffia(),
@@ -627,7 +631,7 @@ const synth = new VistaSynth($('vista-synth'), {
     { id: 'prossimo', nome: it.synth.destinazioni.prossimo, ok: !!cue.slot.prossimo },
     { id: 'kit', nome: it.synth.destinazioni.kit, ok: !!serata.kit },
   ],
-  mandaCue: (dove, nome, testo) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo) : cue.aggiungiClip(dove, nome, testo)),
+  mandaCue: (dove, nome, testo, categoria) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo, categoria) : cue.aggiungiClip(dove, nome, testo, categoria)),
   salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
 });
 

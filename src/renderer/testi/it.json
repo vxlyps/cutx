@@ -240,21 +240,13 @@
       "nome": "che cosa suona la prova",
       "testo": "Arpeggio corto, una nota tenuta oppure le note della clip aperta nel synth. Finiscono anche nella clip che mandi al CUE."
     },
-    "synth-ab": {
-      "nome": "A/B",
-      "testo": "Due versioni del suono da confrontare al volo. La prima volta B parte uguale ad A; poi ognuna si modifica per conto suo."
-    },
     "synth-copia": {
-      "nome": "= copia",
-      "testo": "Copia la versione che stai usando (A o B) sull'altra."
+      "nome": "copia",
+      "testo": "Copia lo slot acceso nell'altro."
     },
     "synth-init": {
       "nome": "init",
       "testo": "Riparti da zero: il suono torna quello di partenza. Le note restano. ⌘Z lo annulla."
-    },
-    "synth-sorprendi": {
-      "nome": "sorprendimi",
-      "testo": "Un suono a caso ma musicale, dentro limiti sensati (mai troppo forte, mai troppo pesante). ⌘Z lo annulla."
     },
     "synth-destinazione": {
       "nome": "dove mandare la clip",
@@ -271,6 +263,26 @@
     "synth-codice": {
       "nome": "codice",
       "testo": "Il codice Strudel che il pannello sta scrivendo, con tutti i parametri attivi. I valori neutri (shape 0, delay 0…) non si scrivono: si vedono solo sulle manopole."
+    },
+    "synth-slot": {
+      "nome": "slot A / B",
+      "testo": "Due versioni del suono. Quella accesa è la tua: la senti in cuffia e la modifichi. La prima volta B parte uguale ad A."
+    },
+    "synth-mutate": {
+      "nome": "mutate",
+      "testo": "Cambia il suono dentro il suo tipo. Poco: una variazione di quello che hai. Tanto: un suono nuovo. ⌘Z lo annulla."
+    },
+    "synth-quanto": {
+      "nome": "quanto",
+      "testo": "Quanto cambia mutate: poco = variazione del suono attuale, tanto = suono nuovo."
+    },
+    "synth-categoria": {
+      "nome": "tipo del suono",
+      "testo": "BASS, LEAD, ARP, PAD, KEYS o FX. Mutate resta dentro i limiti del tipo, e la clip porta il tipo nel file: nel CUE le clip si raggruppano per tipo."
+    },
+    "clip-togli": {
+      "nome": "togli la clip",
+      "testo": "Toglie la clip dal brano (⌘Z la riprende). Se suona live, prima la toglie dal live. Il brano resta da salvare con ⌘S."
     }
   },
   "impostazioni": {
@@ -418,16 +430,20 @@
     "barra": {
       "nome": "Nome del suono",
       "play": "▶ cuffia",
-      "ab": "A/B",
-      "copia": "= copia",
       "init": "init",
-      "sorprendimi": "sorprendimi",
       "cue": "→ CUE",
       "schema": "Schema di prova",
       "destinazione": "Destinazione",
       "codice": "codice",
       "peso": "peso {n}/{max}",
-      "pesante": "peso {n}/{max} · pesante"
+      "pesante": "peso {n}/{max} · pesante",
+      "slotA": "A",
+      "slotB": "B",
+      "copia": "copia → {lato}",
+      "mutate": "mutate",
+      "quanto": "quanto",
+      "categoria": "Tipo del suono",
+      "codiceSlot": "codice · {lato}"
     },
     "destinazioni": {
       "attivo": "brano attivo",
@@ -454,7 +470,17 @@
       "apriTitolo": "Apri questa clip nel synth",
       "dalSynth": "clip «{nome}» dal synth",
       "mandataNonSalvata": "clip «{nome}» → {dove} (da salvare con ⌘S)",
-      "nessunBranoApertoSlot": "nessun brano {dove} nel CUE"
+      "nessunBranoApertoSlot": "nessun brano {dove} nel CUE",
+      "altre": "altre"
+    },
+    "categorie": {
+      "": "tipo",
+      "bass": "BASS",
+      "lead": "LEAD",
+      "arp": "ARP",
+      "pad": "PAD",
+      "keys": "KEYS",
+      "fx": "FX"
     }
   }
 }
