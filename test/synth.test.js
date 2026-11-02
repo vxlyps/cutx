@@ -167,3 +167,14 @@ test('ogni parametro ha il suo intervallo coerente e un valore di partenza dentr
   }
   assert.ok(COSTO_AVVISO < COSTO_MAX);
 });
+
+test('la clip porta le note che suonano davvero, e la riga resta corta', () => {
+  const s = pulisci({ ...iniziale(), anteprima: 'tenuta', cutoff: 900 });
+  const testo = clip(s);
+  const letto = leggiRiga(testo);
+  assert.equal(letto.anteprima, 'clip');
+  assert.equal(letto.note, 'c3');
+  assert.equal(letto.cutoff, 900);
+  assert.ok(rigaSynth(s).length < 200, String(rigaSynth(s).length));
+  assert.match(testo, /^\/\/ @synth \{.*\}\nnote\("c3"\)/);
+});

@@ -3,7 +3,8 @@
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
 import { VistaSynth } from './synth-vista.js';
-import { codice as codiceSynth } from './synth-codice.js';
+import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
+import it from './testi/it.json';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
@@ -73,6 +74,7 @@ let browser = null; // il browser a sinistra (più sotto): serve già al CUE che
 // ⌘Z fuori dagli editor (cronologia.js): un annulla non cambia mai direttamente il live
 const cronologia = new Cronologia(20);
 const cue = new Cue(CODICE_INIZIALE, {
+  apriNelSynth: (codice, nome) => apriNelSynth(codice, nome),
   provaInCuffia: () => provaInCuffia(),
   fermaCuffia: () => fermaCuffia(),
   goLive: () => goLive(),
@@ -620,10 +622,22 @@ const synth = new VistaSynth($('vista-synth'), {
   },
   ferma: () => fermaCuffia(),
   suonaOra: () => pezzoCuffia?.etichetta?.provenienza === 'synth',
-  destinazioni: () => [],
-  mandaCue: () => 'arriva nel prossimo passo',
+  destinazioni: () => [
+    { id: 'attivo', nome: it.synth.destinazioni.attivo, ok: !!cue.slot.attivo },
+    { id: 'prossimo', nome: it.synth.destinazioni.prossimo, ok: !!cue.slot.prossimo },
+    { id: 'kit', nome: it.synth.destinazioni.kit, ok: !!serata.kit },
+  ],
+  mandaCue: (dove, nome, testo) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo) : cue.aggiungiClip(dove, nome, testo)),
   salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
 });
+
+// «apri nel synth» sulla card di una clip fatta dal synth: il pannello riparte da quella clip.
+function apriNelSynth(codice, nome) {
+  const stato = leggiRigaSynth(codice);
+  if (!stato) return cue.avviso(it.synth.msg.apriNonSynth);
+  synth.apri(stato, nome);
+  mostraVista('synth');
+}
 
 function mostraVista(v) {
   if (v === vista) return;
@@ -1154,6 +1168,7 @@ function mostraUscita(aperta) {
 // Il LIVE: la pila dei livelli, dallo stato del motore live, e il jam in fondo.
 let volumePrima = null; // { id, v }: il volume com'era all'inizio del trascinamento
 const pila = new Pila($('livelli'), $('jam'), {
+  apriNelSynth: (codice, nome) => apriNelSynth(codice, nome),
   togli: (id) => togliLivello(id),
   salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
   pulisciCoda: (id) => pulisciCoda(id),

@@ -76,3 +76,12 @@ test('le note evidenziate si riportano sul testo filtrato', () => {
   assert.equal(testo.slice(a, b), 'bd');
   assert.deepEqual(convertiIntervalli([[0, 3]], inv), []); // il commento non c'è più
 });
+
+test('la riga // @synth non si vede mai sul proiettore, nemmeno con i commenti accesi', () => {
+  const codice = '// @synth {"cutoff":900}\nnote("c3")\n  .s("sawtooth")';
+  for (const opz of [{ commenti: true, preambolo: true }, { commenti: false, preambolo: true }, { commenti: true, preambolo: false }]) {
+    const { testo } = filtraCodice(codice, opz);
+    assert.equal(testo.includes('@synth'), false, JSON.stringify(opz));
+    assert.ok(testo.includes('.s("sawtooth")'));
+  }
+});

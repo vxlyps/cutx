@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { NOTE_ANTEPRIMA, eRumore, noteValide, pulisci } from './synth-modello.js';
+import { NOTE_ANTEPRIMA, eRumore, iniziale, noteValide, pulisci } from './synth-modello.js';
 
 export const MARCA = '// @synth';
 const RIGA = /^[ \t]*\/\/[ \t]*@synth[ \t]+(\{.*\})[ \t]*$/m;
@@ -90,10 +90,20 @@ export function codice(stato) {
 }
 
 // La riga `// @synth {…}`: lo stato del pannello, perché «apri nel synth» riapra la clip esatta.
-export const rigaSynth = (stato) => `${MARCA} ${JSON.stringify(pulisci(stato))}`;
+// Solo quello che è diverso dal suono init: la riga resta corta (il resto torna da pulisci).
+export function rigaSynth(stato) {
+  const s = pulisci(stato);
+  const base = iniziale();
+  const diverse = Object.fromEntries(Object.entries(s).filter(([k, v]) => v !== base[k]));
+  return `${MARCA} ${JSON.stringify(diverse)}`;
+}
 
 // Codice di una clip: la riga @synth in testa, poi il codice.
-export const clip = (stato) => `${rigaSynth(stato)}\n${codice(stato)}\n`;
+// Nella riga ci vanno le note che suonano davvero (schema «clip»): riaprendola nel synth le note sono quelle.
+export function clip(stato) {
+  const s = pulisci(stato);
+  return `${rigaSynth({ ...s, anteprima: 'clip', note: noteEffettive(s) })}\n${codice(s)}\n`;
+}
 
 // Lo stato scritto nella riga @synth di un testo, o null se non c'è (o non si legge): le clip scritte a mano non si aprono nel synth.
 export function leggiRiga(testo) {

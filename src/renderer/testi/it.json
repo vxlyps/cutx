@@ -354,5 +354,107 @@
   },
   "ableton": {
     "vuota": "Porta in CUTX i tuoi progetti Ableton: scegli la cartella dove li tieni e li trovi qui, pronti da importare come brani."
+  },
+  "synth": {
+    "gruppi": {
+      "osc": "oscillatore",
+      "filtro": "filtro",
+      "amp": "ampiezza",
+      "fx": "effetti"
+    },
+    "parametri": {
+      "forma": "forma",
+      "voci": "voci",
+      "detune": "detune",
+      "spread": "stereo",
+      "pw": "larghezza",
+      "fm": "FM",
+      "fmh": "FM armonica",
+      "ottava": "ottava",
+      "sub": "sub −12",
+      "pan": "pan",
+      "tipo": "tipo",
+      "cutoff": "cutoff",
+      "q": "risonanza",
+      "ftype": "pendenza",
+      "fenv": "env filtro",
+      "fattacco": "env attack",
+      "fdecay": "env decay",
+      "fsustain": "env sustain",
+      "frelease": "env release",
+      "vowel": "vocale",
+      "attack": "attack",
+      "decay": "decay",
+      "sustain": "sustain",
+      "release": "release",
+      "gain": "gain",
+      "penv": "pitch env",
+      "pdecay": "pitch decay",
+      "shape": "shape",
+      "distort": "distort",
+      "crush": "crush (bit)",
+      "coarse": "coarse",
+      "phaser": "phaser",
+      "phaserdepth": "phaser depth",
+      "tremolo": "tremolo (per ciclo)",
+      "tremolodepth": "tremolo depth",
+      "delay": "delay",
+      "delaysync": "delay tempo",
+      "delayfeedback": "feedback",
+      "room": "room",
+      "roomsize": "room size"
+    },
+    "scelte": {
+      "sawtooth": "saw",
+      "triangle": "tri",
+      "": "no"
+    },
+    "anteprime": {
+      "arpeggio": "arpeggio corto",
+      "tenuta": "nota tenuta",
+      "clip": "note della clip"
+    },
+    "barra": {
+      "nome": "Nome del suono",
+      "play": "▶ cuffia",
+      "ab": "A/B",
+      "copia": "= copia",
+      "init": "init",
+      "sorprendimi": "sorprendimi",
+      "cue": "→ CUE",
+      "schema": "Schema di prova",
+      "destinazione": "Destinazione",
+      "codice": "codice",
+      "peso": "peso {n}/{max}",
+      "pesante": "peso {n}/{max} · pesante"
+    },
+    "destinazioni": {
+      "attivo": "brano attivo",
+      "prossimo": "prossimo brano",
+      "kit": "kit"
+    },
+    "valori": {
+      "off": "off",
+      "bit": "{n} bit",
+      "ciclo": "{n}/ciclo",
+      "x": "×{n}",
+      "on": "on"
+    },
+    "msg": {
+      "tetto": "tetto: peso {n} su {max}",
+      "codiceNonParte": "errore: {errore}",
+      "copiato": "copiato su {lato}",
+      "mandata": "clip «{nome}» → {dove}",
+      "nota": "La riga // @synth con lo stato del pannello si aggiunge alla clip mandata al CUE.",
+      "nessunBrano": "nessun brano {dove}",
+      "nessunKit": "nessun kit.cutx nello stash",
+      "apriNonSynth": "questa clip non viene dal synth",
+      "apri": "synth",
+      "aperta": "aperta «{nome}»",
+      "apriTitolo": "Apri questa clip nel synth",
+      "dalSynth": "clip «{nome}» dal synth",
+      "mandataNonSalvata": "clip «{nome}» → {dove} (da salvare con ⌘S)",
+      "nessunBranoApertoSlot": "nessun brano {dove} nel CUE"
+    }
   }
 }

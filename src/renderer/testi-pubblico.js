@@ -103,8 +103,10 @@ function inizioCommento(riga) {
 // Il codice senza quello che il pubblico non deve leggere: commenti e/o il preambolo del brano (le righe prima di `inizio`; un setcpm
 // scritto dentro il livello, dal CUE, dalla card o dal jam, è un gesto e resta).
 // Ritorna { testo, inv }: inv[i] = dove sta nel testo nuovo il carattere i del vecchio (-1 se non c'è più), per riportare le note evidenziate.
+// La riga `// @synth …` (lo stato del pannello del synth) non si vede mai sul proiettore, qualunque cosa dicano le impostazioni.
+const RIGA_SYNTH = /^\s*\/\/\s*@synth\b/;
 export function filtraCodice(codice, { commenti = true, preambolo = true, inizio = 0 } = {}) {
-  if (commenti && preambolo) return { testo: codice, inv: null };
+  if (commenti && preambolo && !codice.includes('@synth')) return { testo: codice, inv: null };
   const inv = new Int32Array(codice.length + 1).fill(-1);
   const righe = [];
   let uscita = 0;
@@ -113,7 +115,8 @@ export function filtraCodice(codice, { commenti = true, preambolo = true, inizio
     const fine = s + riga.length;
     let tieni = riga;
     let via = false;
-    if (!preambolo && s < inizio) via = true;
+    if (RIGA_SYNTH.test(riga)) via = true;
+    else if (!preambolo && s < inizio) via = true;
     else if (!commenti) {
       const c = inizioCommento(riga);
       if (c === 0 || (c > 0 && riga.slice(0, c).trim() === '')) via = true; // riga di solo commento

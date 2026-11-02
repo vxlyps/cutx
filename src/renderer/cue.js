@@ -3,6 +3,8 @@
 // - brano: un file .cutx della libreria, con la mappa in alto e una card per sezione.
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
+import it from './testi/it.json';
+import { haRigaSynth } from './synth-codice.js';
 import { creaEditor } from './editor.js';
 import { chiediNome, conferma } from './dialogo.js';
 import { analizza } from './analisi.js';
@@ -439,6 +441,21 @@ export class Cue {
     this.mostraModo();
   }
 
+  // Una clip nuova in fondo al brano attivo o al prossimo (dal synth). Ritorna l'errore, o null. Il brano resta da salvare.
+  aggiungiClip(dove, nome, codice) {
+    const slot = this.slot[dove];
+    if (!slot) return it.synth.msg.nessunBranoApertoSlot.replace('{dove}', it.synth.destinazioni[dove]);
+    const nomi = new Set(slot.modello.sezioni.map((x) => x.nome));
+    let unico = nome;
+    for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
+    const prima = this.linguetta;
+    this.linguetta = dove; // modifica() lavora sul brano della linguetta in vista: ci si sposta il tempo di scrivere
+    this.modifica(B.conSezioneInFondo(slot.modello, unico, {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
+    this.linguetta = prima;
+    this.mostraModo();
+    return null;
+  }
+
   // Un livello tolto dal live torna nel CUE, pronto: in fondo al testo libero o al brano aperto. Non tocca il live.
   reinserisci({ nome, codice, volume, muto }) {
     const info = {};
@@ -629,6 +646,7 @@ export class Cue {
       suFuoco: () => this.attiva(carta),
       suCambio: () => {
         const nuove = carta.editor.codice.split('\n');
+        if (carta.apriSynth) carta.apriSynth.hidden = !haRigaSynth(nuove.join('\n'));
         const mm = this.brano.modello;
         this.modifica(preambolo ? { ...mm, preambolo: nuove } : B.conCorpo(mm, i, nuove), false);
         this.mostraMappa(mm.sezioni.map((s) => this.statoSezione(this.nomeBrano, s.nome)));
@@ -704,7 +722,12 @@ export class Cue {
         });
       };
       mostraVolume();
-      testa.append(unisci, dividi, volume, cuffia, live);
+      // solo le clip fatte dal synth (con la riga // @synth) si riaprono nel synth
+      const apriSynth = tasto(it.synth.msg.apri, '', it.synth.msg.apriTitolo);
+      apriSynth.hidden = !haRigaSynth(righe.join('\n'));
+      apriSynth.onclick = () => this.azioni.apriNelSynth?.(carta.editor.codice, m.sezioni[i].nome);
+      carta.apriSynth = apriSynth;
+      testa.append(unisci, dividi, apriSynth, volume, cuffia, live);
     }
     this.carte.push(carta);
     return art;

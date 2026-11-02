@@ -3062,6 +3062,7 @@ async function provaSynth({ finestre, scrivi }) {
   const codiceSynth = () => js(`document.querySelector('.synth-pre').textContent`);
   const stato = (k) => js(`cutxProva.synth.stato[${JSON.stringify(k)}]`);
   const mouse = async (tipo, x, y) => finestre.controllo.webContents.sendInputEvent({ type: tipo, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+  await js(`window.addEventListener('error', (e) => (window.__err = (window.__err || '') + ' || ' + e.error?.stack))`);
   await js(`cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ synthUltimo: null }); cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' })`);
   await aspetta(0.5);
   // un pezzo live piano, che deve continuare a suonare mentre sono nel SYNTH
@@ -3182,6 +3183,43 @@ async function provaSynth({ finestre, scrivi }) {
   await premi('Z', 'meta');
   controlla('⌘Z annulla sorprendimi', (await stato('q')) === 12);
 
+  // → CUE: la clip finisce in fondo al brano (attivo o prossimo) o al kit, con la riga @synth; «synth» sulla card la riapre esatta
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip drum\ns("sine*2").gain(.0001)\n';
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), forma: 'sine', gain: 0.02, cutoff: 777, anteprima: 'tenuta' }, B: null, lato: 'A', nome: 'bass test' })`);
+  const destinazioni = await js(`JSON.stringify([...document.querySelectorAll('.synth-barra select')].at(-1).options.length ? [...[...document.querySelectorAll('.synth-barra select')].at(-1).options].map((o) => [o.value, o.disabled]) : [])`);
+  controlla('senza il brano attivo, «attivo» è spento', /\["attivo",true\]/.test(destinazioni), destinazioni);
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}, 'attivo')`);
+  await aspetta(0.5);
+  await js(`cutxProva.synth.aggiornaDestinazioni(); document.querySelector('.synth-barra select:last-of-type').value = 'attivo'`);
+  await js(`document.querySelector('.synth-cue').click()`);
+  const sez = await js(`cutxProva.cue.slot.attivo.modello.sezioni.map((x) => x.nome + ':' + x.corpo[0].slice(0, 9)).join('|')`);
+  controlla('→ CUE aggiunge la clip in fondo al brano attivo, con la riga // @synth', sez === 'drum:s("sine*2|bass test:// @synth', String(sez));
+  controlla('e il brano risulta da salvare', (await js(`cutxProva.cue.slot.attivo.sporco`)) === true);
+  await js(`document.querySelector('.synth-cue').click()`);
+  controlla('mandandola di nuovo il nome non si ripete', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).nome`)) === 'bass test 2');
+  await js(`window.__prossimo = cutxProva.cue.slot.prossimo; cutxProva.cue.slot.prossimo = null`);
+  controlla('senza il prossimo brano: errore e niente scritto', typeof (await js(`cutxProva.synth.opz.mandaCue('prossimo', 'x', 'y')`)) === 'string');
+  await js(`cutxProva.cue.slot.prossimo = window.__prossimo`);
+
+  const kitVero = await js(`cutxProva.serata.kit != null`);
+  await js(`window.__kitVero = cutxProva.serata.kit; window.__salvaVera = cutxProva.serata.salvaKitSoon; cutxProva.serata.salvaKitSoon = () => {}; cutxProva.serata.kit = { modello: { testa: [], preambolo: [], apertura: null, beat: null, sezioni: [] }, testo: '' }`);
+  const eKit = await js(`cutxProva.synth.opz.mandaCue('kit', 'bass test', '// @synth {}\\nnote("c3")')`);
+  controlla('→ CUE manda anche al kit (qui un kit finto: il kit.cutx dello stash non si tocca)', eKit === null && (await js(`cutxProva.serata.kit.modello.sezioni.length`)) === 1 && (await js(`cutxProva.serata.kit.modello.sezioni[0].nome`)) === 'bass test');
+  await js(`cutxProva.serata.kit = window.__kitVero; cutxProva.serata.salvaKitSoon = window.__salvaVera`);
+  scrivi(`(kit dello stash presente: ${kitVero})`);
+  await premi('1', 'meta');
+  await aspetta(0.6);
+  await js(`cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(0.6);
+  const bottoni = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)))`);
+  controlla('sulla card della clip del synth c\'è «synth», su quella scritta a mano no', bottoni === '[false,false,true,true]' || bottoni === '[false,true,true]', bottoni);
+  await js(`cutxProva.synth.cambia('cutoff', 3000)`);
+  await js(`[...document.querySelectorAll('#carte .card.sezione')].find((c) => c.textContent.includes('bass test') && [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)).querySelector('.card-testa button:not([hidden])') && [...document.querySelectorAll('#carte .card-testa button')].filter((b) => b.textContent.trim() === 'synth' && !b.hidden)[0].click()`);
+  await aspetta(0.6);
+  controlla('«synth» sulla card riapre la clip nel synth, esatta (filtro 777, note della clip)', (await js(`cutxProva.vista`)) === 'synth' && (await stato('cutoff')) === 777 && (await stato('anteprima')) === 'clip' && (await stato('note')) === 'c3' && (await js(`cutxProva.synth.nome`)) === 'bass test', `${await js(`cutxProva.vista`)} ${await stato('cutoff')} ${await stato('note')}`);
+  await premi('1', 'meta');
+  await aspetta(0.4);
+
   // il tetto: troppe voci non si può
   await js(`cutxProva.synth.cambia('forma', 'supersaw'); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('voci', 7); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('sub', 1); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('room', 0.5); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('delay', 0.3)`);
   controlla('il peso arriva al tetto e il pannello avvisa «pesante»', (await js(`document.querySelector('.synth-peso').textContent`)).includes('pesante'));
@@ -3209,6 +3247,7 @@ async function provaSynth({ finestre, scrivi }) {
     await writeFile(path.join(cartella, 'blocco1.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
     await premi('1', 'meta');
   } catch {}
+  controlla('nessun errore non gestito nella pagina durante la prova', !(await js('window.__err')), String(await js('window.__err')));
   await js('cutxProva.fermaTutto()');
   return ok;
 }

@@ -52,3 +52,11 @@ Uno alla volta, commit e prove per ognuno, poi mi fermo a provare.
 - **Ampiezza**: `attack`, `decay`, `sustain`, `release`, `gain`, `velocity`, `postgain`, `pan`.
 - **Effetti**: `shape`, `distort` (+ `distortvol`, `distorttype`), `crush`, `coarse`, `tremolo` (+ depth/phase/shape/sync), `phaser` (+ depth/center/sweep), `compressor` (+ ratio/knee/attack/release), `delay` (+ `delaytime`, `delayfeedback`, `delaysync`), `room` (+ `roomsize`, `roomfade`, `roomlp`, `roomdim`), `duckorbit` (sidechain).
 - Da ricontrollare caso per caso nel codice (non dare per scontato): `n`/`detune` del supersaw (in superdough `n` vale come detune se `detune` manca), valori consentiti di `ftype`.
+
+## Blocco 1 · fatto (2/11/2026)
+
+Vista SYNTH nella stessa finestra (⌘1/⌘2), oscillatore, filtro, ampiezza, effetti (con phaser e tremolo), pannello codice, ▶ in cuffia a volume prudente (⌘↵), → CUE (brano attivo, prossimo, kit), «apri nel synth» sulle clip fatte dal synth, ⌘Z/⇧⌘Z, A/B, init, sorprendimi. Dettagli e scelte nella voce «SYNTH · blocco 1» di `CLAUDE.md`.
+
+Limiti scelti: sovrapposizioni (layer) al massimo 5; voci del supersaw al massimo 7; sub = una copia in più; peso stimato «pesante» da 10, tetto a 18; risonanza al massimo 25 (il limiter e il volume 0,5 proteggono le orecchie); gain al massimo 1; feedback del delay al massimo 0,85.
+
+Non c'è ancora: pianoroll, tastiera, REC (blocco 2); modulatori (blocco 3); arpeggio e caos (blocco 4); controller (blocco 5); campioni dello stash come forma d'onda, MIDI e suoni salvati (blocco 6).

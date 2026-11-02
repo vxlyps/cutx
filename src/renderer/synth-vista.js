@@ -3,9 +3,12 @@
 // Qui non suona niente da sola: la cuffia la comanda app.js, attraverso le funzioni di `opz`.
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, pulisci, pulisciValore, sorprendi } from './synth-modello.js';
 import { clip, codice } from './synth-codice.js';
+import it from './testi/it.json';
 
-const NOMI_FORMA = { sawtooth: 'saw', triangle: 'tri', square: 'square', sine: 'sine', supersaw: 'supersaw', pulse: 'pulse', white: 'white', pink: 'pink', brown: 'brown', crackle: 'crackle' };
-const NOMI_ANTEPRIMA = { arpeggio: 'arpeggio corto', tenuta: 'nota tenuta', clip: 'note della clip' };
+const T = it.synth;
+// Un testo dal file dei testi con i suoi {segnaposto}.
+export const formatta = (modello, vars = {}) => String(modello).replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
+
 const PASSO_FINE = 0.002; // per pixel di trascinamento con ⇧
 const PASSO = 0.006; // per pixel
 const STORIA_MAX = 100;
@@ -21,13 +24,13 @@ const crea = (tag, classe, testo) => {
 
 // Il valore come lo si legge sulla manopola.
 export function etichettaValore(p, v) {
-  if (p.tipo === 'scelta') return NOMI_FORMA[v] ?? (v === '' ? 'no' : String(v));
+  if (p.tipo === 'scelta') return T.scelte[v] ?? String(v);
   if (p.k === 'cutoff') return v >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v));
   if (['attack', 'decay', 'release', 'fattacco', 'fdecay', 'frelease', 'pdecay'].includes(p.k)) return v < 1 ? `${Math.round(v * 1000)}ms` : `${Math.round(v * 100) / 100}s`;
   if (p.k === 'ottava') return v > 0 ? `+${v}` : String(v);
-  if (p.k === 'crush') return v >= 16 ? 'off' : `${v} bit`;
-  if (p.k === 'coarse') return v <= 1 ? 'off' : `×${v}`;
-  if (p.k === 'tremolo') return v === 0 ? 'off' : `${v}/ciclo`;
+  if (p.k === 'crush') return v >= 16 ? T.valori.off : formatta(T.valori.bit, { n: v });
+  if (p.k === 'coarse') return v <= 1 ? T.valori.off : formatta(T.valori.x, { n: v });
+  if (p.k === 'tremolo') return v === 0 ? T.valori.off : formatta(T.valori.ciclo, { n: v });
   return String(v);
 }
 
@@ -62,25 +65,25 @@ export class VistaSynth {
     this.nomeEl = crea('input', 'synth-nome');
     this.nomeEl.value = this.nome;
     this.nomeEl.spellcheck = false;
-    this.nomeEl.setAttribute('aria-label', 'Nome del suono');
+    this.nomeEl.setAttribute('aria-label', T.barra.nome);
     this.nomeEl.oninput = () => (this.nome = this.nomeEl.value);
 
-    this.playEl = this.tasto('▶ cuffia', '⌘↵', () => this.suonaOFerma(), 'synth-play');
+    this.playEl = this.tasto(T.barra.play, '⌘↵', () => this.suonaOFerma(), 'synth-play');
     this.anteprimaEl = crea('select', 'synth-select');
-    this.anteprimaEl.setAttribute('aria-label', 'Che cosa suona la prova');
+    this.anteprimaEl.setAttribute('aria-label', T.barra.schema);
     this.anteprimaEl.dataset.aiuto = 'synth-schema';
-    for (const [id, nome] of Object.entries(NOMI_ANTEPRIMA)) this.anteprimaEl.append(new Option(nome, id));
+    for (const [id, nome] of Object.entries(T.anteprime)) this.anteprimaEl.append(new Option(nome, id));
     this.anteprimaEl.onchange = () => this.passo(() => this.imponi({ ...this.stato, anteprima: this.anteprimaEl.value }));
 
-    this.abEl = this.tasto('A', 'A/B', () => this.scambiaAB(), 'synth-ab');
-    this.copiaEl = this.tasto('= copia', '', () => this.copiaInAltro(), 'synth-copia');
-    this.initEl = this.tasto('init', '', () => this.riparti());
-    this.sorprendiEl = this.tasto('sorprendimi', '', () => this.sorprendimi());
+    this.abEl = this.tasto('A', T.barra.ab, () => this.scambiaAB(), 'synth-ab');
+    this.copiaEl = this.tasto(T.barra.copia, '', () => this.copiaInAltro(), 'synth-copia');
+    this.initEl = this.tasto(T.barra.init, '', () => this.riparti());
+    this.sorprendiEl = this.tasto(T.barra.sorprendimi, '', () => this.sorprendimi());
 
     this.destinazioneEl = crea('select', 'synth-select');
-    this.destinazioneEl.setAttribute('aria-label', 'Dove mandare la clip');
+    this.destinazioneEl.setAttribute('aria-label', T.barra.destinazione);
     this.destinazioneEl.dataset.aiuto = 'synth-destinazione';
-    this.cueEl = this.tasto('→ CUE', '', () => this.mandaCue(), 'synth-cue acid');
+    this.cueEl = this.tasto(T.barra.cue, '', () => this.mandaCue(), 'synth-cue acid');
 
     this.pesoEl = crea('span', 'lbl synth-peso');
     this.pesoEl.dataset.aiuto = 'synth-peso';
@@ -94,7 +97,7 @@ export class VistaSynth {
     const pannello = crea('div', 'synth-pannello');
     for (const g of GRUPPI) {
       const sez = crea('section', `synth-gruppo synth-${g.id}`);
-      sez.append(crea('h2', 'lbl', g.nome));
+      sez.append(crea('h2', 'lbl', T.gruppi[g.id]));
       const griglia = crea('div', 'synth-griglia');
       for (const p of PARAMETRI.filter((x) => x.g === g.id)) griglia.append(this.controllo(p));
       sez.append(griglia);
@@ -102,10 +105,10 @@ export class VistaSynth {
     }
 
     const lato = crea('aside', 'synth-codice');
-    lato.append(crea('h2', 'lbl', 'codice'));
+    lato.append(crea('h2', 'lbl', T.barra.codice));
     this.codiceEl = crea('pre', 'synth-pre');
     this.codiceEl.dataset.aiuto = 'synth-codice';
-    lato.append(this.codiceEl, crea('p', 'secondario', 'Questo è il codice che suona. La riga // @synth con lo stato del pannello si aggiunge quando mandi la clip al CUE.'), this.avvisoEl);
+    lato.append(this.codiceEl, crea('p', 'secondario', T.msg.nota), this.avvisoEl);
 
     corpo.append(pannello, lato);
     this.r.replaceChildren(barra, corpo);
@@ -123,7 +126,7 @@ export class VistaSynth {
   controllo(p) {
     const el = crea('div', `ctl ctl-${p.tipo}`);
     el.dataset.k = p.k;
-    el.append(crea('span', 'ctl-nome', p.nome));
+    el.append(crea('span', 'ctl-nome', T.parametri[p.k]));
     const c = { el, p };
     if (p.tipo === 'scelta') {
       const fila = crea('div', 'ctl-scelte');
@@ -150,7 +153,7 @@ export class VistaSynth {
       el.append(c.valoreEl);
       el.tabIndex = 0;
       el.setAttribute('role', 'slider');
-      el.setAttribute('aria-label', p.nome);
+      el.setAttribute('aria-label', T.parametri[p.k]);
       this.gestiManopola(c);
     }
     this.controlli.set(p.k, c);
@@ -229,7 +232,7 @@ export class VistaSynth {
     const nuovo = imposta(this.stato, k, v);
     if (nuovo === this.stato) {
       const voluto = { ...this.stato, [k]: pulisciValore(p, v) };
-      if (voluto[k] !== this.stato[k] && costo(voluto) > COSTO_MAX) this.avviso(`tetto raggiunto: più di così il live potrebbe soffrire (peso ${costo(voluto)} su ${COSTO_MAX})`);
+      if (voluto[k] !== this.stato[k] && costo(voluto) > COSTO_MAX) this.avviso(formatta(T.msg.tetto, { n: costo(voluto), max: COSTO_MAX }));
       return;
     }
     this.imponi(nuovo);
@@ -315,7 +318,7 @@ export class VistaSynth {
       this.registra();
       const altro = this.slot.lato === 'A' ? 'B' : 'A';
       this.slot[altro] = this.stato;
-      this.avviso(`copiato su ${altro}`);
+      this.avviso(formatta(T.msg.copiato, { lato: altro }));
       this.cambiato();
     });
   }
@@ -340,7 +343,7 @@ export class VistaSynth {
 
   async suona() {
     const errore = await this.opz.suona(codice(this.stato), this.nome);
-    this.avviso(errore ? `il codice non parte: ${errore}` : '');
+    this.avviso(errore ? formatta(T.msg.codiceNonParte, { errore }) : '');
   }
 
   suonaOFerma() {
@@ -363,7 +366,7 @@ export class VistaSynth {
     const dest = this.destinazioneEl.value;
     const testo = clip(this.stato);
     const errore = this.opz.mandaCue(dest, this.nome, testo);
-    this.avviso(errore ? errore : `clip «${this.nome}» mandata`);
+    this.avviso(errore ?? formatta(T.msg.mandata, { nome: this.nome, dove: T.destinazioni[dest] }));
   }
 
   avviso(testo) {
@@ -382,7 +385,7 @@ export class VistaSynth {
         for (const [val, b] of c.bottoni) b.classList.toggle('on', val === v);
       } else if (p.tipo === 'bool') {
         c.interruttore.classList.toggle('on', !!v);
-        c.interruttore.textContent = v ? 'on' : 'off';
+        c.interruttore.textContent = v ? T.valori.on : T.valori.off;
       } else {
         const t = aPosizione(p, s, v);
         c.anello.setAttribute('stroke-dasharray', `${(t * 75).toFixed(2)} 100`);
@@ -398,12 +401,13 @@ export class VistaSynth {
     this.abEl.classList.toggle('on', this.slot.lato === 'B');
     this.copiaEl.disabled = !this.slot.B;
     const peso = costo(s);
-    this.pesoEl.textContent = peso >= COSTO_AVVISO ? `peso ${peso}/${COSTO_MAX} · pesante` : `peso ${peso}/${COSTO_MAX}`;
+    this.pesoEl.textContent = formatta(peso >= COSTO_AVVISO ? T.barra.pesante : T.barra.peso, { n: peso, max: COSTO_MAX });
     this.pesoEl.classList.toggle('pesante', peso >= COSTO_AVVISO);
     this.aggiornaDestinazioni();
   }
 
   aggiornaDestinazioni() {
+    if (!this.avviata) return; // le destinazioni si chiedono all'app solo a vista aperta (il kit e i brani nascono dopo)
     const dest = this.opz.destinazioni();
     const scelta = this.destinazioneEl.value;
     const firma = JSON.stringify(dest);
@@ -417,6 +421,7 @@ export class VistaSynth {
 
   // Chiamata ogni 100 ms: il tasto ▶ segue quello che la cuffia sta davvero suonando.
   aggiorna() {
+    this.avviata = true;
     this.playEl.classList.toggle('on', !!this.opz.suonaOra());
     this.aggiornaDestinazioni();
   }

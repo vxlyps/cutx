@@ -1,5 +1,6 @@
 // La scheda SET del browser a sinistra: la serata (i brani in ordine, ● quello che suona, ▸ il prossimo) e sotto il KIT (le clip sempre
 // disponibili, da kit.cutx). Il calcolo è in set.js (puro); qui lo stato, il disco e il DOM.
+import it from './testi/it.json';
 import * as S from './set.js';
 import * as B from './brano.js';
 import { creaEditor } from './editor.js';
@@ -89,6 +90,18 @@ export class Serata {
   // Il pezzo della clip scelta col controller, o null (allora vale la selezione del CUE).
   pezzoScelto() {
     return this.scelta !== null && this.kit?.modello.sezioni[this.scelta] ? this.pezzoKit(this.scelta) : null;
+  }
+
+  // Una clip nuova in fondo al kit (dal synth). Ritorna l'errore, o null.
+  aggiungiClipKit(nome, codice) {
+    if (!this.kit) return it.synth.msg.nessunKit;
+    const nomi = new Set(this.kit.modello.sezioni.map((x) => x.nome));
+    let unico = nome;
+    for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
+    this.kit.modello = B.conSezioneInFondo(this.kit.modello, unico, {}, codice);
+    this.salvaKitSoon();
+    this.azioni.ridisegna();
+    return null;
   }
 
   salvaKitSoon() {

@@ -5,6 +5,8 @@
 // - in uscita: il codice si cancella all'indietro fino alla fine del ciclo.
 // Ogni livello si modifica sul posto: suona la versione di prima finché ⌘↵ non applica le
 // modifiche al ciclo successivo; esc annulla. In fondo c'è il jam, per improvvisare.
+import it from './testi/it.json';
+import { haRigaSynth } from './synth-codice.js';
 import { creaEditor } from './editor.js';
 import { eNomeBeat } from './nomi.js';
 import { attivi, riempi } from './evidenzia.js';
@@ -145,6 +147,9 @@ export class Pila {
     manopola.title = 'la manopola del controller che comanda questo livello';
     const provenienza = el('span', 'lbl');
     const stato = el('span', 'lbl stato-livello');
+    const apriSynth = el('button', 'key piccolo', it.synth.msg.apri);
+    apriSynth.title = it.synth.msg.apriTitolo;
+    apriSynth.hidden = true;
     const conto = el('span', 'conto');
     const volume = el('div', 'volume');
     volume.dataset.aiuto = 'livello-volume';
@@ -155,7 +160,7 @@ export class Pila {
     const togli = el('button', 'key piccolo', '×');
     togli.dataset.aiuto = 'livello-togli';
     togli.setAttribute('aria-label', 'Togli a fine ciclo');
-    testa.append(el('span', 'punto', '●'), nome, manopola, conteggio, provenienza, stato, el('div', 'spazio'), conto, volume, muto, togli);
+    testa.append(el('span', 'punto', '●'), nome, manopola, conteggio, provenienza, stato, el('div', 'spazio'), conto, apriSynth, volume, muto, togli);
     const barra = el('div', 'barra-arrivo');
     const pieno = el('div');
     barra.append(pieno);
@@ -175,10 +180,11 @@ export class Pila {
     const piede = el('div', 'lbl piede-carta');
     const errore = el('p', 'errore');
     art.append(testa, barra, codice, editor, coda, striscia.radice, piede, errore);
-    const c = { el: art, livello: l, nome, manopola, conteggio, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, striscia, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
+    const c = { el: art, livello: l, apriSynth, nome, manopola, conteggio, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, striscia, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
     pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
+    apriSynth.onclick = () => this.azioni.apriNelSynth?.(c.livello.codice, c.livello.nome);
     art.addEventListener('pointerdown', () => this.seleziona(c.livello.id));
     // un clic sulla card che sta sfumando la salva: l'uscita si annulla e il livello torna al suo volume
     art.addEventListener('click', (e) => {
@@ -417,6 +423,10 @@ export class Pila {
       c.el.classList.toggle('in-uscita', a.esce);
       c.barra.hidden = !a.arriva;
       c.coda.hidden = a.arriva || !c.righeCoda.length;
+      if (c.codiceSynth !== l.codice) {
+        c.codiceSynth = l.codice;
+        c.apriSynth.hidden = !haRigaSynth(l.codice); // solo le clip fatte dal synth si riaprono nel synth
+      }
       // un numero che scivola: sulla card scorre anche lui
       if (l.scivola && Object.keys(l.scivola).length) this.disegnaRigheCoda(c, righeScorrevoli(c.righeCoda, l.scivola, a.ciclo), l.coda?.length ?? 0);
       this.disegnaCodice(c, a);
