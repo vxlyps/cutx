@@ -31,6 +31,7 @@ export class Serata {
     this.aperte = new Set(); // clip del kit con l'editor aperto
     this.editors = [];
     this.live = new Set(); // indici delle clip del kit che suonano
+    this.scelta = null; // la clip del kit scelta col controller (manopola 1): cuffia e go live mandano quella, finché non scelgo altro nel CUE
     this.timerKit = null;
   }
 
@@ -69,6 +70,25 @@ export class Serata {
   pezzoKit(i) {
     const m = this.kit.modello;
     return { nome: m.sezioni[i].nome, provenienza: `kit §${i + 1}`, volume: m.sezioni[i].info?.volume, ...B.codice(m, i), bpmBrano: B.bpmDelBrano(m), dove: null };
+  }
+
+  // Sceglie (o toglie, con null) la clip del kit: si segna senza ridisegnare e la riga si porta in vista.
+  scegliKit(i) {
+    this.scelta = i;
+    this.segnaScelta(true);
+  }
+
+  segnaScelta(inVista = false) {
+    for (const r of document.querySelectorAll('#elenco .kit-riga')) {
+      const e = this.scelta !== null && Number(r.dataset.i) === this.scelta;
+      r.classList.toggle('scelta', e);
+      if (e && inVista) r.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // Il pezzo della clip scelta col controller, o null (allora vale la selezione del CUE).
+  pezzoScelto() {
+    return this.scelta !== null && this.kit?.modello.sezioni[this.scelta] ? this.pezzoKit(this.scelta) : null;
   }
 
   salvaKitSoon() {
@@ -157,6 +177,7 @@ export class Serata {
       const blocco = crea('div', `kit-blocco${aperta ? ' aperto' : ''}`);
       const riga = crea('div', `voce cliccabile kit-riga${this.live.has(i) ? ' live' : ''}`);
       riga.dataset.i = String(i);
+      riga.classList.toggle('scelta', this.scelta === i);
       riga.append(crea('span', 'segno', '●'), crea('span', 'nome', s.nome));
       riga.append(
         tasto('▶', 'Ascolta questa clip in cuffia', () => this.azioni.provaKit(this.pezzoKit(i))),

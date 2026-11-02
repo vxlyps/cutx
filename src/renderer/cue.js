@@ -939,18 +939,58 @@ export class Cue {
     return nomi[k];
   }
 
-  // Un passo avanti o indietro fra le sezioni (senza girare intorno); ritorna il nome della sezione scelta, o null.
-  spostaSezione(delta) {
-    const n = this.sezioniNav().length;
-    if (!n) return null;
-    const ora = this.indiceScelto();
-    const k = Math.max(0, Math.min(n - 1, (ora < 0 ? (delta > 0 ? -1 : n) : ora) + delta));
+  // --- la navigazione del controller (manopola 1): l'apertura (se il brano ne ha una) in cima, poi scene e clip come vociNav ---
+
+  conApertura() {
+    return this.modo === 'brano' && !!this.brano?.modello.apertura;
+  }
+
+  vociControllo() {
+    return [...(this.conApertura() ? ['apertura'] : []), ...this.sezioniNav()];
+  }
+
+  // Dove sono: l'indice fra le voci del controller, o -1 se niente è scelto.
+  indiceControllo() {
+    if (this.conApertura() && this.cartaAttiva?.apertura) return 0;
+    const i = this.indiceScelto();
+    return i < 0 ? -1 : i + (this.conApertura() ? 1 : 0);
+  }
+
+  scegliControllo(k) {
+    if (this.conApertura()) {
+      if (k === 0) return this.scegliApertura();
+      k -= 1;
+    }
     return this.scegliSezione(k);
   }
 
+  scegliApertura() {
+    const carta = this.carte.find((c) => c.apertura);
+    if (!carta) return null;
+    this.attiva(carta);
+    carta.el.hidden = false;
+    carta.el.scrollIntoView({ block: 'nearest' });
+    this.mostraModo();
+    return 'apertura';
+  }
+
+  // Un passo avanti o indietro fra le voci (senza girare intorno); ritorna il nome della voce scelta, o null.
+  spostaSezione(delta) {
+    const n = this.vociControllo().length;
+    if (!n) return null;
+    const ora = this.indiceControllo();
+    const k = Math.max(0, Math.min(n - 1, (ora < 0 ? (delta > 0 ? -1 : n) : ora) + delta));
+    return this.scegliControllo(k);
+  }
+
+  // Dove sono fra le voci del controller: { indice, totale } (indice -1 se niente è scelto).
+  posizioneSezione() {
+    return { indice: this.indiceControllo(), totale: this.vociControllo().length };
+  }
+
   nomeSezioneScelta() {
-    const k = this.indiceScelto();
-    return k >= 0 ? this.sezioniNav()[k] : null;
+    const k = this.indiceControllo();
+    return k >= 0 ? this.vociControllo()[k] : null;
   }
 
   async rinomina(i) {

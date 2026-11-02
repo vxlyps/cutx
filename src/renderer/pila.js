@@ -74,9 +74,9 @@ export class Pila {
       const c = this.carte.get(l.id);
       c.livello = l;
       c.nome.textContent = l.nome;
-      // il numero della manopola che la comanda (①–⑦, nell'ordine dei livelli vivi)
+      // il numero della manopola che la comanda (②–⑦: il beat sulla 2, le clip sulla 3–7)
       const posto = this.posti().indexOf(l);
-      c.manopola.textContent = posto >= 0 ? '①②③④⑤⑥⑦'[posto] : '';
+      c.manopola.textContent = posto >= 0 ? '②③④⑤⑥⑦'[posto] : '';
       c.provenienza.textContent = l.provenienza;
       c.pienoVolume.style.width = `${Math.min(1, l.volume) * 100}%`;
       c.muto.classList.toggle('on', l.muto);
@@ -127,12 +127,13 @@ export class Pila {
     return beat ? [beat, ...vivi.filter((l) => l !== beat)] : vivi;
   }
 
-  // I sette posti delle manopole: 1 = il beat (null se non c'è: la manopola resta libera), 2–7 = le clip nell'ordine di entrata.
+  // I sei posti delle manopole 2–7: il primo (manopola 2) è il beat (null se non c'è: la manopola resta libera), poi le clip nell'ordine di entrata
+  // sulle manopole 3–7 (cinque). La manopola 1 è la navigazione del CUE e la 8 il volume generale.
   posti() {
     const vivi = this.attivi();
     const beat = eNomeBeat(vivi[0]?.nome) ? vivi[0] : null;
     const altri = beat ? vivi.slice(1) : vivi;
-    return Array.from({ length: 7 }, (_, i) => (i === 0 ? beat : altri[i - 1] ?? null));
+    return Array.from({ length: 6 }, (_, i) => (i === 0 ? beat : altri[i - 1] ?? null));
   }
 
   carta(l) {

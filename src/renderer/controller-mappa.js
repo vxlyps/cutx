@@ -11,8 +11,9 @@ export const PARAMETRI = {
   sporco: { nome: 'SPORCO', corto: 'sporco', chiave: 'distort', min: 0, max: 3, predefinito: 0, decimali: 2 },
 };
 
-// Pagina B, le otto manopole: volume (il livello), filtro, risonanza, eco, riverbero, velocità (a scatti), sporco, altezza (semitoni).
-export const PAGINA_B = ['volume', 'filtro', 'risonanza', 'eco', 'riverbero', 'velocita', 'sporco', 'altezza'];
+// Pagina B, le manopole 2–8 (la 1 è la navigazione del CUE, in tutte e due le pagine): filtro, risonanza, eco, riverbero, velocità (a scatti), sporco,
+// altezza (semitoni). Il volume sta in pagina A.
+export const PAGINA_B = [null, 'filtro', 'risonanza', 'eco', 'riverbero', 'velocita', 'sporco', 'altezza'];
 
 // Pagina A, i tasti in alto: ◀ scena, ▶ scena, prossimo brano, cuffia, go live, togli, piano/registra, paracadute (tenuto 1 s).
 export const TASTI_A = ['scenaIndietro', 'scenaAvanti', 'prossimoBrano', 'cuffia', 'goLive', 'togli', 'piano', 'paracadute'];

@@ -11,6 +11,7 @@ const PARACADUTE_MS = 1000;
 const X_VALIDO_MS = 1500; // il valore che sto girando vale finché giro (e un attimo dopo); poi torna a valere la coda, che è la verità
 const LUCI_MS = 150;
 const CODA_OGNI_MS = 33; // le righe di coda partono al massimo 30 volte al secondo
+const PRIMO_POSTO = 2; // la manopola del beat (la 1 è la navigazione del CUE)
 
 export class Controller {
   // azioni: livelli() → [{ id, nome, volume, muto, coda, codice }] (i livelli vivi, nell'ordine delle manopole), selezionato(), seleziona(id),
@@ -24,7 +25,7 @@ export class Controller {
     this.porta = { ingresso: null, uscita: null };
     this.modo = 'sconosciuto'; // 'MC' | 'standard' | 'sconosciuto'
     this.pagina = 'A';
-    this.bersaglio = 1; // pagina B: livello n (1–7) o 'globale'
+    this.bersaglio = 2; // pagina B: la manopola n (2–7) del livello da scolpire, o 'globale'
     this.master = 1; // volume generale, 0..1
     this.push = new Map(); // n → { giu, tenuta, timer }
     this.x = new Map(); // `${id}|${parametro}` → 0..1, finché la coda non lo dice
@@ -39,7 +40,7 @@ export class Controller {
     this.colpi = new GestoreColpi(this);
     this.paracaduteTimer = null;
     this.paracaduteTenuto = false;
-    this.cuffiaTenuta = null; // { usato } mentre tengo premuto «cuffia»: girare una manopola scorre le sezioni del CUE, ◀ ▶ cambiano brano
+    this.cuffiaTenuta = null; // { usato } mentre tengo premuto «cuffia»: ◀ ▶ scelgono il prossimo brano del set (da solo, un tocco accende/spegne la cuffia)
     this.ultimoDiscreto = new Map(); // `${id}|${chiave}` → l'ultimo scatto mandato (velocità, altezza)
     this.lampi = new Map(); // nota → fino a quando resta accesa dopo l'azione (un lampo breve)
     this.toccata = null; // { n, quando }: l'ultima manopola toccata, per lo specchio
@@ -204,7 +205,7 @@ export class Controller {
   }
 
   alternaGlobale() {
-    if (this.bersaglio === 'globale') this.bersaglio = this.ultimoLivello ?? 1;
+    if (this.bersaglio === 'globale') this.bersaglio = this.ultimoLivello ?? PRIMO_POSTO;
     else {
       this.ultimoLivello = this.bersaglio;
       this.bersaglio = 'globale';
@@ -224,21 +225,22 @@ export class Controller {
     return this.livello(this.bersaglio)?.nome ?? `livello ${this.bersaglio}`;
   }
 
-  // I sette posti delle manopole: 1 = il beat (null se non c'è), 2–7 = le clip. Senza `posti` (nei test) i livelli vanno uno dopo l'altro.
+  // I sei posti delle manopole 2–7: il primo è il beat (null se non c'è), poi le cinque clip. Senza `posti` (nei test) i livelli vanno uno dopo l'altro.
   posti() {
-    return this.azioni.posti ? this.azioni.posti() : Array.from({ length: 7 }, (_, i) => this.azioni.livelli()[i] ?? null);
+    return this.azioni.posti ? this.azioni.posti() : Array.from({ length: 6 }, (_, i) => this.azioni.livelli()[i] ?? null);
   }
 
+  // Il livello della manopola n (2–7); la 1 è la navigazione del CUE e la 8 il volume generale.
   livello(n) {
-    return this.posti()[n - 1] ?? null;
+    return n >= PRIMO_POSTO && n <= 7 ? this.posti()[n - PRIMO_POSTO] ?? null : null;
   }
 
   // --- manopole ---
 
   giraManopola(n, passi) {
     if (!passi) return;
-    // «cuffia» tenuto + una manopola qualsiasi: scorro le sezioni del CUE; fermo mezzo secondo, quella parte in cuffia
-    if (this.cuffiaTenuta && this.pagina === 'A') return this.scorriCue(passi);
+    // la manopola 1 è la navigazione, in tutte e due le pagine: scorre la selezione nel CUE (beat, scene, clip, kit), in silenzio
+    if (n === 1) return this.scorriCue(passi);
     if (this.pagina === 'A') {
       if (n === 8) return this.giraMaster(passi);
       const l = this.livello(n);
@@ -250,28 +252,28 @@ export class Controller {
       this.tocca(l, 'volume', `${l.nome.toUpperCase()} · VOLUME ${v.toFixed(2)}`, n);
       return;
     }
-    // pagina B: i parametri del bersaglio
+    // pagina B: i parametri del bersaglio (il volume sta in pagina A)
     const chiave = PAGINA_B[n - 1];
     if (this.bersaglio === 'globale') return this.giraGlobale(n, passi);
     const l = this.livello(this.bersaglio);
     if (!l) return this.riga('nessun livello scelto');
     if (!chiave) return this.riga(`manopola ${n}: arriva presto`);
-    if (chiave === 'volume') {
-      const v = clamp01(l.volume + passi * PASSO_VOLUME);
-      this.azioni.volume(l.id, Math.round(v * 100) / 100);
-      this.tocca(l, 'volume', `${l.nome.toUpperCase()} · VOLUME ${v.toFixed(2)}`, n);
-      return;
-    }
     this.cambiaParametro(l, chiave, passi, n);
   }
 
+  // Si sfoglia in silenzio: niente parte in cuffia da solo; la cosa scelta si ascolta premendo la manopola 1 (o «cuffia»).
   scorriCue(passi) {
-    this.cuffiaTenuta.usato = true;
     const nome = this.azioni.cueSposta?.(Math.sign(passi) * Math.min(3, Math.abs(passi)));
-    if (nome === undefined || nome === null) return this.riga('CUE: niente clip da scorrere');
-    this.toccata = { n: null, quando: this.ora(), testo: `CUE · ${nome}` };
+    if (nome === undefined || nome === null) return this.riga('CUE: niente da scorrere');
+    this.toccata = { n: 1, quando: this.ora(), testo: `CUE · ${nome}` };
     this.azioni.scritta?.(`CUE · ${nome.toUpperCase()}`);
-    // si sfoglia in silenzio: niente parte in cuffia da solo; la sezione scelta si ascolta con un tocco su «cuffia»
+  }
+
+  // Manopola 1 premuta: la cosa scelta nel CUE va in cuffia; un altro tocco smette.
+  ascoltaScelta() {
+    this.azioni.cuffia?.();
+    this.toccata = { n: 1, quando: this.ora(), testo: this.azioni.inCuffia?.() ? 'CUFFIA' : 'CUFFIA · STOP' };
+    this.azioni.scritta?.(this.toccata.testo);
   }
 
   async cambiaBrano(verso) {
@@ -340,15 +342,11 @@ export class Controller {
     const l = this.livello(this.bersaglio);
     if (!l) return this.riga('nessun livello scelto');
     const k = `${l.id}|${chiave}`;
-    let nome = chiave.toUpperCase();
-    if (chiave === 'volume') this.azioni.volume(l.id, 1);
-    else {
-      const chiaveCoda = chiave === 'velocita' ? 'fast' : chiave === 'altezza' ? 'transpose' : PARAMETRI[chiave].chiave;
-      this.azioni.resetRiga?.(l.id, chiaveCoda);
-      this.ultimoDiscreto.delete(k);
-      nome = (PARAMETRI[chiave]?.nome ?? (chiave === 'velocita' ? 'VELOCITÀ' : 'ALTEZZA'));
-      this.fissaX(k, this.xBase(l, chiave));
-    }
+    const chiaveCoda = chiave === 'velocita' ? 'fast' : chiave === 'altezza' ? 'transpose' : PARAMETRI[chiave].chiave;
+    this.azioni.resetRiga?.(l.id, chiaveCoda);
+    this.ultimoDiscreto.delete(k);
+    const nome = PARAMETRI[chiave]?.nome ?? (chiave === 'velocita' ? 'VELOCITÀ' : 'ALTEZZA');
+    this.fissaX(k, this.xBase(l, chiave));
     this.toccata = { n, quando: this.ora(), testo: `${l.nome.toUpperCase()} · ${nome} RESET` };
     this.azioni.tocca?.(l.id);
     this.azioni.scritta?.(this.toccata.testo);
@@ -400,11 +398,11 @@ export class Controller {
   }
 
   giraGlobale(n, passi) {
-    if (n === 1) {
+    if (n === 2) {
       const bpm = Math.max(20, Math.min(300, Math.round((this.bpmVoluto ?? this.azioni.bpm?.() ?? 120) + passi)));
       this.bpmVoluto = bpm;
       this.azioni.tempo?.(bpm);
-      this.toccata = { n: 1, quando: this.ora(), testo: `GLOBALE · BPM ${bpm}` };
+      this.toccata = { n: 2, quando: this.ora(), testo: `GLOBALE · BPM ${bpm}` };
       this.azioni.scritta?.(`GLOBALE · BPM ${bpm}`);
       return;
     }
@@ -434,6 +432,10 @@ export class Controller {
   // --- push delle manopole ---
 
   premiPush(n, giu) {
+    if (n === 1) {
+      if (giu) this.ascoltaScelta();
+      return;
+    }
     const stato = this.push.get(n) ?? { giu: false, tenuta: false, timer: null };
     this.push.set(n, stato);
     if (giu) {
@@ -474,9 +476,10 @@ export class Controller {
   // --- tasti ---
 
   premiTasto(n, giu) {
-    // pagina B: i tasti 1–7 scelgono il livello; l'8 resta il paracadute (sempre raggiungibile); il «globale» si sceglie premendo di nuovo il tasto layer B
+    // pagina B: i tasti 2–7 scelgono il livello (come le manopole: beat sul 2, clip sui 3–7); l'8 resta il paracadute (sempre raggiungibile);
+    // il «globale» si sceglie premendo di nuovo il tasto layer B
     if (n <= 7 && this.pagina === 'B') {
-      if (!giu) return;
+      if (!giu || n < PRIMO_POSTO) return;
       this.bersaglio = n;
       this.ultimoLivello = n;
       this.toccata = null;
@@ -643,19 +646,19 @@ export class Controller {
   // Cosa comanda ogni manopola adesso: null = libera (anello spento); altrimenti { stile: 'fan' | 'punto', valore 0..1 | null (muto) }.
   manopole() {
     const livelli = this.posti();
-    const m = [];
+    const m = [this.manopolaCue()];
     if (this.pagina === 'A') {
-      for (let n = 1; n <= 7; n++) {
-        const l = livelli[n - 1];
+      for (let n = PRIMO_POSTO; n <= 7; n++) {
+        const l = livelli[n - PRIMO_POSTO];
         m.push(l ? { scelta: l.id === this.azioni.selezionato?.(), stile: 'fan', valore: l.muto ? null : l.volume, nome: l.nome, corto: corto(l.nome), testo: l.muto ? 'muto' : l.volume.toFixed(2), muto: l.muto } : null);
       }
       m.push({ stile: 'fan', valore: this.master, nome: 'generale', corto: 'gener', testo: this.master.toFixed(2) });
       return m;
     }
-    for (let n = 1; n <= 8; n++) {
+    for (let n = 2; n <= 8; n++) {
       const chiave = PAGINA_B[n - 1];
       if (this.bersaglio === 'globale') {
-        if (n === 1) {
+        if (n === 2) {
           const bpm = this.bpmVoluto ?? this.azioni.bpm?.() ?? 120;
           m.push({ stile: 'punto', valore: clamp01((bpm - 60) / 140), nome: 'bpm', corto: 'bpm', testo: String(Math.round(bpm)) });
         } else if (chiave === 'eco' || chiave === 'riverbero') {
@@ -664,11 +667,9 @@ export class Controller {
         } else m.push(null);
         continue;
       }
-      const l = livelli[this.bersaglio - 1];
+      const l = this.livello(this.bersaglio);
       if (!l || !chiave) {
         m.push(null);
-      } else if (chiave === 'volume') {
-        m.push({ stile: 'fan', valore: l.volume, nome: 'volume', corto: 'volume', testo: l.volume.toFixed(2) });
       } else if (chiave === 'velocita') {
         const i = Math.round(this.xDi(l, chiave));
         m.push({ stile: 'punto', valore: i / (SCATTI_VELOCITA.length - 1), nome: 'velocità', corto: 'veloc', testo: etichettaVelocita(SCATTI_VELOCITA[i]) });
@@ -682,6 +683,14 @@ export class Controller {
       }
     }
     return m;
+  }
+
+  // La manopola 1 (navigazione, in tutte e due le pagine): un puntino che dice dove sono fra le voci del CUE, e quale è.
+  manopolaCue() {
+    const p = this.azioni.cuePosizione?.() ?? null;
+    if (!p || !p.totale) return { stile: 'punto', valore: null, nome: 'cue', corto: 'cue', testo: '', cue: true };
+    const valore = p.indice < 0 ? 0 : p.totale > 1 ? p.indice / (p.totale - 1) : 0;
+    return { stile: 'punto', valore, nome: 'cue', corto: 'cue', testo: String(p.nome ?? '').slice(0, 6), cue: true };
   }
 
   // Le luci come dovrebbero essere adesso: anelli solo per le manopole assegnate (col valore vero), tasti solo se hanno qualcosa da dire.

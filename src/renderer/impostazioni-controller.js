@@ -94,19 +94,19 @@ export class PaginaController {
 
     // l'effetto del fader: uno solo, in tutte e due le pagine
     const fader = $('ctl-fader');
-    const riga = crea('div', 'imp-riga');
-    const testo = crea('div', 'imp-testo');
-    testo.append(crea('span', '', 'fader'), crea('span', 'imp-nota', `${EFFETTI_FADER[c.effettoFader()].descrizione} · cambiare pagina A/B non lo tocca`));
-    const scelta = crea('select');
+    const rigaFader = crea('div', 'imp-riga');
+    const testoFader = crea('div', 'imp-testo');
+    testoFader.append(crea('span', '', 'fader'), crea('span', 'imp-nota', `${EFFETTI_FADER[c.effettoFader()].descrizione} · cambiare pagina A/B non lo tocca`));
+    const sceltaFader = crea('select');
     for (const [chiave, e] of Object.entries(EFFETTI_FADER)) {
       const o = crea('option', '', e.nome.toLowerCase());
       o.value = chiave;
       o.selected = chiave === c.effettoFader();
-      scelta.append(o);
+      sceltaFader.append(o);
     }
-    scelta.onchange = () => c.azioni.faderScegli?.(scelta.value);
-    riga.append(testo, scelta);
-    fader.replaceChildren(riga);
+    sceltaFader.onchange = () => c.azioni.faderScegli?.(sceltaFader.value);
+    rigaFader.append(testoFader, sceltaFader);
+    fader.replaceChildren(rigaFader);
 
     // i colpi: la griglia e i tasti
     const colpi = $('ctl-colpi');
@@ -190,10 +190,11 @@ export class PaginaController {
       return e;
     };
     m.replaceChildren(
-      p('<b>Pagina A · suona</b> (tasto layer A). Le manopole 1–7 sono i livelli live nell\'ordine (la 1 diventerà il beat), la 8 il volume generale. Gira = volume · tocco = muto · tieni premuta e gira = filtro (scritto nella coda) · tenuta = scelta del livello.'),
-      p('Tasti in alto, da sinistra: <b>◀ ▶ scena</b> (una scena del beat indietro o avanti, a fine frase; accesi se c\'è una scena da raggiungere) · <b>prossimo brano</b> (tocco = cambia linguetta del CUE, ● attivo / ▸ prossimo; tenuto 1 s lampeggia e, a fine frase, entra il beat del prossimo brano dalla sua prima scena; le clip vecchie restano) · <b>cuffia</b> (tenuto + ◀ ▶ = scelgo quale brano del set è il prossimo) · <b>go live</b> · <b>togli</b> · piano · <b>paracadute</b> (tenuto 1 s). Il piano arriva dopo. Tasti in basso: i colpi.'),
-      p('<b>Pagina B · scolpisci</b> (tasto layer B). I tasti in alto 1–7 scelgono il livello; l\'8 resta il paracadute (tenuto 1 s, in tutte e due le pagine). Il «globale» si sceglie premendo di nuovo il tasto layer B (B una volta = il livello scelto, B di nuovo = globale, e così via). Manopole: volume · filtro · risonanza · eco · riverbero · (velocità) · sporco · (altezza), ognuna scritta nella coda del livello. Sul globale: 1 = BPM, 4 = eco di tutto, 5 = riverbero di tutto.'),
-      p('Anelli: pagina A = punto (volume), pagina B = fan (il valore del parametro). Il tasto layer acceso dice la pagina. Il fader per ora si vede solo qui (il filtro del drop arriva dopo).'),
+      p('<b>Manopola 1 = navigazione, in tutte e due le pagine.</b> Gira = scorre la selezione nel CUE (apertura, scene del beat, clip del brano, poi le clip del kit), in silenzio · premi = ascolta in cuffia la cosa scelta (un altro tocco smette) · <b>go live</b> manda la cosa scelta.'),
+      p('<b>Pagina A · suona</b> (tasto layer A). Manopola 2 = il beat, 3–7 = le clip live nell\'ordine di entrata (cinque), 8 = il volume generale. Gira = volume · tocco = muto · tieni premuta e gira = filtro (scritto nella coda) · tenuta = scelta del livello.'),
+      p('Tasti in alto, da sinistra: <b>◀ ▶ scena</b> (una scena del beat indietro o avanti, a fine frase; accesi se c\'è una scena da raggiungere) · <b>prossimo brano</b> (tocco = cambia linguetta del CUE, ● attivo / ▸ prossimo; tenuto 1 s lampeggia e, a fine frase, entra il beat del prossimo brano dalla sua prima scena; le clip vecchie restano) · <b>cuffia</b> (da sola accende e spegne la cuffia; tenuta + ◀ ▶ = scelgo quale brano del set è il prossimo) · <b>go live</b> · <b>togli</b> · piano · <b>paracadute</b> (tenuto 1 s). Il piano arriva dopo. Tasti in basso: i colpi.'),
+      p('<b>Pagina B · scolpisci</b> (tasto layer B). I tasti in alto 2–7 scelgono il livello nello stesso ordine delle manopole (beat sul 2, clip sul 3–7); l\'1 non fa niente (la manopola 1 è la navigazione); l\'8 resta il paracadute (tenuto 1 s, in tutte e due le pagine). Il «globale» si sceglie premendo di nuovo il tasto layer B (B una volta = il livello scelto, B di nuovo = globale, e così via). Manopole 2–8: filtro · risonanza · eco · riverbero · velocità · sporco · altezza, ognuna scritta nella coda del livello (il volume sta in pagina A). Sul globale: 2 = BPM, 4 = eco di tutto, 5 = riverbero di tutto.'),
+      p('Anelli: pagina A = punto (volume), pagina B = fan (il valore del parametro). Il tasto layer acceso dice la pagina. Il fader fa lo stesso effetto in tutte e due le pagine (lo scegli qui sopra, predefinito filtro).'),
     );
   }
 }

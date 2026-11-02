@@ -71,24 +71,30 @@
 
 ## 5. MAPPA DELL'X-TOUCH MINI
 
+### Manopola 1 · NAVIGAZIONE (tutte e due le pagine, niente combinazioni)
+
+- Gira = scorre la selezione nel CUE, in silenzio: apertura, scene del beat, clip del brano e poi le clip del kit (un elenco solo, dall'alto in basso; salendo si arriva fino all'apertura).
+- Premi = ascolta in cuffia la cosa selezionata; un altro tocco smette.
+- GO LIVE manda la cosa selezionata.
+- L'anello è un puntino che dice dove sono nell'elenco; lo specchio dice «CUE · nome».
+
 ### Pagina A · SUONA
 
-- Il beat sta SEMPRE sulla manopola 1 (e sul tasto-livello 1 in pagina B) e la sua card è sempre la prima in cima al LIVE, qualunque sia l'ordine di entrata; le clip vanno su 2-7 nell'ordine di entrata. Senza beat live la manopola 1 resta libera (anello spento, lo specchio scrive «beat» in grigio) e le clip restano su 2-7. I colpi «solo colpo» vanno sul beat vero; se non c'è, sul primo livello (lo specchio dice «non c'è il beat»).
-- Manopola 1 = beat: gira a sinistra svuota (passa-basso), a destra alleggerisce (passa-alto), al centro piena; premi = muto.
-- Manopole 2-7 = clip live 2-7: gira = volume, premi = muto, tieni premuto e gira = filtro di quella clip. La clip toccato per ultimo è il selezionato e su schermo si vede. Se entra un settimo clip, avvisami o prendi il posto del più vecchio in muto: proponimi tu.
+- Il beat sta SEMPRE sulla manopola 2 e la sua card è sempre la prima in cima al LIVE, qualunque sia l'ordine di entrata; le clip vanno su 3-7 (cinque) nell'ordine di entrata. Senza beat live la manopola 2 resta libera (anello spento, lo specchio scrive «beat» in grigio) e le clip restano su 3-7. I colpi «solo colpo» vanno sul beat vero; se non c'è, sul primo livello (lo specchio dice «non c'è il beat»). Sulle card compaiono i numeri ②–⑦.
+- Manopola 2 = beat: gira = volume, premi = muto, tieni premuto e gira = filtro. Manopole 3-7 = clip live: stesso comportamento. Il livello toccato per ultimo (o tenuto premuto) è il selezionato.
 - Manopola 8 = volume generale.
 - Anelli LED = valore vero (si aggiornano anche quando CUTX cambia i valori da solo: dissolvenze, volume dal CUE…).
-- Tasti in alto: ◀ scena, ▶ scena, prossimo brano (tocco = cambia linguetta del CUE; tenuto 1 s = passa al prossimo brano), cuffia (tocco = ascolta la sezione selezionata / smette, al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE in silenzio, restano selezionate; tenuto + ◀ / ▶ = scelgo quale brano del SET è il prossimo), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
+- Tasti in alto: ◀ scena, ▶ scena, prossimo brano (tocco = cambia linguetta del CUE; tenuto 1 s = passa al prossimo brano), cuffia (tocco = accende/spegne la cuffia; tenuto + ◀ / ▶ = scelgo quale brano del SET è il prossimo), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
 - Tasti in basso: i colpi.
 - Fader: un solo effetto su tutto il live, scelto in Impostazioni → controller (predefinito filtro); uguale nelle due pagine.
 
 ### Pagina B · SCOLPISCI
 
-- Tasti in alto: 1–7 scelgono il livello (beat o clip 2-7); **il tasto 8 è il paracadute in tutte e due le pagine** (tenuto 1 s). Il «globale» si sceglie premendo di nuovo il tasto layer B: B una volta = il livello scelto, B di nuovo = globale, e così via. Lo specchio dice «SCOLPISCI · GLOBALE» (in bianco pieno) o «SCOLPISCI · nome del livello».
-- Manopole: volume, filtro, risonanza, eco, riverbero, velocità (a scatti 1/4, 1/2, 1, 2, 4), sporco (distorsione), altezza.
-- Su "globale": BPM, eco e riverbero di tutto.
+- Tasti in alto: 2–7 scelgono il livello nello stesso ordine delle manopole (beat sul 2, clip sul 3–7); l'1 non fa niente; **il tasto 8 è il paracadute in tutte e due le pagine** (tenuto 1 s). Il «globale» si sceglie premendo di nuovo il tasto layer B: B una volta = il livello scelto, B di nuovo = globale, e così via. Lo specchio dice «SCOLPISCI · GLOBALE» (in bianco pieno) o «SCOLPISCI · nome del livello».
+- Manopole 2–8: filtro, risonanza, eco, riverbero, velocità (a scatti 1/4, 1/2, 1, 2, 4), sporco (distorsione), altezza. Premere una di queste = reset del parametro. Il volume sta in pagina A.
+- Su "globale": BPM (manopola 2), eco e riverbero di tutto.
 - Tasti in basso: gli stessi colpi.
-- Fader: lo stesso della pagina A (cambiare pagina non lo tocca).
+- Fader: lo stesso della pagina A (cambiare pagina non lo tocca: se ho abbassato il filtro e vado in B a scolpire, resta dov'è).
 
 Ogni cosa che tocco compare in grande su schermo e, se attivo l'opzione, sul proiettore (es. "REESE · FILTRO 0.42").
 

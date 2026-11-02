@@ -53,7 +53,7 @@ export class GestoreColpi {
     const scelto = c.posti().find((l) => l && l.id === c.azioni.selezionato?.());
     if (scelto) return [scelto];
     // niente di selezionato: il beat vero; se non c'è, il primo livello che suona (e lo specchio lo dice)
-    const beat = c.livello(1);
+    const beat = c.posti()[0];
     if (beat) return [beat];
     const primo = c.posti().find(Boolean);
     this.senzaBeat = !!primo;

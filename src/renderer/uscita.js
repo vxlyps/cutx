@@ -383,7 +383,13 @@ function misuraRighe() {
       for (let k = 0; k < nc; k++) righe.push({ top: tc + k * lc, bottom: tc + (k + 1) * lc });
       fine = tc + nc * lc;
     }
-    if (!b.striscia.radice.hidden) fine = Math.max(fine, top + b.striscia.radice.offsetTop + b.striscia.radice.offsetHeight);
+    if (!b.striscia.radice.hidden) {
+      // la striscia sotto il livello è una riga a sé: lo scorrimento deve poter arrivare a mostrarla intera
+      const sTop = top + b.striscia.radice.offsetTop;
+      const sBottom = sTop + b.striscia.radice.offsetHeight;
+      righe.push({ top: sTop, bottom: sBottom });
+      fine = Math.max(fine, sBottom);
+    }
     livelliGeom.set(chiave, { top, bottom: fine });
   }
   righe.sort((x, y) => x.top - y.top);

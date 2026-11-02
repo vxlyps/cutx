@@ -141,6 +141,7 @@ function fermaCuffia() {
 // Il tasto «cuffia» di una card: se si sta già sentendo quella, spegne; altrimenti la manda in cuffia.
 function provaInCuffia(pezzo = null) {
   if (inTest) return;
+  pezzo ??= serata.pezzoScelto(); // la clip del kit scelta col controller
   const p = pezzo && typeof pezzo === 'object' && 'codice' in pezzo ? pezzo : cue.pezzo(); // un pezzo dato (le clip del kit) o quello del CUE
   if (p.errore) return cue.avviso(p.errore);
   return provaPezzo(p);
@@ -201,6 +202,7 @@ function nomeLiberoNuovo() {
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
 async function goLive(pezzo = null) {
   if (inTest) return;
+  pezzo ??= serata.pezzoScelto(); // la clip del kit scelta col controller
   const daCue = !(pezzo && typeof pezzo === 'object' && 'codice' in pezzo);
   const p = daCue ? cue.pezzo() : pezzo; // un pezzo dato (le clip del kit) o quello del CUE
   if (p.errore) return cue.avviso(p.errore);
@@ -849,6 +851,30 @@ browser = new Browser(
 );
 // --- il set e il kit ---
 
+// La selezione col controller (manopola 1) scorre le voci del CUE (apertura, scene, clip) e poi le clip del kit, come un elenco solo.
+// Ritorna il nome scelto, o null.
+function spostaSelezione(delta) {
+  const nCue = cue.vociControllo().length;
+  const kit = serata.kit?.modello.sezioni ?? [];
+  const totale = nCue + kit.length;
+  if (!totale) return null;
+  const ora = serata.scelta !== null ? nCue + serata.scelta : cue.indiceControllo();
+  const k = Math.max(0, Math.min(totale - 1, (ora < 0 ? (delta > 0 ? -1 : totale) : ora) + delta));
+  if (k < nCue) {
+    serata.scegliKit(null);
+    return cue.scegliControllo(k);
+  }
+  if (browser && browser.scheda !== 'set') browser.vai('set'); // la clip del kit si vede nel SET
+  serata.scegliKit(k - nCue);
+  return `kit · ${kit[k - nCue].nome}`;
+}
+function posizioneSelezione() {
+  const nCue = cue.vociControllo().length;
+  const kit = serata.kit?.modello.sezioni ?? [];
+  if (serata.scelta !== null) return { indice: nCue + serata.scelta, totale: nCue + kit.length, nome: kit[serata.scelta]?.nome ?? '' };
+  return { indice: cue.indiceControllo(), totale: nCue + kit.length, nome: cue.nomeSezioneScelta() ?? '' };
+}
+
 const serata = new Serata({
   libreria: () => libreria,
   branoAttivo: () => cue.slot.attivo?.file ?? null,
@@ -865,6 +891,8 @@ const serata = new Serata({
   avviso: (testo) => cue.avviso(testo),
   ridisegna: () => mostraBrowser(),
 });
+// Ho messo le mani sul CUE (clic o cursore): vale di nuovo quello che c'è nel CUE, non la clip del kit scelta col controller.
+for (const evento of ['pointerdown', 'focusin']) $('carte').addEventListener(evento, () => serata.scelta !== null && serata.scegliKit(null), true);
 let setAvviato = null; // lo stash per cui ho già aperto il brano che apre il set
 
 // Dopo che un brano diventa l'attivo, il successivo del set diventa il prossimo (senza togliermi dalla linguetta in cui sto lavorando).
@@ -1474,8 +1502,9 @@ const controllerMidi = new Controller({
     l.muto = !l.muto;
     live.manda({ tipo: 'livello', livello: id, muto: l.muto });
   },
-  // muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo mezzo secondo la sezione va in cuffia
-  cueSposta: (delta) => cue.spostaSezione(delta),
+  // muoversi nel CUE con la manopola 1: apertura, scene del beat, clip del brano e poi le clip del kit (in silenzio); la manopola premuta ascolta la scelta
+  cueSposta: (delta) => spostaSelezione(delta),
+  cuePosizione: () => posizioneSelezione(),
   // CUFFIA tenuto + ◀ ▶: il prossimo brano nell'ordine del set (senza il brano che suona); senza set, nell'ordine della libreria
   cueBrano: async (verso) => {
     const base = cue.slot.prossimo?.file ?? cue.slot.attivo?.file ?? null;
@@ -1558,7 +1587,7 @@ const controllerMidi = new Controller({
 const paginaController = new PaginaController(controllerMidi);
 const specchio = new Specchio($('specchio'));
 setInterval(() => specchio.aggiorna(controllerMidi), 100);
-// i numeri ①–⑦ sulle card compaiono solo con il controller collegato
+// i numeri ②–⑦ sulle card compaiono solo con il controller collegato
 controllerMidi.quandoCambia(() => document.querySelector('.postazione').classList.toggle('con-controller', controllerMidi.collegato));
 controllerMidi.collega();
 // colpi.cutx dallo stash (se non c'è si crea con i predefiniti): al primo giro e ogni volta che lo stash cambia

@@ -1996,7 +1996,7 @@ async function provaUscita({ finestre, scrivi }) {
       controlla(`${l}×${a}, 5 livelli: si scorre da soli`, cinque.scorre === true && cinque.ci === false, JSON.stringify(cinque));
       controlla(`${l}×${a}, 5 livelli: il carattere resta al minimo leggibile, non più piccolo`, Math.abs(cinque.carattere - cinque.minimo) < 3, `${cinque.carattere} / ${cinque.minimo}`);
       // il livello appena entrato si vede subito
-      controlla(`${l}×${a}: l'ultimo livello entrato è visibile (ci si ferma lì)`, cinque.focusVisibile === true && cinque.focus?.id !== undefined, JSON.stringify(cinque.focus));
+      controlla(`${l}×${a}: l'ultimo livello entrato è visibile (ci si ferma lì)`, cinque.focusVisibile === true && cinque.focus?.id !== undefined, JSON.stringify({ focus: cinque.focus, offset: cinque.offset, area: cinque.area, scala: cinque.scala, disposizione: cinque.disposizione }));
       // lo scorrimento si muove, e a ogni passo non c'è mai una riga a metà
       const visti = new Set();
       let tagliate = 0;
@@ -2013,7 +2013,7 @@ async function provaUscita({ finestre, scrivi }) {
       await finestre.controllo.webContents.executeJavaScript('cutxProva.goLive()');
       await aspetta(6);
       const nuovo = await verifica();
-      controlla(`${l}×${a}: entra un livello nuovo e si scorre fino a lui`, nuovo.focusVisibile === true && !!nuovo.focus && nuovo.livelli.includes(nuovo.focus.id), JSON.stringify(nuovo.focus));
+      controlla(`${l}×${a}: entra un livello nuovo e si scorre fino a lui`, nuovo.focusVisibile === true && !!nuovo.focus && nuovo.livelli.includes(nuovo.focus.id), JSON.stringify({ focus: nuovo.focus, offset: nuovo.offset, area: nuovo.area, scala: nuovo.scala }));
     }
   } finally {
     await js('cutxProva.fermaTutto()').catch(() => {});
@@ -2494,7 +2494,7 @@ async function provaColpi({ finestre, scrivi }) {
   controlla('al rilascio la riga esce e tutto torna a tempo (di nuovo sulla griglia di prima)', !((await attivi()).find((l) => l.id === beat.livello)?.coda ?? []).some((r) => r.startsWith('.fast')) && fine.every((e) => sulla16(e[1])), JSON.stringify(fine.slice(-4)));
 
   // con la manopola di un pezzo tenuta premuta il colpo va su quel pezzo
-  const posto = (await attivi()).findIndex((l) => l.id === pezzo.livello) + 1;
+  const posto = (await attivi()).findIndex((l) => l.id === pezzo.livello) + 2; // il beat è sulla manopola 2, le clip sulle 3–7
   const indietro = await tastoColpo('indietro');
   await midi(0x90, 31 + posto, 127);
   await midi(0x90, indietro, 127);
@@ -2577,7 +2577,7 @@ async function provaColpi({ finestre, scrivi }) {
   return ok;
 }
 
-// --- muoversi nel CUE col controller: «cuffia» tenuto + manopola scorre le sezioni, fermo va in cuffia, go live manda la scelta (npx electron . --prova=cue-controller) ---
+// --- muoversi nel CUE col controller: manopola 1 scorre le voci, premuta ascolta in cuffia, go live manda la scelta (npx electron . --prova=cue-controller) ---
 async function provaCueController({ finestre, scrivi }) {
   let ok = true;
   const controlla = (nome, vero, dettagli = '') => {
@@ -2599,30 +2599,41 @@ async function provaCueController({ finestre, scrivi }) {
   const scelta = () => js(`cutxProva.cue.nomeSezioneScelta()`);
   const cuffia = await tasto(4);
   const golive = await tasto(5);
-  await midi(0x90, cuffia, 127); // tengo «cuffia»
-  await giro(3, 1);
-  controlla('«cuffia» tenuto + manopola: scorro le sezioni (la prima è «intro»)', (await scelta()) === 'intro', String(await scelta()));
-  await giro(7, 1);
-  controlla('una manopola qualsiasi: la sezione dopo («basso»)', (await scelta()) === 'basso', String(await scelta()));
-  controlla('la sezione scelta si vede chiaramente nel CUE (bordo chiaro)', (await js(`document.querySelector('#carte .card.sezione.attiva .nome-sezione')?.textContent`)).includes('basso'));
+  await giro(1, 1);
+  controlla('manopola 1: scorro le voci del CUE (la prima è «intro»)', (await scelta()) === 'intro', String(await scelta()));
+  await giro(1, 1);
+  controlla('ancora: la voce dopo («basso»)', (await scelta()) === 'basso', String(await scelta()));
+  controlla('la voce scelta si vede chiaramente nel CUE (bordo chiaro)', (await js(`document.querySelector('#carte .card.sezione.attiva .nome-sezione')?.textContent`)).includes('basso'));
   await aspetta(0.3);
   controlla('e nello specchio compare «CUE · basso»', /CUE · basso/.test(await js(`document.querySelector('#specchio .spec-info')?.textContent ?? ''`)), await js(`document.querySelector('#specchio .spec-info')?.textContent`));
   controlla('mentre scorro non parte niente in cuffia', !(await cuffiaStato())?.codice);
   await aspetta(1.3);
   controlla('fermo a lungo: non parte niente in cuffia (si sfoglia in silenzio)', !(await cuffiaStato())?.codice);
   await giro(1, 1);
-  await midi(0x90, cuffia, 0); // lascio «cuffia»
-  controlla('lascio «cuffia»: la sezione resta scelta (melodia) e la cuffia non si toglie', (await scelta()) === 'melodia' || (await scelta()) === 'basso');
+  await giro(1, -1);
+  controlla('giro avanti e poi indietro: si torna su («basso»), niente si blocca', (await scelta()) === 'basso', String(await scelta()));
+  await giro(1, -1);
+  controlla('ancora su: «intro»', (await scelta()) === 'intro', String(await scelta()));
+  await giro(1, 1);
   const scelta1 = await scelta();
-  await midi(0x90, cuffia, 127); // un tocco su «cuffia»: ascolto la sezione scelta
-  await midi(0x90, cuffia, 0);
+  await midi(0x90, 32, 127); // la manopola 1 premuta: ascolto la voce scelta
+  await midi(0x90, 32, 0);
   await aspetta(1.5);
   const cs = await cuffiaStato();
-  controlla('un tocco su «cuffia»: la sezione scelta parte in cuffia', !!cs?.codice && cs.nome === scelta1, JSON.stringify([cs?.nome, scelta1]));
+  controlla('manopola 1 premuta: la voce scelta parte in cuffia', !!cs?.codice && cs.nome === scelta1, JSON.stringify([cs?.nome, scelta1]));
+  controlla('e non è un muto', !(await live()).livelli.some((l) => l.muto));
+  await midi(0x90, 32, 127);
+  await midi(0x90, 32, 0);
+  await aspetta(1);
+  controlla('un altro tocco: smette', !(await cuffiaStato())?.codice);
+  await midi(0x90, cuffia, 127); // «cuffia» da solo: accende
+  await midi(0x90, cuffia, 0);
+  await aspetta(1.5);
+  controlla('«cuffia» da solo accende la cuffia', !!(await cuffiaStato())?.codice);
   await midi(0x90, cuffia, 127);
   await midi(0x90, cuffia, 0);
   await aspetta(1);
-  controlla('un altro tocco: smette', !(await cuffiaStato())?.codice);
+  controlla('e un altro tocco la spegne', !(await cuffiaStato())?.codice);
   await aspetta(1.3);
   const attesa = await scelta(); // la sezione scelta PRIMA del go live (dopo, la card live si richiude)
   await midi(0x90, golive, 127);
@@ -3011,8 +3022,9 @@ async function provaSfoglia({ finestre, scrivi }) {
   for (let i = 0; i < 14; i++) { await giro(1, -1); su.push(await scelta()); }
   await midi(0x90, cuffia, 0);
   scrivi(`giù: ${JSON.stringify(giu)} su: ${JSON.stringify(su)}`);
-  controlla('giù arriva in fondo (melodia)', true, JSON.stringify(giu));
-  controlla('su torna fino alla prima (intro)', true, JSON.stringify(su));
+  controlla('giù arriva in fondo (pad)', giu.at(-1) === 'pad', JSON.stringify(giu));
+  controlla('su torna fino all\'apertura, in cima, senza bloccarsi', su.at(-1) === 'apertura' && su.includes('intro') && su.indexOf('intro') < su.indexOf('apertura'), JSON.stringify(su));
+  
   await js('cutxProva.fermaTutto()');
   return ok;
 }
@@ -3184,19 +3196,19 @@ async function provaBeat({ finestre, scrivi }) {
   await aspetta(3.5);
   const nomi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).sort();
   controlla('un pezzo entra accanto al beat, senza toccarla', JSON.stringify(nomi) === '["basso","beat"]', JSON.stringify(nomi));
-  // il beat sta sempre sulla manopola 1 e in cima al LIVE, anche se è entrata dopo un pezzo; senza beat la manopola 1 è libera
+  // il beat sta sempre sulla manopola 2 e in cima al LIVE, anche se è entrata dopo un pezzo; senza beat la manopola 2 è libera
   await js('cutxProva.fermaTutto()');
   await aspetta(1);
   await js(`cutxProva.cue.scegliSezione(3)`);
   await tocca(5); // prima il pezzo
   await aspetta(3.5);
-  controlla('senza beat la manopola 1 è libera e il pezzo sta sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '[null,"basso",null,null,null,null,null]');
-  controlla('e l\'anello 1 è spento', (await js(`cutxProva.controllerMidi.manopole()[0]`)) === null);
+  controlla('senza beat la manopola 2 è libera e il pezzo sta sulla 3', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '[null,"basso",null,null,null,null]');
+  controlla('e l\'anello 2 è spento', (await js(`cutxProva.controllerMidi.manopole()[1]`)) === null);
   await js(`cutxProva.cue.scegliSezione(0)`);
   await tocca(5); // poi il beat
   await aspetta(3.5);
-  controlla('entrata dopo il pezzo, il beat va comunque sulla manopola 1 e il pezzo sulla 2', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '["beat","basso",null,null,null,null,null]');
-  controlla('la sua card è la prima in cima al LIVE, col numero ①', (await js(`document.querySelector('#livelli .card.livello .nome')?.textContent`)) === 'beat' && (await js(`document.querySelector('#livelli .card.livello .manopola, #livelli .card.livello [class*=manopola]')?.textContent`)) === '①');
+  controlla('entrata dopo il pezzo, il beat va comunque sulla manopola 2 e il pezzo sulla 3', (await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`)) === '["beat","basso",null,null,null,null]');
+  controlla('la sua card è la prima in cima al LIVE, col numero ②', (await js(`document.querySelector('#livelli .card.livello .nome')?.textContent`)) === 'beat' && (await js(`document.querySelector('#livelli .card.livello .manopola, #livelli .card.livello [class*=manopola]')?.textContent`)) === '②');
   // armare il drop: un cambio di scena in attesa e un go live subito dopo, il pezzo entra insieme a lui
   await js(`cutxProva.muoviScena(1)`);
   await aspetta(0.3);
@@ -3519,7 +3531,7 @@ async function provaController({ finestre, scrivi }) {
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'`);
   await aspetta(0.5);
   const entra = (nome, extra = {}) => js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*8").gain(.0001).lpf(800)', nome, provenienza: 'prova', cicli: 1, ...extra })})`);
-  const uno = await entra('beat'); // il beat sta sulla manopola 1; «due» è un pezzo sulla 2
+  const uno = await entra('beat'); // il beat sta sulla manopola 2; «due» è un pezzo sulla 3
   const due = await entra('due');
   await aspetta(2.8);
   await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${due.livello}, volume: 0.5 })`);
@@ -3527,25 +3539,25 @@ async function provaController({ finestre, scrivi }) {
 
   // pagina A: volume, muto, filtro
   await js(`cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  controlla('la card della manopola si illumina un attimo', (await js(`(() => { cutxProva.controllerMidi.riceve([0xb0, 17, 5]); return document.querySelectorAll('#livelli .card.livello.toccata').length; })()`)) === 1);
+  controlla('la card della manopola si illumina un attimo', (await js(`(() => { cutxProva.controllerMidi.riceve([0xb0, 18, 5]); return document.querySelectorAll('#livelli .card.livello.toccata').length; })()`)) === 1);
   await aspetta(0.6);
   const v = (await attivi()).find((l) => l.id === due.livello)?.volume;
-  controlla('manopola 2: il volume del secondo livello sale (0,5 → 0,6)', Math.abs(v - 0.6) < 0.011, String(v));
-  await push(2, true);
+  controlla('manopola 3: il volume del secondo livello sale (0,5 → 0,6)', Math.abs(v - 0.6) < 0.011, String(v));
+  await push(3, true);
   await aspetta(0.1);
-  await push(2, false);
+  await push(3, false);
   await aspetta(0.5);
-  controlla('un tocco sul push 2: muto', (await attivi()).find((l) => l.id === due.livello)?.muto === true);
-  await push(2, true);
+  controlla('un tocco sul push 3: muto', (await attivi()).find((l) => l.id === due.livello)?.muto === true);
+  await push(3, true);
   await aspetta(0.1);
-  await push(2, false);
+  await push(3, false);
   await aspetta(0.5);
   controlla('un secondo tocco: torna a suonare', (await attivi()).find((l) => l.id === due.livello)?.muto === false);
-  await push(2, true);
+  await push(3, true);
   await aspetta(0.6);
-  for (let i = 0; i < 12; i++) await giro(2, 1);
+  for (let i = 0; i < 12; i++) await giro(3, 1);
   await aspetta(0.5);
-  await push(2, false);
+  await push(3, false);
   await aspetta(0.5);
   const l2 = (await attivi()).find((l) => l.id === due.livello);
   controlla('tenuta premuta + giro: il filtro entra nella coda del livello (e il muto non scatta)', /^\.lpf\(\d+\)$/.test(l2?.coda?.[0] ?? '') && l2.muto === false && Number(l2.coda[0].match(/\d+/)[0]) > 800, JSON.stringify([l2?.coda, l2?.muto]));
@@ -3556,7 +3568,7 @@ async function provaController({ finestre, scrivi }) {
     return { visibile: !document.getElementById('specchio').hidden, n: m.length, righe: new Set(m.map((x) => x.offsetTop)).size, nomi: m.map((x) => x.querySelector('.nm').textContent), info: document.querySelector('#specchio .spec-info')?.textContent, a: document.querySelector('#specchio .pag.on')?.textContent, toccata: m.findIndex((x) => x.classList.contains('toccata')) + 1 };
   })()`);
   controlla('lo specchio: otto manopole in una riga sola, nomi di al massimo 6 lettere', spec.visibile && spec.n === 8 && spec.righe === 1 && spec.nomi.every((n) => n.length <= 6), JSON.stringify(spec));
-  controlla('lo specchio: in testata il nome intero e il valore dell\'ultima toccata (volume), la pagina A accesa, la manopola 2 in evidenza', /^DUE · VOLUME|^DUE · FILTRO \d+ Hz/.test(spec.info) && spec.a === 'A' && spec.toccata === 2, JSON.stringify(spec));
+  controlla('lo specchio: in testata il nome intero e il valore dell\'ultima toccata (volume), la pagina A accesa, la manopola 3 in evidenza', /^DUE · VOLUME|^DUE · FILTRO \d+ Hz/.test(spec.info) && spec.a === 'A' && spec.toccata === 3, JSON.stringify(spec));
   // i suggerimenti hanno altezza fissa: passando su comandi con testi diversi lo specchio non si muove
   const posizioni = [];
   for (const sel of ['#go-live', '#cuffia-onoff', '#manda-live', '#uscita-onoff']) {
@@ -3575,17 +3587,17 @@ async function provaController({ finestre, scrivi }) {
   // pagina B
   await midi(0x90, 85, 127);
   controlla('il tasto layer B porta alla pagina B, e lo dice la riga sottile in basso (non una scritta gigante)', (await js('cutxProva.controllerMidi.pagina')) === 'B' && /pagina B/.test(await js(`document.getElementById('riga-controller').textContent`)) && (await js(`document.getElementById('riga-controller').classList.contains('visibile')`)) === true);
-  await midi(0x90, await tasto(1), 127);
-  await midi(0x90, await tasto(1), 0);
+  await midi(0x90, await tasto(2), 127);
+  await midi(0x90, await tasto(2), 0);
   await giro(4, 10);
   await aspetta(0.6);
   const l1 = (await attivi()).find((l) => l.id === uno.livello);
-  controlla('pagina B: il tasto 1 sceglie il livello 1 e la manopola 4 scrive l\'eco nella sua coda', /^\.delay\(0\.\d+\)$/.test(l1?.coda?.find((x) => x.startsWith('.delay')) ?? ''), JSON.stringify(l1?.coda));
+  controlla('pagina B: il tasto 2 sceglie il beat (manopola 2) e la manopola 4 scrive l\'eco nella sua coda', /^\.delay\(0\.\d+\)$/.test(l1?.coda?.find((x) => x.startsWith('.delay')) ?? ''), JSON.stringify(l1?.coda));
   // passo 3: velocità a scatti, altezza in semitoni, fader
   const melodia = await entra('melodia', { codice: 'note("c3 e3 g3 b3").s("sine*1").gain(.0001)' });
   await aspettaChe(async () => (await js('cutxProva.pila.livelli.some((l) => l.id === ' + melodia.livello + ' && l.a === null)')) === true, 12);
   await aspetta(0.8);
-  const posto = (await attivi()).findIndex((l) => l.id === melodia.livello) + 1;
+  const posto = (await attivi()).findIndex((l) => l.id === melodia.livello) + 2; // il beat è sulla manopola 2
   await midi(0x90, await tasto(posto), 127);
   await midi(0x90, await tasto(posto), 0);
   await giro(6, 3);
@@ -3619,8 +3631,19 @@ async function provaController({ finestre, scrivi }) {
   await midi(0xe8, 0x7f, 0x7f);
   await aspetta(0.8);
   controlla('fader in alto (aperto): la riga sparisce', (await live()).globali.length === 0 && (await js(`document.getElementById('globali').hidden`)) === true);
-  // lavaggio scelto per la pagina A, riser in pagina B, break
-  await js(`window.cutx.salvaPreferenze({ controller: { fader: { A: 'lavaggio', B: 'riser' } } })`);
+  // cambiare pagina non tocca il fader: se ho abbassato il filtro e vado in B a scolpire, la riga resta dov'è
+  await midi(0xe8, 0x00, 0x30);
+  await aspetta(0.6);
+  const riga = (await live()).globali[0];
+  await midi(0x90, 85, 127); // pagina B
+  await aspetta(0.6);
+  controlla('il filtro del fader resta dov\'è passando in pagina B', !!riga && (await live()).globali[0] === riga, JSON.stringify([riga, (await live()).globali]));
+  await midi(0x90, 84, 127); // pagina A
+  await aspetta(0.3);
+  await midi(0xe8, 0x7f, 0x7f);
+  await aspetta(0.6);
+  // un solo effetto per il fader, scelto nelle impostazioni: lavaggio, break, riser
+  await js(`window.cutx.salvaPreferenze({ controller: { fader: 'lavaggio' } })`);
   await aspetta(0.5);
   await midi(0xe8, 0x00, 0x30);
   await aspetta(0.6);
@@ -3628,7 +3651,7 @@ async function provaController({ finestre, scrivi }) {
   controlla('e nello specchio «FADER · LAVAGGIO … Hz»', /FADER · LAVAGGIO \d+ Hz/.test(await js(`document.querySelector('#specchio .spec-info')?.textContent ?? ''`)));
   await midi(0xe8, 0x00, 0x00);
   await aspetta(0.5);
-  await js(`window.cutx.salvaPreferenze({ controller: { fader: { A: 'break', B: 'riser' } } })`);
+  await js(`window.cutx.salvaPreferenze({ controller: { fader: 'break' } })`);
   await aspetta(0.4);
   await midi(0xe8, 0x00, 0x60);
   await aspetta(0.6);
@@ -3637,11 +3660,12 @@ async function provaController({ finestre, scrivi }) {
   await midi(0xe8, 0x00, 0x00);
   await aspetta(0.5);
   controlla('break a zero: tutto torna al volume di prima, niente riga', (await live()).breakFattore === 1 && (await live()).globali.length === 0);
-  await midi(0x90, 85, 127); // pagina B: riser
+  await js(`window.cutx.salvaPreferenze({ controller: { fader: 'riser' } })`);
+  await aspetta(0.4);
   await midi(0xe8, 0x00, 0x70);
   await aspetta(2.5);
   const riser = (await attivi()).find((l) => l.nome === 'riser');
-  controlla('riser (pagina B): un livello di rumore entra subito, col passa-alto in coda, e la riga globale hpf', !!riser && riser.coda.some((r) => r.startsWith('.hpf')) && /x\.hpf/.test((await live()).globali[0] ?? ''), JSON.stringify([riser?.coda, (await live()).globali]));
+  controlla('riser: un livello di rumore entra subito, col passa-alto in coda, e la riga globale hpf', !!riser && riser.coda.some((r) => r.startsWith('.hpf')) && /x\.hpf/.test((await live()).globali[0] ?? ''), JSON.stringify([riser?.coda, (await live()).globali]));
   await midi(0xe8, 0x00, 0x00);
   await aspetta(1);
   controlla('riser: il fader giù, il rumore se ne va subito e la riga sparisce', !(await attivi()).some((l) => l.nome === 'riser') && (await live()).globali.length === 0);
@@ -3726,12 +3750,12 @@ async function provaController({ finestre, scrivi }) {
   for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
   await aspetta(1.5);
   await js(`document.getElementById('chiudi-impostazioni').click()`);
-  await giro(1, 1);
+  await giro(2, 1);
   await aspetta(0.5);
   controlla('la scritta del controller sul proiettore è spenta di default', (await chiedi(finestre.uscita, `document.getElementById('scritta').hidden`)) === true);
   await js(`window.cutx.salvaPreferenze({ testiPubblico: { controller: { acceso: true } } })`);
   await aspetta(0.6);
-  await giro(1, 1);
+  await giro(2, 1);
   await aspetta(0.4);
   const proiettore = await chiedi(finestre.uscita, `[document.getElementById('scritta').hidden, document.getElementById('scritta').textContent].join('|')`);
   controlla('accesa nei testi per il pubblico: compare (es. «UNO · VOLUME 0.99»)', /^false\|.*VOLUME/.test(proiettore), JSON.stringify(proiettore));

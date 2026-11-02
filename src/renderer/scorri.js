@@ -87,6 +87,12 @@ export class Scorrimento {
       this.tieniFino = t + this.tieniS;
       this.prossimo = t + this.passoS;
     }
+    // il livello appena entrato, se ci sta tutto nella finestra, si porta subito dove si vede intero (la geometria cresce mentre si scrive:
+    // con le righe piccole servirebbero molti scatti da soli)
+    if (focus && !segui && t < this.tieniFino && focus.bottom - focus.top <= altezza) {
+      const j = punti.findIndex((p) => p + altezza - bordoInBasso(righe, p, altezza) + 0.5 >= focus.bottom);
+      if (j > this.i && punti[j] <= focus.top + 0.5) this.i = j;
+    }
     if (segui && punti.length > 1) {
       if (segui.top < punti[this.i] - 0.5) this.i = indiceDa(punti, segui.top);
       else while (segui.bottom > punti[this.i] + altezza + 0.5 && this.i < punti.length - 1) this.i++;
