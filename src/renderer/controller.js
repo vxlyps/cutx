@@ -144,10 +144,10 @@ export class Controller {
     }
   }
 
-  // L'effetto del fader per la pagina in cui sono (scelto nelle impostazioni, separato per A e B).
-  effettoFader(pagina = this.pagina) {
-    const scelto = this.azioni.faderEffetto?.(pagina);
-    return Object.hasOwn(EFFETTI_FADER, scelto) ? scelto : FADER_PREDEFINITO[pagina];
+  // L'effetto del fader: uno solo, scelto nelle impostazioni; cambiare pagina non lo tocca.
+  effettoFader() {
+    const scelto = this.azioni.faderEffetto?.();
+    return Object.hasOwn(EFFETTI_FADER, scelto) ? scelto : FADER_PREDEFINITO;
   }
 
   // Il fader: un effetto su tutto il live, scritto come riga globale (all(x => …)); in fondo (o tutto aperto) la riga sparisce.
@@ -173,7 +173,7 @@ export class Controller {
     }, CODA_OGNI_MS);
   }
 
-  // Cambio pagina o effetto: quello di prima si ferma (la riga, il break, il rumore) e il nuovo parte dal prossimo movimento del fader.
+  // Cambio dell'effetto (dalle impostazioni): quello di prima si ferma (la riga, il break, il rumore) e il nuovo parte dal prossimo movimento del fader.
   rilasciaFader() {
     if (!this.faderEffetto) return;
     this.faderEffetto = null;
@@ -189,7 +189,6 @@ export class Controller {
       if (pagina === 'B') this.alternaGlobale();
       return;
     }
-    this.rilasciaFader();
     this.pagina = pagina;
     this.toccata = null;
     this.ultime.clear();

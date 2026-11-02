@@ -1511,7 +1511,7 @@ const controllerMidi = new Controller({
     });
   },
   // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
-  faderEffetto: (pagina) => preferenze.controller?.fader?.[pagina],
+  faderEffetto: () => preferenze.controller?.fader, // una stringa (le versioni vecchie avevano { A, B }: non vale più, torna il filtro)
   globale: (chiave, riga, griglia = 0, taglio = null) => live.manda({ tipo: 'globale', chiave, riga, griglia, taglio }),
   // i colpi: righe di coda e livelli temporanei, sulla griglia scelta nelle impostazioni (1/4 o 1/8)
   colpiGriglia: () => preferenze.colpiGriglia ?? 0.25,
@@ -1553,7 +1553,7 @@ const controllerMidi = new Controller({
   avviso: (testo) => cue.avviso(testo, { persistente: true }),
   calibrazione: () => preferenze.controller,
   salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, ...c } }),
-  faderScegli: (pagina, effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: { ...FADER_PREDEFINITO, ...preferenze.controller?.fader, [pagina]: effetto } } }),
+  faderScegli: (effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: effetto } }),
 });
 const paginaController = new PaginaController(controllerMidi);
 const specchio = new Specchio($('specchio'));

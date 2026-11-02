@@ -479,7 +479,7 @@ export class Cue {
       apertura.el.classList.toggle('e-live', live);
       apertura.el.classList.toggle('in-cuffia', cuffia);
       apertura.cuffia?.classList.toggle('on', cuffia);
-      apertura.stato.textContent = cuffia ? '◖◗ in cuffia' : live ? '● l\'apertura suona' : 'scrivi sopra il fantasma';
+      apertura.stato.textContent = cuffia ? '◖◗ in cuffia' : live ? '● l\'apertura suona' : '';
     }
     // le scene del beat: mai richiuse, il live si vede dalla pillola e dalla card
     const scelta = this.scenaScelta();
@@ -718,7 +718,7 @@ export class Cue {
     const art = el('article', `card apertura-card${ap ? '' : ' senza-apertura'}`);
     art.dataset.aiuto = 'apertura';
     const testa = el('div', 'card-testa');
-    const stato = el('span', 'lbl', ap ? 'scrivi sopra il fantasma' : 'nessuna apertura in questo brano');
+    const stato = el('span', 'lbl', ap ? '' : 'nessuna apertura in questo brano');
     testa.append(el('span', 'nome nome-apertura', 'APERTURA'), stato, el('div', 'spazio'));
     art.append(testa);
     const carta = { i: -4, apertura: true, el: art, stato };

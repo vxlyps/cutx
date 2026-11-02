@@ -80,7 +80,7 @@
 - Anelli LED = valore vero (si aggiornano anche quando CUTX cambia i valori da solo: dissolvenze, volume dal CUE…).
 - Tasti in alto: ◀ scena, ▶ scena, prossimo brano (tocco = cambia linguetta del CUE; tenuto 1 s = passa al prossimo brano), cuffia (tocco = ascolta la sezione selezionata / smette, al rilascio; tenuto + giro una manopola = sfoglio le sezioni del CUE in silenzio, restano selezionate; tenuto + ◀ / ▶ = scelgo quale brano del SET è il prossimo), go live, togli (il selezionato), piano/registra, paracadute (tenuto 1 s, anche in pagina B).
 - Tasti in basso: i colpi.
-- Fader: filtro del drop su tutto il live.
+- Fader: un solo effetto su tutto il live, scelto in Impostazioni → controller (predefinito filtro); uguale nelle due pagine.
 
 ### Pagina B · SCOLPISCI
 
@@ -88,7 +88,7 @@
 - Manopole: volume, filtro, risonanza, eco, riverbero, velocità (a scatti 1/4, 1/2, 1, 2, 4), sporco (distorsione), altezza.
 - Su "globale": BPM, eco e riverbero di tutto.
 - Tasti in basso: gli stessi colpi.
-- Fader: riser.
+- Fader: lo stesso della pagina A (cambiare pagina non lo tocca).
 
 Ogni cosa che tocco compare in grande su schermo e, se attivo l'opzione, sul proiettore (es. "REESE · FILTRO 0.42").
 

@@ -259,8 +259,10 @@ test('altezza in semitoni: .transpose(n) fra -12 e +12, a 0 la riga sparisce', (
   assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /ALTEZZA 0 st/);
 });
 
-test('il fader scrive righe globali all(x => …): filtro di default in pagina A, riser in B; a fondo corsa la riga sparisce', () => {
+test('il fader scrive righe globali all(x => …): filtro di default; a fondo corsa la riga sparisce; col riser scelto sale anche il rumore', () => {
   const { c, log, avanza, azioni } = prova([]);
+  let effetto;
+  azioni.faderEffetto = () => effetto;
   azioni.globale = (chiave, riga) => log.push(['globale', chiave, riga]);
   azioni.breakTutti = (f) => log.push(['break', f]);
   azioni.riser = (r) => log.push(['riser', r]);
@@ -274,11 +276,15 @@ test('il fader scrive righe globali all(x => …): filtro di default in pagina A
   avanza(100);
   assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], null, 'tutto aperto: la riga sparisce');
   assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /APERTO/);
-  // pagina B: riser (riga globale + rumore); cambiando pagina l'effetto di prima si ferma
+  // il filtro abbassato resta dov'è passando in pagina B (a scolpire)
   c.riceve([0xe8, 0x00, 0x20]);
   avanza(100);
+  const riga = log.filter((x) => x[0] === 'globale').at(-1)[2];
   c.riceve([0x90, c.tab.layer.B, 127]);
-  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], null, 'cambio pagina: la riga di prima si toglie');
+  avanza(100);
+  assert.equal(log.filter((x) => x[0] === 'globale').at(-1)[2], riga, 'cambio pagina: la riga resta');
+  // un altro effetto, scelto nelle impostazioni: il riser (riga globale + rumore)
+  effetto = 'riser';
   c.riceve([0xe8, 0x7f, 0x40]); // alto
   avanza(100);
   assert.match(log.filter((x) => x[0] === 'globale').at(-1)[2], /^all\(x => x\.hpf\(\d+\)\)$/);
@@ -290,17 +296,21 @@ test('il fader scrive righe globali all(x => …): filtro di default in pagina A
   assert.equal(log.filter((x) => x[0] === 'riser').at(-1)[1], null);
 });
 
-test('l\'effetto del fader si sceglie per pagina nelle impostazioni', () => {
+test('l\'effetto del fader è uno solo (impostazioni, predefinito filtro) e cambiare pagina non lo tocca', () => {
   const { c, log, avanza, azioni } = prova([]);
-  azioni.faderEffetto = (pagina) => (pagina === 'A' ? 'lavaggio' : 'cattedrale');
+  azioni.faderEffetto = () => 'lavaggio';
   azioni.globale = (chiave, riga) => log.push(['globale', chiave, riga]);
   c.riceve([0xe8, 0x7f, 0x40]);
   avanza(100);
   assert.match(log.filter((x) => x[0] === 'globale').at(-1)[2], /^all\(x => x\.hpf\(/);
   assert.match(log.filter((x) => x[0] === 'scritta').at(-1)[1], /FADER · LAVAGGIO \d+ Hz/);
-  assert.equal(c.effettoFader('B'), 'cattedrale');
-  assert.equal(prova([]).c.effettoFader('B'), 'riser', 'predefiniti: A filtro, B riser');
-  assert.equal(prova([]).c.effettoFader('A'), 'filtro');
+  const prima = log.filter((x) => x[0] === 'globale').length;
+  c.vaiA('B');
+  c.vaiA('A');
+  avanza(100);
+  assert.equal(log.filter((x) => x[0] === 'globale').length, prima, 'cambiando pagina il fader non manda niente: la riga resta dov\'è');
+  assert.equal(c.effettoFader(), 'lavaggio');
+  assert.equal(prova([]).c.effettoFader(), 'filtro', 'predefinito: filtro');
 });
 
 test('muoversi nel CUE: «cuffia» tenuto + manopola scorre le sezioni, si sfoglia in silenzio (niente parte da solo); al rilascio niente toggle; un tocco ascolta, un altro smette', () => {

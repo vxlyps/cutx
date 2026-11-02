@@ -345,7 +345,8 @@ function disegna() {
 //    o più stretta ma alta fino ai pallini delle battute. Si prende la disposizione in cui il carattere viene più grande.
 // 2. Se non ci sta si rimpicciolisce il carattere, fino a un minimo leggibile da lontano.
 // 3. Se ancora non basta si scorre piano e da soli, una riga alla volta, fermandosi sul livello appena entrato o modificato.
-const MINIMO_ALTEZZA = 0.026; // il carattere più piccolo: 2,6% dell'altezza della finestra (28 px su un proiettore 1080p)
+const MINIMO_ALTEZZA = 0.019; // il carattere più piccolo: 1,9% dell'altezza della finestra (20 px su un proiettore 1080p): si preferisce vedere più codice
+const CARATTERE_BASE = 30; // px a 1440 di larghezza, a scala 1 (deve stare uguale in uscita.css)
 const scorrimento = new Scorrimento({ passoS: 1.8, pausaS: 4, tieniS: 14 });
 const novita = new Map(); // chiave → { testo, quando }: quando è entrato o cambiato
 let ultimaNovita = null; // { id, quando }
@@ -397,7 +398,7 @@ function adatta(firma, epoca) {
     const angolo = document.querySelector('.angolo').getBoundingClientRect();
     const battute = $('battute').getBoundingClientRect();
     const margine = 18 * u;
-    const minima = Math.max(0.25, (MINIMO_ALTEZZA * innerHeight) / (40 * u));
+    const minima = Math.max(0.25, (MINIMO_ALTEZZA * innerHeight) / (CARATTERE_BASE * u));
     const sotto = (basso) => innerHeight - basso;
     const opzioni = [
       // larga: sopra l'angolo; stretta: a sinistra dell'angolo, fino ai pallini delle battute

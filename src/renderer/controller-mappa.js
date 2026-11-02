@@ -37,7 +37,7 @@ export const ALTEZZA_MIN = -12;
 export const ALTEZZA_MAX = 12;
 export const etichettaAltezza = (n) => `${n > 0 ? '+' : ''}${n} st`;
 
-// Il fader: un effetto a scelta (separato per la pagina A e per la B) su tutto il live. Scrive righe globali con la funzione all di Strudel,
+// Il fader: un solo effetto, scelto nelle impostazioni (uguale in tutte e due le pagine), su tutto il live. Scrive righe globali con la funzione all di Strudel,
 // per esempio all(x => x.lpf(1920)), che si aggiornano mentre lo muovo; a zero (o tutto aperto per il filtro) la riga sparisce.
 export const FILTRO_MASTER_MIN = 150;
 export const FILTRO_MASTER_MAX = 16000;
@@ -51,7 +51,7 @@ export const EFFETTI_FADER = {
   cattedrale: { nome: 'CATTEDRALE', descrizione: 'un riverbero che affoga tutto' },
   rottame: { nome: 'ROTTAME', descrizione: 'crush e coarse sempre più forti' },
 };
-export const FADER_PREDEFINITO = { A: 'filtro', B: 'riser' };
+export const FADER_PREDEFINITO = 'filtro';
 export const eEffettoFader = (e) => Object.hasOwn(EFFETTI_FADER, e);
 
 const log = (min, max, a) => min * (max / min) ** a;

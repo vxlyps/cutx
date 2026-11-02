@@ -92,26 +92,21 @@ export class PaginaController {
     voci.push(prova);
     stato.replaceChildren(...voci);
 
-    // l'effetto del fader, separato per pagina
+    // l'effetto del fader: uno solo, in tutte e due le pagine
     const fader = $('ctl-fader');
-    fader.replaceChildren(
-      ...['A', 'B'].map((pagina) => {
-        const riga = crea('div', 'imp-riga');
-        const testo = crea('div', 'imp-testo');
-        testo.append(crea('span', '', `fader · pagina ${pagina}${pagina === 'A' ? ' (suona)' : ' (scolpisci)'}`), crea('span', 'imp-nota', EFFETTI_FADER[c.effettoFader(pagina)].descrizione));
-        const scelta = crea('select');
-        scelta.dataset.pagina = pagina;
-        for (const [chiave, e] of Object.entries(EFFETTI_FADER)) {
-          const o = crea('option', '', e.nome.toLowerCase());
-          o.value = chiave;
-          o.selected = chiave === c.effettoFader(pagina);
-          scelta.append(o);
-        }
-        scelta.onchange = () => c.azioni.faderScegli?.(pagina, scelta.value);
-        riga.append(testo, scelta);
-        return riga;
-      }),
-    );
+    const riga = crea('div', 'imp-riga');
+    const testo = crea('div', 'imp-testo');
+    testo.append(crea('span', '', 'fader'), crea('span', 'imp-nota', `${EFFETTI_FADER[c.effettoFader()].descrizione} · cambiare pagina A/B non lo tocca`));
+    const scelta = crea('select');
+    for (const [chiave, e] of Object.entries(EFFETTI_FADER)) {
+      const o = crea('option', '', e.nome.toLowerCase());
+      o.value = chiave;
+      o.selected = chiave === c.effettoFader();
+      scelta.append(o);
+    }
+    scelta.onchange = () => c.azioni.faderScegli?.(scelta.value);
+    riga.append(testo, scelta);
+    fader.replaceChildren(riga);
 
     // i colpi: la griglia e i tasti
     const colpi = $('ctl-colpi');

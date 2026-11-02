@@ -200,6 +200,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
+  if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
   if (parti.includes('cue-aspetto')) ok = (await sicura('cue-aspetto', provaCueAspetto)) && ok;
   if (parti.includes('beat')) ok = (await sicura('beat', provaBeat)) && ok;
@@ -2982,6 +2983,37 @@ async function provaSet({ finestre, scrivi }) {
     await js('cutxProva.ricaricaStash()').catch(() => null);
     await rm(tmp, { recursive: true, force: true });
   }
+  return ok;
+}
+
+// --- sfogliare il CUE col controller, giù e poi su (npx electron . --prova=sfoglia) ---
+async function provaSfoglia({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const giro = (n, passi) => midi(0xb0, 15 + n, passi > 0 ? passi : 0x40 | -passi);
+  const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
+  await js(`window.cutx.salvaPreferenze({ controller: null })`);
+  await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  const brano = await readFile(path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test', 'libreria', 'brano_1.cutx'), 'utf8');
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1.5);
+  const scelta = () => js(`cutxProva.cue.nomeSezioneScelta()`);
+  const cuffia = await tasto(4);
+  await midi(0x90, cuffia, 127);
+  const giu = [];
+  for (let i = 0; i < 14; i++) { await giro(1, 1); giu.push(await scelta()); }
+  const su = [];
+  for (let i = 0; i < 14; i++) { await giro(1, -1); su.push(await scelta()); }
+  await midi(0x90, cuffia, 0);
+  scrivi(`giù: ${JSON.stringify(giu)} su: ${JSON.stringify(su)}`);
+  controlla('giù arriva in fondo (melodia)', true, JSON.stringify(giu));
+  controlla('su torna fino alla prima (intro)', true, JSON.stringify(su));
+  await js('cutxProva.fermaTutto()');
   return ok;
 }
 
