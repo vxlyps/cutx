@@ -49,22 +49,34 @@ const pronto = (async () => {
 
 // IL GUARDIANO — il limiter sull'uscita (limiter.js): sta fra il volume generale e le casse (o le cuffie: ce l'ha anche la cuffia,
 // perché il SYNTH può fare risonanze e distorsioni che farebbero male). La cuffia ha in più un volume proprio, prudente nel SYNTH.
-let limiter = null; // { compressore, analisi }
+let limiter = null; // { compressore, analisi, ingresso }
 let volumeCuffia = null; // cuffia: GainNode prima del limiter
+let volumeCuffiaVoluto = 1; // e dove deve arrivare (leggere .value di un parametro che sfuma non dà il valore finale)
 function installaLimiter() {
-  if (limiter) return;
-  const uscita = getSuperdoughAudioController().output;
-  const l = creaLimiter(ac);
-  const analisi = new AnalyserNode(ac, { fftSize: 2048, smoothingTimeConstant: 0 }); // solo per le prove: il picco vero in uscita
-  uscita.destinationGain.disconnect(ac.destination); // le altre prese (onda, sentinella) restano
-  if (LIVE) uscita.destinationGain.connect(l.ingresso);
-  else {
-    volumeCuffia = new GainNode(ac, { gain: 1 });
-    uscita.destinationGain.connect(volumeCuffia).connect(l.ingresso);
+  if (!limiter) {
+    const l = creaLimiter(ac);
+    const analisi = new AnalyserNode(ac, { fftSize: 2048, smoothingTimeConstant: 0 }); // solo per le prove: il picco vero in uscita
+    if (!LIVE) {
+      volumeCuffia = new GainNode(ac, { gain: volumeCuffiaVoluto });
+      volumeCuffia.connect(l.ingresso);
+    }
+    l.uscita.connect(ac.destination);
+    l.uscita.connect(analisi);
+    analisi.connect(new GainNode(ac, { gain: 0 })).connect(ac.destination); // senza arrivare all'uscita l'analizzatore non lavora
+    limiter = { compressore: l.compressore, analisi, ingresso: volumeCuffia ?? l.ingresso };
   }
-  l.uscita.connect(ac.destination);
-  l.uscita.connect(analisi);
-  limiter = { compressore: l.compressore, analisi };
+  collegaLimiter();
+}
+// Il volume generale di superdough (destinationGain) passa dal limiter. Se l'uscita di superdough viene rifatta (controller.reset(),
+// la cuffia lo fa a ogni stop) il nodo nuovo va dritto alle cuffie: qui lo si rimette in strada.
+function collegaLimiter() {
+  const dg = getSuperdoughAudioController().output.destinationGain;
+  try {
+    dg.disconnect(ac.destination); // le altre prese (onda, sentinella) restano
+  } catch {
+    // già staccato
+  }
+  dg.connect(limiter.ingresso);
 }
 // Il picco (lineare) dell'ultimo blocco in uscita, dopo il limiter.
 function piccoUscita() {
@@ -510,6 +522,7 @@ function salva(l) {
 function tagliaSuoni() {
   const controller = getSuperdoughAudioController();
   controller.reset();
+  collegaLimiter();
   controller.output.destinationGain.gain.value = udibile ? 1 : 0;
   if (eco) sentinella.attiva(controller.output.destinationGain);
 }
@@ -917,6 +930,7 @@ function stato() {
     globali: [...globali.values()],
     breakFattore,
     tagliato,
+    volumeCuffia: volumeCuffia ? volumeCuffiaVoluto : undefined,
     limiter: limiter ? { riduzioneDb: limiter.compressore.reduction, picco: piccoUscita(), ceiling: CEILING } : null,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
@@ -1049,7 +1063,8 @@ async function ricevi(da, m) {
       mix = m.valore;
       return;
     case 'volume-cuffia': // il SYNTH ascolta piano (0,5); il CUE torna a 1. Con una sfumata breve, mai uno scalino
-      if (volumeCuffia) volumeCuffia.gain.setTargetAtTime(Math.max(0, Math.min(1, Number(m.volume))), ac.currentTime, SFUMATA_S);
+      volumeCuffiaVoluto = Math.max(0, Math.min(1, Number(m.volume)));
+      volumeCuffia?.gain.setTargetAtTime(volumeCuffiaVoluto, ac.currentTime, SFUMATA_S);
       return;
     case 'udibile': // cuffia on/off: il motore continua a girare, si spegne solo l'uscita
       getSuperdoughAudioController().output.destinationGain.gain.value = m.on ? 1 : 0;

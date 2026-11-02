@@ -1,0 +1,236 @@
+/* La vista SYNTH: sta sopra la postazione (LIVE e CUE restano sotto, vivi, ma inerti). */
+
+.postazione {
+  position: relative;
+}
+
+.synth {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: var(--fondo);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.synth-barra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--linea);
+  flex-wrap: wrap;
+}
+
+.synth-barra .sep {
+  width: 1px;
+  height: 22px;
+  background: var(--linea);
+  margin: 0 4px;
+}
+
+.synth-nome,
+.synth-select {
+  height: 32px;
+  background: var(--pannello);
+  color: var(--testo);
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.synth-nome {
+  width: 180px;
+  font-family: var(--stencil);
+  font-size: 18px;
+}
+
+.synth-peso.pesante {
+  color: var(--marcio);
+  text-shadow: var(--bagliore-testo);
+}
+
+.synth-corpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.synth-pannello {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+
+@media (max-width: 1300px) {
+  .synth-pannello {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.synth-gruppo {
+  border: 1px solid var(--linea);
+  background: var(--pannello);
+  padding: 10px 12px 12px;
+}
+
+.synth-gruppo h2 {
+  margin: 0 0 8px;
+}
+
+.synth-griglia {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+/* una manopola */
+.ctl {
+  width: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  user-select: none;
+  outline: none;
+}
+
+.ctl-nome {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--spento);
+  text-align: center;
+  line-height: 1.15;
+  min-height: 23px;
+}
+
+.ctl-anello {
+  width: 48px;
+  height: 48px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.ctl-anello circle {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.ctl-anello .traccia {
+  stroke: var(--grigio);
+}
+
+.ctl-anello .valore {
+  stroke: var(--marcio);
+  filter: drop-shadow(0 0 3px rgba(159, 194, 58, 0.5));
+}
+
+.ctl-valore {
+  font-size: 11px;
+  color: var(--testo);
+}
+
+.ctl:focus-visible .ctl-anello .traccia {
+  stroke: var(--secondario);
+}
+
+.ctl.spenta {
+  opacity: 0.35;
+}
+
+/* una fila di scelte (forma, tipo di filtro…) */
+.ctl-scelte {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  max-width: 190px;
+}
+
+.ctl-b {
+  font-family: var(--mono);
+  background: var(--fondo);
+  color: var(--secondario);
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 3px 6px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.ctl-b.on {
+  background: var(--testo);
+  color: var(--su-marcio);
+  border-color: var(--testo);
+}
+
+.ctl-b:hover:not(.on) {
+  border-color: var(--secondario);
+}
+
+.ctl-b.ctl-interruttore {
+  width: 48px;
+}
+
+.ctl-b.ctl-interruttore.on {
+  background: var(--marcio);
+  border-color: var(--marcio);
+}
+
+.ctl.ctl-scelta {
+  width: auto;
+  max-width: 240px;
+}
+
+/* il pannello del codice */
+.synth-codice {
+  width: 440px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--linea);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.synth-pre {
+  margin: 0;
+  padding: 10px;
+  background: var(--pannello);
+  border: 1px solid var(--linea);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--testo);
+}
+
+.synth-avviso {
+  color: var(--marcio);
+  font-size: 12px;
+  min-height: 1.4em;
+}
+
+/* l'interruttore LIVE | SYNTH in alto */
+.vista-scelta {
+  display: flex;
+  gap: 4px;
+}
+
+.vista-scelta .key {
+  padding: 0 9px;
+}

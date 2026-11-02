@@ -9,6 +9,7 @@
     <title>CUTX</title>
     <link rel="stylesheet" href="./stile.css" />
     <link rel="stylesheet" href="./neon.css" />
+    <link rel="stylesheet" href="./synth.css" />
   </head>
   <body>
     <header class="barra">
@@ -20,6 +21,10 @@
       <button id="stash" data-aiuto="stash" class="key">
         <span class="lbl">stash</span><span id="stash-nome">nessuno</span><i id="stash-dove"></i>
       </button>
+      <div class="vista-scelta" role="tablist" aria-label="Vista">
+        <button id="vista-live" data-aiuto="vista-live" class="key on" role="tab">LIVE</button>
+        <button id="vista-synth-btn" data-aiuto="vista-synth" class="key" role="tab">SYNTH</button>
+      </div>
       <div class="spazio"></div>
       <div class="tempo">
         <div class="valore"><span id="bpm" class="numero" data-aiuto="bpm">–</span><span class="lbl">bpm</span></div>
@@ -155,6 +160,9 @@
           <span id="conteggio" class="lbl" data-aiuto="conteggio">0 live</span>
         </div>
       </section>
+
+      <!-- La vista SYNTH: sta sopra LIVE e CUE, che restano vivi sotto. Si costruisce da synth-vista.js. -->
+      <div id="vista-synth" class="synth" aria-label="SYNTH" hidden></div>
     </main>
 
     <!-- L'importazione da Ableton, in tre passi: 1 progetto, 2 tracce, 3 importa. -->

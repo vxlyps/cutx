@@ -2,6 +2,9 @@
 // Qui non suona niente: il codice va ai motori live e cuffia, ognuno nel suo processo.
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
 import { Cue } from './cue.js';
+import { VistaSynth } from './synth-vista.js';
+import { codice as codiceSynth } from './synth-codice.js';
+import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
 import { misuraLimiter, misuraMicroEntrata } from './limiter.js';
@@ -578,6 +581,7 @@ pulsanteTenuto($('passa-brano'), () => passaBrano());
 // Le scorciatoie valgono anche dentro l'editor: le prendo prima di lui.
 // ⌘↵: nel LIVE (jam o livello in modifica) applica al prossimo ciclo, nel CUE prova in cuffia.
 function invio() {
+  if (vista === 'synth') return synth.provaInCuffia();
   if (pila.fuoco()) return pila.applica();
   return provaInCuffia();
 }
@@ -598,10 +602,53 @@ function paracaduteDoppio() {
   ultimoP = ora;
 }
 
+// --- le due viste: LIVE (CUE e LIVE) e SYNTH ---
+// Il SYNTH sta sopra la postazione, che resta viva sotto (il live non si ferma mai) ma inerte. La cuffia è la stessa del CUE:
+// nel SYNTH ascolta a volume prudente (la preview) e il limiter della cuffia protegge le orecchie.
+const VOLUME_CUFFIA_SYNTH = 0.5;
+let vista = 'live';
+
+const synth = new VistaSynth($('vista-synth'), {
+  suona: async (codice, nome) => {
+    if (inTest) return null;
+    cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH });
+    if (cuffiaInPausa) pausaCuffia(false);
+    const etichetta = { nome: `synth · ${nome}`, provenienza: 'synth' };
+    pezzoCuffia = { codice, etichetta, da: performance.now() };
+    dovaCuffia = null;
+    return cuffia.valuta(codice, etichetta);
+  },
+  ferma: () => fermaCuffia(),
+  suonaOra: () => pezzoCuffia?.etichetta?.provenienza === 'synth',
+  destinazioni: () => [],
+  mandaCue: () => 'arriva nel prossimo passo',
+  salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
+});
+
+function mostraVista(v) {
+  if (v === vista) return;
+  vista = v;
+  const insynth = v === 'synth';
+  document.body.dataset.vista = v;
+  $('vista-synth').hidden = !insynth;
+  for (const el of document.querySelector('.postazione').children) if (el.id !== 'vista-synth') el.inert = insynth;
+  $('vista-live').classList.toggle('on', !insynth);
+  $('vista-synth-btn').classList.toggle('on', insynth);
+  document.activeElement?.blur?.();
+  if (insynth) cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH });
+  else {
+    synth.fermaAnteprima(); // uscendo dal SYNTH la prova si ferma; il volume della cuffia torna intero
+    cuffia.manda({ tipo: 'volume-cuffia', volume: 1 });
+  }
+  synth.aggiorna();
+}
+$('vista-live').onclick = () => mostraVista('live');
+$('vista-synth-btn').onclick = () => mostraVista('synth');
+
 // Cosa fa ogni azione (i tasti sono in scorciatoie.js e nelle preferenze: si cambiano nelle impostazioni).
 const FA = {
   provaCuffia: invio,
-  goLive,
+  goLive: () => (vista === 'synth' ? null : goLive()),
   togli: () => togliLivello(),
   entra1: () => scegliEntraTra(1),
   entra2: () => scegliEntraTra(2),
@@ -623,8 +670,10 @@ const FA = {
   fermaTutto,
   cuffiaOnOff: () => cuffiaOnOff(),
   cuffiaPausa: () => pausaCuffia(),
-  annullaSet: () => annullaSet('annulla'),
-  rifaiSet: () => annullaSet('rifai'),
+  annullaSet: () => (vista === 'synth' ? synth.annulla() : annullaSet('annulla')),
+  rifaiSet: () => (vista === 'synth' ? synth.rifai() : annullaSet('rifai')),
+  vistaLive: () => mostraVista('live'),
+  vistaSynth: () => mostraVista('synth'),
   // dal CUE al LIVE (il jam) e ritorno
   cambiaLinguetta: () => {
     cue.cambiaLinguetta();
@@ -1220,6 +1269,7 @@ function mostra() {
   mostraLive();
   disegnaTempo();
   mostraCue();
+  if (vista === 'synth') synth.aggiorna();
   if (!$('impostazioni').hidden) mostraImpostazioni();
 }
 
@@ -1340,6 +1390,7 @@ cuffia.suCollegato = async () => {
   if (cuffia.collegatoDa !== nuova) return; // nel frattempo è rinata di nuovo: ci pensa la prossima
   if (inTest) cuffia.manda({ tipo: 'eco', attivo: true });
   if (!cuffiaUdibile) cuffia.manda({ tipo: 'udibile', on: false });
+  if (vista === 'synth') cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH }); // la cuffia rinata riparte prudente
   if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
 };
 
@@ -1383,6 +1434,14 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  synth,
+  synthIniziale,
+  fermaCuffia,
+  codiceSynth: (parziale) => codiceSynth(synthPulisci({ ...synthIniziale(), ...parziale })),
+  mostraVista,
+  get vista() {
+    return vista;
+  },
   motori: { live, cuffia },
   misuraLimiter,
   misuraMicroEntrata,
@@ -1600,9 +1659,14 @@ controllerPronto = true;
 setInterval(mostra, 100);
 mostra();
 mostraTempo();
+let synthCaricato = false;
 function applicaPreferenze(p) {
   const dissPrima = preferenze.dissolvenzaEntrata;
   preferenze = p;
+  if (!synthCaricato) {
+    synthCaricato = true;
+    synth.carica(p.synthUltimo); // il SYNTH riparte dall'ultimo suono
+  }
   controllerMidi.ricaricaTabella();
   if (p.striscia !== (preferenze.striscia)) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE

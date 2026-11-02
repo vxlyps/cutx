@@ -220,6 +220,57 @@
     "cue-tempo": {
       "nome": "tempo del brano",
       "testo": "Il brano è a un BPM diverso dal set. Mentre il live suona il set non cambia da solo: «porta il set a …» lo porta al tempo del brano, all'inizio del ciclo dopo."
+    },
+    "vista-live": {
+      "nome": "vista LIVE",
+      "testo": "CUE e LIVE: la vista di sempre. Il live continua a suonare anche quando sei nel SYNTH.",
+      "azione": "vistaLive"
+    },
+    "vista-synth": {
+      "nome": "vista SYNTH",
+      "testo": "Il synth: ogni manopola è un parametro di Strudel e il codice si scrive mentre giri. Il live continua a suonare.",
+      "azione": "vistaSynth"
+    },
+    "synth-play": {
+      "nome": "▶ cuffia",
+      "testo": "Fa sentire il suono in cuffia, in loop e a tempo col live, a volume prudente. Cambia una manopola e si sente subito.",
+      "azione": "provaCuffia"
+    },
+    "synth-schema": {
+      "nome": "che cosa suona la prova",
+      "testo": "Arpeggio corto, una nota tenuta oppure le note della clip aperta nel synth. Finiscono anche nella clip che mandi al CUE."
+    },
+    "synth-ab": {
+      "nome": "A/B",
+      "testo": "Due versioni del suono da confrontare al volo. La prima volta B parte uguale ad A; poi ognuna si modifica per conto suo."
+    },
+    "synth-copia": {
+      "nome": "= copia",
+      "testo": "Copia la versione che stai usando (A o B) sull'altra."
+    },
+    "synth-init": {
+      "nome": "init",
+      "testo": "Riparti da zero: il suono torna quello di partenza. Le note restano. ⌘Z lo annulla."
+    },
+    "synth-sorprendi": {
+      "nome": "sorprendimi",
+      "testo": "Un suono a caso ma musicale, dentro limiti sensati (mai troppo forte, mai troppo pesante). ⌘Z lo annulla."
+    },
+    "synth-destinazione": {
+      "nome": "dove mandare la clip",
+      "testo": "Il brano attivo, il prossimo o il KIT."
+    },
+    "synth-cue": {
+      "nome": "→ CUE",
+      "testo": "Manda il suono come clip, col suo codice intero e lo stato del pannello, così lo riapri nel synth."
+    },
+    "synth-peso": {
+      "nome": "peso",
+      "testo": "Una stima di quanto pesa il suono sulla CPU. Da 10 in su è pesante; oltre 18 le manopole si fermano: il live non deve mai soffrire."
+    },
+    "synth-codice": {
+      "nome": "codice",
+      "testo": "Il codice Strudel che il pannello sta scrivendo, con tutti i parametri attivi. I valori neutri (shape 0, delay 0…) non si scrivono: si vedono solo sulle manopole."
     }
   },
   "impostazioni": {

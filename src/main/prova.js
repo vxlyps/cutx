@@ -200,6 +200,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
+  if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
   if (parti.includes('cue-aspetto')) ok = (await sicura('cue-aspetto', provaCueAspetto)) && ok;
@@ -3038,6 +3039,176 @@ async function provaSfoglia({ finestre, scrivi }) {
   controlla('giù arriva in fondo (pad)', giu.at(-1) === 'pad', JSON.stringify(giu));
   controlla('su torna fino all\'apertura, in cima, senza bloccarsi', su.at(-1) === 'apertura' && su.includes('intro') && su.indexOf('intro') < su.indexOf('apertura'), JSON.stringify(su));
   
+  await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- la vista SYNTH: pannello, codice, cuffia prudente, annulla, A/B, tetti, il live che non si ferma (npx electron . --prova=synth) ---
+async function provaSynth({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const cuffiaStato = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+  const liveStato = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const premi = async (tasto, ...modificatori) => {
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: tasto, modifiers: modificatori });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
+    await aspetta(0.6);
+  };
+  const codiceSynth = () => js(`document.querySelector('.synth-pre').textContent`);
+  const stato = (k) => js(`cutxProva.synth.stato[${JSON.stringify(k)}]`);
+  const mouse = async (tipo, x, y) => finestre.controllo.webContents.sendInputEvent({ type: tipo, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+  await js(`cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ synthUltimo: null }); cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' })`);
+  await aspetta(0.5);
+  // un pezzo live piano, che deve continuare a suonare mentre sono nel SYNTH
+  await js(`cutxProva.scriviCue('note("c2 g2").s("sine").gain(.0001)')`);
+  await premi('Return', 'meta', 'shift');
+  await aspetta(1.5);
+  const cicloPrima = (await liveStato())?.ciclo;
+  const liveCodice = (await liveStato())?.codice;
+  controlla('un pezzo suona nel live', !!liveCodice);
+  const cuffia0 = await cuffiaStato();
+  controlla('la cuffia ha il limiter (come il live)', cuffia0?.limiter != null && cuffia0.volumeCuffia === 1, JSON.stringify(cuffia0?.limiter));
+
+  // ⌘2 apre il SYNTH
+  await premi('2', 'meta');
+  controlla('⌘2 apre il SYNTH', (await js(`cutxProva.vista`)) === 'synth' && (await js(`!document.getElementById('vista-synth').hidden`)) === true);
+  controlla('CUE e LIVE restano sotto ma inerti', (await js(`[...document.querySelectorAll('.postazione > :not(#vista-synth)')].every((e) => e.inert)`)) === true);
+  controlla('il tasto SYNTH è acceso', (await js(`document.getElementById('vista-synth-btn').classList.contains('on')`)) === true);
+  const quante = await js(`document.querySelectorAll('.synth-pannello .ctl').length`);
+  controlla('il pannello ha tutte le manopole', quante >= 40, String(quante));
+  controlla('quattro gruppi: oscillatore, filtro, ampiezza, effetti', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|effetti');
+  controlla('il codice del suono init è visibile e leggibile', (await codiceSynth()).includes('.s("sawtooth")') && (await codiceSynth()).includes('.lpf(2400)'), await codiceSynth());
+  controlla('niente parametri neutri nel codice', !/shape|delay|room|crush|gain|pan|vowel/.test(await codiceSynth()));
+  controlla('la cuffia è a volume prudente nel SYNTH', (await cuffiaStato())?.volumeCuffia < 0.6, String((await cuffiaStato())?.volumeCuffia));
+
+  // il volume prudente si sente davvero: lo stesso tono, il picco dopo il limiter è circa la metà che fuori dal SYNTH
+  const piccoCon = async () => {
+    await js(`cutxProva.valuta('cuffia', 'note("a3").s("sine").attack(.01).sustain(1).gain(.1)', { nome: 'misura', provenienza: 'prova' })`);
+    await aspetta(1);
+    let m = 0;
+    for (let i = 0; i < 12; i++) {
+      m = Math.max(m, (await cuffiaStato())?.limiter?.picco ?? 0);
+      await aspetta(0.1);
+    }
+    return m;
+  };
+  const piccoSynth = await piccoCon();
+  await premi('1', 'meta');
+  await aspetta(0.6);
+  const piccoFuori = await piccoCon();
+  await js(`cutxProva.fermaCuffia()`);
+  await premi('2', 'meta');
+  await aspetta(0.6);
+  controlla('a volume prudente il suono in cuffia è circa la metà', piccoFuori > 0.005 && piccoSynth / piccoFuori > 0.4 && piccoSynth / piccoFuori < 0.6, `${piccoSynth} / ${piccoFuori}`);
+
+  // il gain basso, perché la prova non faccia rumore
+  await js(`cutxProva.synth.cambia('gain', 0.02)`);
+  controlla('cambiare una manopola riscrive il codice', (await codiceSynth()).includes('.gain(.02)'));
+
+  // trascinare una manopola col mouse vero: un giro continuo è un passo solo
+  const r = await js(`(() => { const e = document.querySelector('.ctl[data-k="cutoff"] .ctl-anello').getBoundingClientRect(); return { x: e.x + e.width / 2, y: e.y + e.height / 2 }; })()`);
+  const prima = await stato('cutoff');
+  const nStoria = await js(`cutxProva.synth.storia.length`);
+  await mouse('mouseDown', r.x, r.y);
+  for (let i = 1; i <= 12; i++) {
+    await mouse('mouseMove', r.x, r.y - i * 5);
+    await aspetta(0.02);
+  }
+  await mouse('mouseUp', r.x, r.y - 60);
+  await aspetta(0.3);
+  const dopo = await stato('cutoff');
+  controlla('trascinare in su apre il filtro', dopo > prima * 1.5, `${prima} → ${dopo}`);
+  controlla('e il codice segue', (await codiceSynth()).includes(`.lpf(${dopo})`), await codiceSynth());
+  controlla('un giro continuo è un solo passo di annulla', (await js(`cutxProva.synth.storia.length`)) === nStoria + 1);
+  await premi('Z', 'meta');
+  controlla('⌘Z riporta il filtro com\'era', (await stato('cutoff')) === prima);
+  await premi('Z', 'meta', 'shift');
+  controlla('⇧⌘Z lo rifà', (await stato('cutoff')) === dopo);
+  await js(`cutxProva.synth.cambia('cutoff', 1200)`);
+  await js(`cutxProva.synth.inGesto = false; cutxProva.synth.cambia('cutoff', 1500)`);
+  controlla('doppio clic su una manopola torna al valore di partenza', await (async () => {
+    await js(`document.querySelector('.ctl[data-k="cutoff"]').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+    return (await stato('cutoff')) === 2400;
+  })());
+
+  // ▶ cuffia con ⌘↵
+  await premi('Return', 'meta');
+  await aspetta(1.5);
+  const c1 = await cuffiaStato();
+  controlla('⌘↵ manda il suono in cuffia, e il codice è quello del pannello', c1?.codice === (await codiceSynth()) && c1?.provenienza === 'synth', `${c1?.provenienza} ${(c1?.codice ?? '').slice(0, 40)}`);
+  controlla('il tasto ▶ si accende', (await js(`document.querySelector('.synth-play').classList.contains('on')`)) === true);
+  controlla('la cuffia suona piano (volume 0,5)', (await cuffiaStato())?.volumeCuffia === 0.5);
+  controlla('la cuffia non ha errori', !c1?.errore, c1?.errore);
+  await js(`cutxProva.synth.cambia('q', 12)`);
+  await aspetta(0.8);
+  controlla('girando una manopola la cuffia riceve il codice nuovo', ((await cuffiaStato())?.codice ?? '').includes('.lpq(12)'));
+
+  // ogni forma e ogni effetto sono codice Strudel vero: nessun parametro inventato (la cuffia valuta, e se c'è un errore lo dice)
+  const forme = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];
+  for (const forma of forme) {
+    const e = await js(`cutxProva.synth.opz.suona(cutxProva.codiceSynth({ forma: ${JSON.stringify(forma)}, gain: 0.02, voci: 3, sub: 1, fm: 2, penv: 5, ottava: 1 }), 'prova')`);
+    controlla(`la forma ${forma} è codice che parte`, e === null, String(e));
+  }
+  const tutto = await js(`cutxProva.synth.opz.suona(cutxProva.codiceSynth({ gain: 0.02, tipo: 'hpf', cutoff: 300, q: 4, ftype: 'ladder', fenv: 3, vowel: 'a', pan: 0.3, shape: 0.2, distort: 1, crush: 8, coarse: 4, phaser: 2, tremolo: 4, delay: 0.3, delaysync: '1/8', room: 0.3, penv: 3 }), 'prova')`);
+  controlla('tutti gli effetti insieme sono codice che parte (hpf, ladder, vocale, shape, distort, crush, coarse, phaser, tremolo, delay, room)', tutto === null, String(tutto));
+  for (const tipo of ['lpf', 'bpf']) {
+    const e = await js(`cutxProva.synth.opz.suona(cutxProva.codiceSynth({ gain: 0.02, tipo: ${JSON.stringify(tipo)}, q: 3, fenv: 2, ftype: '24db' }), 'prova')`);
+    controlla(`il filtro ${tipo} con inviluppo e 24 dB parte`, e === null, String(e));
+  }
+  controlla('di nuovo ▶ dopo i controlli', ((await cuffiaStato())?.provenienza ?? '') === 'synth');
+
+  // A/B, init, sorprendimi
+  await js(`cutxProva.synth.cambia('cutoff', 500)`);
+  await js(`document.querySelector('.synth-ab').click()`);
+  controlla('A/B: la prima volta B parte uguale ad A', (await js(`cutxProva.synth.slot.lato`)) === 'B' && (await stato('cutoff')) === 500);
+  await js(`cutxProva.synth.cambia('cutoff', 4000)`);
+  await js(`document.querySelector('.synth-ab').click()`);
+  controlla('tornando su A il filtro è com\'era', (await stato('cutoff')) === 500 && (await codiceSynth()).includes('.lpf(500)'));
+  await js(`document.querySelector('.synth-ab').click()`);
+  controlla('e B ha il suo', (await stato('cutoff')) === 4000);
+  await js(`document.querySelector('.synth-ab').click()`);
+  await js(`[...document.querySelectorAll('.synth-barra .key')].find((b) => b.textContent.startsWith('init')).click()`);
+  controlla('init riparte da zero', (await stato('cutoff')) === 2400 && (await stato('q')) === 1);
+  await premi('Z', 'meta');
+  controlla('⌘Z annulla anche init', (await stato('q')) === 12);
+  await js(`[...document.querySelectorAll('.synth-barra .key')].find((b) => b.textContent.startsWith('sorprendimi')).click()`);
+  const sorpresa = await js(`JSON.stringify(cutxProva.synth.stato)`);
+  controlla('sorprendimi cambia il suono', sorpresa !== (await js(`JSON.stringify(cutxProva.synth.storia.at(-1).A)`)));
+  await premi('Z', 'meta');
+  controlla('⌘Z annulla sorprendimi', (await stato('q')) === 12);
+
+  // il tetto: troppe voci non si può
+  await js(`cutxProva.synth.cambia('forma', 'supersaw'); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('voci', 7); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('sub', 1); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('room', 0.5); cutxProva.synth.inGesto = false; cutxProva.synth.cambia('delay', 0.3)`);
+  controlla('il peso arriva al tetto e il pannello avvisa «pesante»', (await js(`document.querySelector('.synth-peso').textContent`)).includes('pesante'));
+  const vocePrima = await js(`cutxProva.synth.stato.phaser`);
+  await js(`cutxProva.synth.inGesto = false; cutxProva.synth.cambia('phaser', 4)`);
+  controlla('una manopola che supera il tetto si ferma e lo dice', (await js(`cutxProva.synth.stato.phaser`)) === vocePrima && (await js(`document.querySelector('.synth-avviso').textContent`)).includes('tetto'));
+  controlla('le voci del supersaw non superano 7', (await stato('voci')) === 7);
+
+  // il live non si è fermato
+  const cicloDopo = (await liveStato())?.ciclo;
+  controlla('il live continua a suonare mentre sono nel SYNTH', (await liveStato())?.codice === liveCodice && cicloDopo > cicloPrima, `${cicloPrima} → ${cicloDopo}`);
+
+  // ⌘1 torna al LIVE e la prova si ferma
+  await premi('1', 'meta');
+  await aspetta(0.8);
+  controlla('⌘1 torna al LIVE', (await js(`cutxProva.vista`)) === 'live' && (await js(`document.getElementById('vista-synth').hidden`)) === true);
+  controlla('la prova del synth si ferma e il volume della cuffia torna intero', !(await cuffiaStato())?.codice && (await cuffiaStato())?.volumeCuffia === 1, JSON.stringify([(await cuffiaStato())?.codice, (await cuffiaStato())?.volumeCuffia]));
+  controlla('il live suona ancora', (await liveStato())?.codice === liveCodice);
+  controlla('LIVE e CUE tornano attivi', (await js(`[...document.querySelectorAll('.postazione > :not(#vista-synth)')].every((e) => !e.inert)`)) === true);
+  try {
+    await premi('2', 'meta');
+    await aspetta(0.5);
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
+    await mkdir(cartella, { recursive: true });
+    await writeFile(path.join(cartella, 'blocco1.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await premi('1', 'meta');
+  } catch {}
   await js('cutxProva.fermaTutto()');
   return ok;
 }
