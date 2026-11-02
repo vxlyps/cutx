@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COSTO_AVVISO, COSTO_MAX, LAYER_MAX, PARAMETRI, UNISON_MAX, aPosizione, costo, daPosizione, eCaro, imposta, iniziale, noteValide, parametro, pulisci, sorprendi,
+  COSTO_AVVISO, COSTO_MAX, LAYER_MAX, PARAMETRI, UNISON_MAX, aPosizione, attivo, costo, daPosizione, eCaro, imposta, iniziale, noteValide, parametro, pulisci, sorprendi,
 } from '../src/renderer/synth-modello.js';
 import { clip, codice, leggiRiga, rigaSynth, scarti } from '../src/renderer/synth-codice.js';
 
@@ -237,4 +237,105 @@ test('i tipi nel file: la riga della clip e i gruppi del CUE', () => {
   ]);
   assert.deepEqual(ordineClip(clip), [2, 4, 1, 0, 3]);
   assert.deepEqual(gruppiClip([{ info: {} }, { info: {} }]), [{ categoria: null, indici: [0, 1] }]); // senza tipi: niente gruppi né titoli
+});
+
+import { leggiCodice, spezza } from '../src/renderer/synth-codice.js';
+
+test('spezza: testa e chiamate, stringhe e parentesi rispettate, commenti tolti', () => {
+  const r = spezza('note("c3 e3")\n  .s("sawtooth").lpf(sine.range(300, 2400).slow(8)) // modulato\n  .gain(.5);');
+  assert.equal(r.testa, 'note("c3 e3")');
+  assert.deepEqual(r.chiamate.map((c) => c.nome), ['s', 'lpf', 'gain']);
+  assert.equal(r.chiamate[1].args, 'sine.range(300, 2400).slow(8)');
+  assert.equal(spezza('note("c3"').errore, 'parentesi non chiusa');
+  assert.equal(spezza('note("c3)').errore, 'stringa non chiusa');
+  assert.equal(spezza('note("c3"))').errore, 'parentesi chiusa di troppo');
+  assert.ok(spezza('').errore);
+  assert.equal(spezza('note("a.b(c)")').chiamate.length, 0); // un punto dentro una stringa non spezza
+});
+
+test('il codice scritto a mano sposta le manopole', () => {
+  const base = iniziale();
+  const r = leggiCodice('note("c3 e3")\n  .s("square")\n  .lpf(400).lpq(6)\n  .attack(.02).decay(.3).sustain(.5).release(.8)\n  .delay(.3).delaysync(1/8).room(.2).roomsize(3)', base);
+  assert.equal(r.errore, undefined);
+  const s = r.stato;
+  assert.equal(s.forma, 'square');
+  assert.equal(s.cutoff, 400);
+  assert.equal(s.q, 6);
+  assert.equal(s.release, 0.8);
+  assert.equal(s.delay, 0.3);
+  assert.equal(s.delaysync, '1/8');
+  assert.equal(s.roomsize, 3);
+  assert.equal(s.note, 'c3 e3');
+  assert.deepEqual(r.mano, []);
+  // quello che il codice non nomina è spento
+  assert.equal(s.shape, 0);
+  assert.equal(s.crush, 16);
+  assert.equal(s.fenv, 0);
+});
+
+test('quello che il pannello non conosce resta com\'è, in fondo, e non si perde', () => {
+  const r = leggiCodice('note("c3")\n  .s("sawtooth").lpf(sine.range(300, 2400).slow(8)).vib(4).vibmod(.5).gain(.6)\n  .chunk(4, x => x.add(7))', iniziale());
+  assert.equal(r.errore, undefined);
+  assert.deepEqual(r.mano, ['.lpf(sine.range(300, 2400).slow(8))', '.vib(4)', '.vibmod(.5)', '.chunk(4, x => x.add(7))']);
+  assert.equal(r.stato.gain, 0.6);
+  const c = codice(r.stato);
+  for (const m of r.mano) assert.ok(c.includes(m), m);
+  assert.ok(c.indexOf('.vib(4)') > c.indexOf('.gain(.6)'), 'le chiamate a mano vanno in fondo: l\'ultimo valore vince');
+  // andata e ritorno: riletto, resta uguale
+  assert.equal(codice(leggiCodice(c, r.stato).stato), c);
+});
+
+test('un\'inizio diverso da note("…") resta com\'è', () => {
+  const r = leggiCodice('n("0 3 7").scale("c:minor")\n  .s("triangle").lpf(900)', iniziale());
+  assert.equal(r.stato.testa, 'n("0 3 7")');
+  assert.deepEqual(r.mano, ['.scale("c:minor")']);
+  assert.equal(r.stato.cutoff, 900);
+  assert.match(codice(r.stato), /^n\("0 3 7"\)\n/);
+});
+
+test('valori fuori dai limiti: errore, niente cambia', () => {
+  for (const [codiceTesto, atteso] of [
+    ['note("c3").s("supersaw").unison(50)', /unison/],
+    ['note("c3").lpf(30000)', /lpf/],
+    ['note("c3").gain(5)', /gain/],
+    ['note("c3").lpf(400', /parentesi/],
+  ]) {
+    const r = leggiCodice(codiceTesto, iniziale());
+    assert.match(r.errore ?? '', atteso, codiceTesto);
+    assert.equal(r.stato, undefined);
+  }
+});
+
+test('voci sovrapposte, sub, ottava e doppioni', () => {
+  const s = leggiCodice('note("c3")\n  .trans(12)\n  .add(note("-.2,0,.2,-12"))\n  .s("sawtooth").lpf(400).lpf(900)', iniziale()).stato;
+  assert.equal(s.ottava, 1);
+  assert.equal(s.voci, 3);
+  assert.equal(s.detune, 0.2);
+  assert.equal(s.sub, 1);
+  assert.equal(s.cutoff, 900); // vale l'ultimo
+  const dispari = leggiCodice('note("c3").add(note("0,7,12"))', iniziale());
+  assert.deepEqual(dispari.mano, ['.add(note("0,7,12"))']);
+  assert.equal(leggiCodice('note("c3").trans(7)', iniziale()).mano[0], '.trans(7)');
+});
+
+test('andata e ritorno: ogni suono (300 casuali, tutti i tipi) torna lo stesso dal suo codice', () => {
+  for (let n = 1; n <= 300; n++) {
+    const categoria = ['', ...CATEGORIE][n % 7];
+    const s = sorprendi(seme(n), { ...iniziale(), categoria });
+    const c = codice(s);
+    const r = leggiCodice(c, s);
+    assert.equal(r.errore, undefined, `seme ${n}: ${r.errore}\n${c}`);
+    assert.deepEqual(r.mano, [], `seme ${n}`);
+    assert.equal(codice(r.stato), c, `seme ${n}`);
+    for (const p of PARAMETRI) if (attivo(p, s)) assert.equal(r.stato[p.k], s[p.k], `seme ${n} ${p.k}`);
+  }
+});
+
+test('lo stato con la mano sta nella riga @synth e si riapre uguale', () => {
+  const r = leggiCodice('n("0 3").scale("c:minor").s("triangle").vib(4)', iniziale());
+  const testo = clip(r.stato);
+  const letto = leggiRiga(testo);
+  assert.equal(letto.testa, 'n("0 3")');
+  assert.deepEqual(letto.mano, ['.scale("c:minor")', '.vib(4)']);
+  assert.equal(codice(letto), codice(r.stato));
 });

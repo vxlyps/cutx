@@ -471,7 +471,10 @@
       "dalSynth": "clip «{nome}» dal synth",
       "mandataNonSalvata": "clip «{nome}» → {dove} (da salvare con ⌘S)",
       "nessunBranoApertoSlot": "nessun brano {dove} nel CUE",
-      "altre": "altre"
+      "altre": "altre",
+      "aMano": "a mano",
+      "codiceErrore": "codice: {errore}",
+      "codiceAMano": "a mano: il pannello non lo comanda"
     },
     "categorie": {
       "": "tipo",

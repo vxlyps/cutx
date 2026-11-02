@@ -85,6 +85,8 @@ export function iniziale() {
   const s = Object.fromEntries(PARAMETRI.map((p) => [p.k, p.def]));
   s.anteprima = 'arpeggio'; // quale schema di prova si sente (e finisce nella clip)
   s.note = NOTE_ANTEPRIMA.arpeggio; // le note della clip (mini-notazione)
+  s.testa = ''; // l'inizio del codice se non è note("…") (scritto a mano nel pannello del codice): vuoto = note("…") delle note della clip
+  s.mano = []; // le chiamate .nome(…) scritte a mano che il pannello non conosce: restano com'erano, in fondo, e non si perdono mai
   s.categoria = ''; // bass, lead, arp, pad, keys, fx o niente: i limiti di MUTATE e il gruppo della clip nel CUE
   return s;
 }
@@ -114,6 +116,18 @@ export function pulisciValore(p, v) {
       return Number.isFinite(n) ? arrotonda(Math.min(p.max, Math.max(p.min, n)), p.dec ?? 2) : p.def;
     }
   }
+}
+
+// Cosa suona il motore se il codice non nomina un parametro: tutto neutro, e i valori di superdough dove ne ha uno suo
+// (forma triangle, inviluppo .001/.05/.6/.01, tremolo a fondo). Serve per leggere il codice scritto a mano: quello che non c'è, è spento.
+export function spento() {
+  const s = iniziale();
+  Object.assign(s, {
+    forma: 'triangle', voci: 1, fm: 0, ottava: 0, sub: 0, pan: 0.5, tipo: 'lpf', cutoff: 20000, q: 1, ftype: '12db', fenv: 0, vowel: '',
+    attack: 0.001, decay: 0.05, sustain: 0.6, release: 0.01, gain: 0.8, penv: 0, shape: 0, distort: 0, crush: 16, coarse: 1,
+    phaser: 0, tremolo: 0, tremolodepth: 1, delay: 0, room: 0,
+  });
+  return s;
 }
 
 // Costo stimato sulla CPU, in «oscillatori equivalenti». Una stima semplice ma onesta: oscillatori che suonano insieme,
@@ -151,16 +165,23 @@ function sotto(s) {
 }
 
 // Lo stato com'è scritto in un file o arrivato da fuori: solo le chiavi note, ognuna nel suo intervallo. Mai eval, mai codice.
-export function pulisci(grezzo) {
+const MANO = /^\.[A-Za-z_]\w*\(.*\)$/;
+export const manoValida = (x) => typeof x === 'string' && x.length <= 300 && !x.includes('\n') && MANO.test(x.trim());
+export const testaValida = (x) => typeof x === 'string' && x.length <= 300 && !x.includes('\n') && !x.includes('//') && x.trim().length > 0;
+
+// tetto: false lascia i pesi com'erano (il codice scritto a mano non si alleggerisce di nascosto: il pannello avvisa).
+export function pulisci(grezzo, { tetto = true } = {}) {
   const s = iniziale();
   const g = grezzo && typeof grezzo === 'object' ? grezzo : {};
   for (const p of PARAMETRI) if (p.k in g) s[p.k] = pulisciValore(p, g[p.k]);
   if (ANTEPRIME.includes(g.anteprima)) s.anteprima = g.anteprima;
   if (noteValide(g.note)) s.note = g.note.trim();
   if (eCategoria(g.categoria)) s.categoria = g.categoria;
+  if (testaValida(g.testa)) s.testa = g.testa.trim();
+  if (Array.isArray(g.mano)) s.mano = g.mano.filter(manoValida).map((x) => x.trim()).slice(0, 40);
   // il supersaw ha fino a 7 voci, gli altri fino a 5
   if (s.forma !== 'supersaw') s.voci = Math.min(s.voci, LAYER_MAX);
-  return sotto(s);
+  return tetto ? sotto(s) : s;
 }
 
 // Cambia una manopola. Ritorna lo stato nuovo, o lo stesso oggetto se il tetto lo vieta (il pannello lo dice).

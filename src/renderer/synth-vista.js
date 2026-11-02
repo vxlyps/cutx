@@ -3,7 +3,7 @@
 // Qui non suona niente da sola: la cuffia la comanda app.js, attraverso le funzioni di `opz`.
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
-import { clip, codice } from './synth-codice.js';
+import { clip, codice, funzioniDi, leggiCodice } from './synth-codice.js';
 import it from './testi/it.json';
 
 const T = it.synth;
@@ -15,6 +15,7 @@ const PASSO = 0.006; // per pixel
 const STORIA_MAX = 100;
 const PAUSA_ANTEPRIMA_MS = 90;
 const PAUSA_SALVA_MS = 800;
+const PAUSA_CODICE_MS = 350;
 
 const crea = (tag, classe, testo) => {
   const el = document.createElement(tag);
@@ -51,6 +52,9 @@ export class VistaSynth {
     this.timerSalva = null;
     this.timerRuota = null;
     this.quanto = 30; // quanto cambia mutate (0–100)
+    this.scrivendo = false; // sto scrivendo nel pannello del codice: il pannello non lo riscrive sotto le dita
+    this.erroreCodice = null; // il codice scritto non si legge: resta com'è finché non si corregge
+    this.timerCodice = null;
     this.controlli = new Map();
     this.costruisci();
     this.disegna();
@@ -132,9 +136,26 @@ export class VistaSynth {
     const lato = crea('aside', 'synth-codice');
     this.titoloCodice = crea('h2', 'lbl', T.barra.codice);
     lato.append(this.titoloCodice);
-    this.codiceEl = crea('pre', 'synth-pre');
+    // il codice si può scrivere: quello che il pannello conosce sposta le manopole, il resto resta com'è (a mano)
+    this.codiceEl = crea('textarea', 'synth-pre');
     this.codiceEl.dataset.aiuto = 'synth-codice';
-    lato.append(this.codiceEl, this.avvisoEl);
+    this.codiceEl.spellcheck = false;
+    this.codiceEl.wrap = 'off';
+    this.codiceEl.setAttribute('aria-label', T.barra.codice);
+    this.codiceEl.oninput = () => {
+      this.scrivendo = true;
+      clearTimeout(this.timerCodice);
+      this.timerCodice = setTimeout(() => this.daCodice(), PAUSA_CODICE_MS);
+    };
+    this.codiceEl.onblur = () => {
+      clearTimeout(this.timerCodice);
+      this.daCodice();
+      this.scrivendo = false;
+      if (!this.erroreCodice) this.codiceEl.value = codice(this.stato); // il codice come lo scrive il pannello (ordine e spazi in regola)
+    };
+    this.manoEl = crea('p', 'synth-mano');
+    this.manoEl.dataset.aiuto = 'synth-mano';
+    lato.append(this.codiceEl, this.manoEl, this.avvisoEl);
 
     corpo.append(pannello, lato);
     this.r.replaceChildren(barra, corpo);
@@ -237,6 +258,21 @@ export class VistaSynth {
     });
   }
 
+  // Il codice scritto a mano → manopole. Se non si legge, o va fuori dai limiti, il suono di prima continua e lo dice.
+  daCodice() {
+    const r = leggiCodice(this.codiceEl.value, this.stato);
+    if (r.errore) {
+      this.erroreCodice = r.errore;
+      this.codiceEl.classList.add('errore');
+      this.avviso(formatta(T.msg.codiceErrore, { errore: r.errore }));
+      return;
+    }
+    this.erroreCodice = null;
+    this.codiceEl.classList.remove('errore');
+    if (JSON.stringify(r.stato) === JSON.stringify(this.stato)) return this.avviso('');
+    this.imponi(r.stato);
+  }
+
   // --- stato, storia, anteprima ---
 
   // Un gesto di un colpo solo (un clic, un tasto): il prossimo cambio apre un passo nuovo della storia.
@@ -270,6 +306,7 @@ export class VistaSynth {
       this.inGesto = true;
     }
     this.slot[this.slot.lato] = nuovo;
+    if (!this.scrivendo) this.erroreCodice = null;
     this.avviso('');
     this.cambiato();
   }
@@ -379,7 +416,8 @@ export class VistaSynth {
 
   async suona() {
     const errore = await this.opz.suona(codice(this.stato), this.nome);
-    this.avviso(errore ? formatta(T.msg.codiceNonParte, { errore }) : '');
+    // l'errore di Strudel nomina tutta la catena: qui basta la parte che dice cosa non va
+    this.avviso(errore ? formatta(T.msg.codiceNonParte, { errore: String(errore).replace(/^[\s\S]*\)\.(\w+ is not a function)$/, '$1') }) : '');
   }
 
   suonaOFerma() {
@@ -430,7 +468,14 @@ export class VistaSynth {
         c.el.classList.toggle('acceso', t > 0.001);
       }
     }
-    this.codiceEl.textContent = codice(s);
+    if (!this.scrivendo && !this.erroreCodice) {
+      this.codiceEl.value = codice(s);
+      this.codiceEl.classList.remove('errore');
+    }
+    const nomiMano = new Set(s.mano.map((m) => /^\.(\w+)/.exec(m)?.[1]));
+    this.manoEl.textContent = s.mano.length || s.testa ? `${T.msg.aMano}: ${[s.testa, ...s.mano].filter(Boolean).join(' ')}` : '';
+    this.manoEl.hidden = !this.manoEl.textContent;
+    for (const [k, c] of this.controlli) c.el.classList.toggle('a-mano', funzioniDi(k).some((f) => nomiMano.has(f)));
     this.anteprimaEl.value = s.anteprima;
     this.anteprimaEl.querySelector('option[value="clip"]').disabled = !this.aperta && s.anteprima !== 'clip';
     this.slotA.classList.toggle('on', this.slot.lato === 'A');

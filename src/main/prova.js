@@ -3059,7 +3059,7 @@ async function provaSynth({ finestre, scrivi }) {
     wc.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
     await aspetta(0.6);
   };
-  const codiceSynth = () => js(`document.querySelector('.synth-pre').textContent`);
+  const codiceSynth = () => js(`document.querySelector('.synth-pre').value`);
   const stato = (k) => js(`cutxProva.synth.stato[${JSON.stringify(k)}]`);
   const mouse = async (tipo, x, y) => finestre.controllo.webContents.sendInputEvent({ type: tipo, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
   await js(`window.addEventListener('error', (e) => (window.__err = (window.__err || '') + ' || ' + e.error?.stack))`);
@@ -3152,6 +3152,34 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.cambia('q', 12)`);
   await aspetta(0.8);
   controlla('girando una manopola la cuffia riceve il codice nuovo', ((await cuffiaStato())?.codice ?? '').includes('.lpq(12)'));
+
+
+  // il codice si può scrivere: quello che il pannello conosce sposta le manopole, il resto resta a mano, un errore non ferma il suono
+  const scrivi_ = async (testo) => {
+    await js(`(() => { const t = document.querySelector('.synth-pre'); t.focus(); t.value = ${JSON.stringify(testo)}; t.dispatchEvent(new Event('input')); })()`);
+    await aspetta(1.2);
+  };
+  const prima_ = (await cuffiaStato())?.codice;
+  await scrivi_('note("c3 e3")\n  .s("square")\n  .lpf(400).lpq(6)\n  .attack(.02).decay(.3).sustain(.5).release(.8)\n  .gain(.02)');
+  controlla('scrivere .lpf(400) sposta la manopola del filtro', (await stato('cutoff')) === 400 && (await stato('q')) === 6 && (await stato('forma')) === 'square');
+  controlla('e la cuffia riceve il codice nuovo (le note scritte, il filtro)', ((await cuffiaStato())?.codice ?? '').includes('.lpf(400)') && ((await cuffiaStato())?.codice ?? '').includes('note("c3 e3")'));
+  await scrivi_('note("c3 e3")\n  .s("square").lpf(sine.range(300, 2400).slow(8)).vib(4)\n  .attack(.02).decay(.3).sustain(.5).release(.8).gain(.02)');
+  controlla('quello che il pannello non conosce resta scritto e segnato «a mano»', (await js(`document.querySelector('.synth-mano').textContent`)).includes('.vib(4)') && (await js(`document.querySelector('.synth-mano').textContent`)).includes('sine.range') && (await js(`document.querySelector('.ctl[data-k="cutoff"]').classList.contains('a-mano')`)) === true);
+  controlla('e arriva alla cuffia, in fondo, senza essere toccato', ((await cuffiaStato())?.codice ?? '').includes('.lpf(sine.range(300, 2400).slow(8))'));
+  const buono = (await cuffiaStato())?.codice;
+  await scrivi_('note("c3 e3"\n  .s("square")');
+  controlla('un errore di forma: lo dice e il suono di prima continua', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('parentesi') && (await cuffiaStato())?.codice === buono);
+  await scrivi_('note("c3 e3")\n  .s("square").lpf(30000).gain(.02)');
+  controlla('un valore fuori dai limiti: lo dice e il suono di prima continua', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('fuori limiti') && (await cuffiaStato())?.codice === buono);
+  await scrivi_('note("c3 e3")\n  .s("square").nonEsiste(3).gain(.02)');
+  controlla('una funzione che Strudel non conosce: errore del motore, il suono di prima continua', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('nonEsiste is not a function') && (await cuffiaStato())?.codice === buono, String(await js(`document.querySelector('.synth-avviso').textContent`)));
+  await js(`document.querySelector('.synth-pre').dispatchEvent(new FocusEvent('blur'))`);
+  await js(`cutxProva.synth.cambia('cutoff', 900)`);
+  controlla('muovendo una manopola il codice si riscrive, senza perdere le chiamate a mano', (await codiceSynth()).includes('.lpf(900)') && (await codiceSynth()).includes('.nonEsiste(3)'));
+  await premi('Z', 'meta');
+  await premi('Z', 'meta');
+  await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.cambia('gain', 0.02); cutxProva.synth.cambia('q', 12)`);
+  await aspetta(0.6);
 
   // ogni forma e ogni effetto sono codice Strudel vero: nessun parametro inventato (la cuffia valuta, e se c'è un errore lo dice)
   const forme = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];

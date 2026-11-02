@@ -620,9 +620,13 @@ const synth = new VistaSynth($('vista-synth'), {
     cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH });
     if (cuffiaInPausa) pausaCuffia(false);
     const etichetta = { nome: `synth · ${nome}`, provenienza: 'synth' };
-    pezzoCuffia = { codice, etichetta, da: performance.now() };
-    dovaCuffia = null;
-    return cuffia.valuta(codice, etichetta);
+    // se il codice ha un errore il motore tiene il suono di prima: anche qui resta quello di prima
+    const errore = await cuffia.valuta(codice, etichetta);
+    if (!errore) {
+      pezzoCuffia = { codice, etichetta, da: performance.now() };
+      dovaCuffia = null;
+    }
+    return errore;
   },
   ferma: () => fermaCuffia(),
   suonaOra: () => pezzoCuffia?.etichetta?.provenienza === 'synth',

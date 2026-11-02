@@ -242,6 +242,9 @@
 }
 
 .synth-pre {
+  resize: none;
+  min-height: 190px;
+  width: 100%;
   margin: 0;
   padding: 10px;
   background: var(--pannello);
@@ -293,4 +296,30 @@
 .synth-quanto {
   width: 90px;
   accent-color: var(--testo);
+}
+
+.synth-pre:focus {
+  outline: none;
+  border-color: var(--secondario);
+}
+
+.synth-pre.errore {
+  border-color: var(--avviso);
+}
+
+/* le chiamate scritte a mano: il pannello non le comanda */
+.synth-mano {
+  margin: 0;
+  color: var(--avviso);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.ctl.a-mano .ctl-anello .valore {
+  stroke: var(--avviso);
+  stroke-dasharray: 2 4;
+}
+
+.ctl.a-mano .ctl-nome {
+  color: var(--avviso);
 }
