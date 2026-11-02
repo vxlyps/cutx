@@ -48,30 +48,31 @@ export const PARAMETRI = [
   { k: 'decay', g: 'amp', tipo: 'num', min: 0.001, max: 4, log: true, def: 0.2, dec: 3 },
   { k: 'sustain', g: 'amp', tipo: 'num', min: 0, max: 1, def: 0.6, dec: 2 },
   { k: 'release', g: 'amp', tipo: 'num', min: 0.01, max: 6, log: true, def: 0.3, dec: 2 },
-  { k: 'gain', g: 'amp', tipo: 'num', min: 0, max: 1, def: 0.8, dec: 2 },
   { k: 'penv', g: 'amp', tipo: 'num', min: -24, max: 24, def: 0, dec: 1, se: (s) => !eRumore(s.forma) },
   { k: 'pdecay', g: 'amp', tipo: 'num', min: 0.01, max: 1, log: true, def: 0.1, dec: 2, se: (s) => !eRumore(s.forma) && s.penv !== 0 },
-  // EFFETTI
-  { k: 'shape', g: 'fx', tipo: 'num', min: 0, max: 0.95, def: 0, dec: 2 },
-  { k: 'distort', g: 'fx', tipo: 'num', min: 0, max: 8, def: 0, dec: 1 },
-  { k: 'crush', g: 'fx', tipo: 'int', min: 1, max: 16, def: 16 },
-  { k: 'coarse', g: 'fx', tipo: 'int', min: 1, max: 32, def: 1 },
-  { k: 'phaser', g: 'fx', tipo: 'num', min: 0, max: 8, def: 0, dec: 1 },
-  { k: 'phaserdepth', g: 'fx', tipo: 'num', min: 0, max: 1, def: 0.75, dec: 2, se: (s) => s.phaser > 0 },
-  { k: 'tremolo', g: 'fx', tipo: 'int', min: 0, max: 16, def: 0 },
-  { k: 'tremolodepth', g: 'fx', tipo: 'num', min: 0, max: 1, def: 0.5, dec: 2, se: (s) => s.tremolo > 0 },
-  { k: 'delay', g: 'fx', tipo: 'num', min: 0, max: 1, def: 0, dec: 2 },
-  { k: 'delaysync', g: 'fx', tipo: 'scelta', scelte: DIVISIONI, def: '3/16', se: (s) => s.delay > 0 },
-  { k: 'delayfeedback', g: 'fx', tipo: 'num', min: 0, max: 0.85, def: 0.5, dec: 2, se: (s) => s.delay > 0 },
-  { k: 'room', g: 'fx', tipo: 'num', min: 0, max: 1, def: 0, dec: 2 },
-  { k: 'roomsize', g: 'fx', tipo: 'num', min: 0.5, max: 8, def: 2, dec: 1, se: (s) => s.room > 0 },
+  { k: 'gain', g: 'amp', tipo: 'num', min: 0, max: 1, def: 0.8, dec: 2 },
+  // DRIVE e SPACE (i due gruppi degli effetti)
+  { k: 'shape', g: 'drive', tipo: 'num', min: 0, max: 0.95, def: 0, dec: 2 },
+  { k: 'distort', g: 'drive', tipo: 'num', min: 0, max: 8, def: 0, dec: 1 },
+  { k: 'crush', g: 'drive', tipo: 'int', min: 1, max: 16, def: 16 },
+  { k: 'coarse', g: 'drive', tipo: 'int', min: 1, max: 32, def: 1 },
+  { k: 'delay', g: 'space', tipo: 'num', min: 0, max: 1, def: 0, dec: 2 },
+  { k: 'delaysync', g: 'space', tipo: 'scelta', scelte: DIVISIONI, def: '3/16', se: (s) => s.delay > 0 },
+  { k: 'delayfeedback', g: 'space', tipo: 'num', min: 0, max: 0.85, def: 0.5, dec: 2, se: (s) => s.delay > 0 },
+  { k: 'room', g: 'space', tipo: 'num', min: 0, max: 1, def: 0, dec: 2 },
+  { k: 'roomsize', g: 'space', tipo: 'num', min: 0.5, max: 8, def: 2, dec: 1, se: (s) => s.room > 0 },
+  { k: 'phaser', g: 'space', tipo: 'num', min: 0, max: 8, def: 0, dec: 1 },
+  { k: 'phaserdepth', g: 'space', tipo: 'num', min: 0, max: 1, def: 0.75, dec: 2, se: (s) => s.phaser > 0 },
+  { k: 'tremolo', g: 'space', tipo: 'int', min: 0, max: 16, def: 0 },
+  { k: 'tremolodepth', g: 'space', tipo: 'num', min: 0, max: 1, def: 0.5, dec: 2, se: (s) => s.tremolo > 0 },
 ];
 
 export const GRUPPI = [
   { id: 'osc' },
   { id: 'filtro' },
   { id: 'amp' },
-  { id: 'fx' },
+  { id: 'drive' },
+  { id: 'space' },
 ];
 
 const PER_CHIAVE = new Map(PARAMETRI.map((p) => [p.k, p]));

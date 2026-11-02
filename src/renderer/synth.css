@@ -1,5 +1,9 @@
 /* La vista SYNTH: sta sopra la postazione (LIVE e CUE restano sotto, vivi, ma inerti). */
 
+:root {
+  --avviso: #e0a03a; /* il verde è solo del live: gli avvisi del synth sono ambra */
+}
+
 .postazione {
   position: relative;
 }
@@ -49,8 +53,7 @@
 }
 
 .synth-peso.pesante {
-  color: var(--marcio);
-  text-shadow: var(--bagliore-testo);
+  color: var(--avviso);
 }
 
 .synth-corpo {
@@ -65,14 +68,31 @@
   overflow-y: auto;
   padding: 14px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 14px;
   align-content: start;
 }
 
-@media (max-width: 1300px) {
-  .synth-pannello {
-    grid-template-columns: minmax(0, 1fr);
+.synth-osc,
+.synth-filtro {
+  grid-column: span 6;
+}
+
+.synth-amp {
+  grid-column: span 7;
+}
+
+.synth-drive {
+  grid-column: span 5;
+}
+
+.synth-space {
+  grid-column: span 12;
+}
+
+@media (max-width: 1100px) {
+  .synth-gruppo {
+    grid-column: span 12;
   }
 }
 
@@ -89,12 +109,12 @@
 .synth-griglia {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 8px;
 }
 
 /* una manopola */
 .ctl {
-  width: 62px;
+  width: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -110,7 +130,7 @@
   color: var(--spento);
   text-align: center;
   line-height: 1.15;
-  min-height: 23px;
+  white-space: nowrap;
 }
 
 .ctl-anello {
@@ -191,7 +211,22 @@
 
 .ctl.ctl-scelta {
   width: auto;
-  max-width: 240px;
+  padding: 0 6px;
+}
+
+/* la forma d'onda ha dieci scelte: una riga sua */
+.ctl[data-k='forma'] {
+  width: 100%;
+  flex-basis: 100%;
+}
+
+.ctl[data-k='forma'] .ctl-scelte {
+  max-width: none;
+}
+
+.ctl.ctl-scelta .ctl-scelte {
+  min-height: 48px;
+  align-content: center;
 }
 
 /* il pannello del codice */
@@ -220,7 +255,7 @@
 }
 
 .synth-avviso {
-  color: var(--marcio);
+  color: var(--avviso);
   font-size: 12px;
   min-height: 1.4em;
 }

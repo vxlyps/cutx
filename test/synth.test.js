@@ -65,7 +65,7 @@ test('il rumore non ha note da trasporre, voci, FM, pitch', () => {
   assert.doesNotMatch(c, /trans|add\(|fm|penv/);
 });
 
-test('pulse, FM, pitch env, fx a griglia', () => {
+test('pulse, FM, pitch env, effetti a griglia', () => {
   const c = codice(pulisci({ ...iniziale(), forma: 'pulse', pw: 0.3, fm: 2, fmh: 2, penv: 7, pdecay: 0.05, crush: 6, coarse: 4, phaser: 2, tremolo: 4, shape: 0.4, pan: 0.2 }));
   assert.match(c, /\.s\("pulse"\)\.pw\(\.3\)/);
   assert.match(c, /\.fm\(2\)\.fmh\(2\)/);

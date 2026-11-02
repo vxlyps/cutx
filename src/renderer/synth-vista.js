@@ -108,7 +108,7 @@ export class VistaSynth {
     lato.append(crea('h2', 'lbl', T.barra.codice));
     this.codiceEl = crea('pre', 'synth-pre');
     this.codiceEl.dataset.aiuto = 'synth-codice';
-    lato.append(this.codiceEl, crea('p', 'secondario', T.msg.nota), this.avvisoEl);
+    lato.append(this.codiceEl, this.avvisoEl);
 
     corpo.append(pannello, lato);
     this.r.replaceChildren(barra, corpo);

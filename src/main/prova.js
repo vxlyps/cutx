@@ -3082,8 +3082,12 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('il tasto SYNTH è acceso', (await js(`document.getElementById('vista-synth-btn').classList.contains('on')`)) === true);
   const quante = await js(`document.querySelectorAll('.synth-pannello .ctl').length`);
   controlla('il pannello ha tutte le manopole', quante >= 40, String(quante));
-  controlla('quattro gruppi: oscillatore, filtro, ampiezza, effetti', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|effetti');
+  controlla('cinque gruppi: oscillatore, filtro, ampiezza, drive, space', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|drive|space');
   controlla('il codice del suono init è visibile e leggibile', (await codiceSynth()).includes('.s("sawtooth")') && (await codiceSynth()).includes('.lpf(2400)'), await codiceSynth());
+  controlla('niente frasi sotto il codice', (await js(`document.querySelectorAll('.synth-codice .secondario').length`)) === 0);
+  controlla('le etichette delle manopole stanno su una riga', (await js(`[...document.querySelectorAll('.ctl-nome')].every((e) => e.getBoundingClientRect().height < 14)`)) === true);
+  controlla('nessun gruppo è stretto o schiacciato fuori dalla vista', (await js(`[...document.querySelectorAll('.synth-gruppo')].every((g) => g.scrollWidth <= g.clientWidth + 1)`)) === true);
+  controlla('il suono init parte leggero (peso 1: saw semplice, sub spento)', (await js(`document.querySelector('.synth-peso').textContent`)) === 'peso 1/18' && (await stato('sub')) === 0 && (await stato('forma')) === 'sawtooth');
   controlla('niente parametri neutri nel codice', !/shape|delay|room|crush|gain|pan|vowel/.test(await codiceSynth()));
   controlla('la cuffia è a volume prudente nel SYNTH', (await cuffiaStato())?.volumeCuffia < 0.6, String((await cuffiaStato())?.volumeCuffia));
 
@@ -3226,6 +3230,7 @@ async function provaSynth({ finestre, scrivi }) {
   const vocePrima = await js(`cutxProva.synth.stato.phaser`);
   await js(`cutxProva.synth.inGesto = false; cutxProva.synth.cambia('phaser', 4)`);
   controlla('una manopola che supera il tetto si ferma e lo dice', (await js(`cutxProva.synth.stato.phaser`)) === vocePrima && (await js(`document.querySelector('.synth-avviso').textContent`)).includes('tetto'));
+  controlla('«pesante» e il tetto non sono verdi (il verde è del live)', (await js(`getComputedStyle(document.querySelector('.synth-peso')).color`)) !== (await js(`getComputedStyle(document.documentElement).getPropertyValue('--marcio').trim() && (() => { const e = document.createElement('i'); e.style.color = getComputedStyle(document.documentElement).getPropertyValue('--marcio'); document.body.append(e); const c = getComputedStyle(e).color; e.remove(); return c; })()`)) && (await js(`getComputedStyle(document.querySelector('.synth-avviso')).color`)) !== (await js(`getComputedStyle(document.querySelector('.synth-play.on, .synth-cue')).backgroundColor`)));
   controlla('le voci del supersaw non superano 7', (await stato('voci')) === 7);
 
   // il live non si è fermato
@@ -3239,6 +3244,32 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('la prova del synth si ferma e il volume della cuffia torna intero', !(await cuffiaStato())?.codice && (await cuffiaStato())?.volumeCuffia === 1, JSON.stringify([(await cuffiaStato())?.codice, (await cuffiaStato())?.volumeCuffia]));
   controlla('il live suona ancora', (await liveStato())?.codice === liveCodice);
   controlla('LIVE e CUE tornano attivi', (await js(`[...document.querySelectorAll('.postazione > :not(#vista-synth)')].every((e) => !e.inert)`)) === true);
+  // il volume prudente è solo della cuffia: una clip dal synth, mandata al CUE e poi live, suona a volume giusto
+  await premi('2', 'meta');
+  await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'volume test' })`);
+  controlla('il gain parte normale: non è nel codice e vale .8', !(await codiceSynth()).includes('gain') && (await stato('gain')) === 0.8);
+  await js(`cutxProva.synth.aggiornaDestinazioni(); document.querySelector('.synth-barra select:last-of-type').value = 'attivo'; document.querySelector('.synth-cue').click()`);
+  await premi('1', 'meta');
+  await js(`cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(0.6);
+  const vai = `(() => { const c = [...document.querySelectorAll('#carte .card.sezione')].find((x) => x.querySelector('.nome-sezione')?.textContent.includes('volume test')); return c && [...c.querySelectorAll('.card-testa button')].find((b) => b.textContent.trim().startsWith('go live')); })()`;
+  controlla('la clip è nel brano del CUE', !!(await js(`!!${vai}`)));
+  await js(`${vai}.click()`);
+  await aspetta(4);
+  await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 0.1 })`);
+  await aspetta(0.8);
+  let picco = 0;
+  for (let i = 0; i < 20; i++) {
+    picco = Math.max(picco, (await liveStato())?.limiter?.picco ?? 0);
+    await aspetta(0.1);
+  }
+  await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`);
+  const livelloSynth = (await liveStato())?.livelli?.find((l) => l.codice?.includes('@synth'));
+  controlla('la clip del synth è live', !!livelloSynth);
+  controlla('e non è quasi muta: col volume generale a 0,1 il picco è udibile', picco > 0.01, `picco ${picco.toFixed(4)}`);
+  scrivi(`(picco della clip del synth con volume generale 0,1: ${picco.toFixed(4)})`);
+  await js('cutxProva.fermaTutto()');
+  await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' }); window.cutx.salvaPreferenze({ synthUltimo: null })`);
   try {
     await premi('2', 'meta');
     await aspetta(0.5);
