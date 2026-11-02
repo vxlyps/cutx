@@ -5,6 +5,8 @@ import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, 
 import { CATEGORIE } from './categorie.js';
 import { PianoRoll } from './synth-roll.js';
 import { conCicli, eventiDaMini, miniDaEventi } from './synth-note.js';
+import { OTTAVA_INIZIALE, inCampoDiTesto, notaDaTasto, ottavaDopo } from './synth-tastiera.js';
+import { Registratore } from './synth-rec.js';
 import { clip, codice, funzioniDi, leggiCodice, noteEffettive } from './synth-codice.js';
 import it from './testi/it.json';
 
@@ -54,6 +56,11 @@ export class VistaSynth {
     this.timerSalva = null;
     this.timerRuota = null;
     this.quanto = 30; // quanto cambia mutate (0–100)
+    this.ottava = OTTAVA_INIZIALE; // l'ottava dei tasti del Mac (Z e X)
+    this.tenuti = new Map(); // tasto premuto → nota suonata
+    this.rec = null;
+    this.attiva_ = false;
+    this.timerSuono = null;
     this.cicliScelti = 1; // quanti cicli mostra il pianoroll (almeno quelli del pattern)
     this.scrivendo = false; // sto scrivendo nel pannello del codice: il pannello non lo riscrive sotto le dita
     this.erroreCodice = null; // il codice scritto non si legge: resta com'è finché non si corregge
@@ -78,6 +85,11 @@ export class VistaSynth {
     this.nomeEl.oninput = () => (this.nome = this.nomeEl.value);
 
     this.playEl = this.tasto(T.barra.play, '⌘↵', () => this.suonaOFerma(), 'synth-play');
+    this.recEl = crea('button', 'key synth-rec', T.barra.rec);
+    this.recEl.dataset.aiuto = 'synth-rec';
+    this.recEl.onclick = () => this.avviaRec();
+    this.ottavaEl = crea('span', 'lbl synth-ottava');
+    this.ottavaEl.dataset.aiuto = 'synth-tastiera';
     this.anteprimaEl = crea('select', 'synth-select');
     this.anteprimaEl.setAttribute('aria-label', T.barra.schema);
     this.anteprimaEl.dataset.aiuto = 'synth-schema';
@@ -122,7 +134,7 @@ export class VistaSynth {
     this.avvisoEl = crea('span', 'synth-avviso');
     this.avvisoEl.setAttribute('role', 'status');
 
-    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
+    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
     for (const [el, chiave] of [[this.playEl, 'synth-play'], [this.initEl, 'synth-init'], [this.cueEl, 'synth-cue']]) el.dataset.aiuto = chiave;
 
     const corpo = crea('div', 'synth-corpo');
@@ -175,7 +187,7 @@ export class VistaSynth {
     this.roll = new PianoRoll(this.noteEl, {
       cambia: (eventi, cicli) => this.cambiaNote(eventi, cicli),
       testo: (testoMini, fine) => this.daMini(testoMini, fine),
-      nota: (n) => this.opz.nota?.(n, this),
+      nota: (n) => this.provaNota(n),
       ciclo: () => this.opz.ciclo?.() ?? null,
     });
     sinistra.append(schede, pannello, this.noteEl);
@@ -282,6 +294,131 @@ export class VistaSynth {
     });
   }
 
+  // --- suonare: la tastiera del Mac e il REC ---
+
+  // La vista si apre o si chiude: aperta, la cuffia riceve il suono dei tasti; chiusa, le note e il REC si fermano.
+  attiva(on) {
+    this.attiva_ = on;
+    if (on) this.inviaSuono();
+    else {
+      this.fermaNote();
+      this.fermaRec(true);
+    }
+  }
+
+  // Il suono dei tasti: il codice del pannello con una nota sola (l'inizio scritto a mano non conta: i tasti hanno la nota).
+  inviaSuono() {
+    clearTimeout(this.timerSuono);
+    if (!this.attiva_) return;
+    this.opz.suonoTasti?.(codice({ ...this.stato, testa: '', anteprima: 'tenuta' }));
+  }
+
+  programmaSuono() {
+    if (!this.attiva_) return;
+    clearTimeout(this.timerSuono);
+    this.timerSuono = setTimeout(() => this.inviaSuono(), PAUSA_ANTEPRIMA_MS);
+  }
+
+  notaOn(midi, vel = 100) {
+    this.opz.nota?.({ on: true, midi, velocita: vel });
+    this.rec?.noteOn(midi, vel);
+  }
+
+  notaOff(midi) {
+    this.opz.nota?.({ on: false, midi });
+    this.rec?.noteOff(midi);
+  }
+
+  // Un tasto del Mac giù: ritorna true se era un tasto della tastiera (da non lasciare al resto dell'app).
+  tastoGiu(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) return false;
+    const o = ottavaDopo(e.code, this.ottava);
+    if (o !== null) {
+      if (!e.repeat) this.ottava = o;
+      this.disegnaOttava();
+      return true;
+    }
+    const n = notaDaTasto(e.code, this.ottava);
+    if (n === null) return false;
+    if (!e.repeat && !this.tenuti.has(e.code)) {
+      this.tenuti.set(e.code, n);
+      this.notaOn(n);
+    }
+    return true;
+  }
+
+  tastoSu(e) {
+    const n = this.tenuti.get(e.code);
+    if (n === undefined) return false;
+    this.tenuti.delete(e.code);
+    this.notaOff(n);
+    return true;
+  }
+
+  // Un tocco sul pianoroll: la nota si sente un attimo.
+  provaNota(n) {
+    this.opz.nota?.({ on: true, midi: n, velocita: 100 });
+    setTimeout(() => this.opz.nota?.({ on: false, midi: n }), 260);
+  }
+
+  fermaNote() {
+    for (const n of this.tenuti.values()) this.rec?.noteOff(n);
+    this.tenuti.clear();
+    this.opz.fermaNote?.();
+  }
+
+  disegnaOttava() {
+    this.ottavaEl.textContent = formatta(T.barra.tastiera, { n: this.ottava });
+  }
+
+  // REC: conteggio, registrazione, note nel pianoroll. Un altro clic: durante il conteggio annulla, durante la registrazione ferma e tiene.
+  avviaRec() {
+    if (this.rec) return this.fermaRec(this.rec.fase() !== 'registra');
+    if (this.opz.ciclo?.() == null) return this.avviso(T.msg.nessunTempo);
+    this.rec = new Registratore({ ciclo: () => this.opz.ciclo(), cicli: this.roll.cicli });
+    this.battitoClick = null;
+    this.timerRec = setInterval(() => this.tickRec(), 20);
+    this.avviso('');
+    this.tickRec();
+  }
+
+  tickRec() {
+    const r = this.rec;
+    if (!r) return;
+    const c = this.opz.ciclo?.();
+    if (c == null) return this.fermaRec(true);
+    const fase = r.fase(c);
+    if (fase === 'fine') return this.fermaRec(false);
+    if (fase === 'conta') {
+      const b = Math.floor(c * 4);
+      if (b !== this.battitoClick) {
+        this.battitoClick = b;
+        this.opz.click?.(b % 4 === 0);
+      }
+    }
+    this.recEl.classList.toggle('conta', fase !== 'registra');
+    this.recEl.classList.toggle('registra', fase === 'registra');
+    this.recEl.firstChild.textContent = fase === 'registra' ? '● REC' : String(r.conto(c) ?? '');
+  }
+
+  fermaRec(annulla) {
+    const r = this.rec;
+    if (!r) return;
+    clearInterval(this.timerRec);
+    this.rec = null;
+    this.recEl.classList.remove('conta', 'registra');
+    this.recEl.firstChild.textContent = T.barra.rec;
+    if (annulla) return this.avviso(T.msg.recAnnullato);
+    r.chiudi();
+    const nuovi = r.risultato();
+    // con le note già scritte si aggiunge; con lo schema di prova (arpeggio, nota tenuta) si parte da vuoto
+    const base = this.stato.anteprima === 'clip' && this.roll.editabile ? this.roll.eventi : [];
+    const cicli = Math.max(r.cicli, base.length ? this.roll.cicli : 1);
+    const uniti = [...base.filter((b) => !nuovi.some((x) => x.i === b.i && x.n === b.n)), ...nuovi].sort((a, b) => a.i - b.i || a.n - b.n);
+    this.avviso(formatta(T.msg.registrate, { n: nuovi.length }));
+    if (nuovi.length) this.cambiaNote(uniti, cicli);
+  }
+
   mostraScheda(id) {
     this.scheda = id;
     this.pannelloEl ??= this.r.querySelector('.synth-pannello');
@@ -371,6 +508,7 @@ export class VistaSynth {
   cambiato() {
     this.disegna();
     this.programmaAnteprima();
+    this.programmaSuono();
     clearTimeout(this.timerSalva);
     this.timerSalva = setTimeout(() => this.opz.salva?.(this.contenuto()), PAUSA_SALVA_MS);
   }
@@ -532,6 +670,7 @@ export class VistaSynth {
       this.codiceEl.classList.remove('errore');
     }
     this.disegnaNote(s);
+    this.disegnaOttava();
     const nomiMano = new Set(s.mano.map((m) => /^\.(\w+)/.exec(m)?.[1]));
     this.manoEl.textContent = s.mano.length || s.testa ? `${T.msg.aMano}: ${[s.testa, ...s.mano].filter(Boolean).join(' ')}` : '';
     this.manoEl.hidden = !this.manoEl.textContent;

@@ -3269,6 +3269,100 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.cambia('q', 12)`);
   await aspetta(0.4);
 
+  // la tastiera del Mac suona il synth subito in cuffia, REC registra a tempo nel pianoroll
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.15 }, B: null, lato: 'A', nome: 'synth' })`);
+  await aspetta(0.5);
+  await js(`cutxProva.synth.opz.ferma()`);
+  await aspetta(0.5);
+  await js(`document.activeElement?.blur?.()`);
+  const picco_ = async (volte = 8) => {
+    let m = 0;
+    for (let k = 0; k < volte; k++) {
+      m = Math.max(m, (await cuffiaStato())?.limiter?.picco ?? 0);
+      await aspetta(0.08);
+    }
+    return m;
+  };
+  const tasto_ = async (su, code, mod = []) => finestre.controllo.webContents.sendInputEvent({ type: su ? 'keyUp' : 'keyDown', keyCode: code, modifiers: mod });
+  controlla('il suono dei tasti è codice che parte (la cuffia lo compila)', (await js(`cutxProva.synth.opz.suonoTasti(cutxProva.codiceSynth({ gain: 0.15, testa: '', anteprima: 'tenuta' }))`)) === null);
+  const silenzio = await picco_(4);
+  await tasto_(false, 'A');
+  await aspetta(0.5);
+  const suonando = await picco_(8);
+  controlla('un tasto premuto suona subito in cuffia', suonando > 0.003 && suonando > silenzio * 5, `${silenzio} → ${suonando}`);
+  controlla('A è il do 3 (midi 48)', (await js(`[...cutxProva.synth.tenuti.values()].join(',')`)) === '48');
+  await tasto_(true, 'A');
+  await aspetta(1.2);
+  const spento_ = await picco_(6);
+  controlla('rilasciato il tasto, il suono si spegne (release del suono)', spento_ < suonando * 0.1, `${suonando} → ${spento_}`);
+  await tasto_(false, 'X');
+  await tasto_(true, 'X');
+  await tasto_(false, 'D');
+  controlla('X sale di un\'ottava: D è il mi 4 (midi 64)', (await js(`cutxProva.synth.ottava`)) === 4 && (await js(`[...cutxProva.synth.tenuti.values()].join(',')`)) === '64' && (await js(`document.querySelector('.synth-ottava').textContent`)).includes('4'));
+  await tasto_(true, 'D');
+  await tasto_(false, 'Z');
+  await tasto_(true, 'Z');
+  controlla('Z la riporta giù', (await js(`cutxProva.synth.ottava`)) === 3);
+  await tasto_(false, 'A', ['meta']);
+  await tasto_(true, 'A', ['meta']);
+  controlla('⌘A non è una nota (le scorciatoie restano loro)', (await js(`cutxProva.synth.tenuti.size`)) === 0);
+  // un campo di testo non suona
+  await js(`(() => { const t = document.querySelector('.synth-nome'); t.focus(); })()`);
+  await tasto_(false, 'A');
+  await tasto_(true, 'A');
+  controlla('scrivendo nel campo del nome i tasti non suonano', (await js(`cutxProva.synth.tenuti.size`)) === 0);
+  await js(`document.activeElement?.blur?.()`);
+  // uscire dal synth ferma le note tenute
+  await tasto_(false, 'F');
+  await aspetta(0.4);
+  await premi('1', 'meta');
+  await aspetta(1.4);
+  controlla('uscendo dal SYNTH le note tenute si fermano', (await js(`cutxProva.synth.tenuti.size`)) === 0 && (await picco_(6)) < suonando * 0.1);
+  await tasto_(true, 'F');
+  await premi('2', 'meta');
+  await aspetta(0.5);
+
+  // REC: conteggio, registrazione a tempo, quantizzazione, le note nel pianoroll
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.05 }, B: null, lato: 'A', nome: 'synth' })`);
+  await aspetta(0.4);
+  await clic('.synth-rec');
+  const testiRec = new Set();
+  const cicloAdesso = () => js(`cutxProva.synth.opz.ciclo()`);
+  let inizioRec = null;
+  for (let k = 0; k < 400 && inizioRec === null; k++) {
+    testiRec.add(await js(`document.querySelector('.synth-rec').textContent`));
+    if ((await js(`cutxProva.synth.rec?.fase()`)) === 'registra') inizioRec = await js(`cutxProva.synth.rec.inizio`);
+    else await aspetta(0.05);
+  }
+  controlla('REC: il conteggio mostra 4, 3, 2, 1 e poi «● REC»', ['4', '3', '2', '1'].filter((x) => testiRec.has(x)).length >= 3 && (await js(`document.querySelector('.synth-rec').textContent`)).includes('REC') && inizioRec !== null, JSON.stringify([...testiRec]));
+  // tre note: allo scatto 0 (lunga 4), allo scatto 8 (lunga 2), allo scatto 12 (lunga 3)
+  const attendi = async (ciclo) => {
+    for (let k = 0; k < 400; k++) {
+      if ((await cicloAdesso()) >= ciclo) return;
+      await aspetta(0.01);
+    }
+  };
+  for (const [da, a, midi] of [[0, 4, 48], [8, 10, 52], [12, 15, 55]]) {
+    await attendi(inizioRec + da / 16);
+    await js(`cutxProva.synth.notaOn(${midi}, 100)`);
+    await attendi(inizioRec + a / 16);
+    await js(`cutxProva.synth.notaOff(${midi})`);
+  }
+  for (let k = 0; k < 300 && (await js(`!!cutxProva.synth.rec`)); k++) await aspetta(0.05);
+  const registrate = await js(`JSON.stringify(cutxProva.synth.roll.eventi)`);
+  const ev = JSON.parse(registrate);
+  const vicino = (e, i, l, n) => e.n === n && Math.abs(e.i - i) <= 1 && Math.abs(e.l - l) <= 1;
+  controlla('REC: finita la battuta le note sono nel pianoroll, quantizzate al 1/16', ev.length === 3 && vicino(ev[0], 0, 4, 48) && vicino(ev[1], 8, 2, 52) && vicino(ev[2], 12, 3, 55), registrate);
+  controlla('e nel testo mini e nel codice', (await js(`cutxProva.synth.stato.anteprima`)) === 'clip' && (await codiceSynth()).includes('note("') && !(await codiceSynth()).includes('c3 eb3 g3 bb3'));
+  controlla('il pulsante torna «REC»', (await js(`document.querySelector('.synth-rec').textContent`)) === 'REC');
+  // un secondo giro aggiunge alle note scritte (overdub); un clic durante il conteggio annulla
+  await clic('.synth-rec');
+  await aspetta(0.3);
+  await clic('.synth-rec');
+  controlla('un clic su REC durante il conteggio annulla, senza toccare le note', (await js(`!cutxProva.synth.rec`)) && (await js(`cutxProva.synth.roll.eventi.length`)) === 3 && (await js(`document.querySelector('.synth-avviso').textContent`)).includes('annullato'));
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.cambia('q', 12)`);
+  await aspetta(0.5);
+
   // ogni forma e ogni effetto sono codice Strudel vero: nessun parametro inventato (la cuffia valuta, e se c'è un errore lo dice)
   const forme = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];
   for (const forma of forme) {

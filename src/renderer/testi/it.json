@@ -311,6 +311,14 @@
     "roll-mini": {
       "nome": "mini-notazione",
       "testo": "Le note come le scrive Strudel. Cambia qui o nel pianoroll: restano allineati. Quello che il pianoroll non legge (? / euclidei) resta com'è."
+    },
+    "synth-rec": {
+      "nome": "REC",
+      "testo": "Registra le note che suoni, a tempo col live: una battuta di conteggio, poi un giro (1, 2, 4 o 8 cicli come nel pianoroll), quantizzato al 1/16. Con le note già scritte aggiunge; con lo schema di prova (arpeggio, nota tenuta) parte da vuoto. Un altro clic ferma."
+    },
+    "synth-tastiera": {
+      "nome": "tastiera del Mac",
+      "testo": "A S D F G H J K sono i tasti bianchi, W E T Y U i neri; Z e X cambiano ottava. Suonano in cuffia con il suono del pannello."
     }
   },
   "impostazioni": {
@@ -471,7 +479,9 @@
       "mutate": "mutate",
       "quanto": "quanto",
       "categoria": "Tipo del suono",
-      "codiceSlot": "codice · {lato}"
+      "codiceSlot": "codice · {lato}",
+      "rec": "REC",
+      "tastiera": "ottava {n}"
     },
     "destinazioni": {
       "attivo": "brano attivo",
@@ -502,7 +512,10 @@
       "altre": "altre",
       "aMano": "a mano",
       "codiceErrore": "codice: {errore}",
-      "codiceAMano": "a mano: il pannello non lo comanda"
+      "codiceAMano": "a mano: il pannello non lo comanda",
+      "registrate": "registrate {n} note",
+      "nessunTempo": "nessun tempo dal live",
+      "recAnnullato": "REC annullato"
     },
     "categorie": {
       "": "tipo",

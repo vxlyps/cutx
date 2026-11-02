@@ -2,6 +2,7 @@
 
 :root {
   --avviso: #e0a03a; /* il verde è solo del live: gli avvisi del synth sono ambra */
+  --rec: #e5484d;
 }
 
 .postazione {
@@ -400,4 +401,21 @@
   display: block;
   outline: none;
   cursor: crosshair;
+}
+
+.synth-rec.conta {
+  border-color: var(--avviso);
+  color: var(--avviso);
+  min-width: 70px;
+  justify-content: center;
+}
+
+.synth-rec.registra {
+  background: var(--rec);
+  border-color: var(--rec);
+  color: #fff;
+}
+
+.synth-ottava {
+  min-width: 56px;
 }

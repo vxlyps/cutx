@@ -522,6 +522,8 @@ function salva(l) {
 function tagliaSuoni() {
   const controller = getSuperdoughAudioController();
   controller.reset();
+  orbiteTasti.length = 0; // le orbite della tastiera sono andate con lui: si rifanno alla prossima nota
+  noteTenute.clear();
   collegaLimiter();
   controller.output.destinationGain.gain.value = udibile ? 1 : 0;
   if (eco) sentinella.attiva(controller.output.destinationGain);
@@ -955,6 +957,115 @@ function stato() {
   };
 }
 
+// --- la tastiera del SYNTH (solo cuffia): note suonate subito, con il suono del pannello ---
+// Il suono si compila una volta (il codice del pannello con una nota sola): il suo primo evento è il «valore» da riempire con la nota.
+// Ogni nota tenuta ha una sua orbita di superdough con un GainNode in uscita: al rilascio il guadagno scende (come il release del
+// suono) e la sorgente si ferma. Una nota può durare al più DURATA_TASTO_S.
+const DURATA_TASTO_S = 20;
+const VOCI_TASTI = 8;
+const FORME_SYNTH = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];
+let valoreTasti = null; // il valore (controlli di superdough) del suono del pannello
+const orbiteTasti = []; // k → { orbita, gain }
+const noteTenute = new Map(); // midi → { k, id, rilascio }
+let prossimoTasto = 1;
+const maniTasti = new Map(); // id → il manico della sorgente (per fermarla al rilascio)
+let manicoCatturato = false;
+
+// Le sorgenti dei suoni del synth, quando sono per una nota della tastiera, lasciano il loro manico: serve a fermarle al rilascio.
+function catturaManici() {
+  if (manicoCatturato) return;
+  manicoCatturato = true;
+  for (const nome of FORME_SYNTH) {
+    const suono = getSound(nome);
+    if (!suono) continue;
+    const originale = suono.onTrigger;
+    suono.onTrigger = async (t, value, onended, ...resto) => {
+      const manico = await originale(t, value, onended, ...resto);
+      if (value?.tastoId && manico) maniTasti.set(value.tastoId, manico);
+      return manico;
+    };
+  }
+}
+
+function orbitaTasti(k) {
+  if (!orbiteTasti[k]) {
+    const controller = getSuperdoughAudioController();
+    const orbita = 2000 + k;
+    const o = controller.getOrbit(orbita, [0, 1]);
+    const gain = new GainNode(ac, { gain: 1 });
+    o.output.disconnect();
+    o.output.connect(gain);
+    controller.output.connectToDestination(gain, [0, 1]);
+    orbiteTasti[k] = { orbita, gain };
+  }
+  return orbiteTasti[k];
+}
+
+// Il suono del pannello: il codice (con una nota sola) diventa il valore con cui suonano i tasti.
+async function suonoTasti(codice) {
+  const c = await compila(codice);
+  if (c.errore) return c.errore;
+  const hap = c.pattern.queryArc(0, 1)[0];
+  if (!hap) return 'il suono non ha note';
+  valoreTasti = { ...(typeof hap.value === 'object' ? hap.value : { note: hap.value }) };
+  return null;
+}
+
+function notaTasti({ on, midi, velocita = 100 }) {
+  if (on) {
+    if (!valoreTasti || noteTenute.has(midi)) return;
+    catturaManici();
+    // una voce libera (o la più vecchia: la nota che stava lì si interrompe)
+    const usate = new Set([...noteTenute.values()].map((n) => n.k));
+    let k = [...Array(VOCI_TASTI).keys()].find((x) => !usate.has(x));
+    if (k === undefined) {
+      const [vecchia] = noteTenute.keys();
+      k = noteTenute.get(vecchia).k;
+      rilascia(vecchia, 0.03);
+    }
+    const voce = orbitaTasti(k);
+    voce.gain.gain.cancelScheduledValues(ac.currentTime);
+    voce.gain.gain.setValueAtTime(1, ac.currentTime);
+    const id = prossimoTasto++;
+    const rilascio = Number(valoreTasti.release ?? 0.3);
+    noteTenute.set(midi, { k, id, rilascio });
+    const valore = { ...valoreTasti, note: midi, orbit: voce.orbita, velocity: Math.max(0.05, Math.min(1, velocita / 127)), tastoId: id };
+    const hap = { value: valore, ensureObjectValue() {}, whole: { begin: { valueOf: () => 0 } } };
+    webaudioOutput(hap, 0, DURATA_TASTO_S, rip.mappa ? rip.cpsAl(ac.currentTime) : CPS_INIZIALE, ac.currentTime + 0.01);
+  } else rilascia(midi);
+}
+
+function rilascia(midi, durata = null) {
+  const n = noteTenute.get(midi);
+  if (!n) return;
+  noteTenute.delete(midi);
+  const voce = orbiteTasti[n.k];
+  const r = durata ?? Math.min(2, Math.max(0.03, n.rilascio));
+  const ora = ac.currentTime;
+  voce.gain.gain.cancelScheduledValues(ora);
+  voce.gain.gain.setTargetAtTime(0, ora, Math.max(0.008, r / 4)); // a zero in circa r secondi, come il release del suono
+  const manico = maniTasti.get(n.id);
+  maniTasti.delete(n.id);
+  try {
+    manico?.stop?.(ora + r + 0.1);
+  } catch {
+    // una sorgente già finita
+  }
+}
+
+function fermaTasti() {
+  for (const midi of [...noteTenute.keys()]) rilascia(midi, 0.05);
+}
+
+// Un colpo di metronomo (il conteggio del REC): un click corto, forte sul primo battito.
+function clickSynth(accento) {
+  const voce = orbitaTasti(VOCI_TASTI); // un'orbita sua
+  voce.gain.gain.setValueAtTime(1, ac.currentTime);
+  const valore = { s: 'sine', freq: accento ? 1800 : 1200, attack: 0, decay: 0.03, sustain: 0, release: 0.02, gain: 0.5, orbit: voce.orbita };
+  const hap = { value: valore, ensureObjectValue() {}, whole: { begin: { valueOf: () => 0 } } };
+  webaudioOutput(hap, 0, 0.05, rip.mappa ? rip.cpsAl(ac.currentTime) : CPS_INIZIALE, ac.currentTime + 0.005);
+}
+
 async function ricevi(da, m) {
   switch (m.tipo) {
     case 'valuta': {
@@ -1061,6 +1172,20 @@ async function ricevi(da, m) {
       return ac.resume();
     case 'mix':
       mix = m.valore;
+      return;
+    case 'synth-suono': {
+      if (LIVE) return;
+      const errore = await suonoTasti(m.codice);
+      return manda(da, { tipo: 'risposta', id: m.id, errore });
+    }
+    case 'synth-nota':
+      if (!LIVE) notaTasti(m);
+      return;
+    case 'synth-ferma-note':
+      if (!LIVE) fermaTasti();
+      return;
+    case 'synth-click':
+      if (!LIVE) clickSynth(!!m.accento);
       return;
     case 'volume-cuffia': // il SYNTH ascolta piano (0,5); il CUE torna a 1. Con una sfumata breve, mai uno scalino
       volumeCuffiaVoluto = Math.max(0, Math.min(1, Number(m.volume)));

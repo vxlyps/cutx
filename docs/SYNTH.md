@@ -60,3 +60,22 @@ Vista SYNTH nella stessa finestra (⌘1/⌘2), oscillatore, filtro, ampiezza, ef
 Limiti scelti: sovrapposizioni (layer) al massimo 5; voci del supersaw al massimo 7; sub = una copia in più; peso stimato «pesante» da 10, tetto a 18; risonanza al massimo 25 (il limiter e il volume 0,5 proteggono le orecchie); gain al massimo 1; feedback del delay al massimo 0,85.
 
 Non c'è ancora: pianoroll, tastiera, REC (blocco 2); modulatori (blocco 3); arpeggio e caos (blocco 4); controller (blocco 5); campioni dello stash come forma d'onda, MIDI e suoni salvati (blocco 6).
+
+## Blocco 2 · fatto (2/11/2026)
+
+Pianoroll (1/2/4/8 cicli, griglia 1/16, scala, accordi, disegno e modifica col mouse) allineato alla mini-notazione; tastiera del Mac (A S D F G H J K, W E T Y U, Z/X) che suona subito in cuffia; REC con conteggio, quantizzato, che scrive le note nel pianoroll. In più, chieste dopo le prove del blocco 1: codice modificabile a mano nei due sensi, A/B a due slot, MUTATE con «quanto», tipo del suono (BASS · LEAD · ARP · PAD · KEYS · FX) con i suoi limiti, clip raggruppate per tipo nel CUE, × sulla card. Dettagli nella voce «SYNTH · blocco 2» di `CLAUDE.md`.
+
+Limiti di MUTATE per tipo (`PROFILI` in `synth-modello.js`):
+
+| tipo | forme | ottava | filtro | inviluppo | effetti |
+|---|---|---|---|---|---|
+| BASS | saw, square, supersaw (2–4 voci), triangle | −1 | solo lpf 150–1200 Hz, reso fino a 8 | attack ≤ 20 ms, decay .1–.4, sustain .4–.9, release ≤ .3 | sub possibile, distort spesso, delay/room quasi mai |
+| LEAD | saw, square, supersaw, pulse | 0–+1 | lpf 1200–8000, reso fino a 10 | attack ≤ 50 ms, sustain .5–1, release .1–.6 | delay spesso, room media |
+| ARP | saw, square, pulse, triangle | 0–+1 | lpf (o bpf) 800–6000, inviluppo del filtro quasi sempre | attack ≤ 10 ms, decay ≤ .25, sustain ≤ .3 | delay 1/8 o 3/16 spesso |
+| PAD | supersaw (3–7 voci), saw, triangle, sine | 0–+1 | lpf 600–5000, reso ≤ 4 | attack .4–2, release 1–4 | room quasi sempre (.3–.8, size 3–8), phaser |
+| KEYS | triangle, sine, square (+FM) | 0 | lpf 1500–6000 | attack ≤ 10 ms, decay .3–1.2, sustain .1–.5 | room, phaser, tremolo |
+| FX | tutte, anche i rumori | −1…+2 | 200–12000, reso fino a 18 | libero | pitch env ±24, crush, distort, delay e room larghi |
+
+Il gain non lo tocca mai MUTATE.
+
+Seguono, prima del resto: **il controller nel SYNTH** (era il blocco 5).

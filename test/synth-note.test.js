@@ -109,3 +109,57 @@ test('accordi, cicli, eventi', () => {
   assert.deepEqual(conEvento([{ i: 0, l: 4, n: 48 }], { i: 0, l: 8, n: 48 }), [{ i: 0, l: 8, n: 48 }]);
   assert.deepEqual(senzaEvento([{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 48 }], { i: 0, l: 4, n: 48 }), [{ i: 4, l: 4, n: 48 }]);
 });
+
+import { notaDaTasto, ottavaDopo, OTTAVA_INIZIALE } from '../src/renderer/synth-tastiera.js';
+import { Registratore } from '../src/renderer/synth-rec.js';
+
+test('tastiera del Mac: A è il do 3, i neri sono W E T Y U, Z e X cambiano ottava', () => {
+  assert.equal(OTTAVA_INIZIALE, 3);
+  assert.deepEqual(['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK'].map((c) => notaDaTasto(c)), [48, 50, 52, 53, 55, 57, 59, 60]);
+  assert.deepEqual(['KeyW', 'KeyE', 'KeyT', 'KeyY', 'KeyU'].map((c) => notaDaTasto(c)), [49, 51, 54, 56, 58]);
+  assert.equal(notaDaTasto('KeyA', 4), 60);
+  assert.equal(notaDaTasto('KeyQ'), null);
+  assert.equal(notaDaTasto('Digit1'), null);
+  assert.equal(ottavaDopo('KeyZ', 3), 2);
+  assert.equal(ottavaDopo('KeyX', 3), 4);
+  assert.equal(ottavaDopo('KeyX', 7), 7);
+  assert.equal(ottavaDopo('KeyZ', -1), -1);
+  assert.equal(ottavaDopo('KeyA', 3), null);
+});
+
+test('REC: conteggio di una battuta, poi registra e quantizza al 1/16', () => {
+  let t = 3.5;
+  const r = new Registratore({ ciclo: () => t, cicli: 1 });
+  assert.equal(r.inizio, 5); // il ciclo 4 è il conteggio, si registra il 5
+  assert.equal(r.fase(3.5), 'attesa');
+  assert.equal(r.conto(3.5), 4);
+  assert.equal(r.fase(4.0), 'conta');
+  assert.deepEqual([4.0, 4.3, 4.55, 4.8].map((c) => r.conto(c)), [4, 3, 2, 1]);
+  assert.equal(r.fase(5.0), 'registra');
+  assert.equal(r.fase(6.0), 'fine');
+  r.noteOn(48, 100, 4.9); // durante il conteggio non si registra
+  assert.equal(r.aperte.size, 0);
+  r.noteOn(48, 100, 5.01); // quasi sull'1
+  r.noteOff(48, 5.24);
+  r.noteOn(52, 90, 5.47); // verso la metà
+  r.noteOff(52, 5.6);
+  r.noteOn(55, 90, 5.93); // appena prima della fine: ancora tenuta
+  r.chiudi();
+  assert.deepEqual(r.risultato(), [{ i: 0, l: 4, n: 48 }, { i: 8, l: 2, n: 52 }, { i: 15, l: 1, n: 55 }]);
+});
+
+test('REC: più cicli, una nota che parte sul confine torna all\'inizio, una nota non esce dal suo ciclo', () => {
+  const r = new Registratore({ ciclo: () => 0.2, cicli: 2 });
+  assert.equal(r.inizio, 2);
+  r.noteOn(48, 100, 2.0);
+  r.noteOff(48, 2.9);
+  r.noteOn(52, 100, 3.5); // secondo ciclo, a metà
+  r.noteOff(52, 3.99);
+  r.noteOn(60, 100, 3.93); // scatto 30,9 → 31: sull'ultimo scatto
+  r.noteOff(60, 4.2); // oltre la fine: si chiude a 4
+  assert.deepEqual(r.risultato(), [{ i: 0, l: 14, n: 48 }, { i: 24, l: 8, n: 52 }, { i: 31, l: 1, n: 60 }]);
+  const r2 = new Registratore({ ciclo: () => 0, cicli: 1 });
+  r2.noteOn(60, 100, 2.999); // scatto 15,98 → 16 = la fine: torna sull'1
+  r2.noteOff(60, 3.0);
+  assert.deepEqual(r2.risultato(), [{ i: 0, l: 1, n: 60 }]);
+});

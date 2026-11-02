@@ -628,6 +628,10 @@ const synth = new VistaSynth($('vista-synth'), {
     }
     return errore;
   },
+  nota: (m) => cuffia.manda({ tipo: 'synth-nota', ...m }),
+  click: (accento) => cuffia.manda({ tipo: 'synth-click', accento }),
+  fermaNote: () => cuffia.manda({ tipo: 'synth-ferma-note' }),
+  suonoTasti: async (codice) => (await cuffia.richiesta({ tipo: 'synth-suono', codice })).errore ?? null,
   ferma: () => fermaCuffia(),
   ciclo: () => (mappa ? cicloDi(mappa, performance.timeOrigin + performance.now()) : null),
   suonaOra: () => pezzoCuffia?.etichetta?.provenienza === 'synth',
@@ -663,8 +667,17 @@ function mostraVista(v) {
     synth.fermaAnteprima(); // uscendo dal SYNTH la prova si ferma; il volume della cuffia torna intero
     cuffia.manda({ tipo: 'volume-cuffia', volume: 1 });
   }
+  synth.attiva(insynth);
   synth.aggiorna();
 }
+// la tastiera del Mac suona il synth (A S D F G H J K, W E T Y U, Z/X per l'ottava) quando la vista è SYNTH e non si sta scrivendo
+window.addEventListener('keydown', (e) => {
+  if (vista === 'synth' && !dialogoAperto() && !imp.catturando && synth.tastoGiu(e)) e.preventDefault();
+});
+window.addEventListener('keyup', (e) => {
+  if (vista === 'synth') synth.tastoSu(e);
+});
+window.addEventListener('blur', () => synth.fermaNote());
 $('vista-live').onclick = () => mostraVista('live');
 $('vista-synth-btn').onclick = () => mostraVista('synth');
 
@@ -1414,7 +1427,10 @@ cuffia.suCollegato = async () => {
   if (cuffia.collegatoDa !== nuova) return; // nel frattempo è rinata di nuovo: ci pensa la prossima
   if (inTest) cuffia.manda({ tipo: 'eco', attivo: true });
   if (!cuffiaUdibile) cuffia.manda({ tipo: 'udibile', on: false });
-  if (vista === 'synth') cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH }); // la cuffia rinata riparte prudente
+  if (vista === 'synth') {
+    cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH }); // la cuffia rinata riparte prudente
+    synth.inviaSuono();
+  }
   if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
 };
 
