@@ -5,6 +5,7 @@
 // legge: il pianoroll lo dice e il testo resta com'è.
 
 export const SCATTI = 16; // scatti per ciclo (griglia 1/16)
+export const GRIGLIE = [16, 12, 32, 24, 48]; // scatti per ciclo che il pianoroll sa usare: 1/16, terzine (1/12), 1/32 e i loro doppi
 export const CICLI = [1, 2, 4, 8];
 const CICLI_MAX = 8;
 export const NOTA_MIN = 12; // le note del pianoroll stanno tra c0 e c7
@@ -57,6 +58,39 @@ export const ACCORDI = {
   5: [0, 7],
 };
 
+// Le scale di Strudel che il pianoroll conosce (nome tonal → nome del pianoroll). Un'altra scala resta scritta a mano.
+const SCALE_STRUDEL = {
+  major: 'maggiore', ionian: 'maggiore', minor: 'minore', aeolian: 'minore', dorian: 'dorica', phrygian: 'frigia', lydian: 'lidia', mixolydian: 'misolidia',
+  'major pentatonic': 'pentatonica maggiore', 'minor pentatonic': 'pentatonica minore', blues: 'blues',
+};
+
+// «A2:minor», «C3:minor:pentatonic», «D:dorian» → { tipo (nome del pianoroll), radice 0–11, base (la tonica, midi), gradi } o null.
+// Come in Strudel: la stringa passa dalla mini-notazione, quindi niente spazi (due parole sarebbero due passi) e i due punti fanno da spazio.
+// Senza ottava la tonica è all'ottava 3.
+export function leggiScala(spec) {
+  if (typeof spec !== 'string' || spec.length > 60 || /\s/.test(spec)) return null;
+  const [tonica, ...nome] = spec.split(':');
+  const m = /^([A-Ga-g])([#b]?)(-?\d)?$/.exec(tonica);
+  const tipo = SCALE_STRUDEL[nome.join(' ').toLowerCase()];
+  if (!m || !tipo) return null;
+  const alt = m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0;
+  const pc = SEMITONI[m[1].toLowerCase()] + alt;
+  const ottava = m[3] === undefined ? 3 : Number(m[3]);
+  return { tipo, radice: ((pc % 12) + 12) % 12, base: (ottava + 1) * 12 + pc, gradi: SCALE[tipo] };
+}
+
+// Il grado della scala (0 = la tonica, 7 = l'ottava sopra in una scala di sette note, −1 = sotto) → nota midi, e ritorno (null se la nota non è nella scala).
+export function gradoInNota(g, sc) {
+  const L = sc.gradi.length;
+  return sc.base + 12 * Math.floor(g / L) + sc.gradi[((g % L) + L) % L];
+}
+export function notaInGrado(n, sc) {
+  const d = n - sc.base;
+  const ottava = Math.floor(d / 12);
+  const k = sc.gradi.indexOf(d - 12 * ottava);
+  return k < 0 ? null : ottava * sc.gradi.length + k;
+}
+
 // La nota più vicina dentro la scala (radice 0–11); a parità, la più bassa. Senza scala (o cromatica) resta com'è.
 export function agganciaScala(n, radice = 0, scala = 'cromatica') {
   const gradi = SCALE[scala];
@@ -71,7 +105,7 @@ export const inScala = (n, radice = 0, scala = 'cromatica') => !SCALE[scala] || 
 
 // --- dalla mini-notazione agli eventi ---
 
-function leggiMini(testo) {
+function leggiMini(testo, scala = null) {
   const src = String(testo);
   let i = 0;
   const salta = () => {
@@ -132,8 +166,9 @@ function leggiMini(testo) {
       } else {
         const m = /^[A-Za-z#]+-?\d*|^-?\d+/.exec(src.slice(i));
         if (!m) throw new Error(`non leggo «${src.slice(i, i + 6)}»`);
-        const n = notaDaNome(m[0]);
-        if (n === null) throw new Error(`«${m[0]}» non è una nota`);
+        // con n(…).scale(…) i numeri sono gradi della scala
+        const n = scala ? (/^-?\d+$/.test(m[0]) ? gradoInNota(Number(m[0]), scala) : null) : notaDaNome(m[0]);
+        if (n === null) throw new Error(scala ? `«${m[0]}»: con la scala vogliono numeri (gradi)` : `«${m[0]}» non è una nota`);
         i += m[0].length;
         nodo = { t: 'nota', n };
       }
@@ -214,40 +249,39 @@ function espandi(nodo, t0, durata, ciclo, fuori) {
   }
 }
 
-// La mini-notazione → { eventi, cicli, fuoriGriglia } oppure { errore }. fuoriGriglia: ci sono note che non cadono sul 1/16
-// (terzine, [a b c]…): si vedono ma il pianoroll non le modifica.
-export function eventiDaMini(testo) {
+// La mini-notazione → { eventi, cicli, griglia, fuoriGriglia } oppure { errore }. La griglia è quanti scatti ha un ciclo (16, o 12 per
+// le terzine…): la prima di GRIGLIE su cui cadono tutte le note (prima quella chiesta, se c'è). fuoriGriglia: non cade su nessuna (si vede
+// ma il pianoroll non la modifica). Con { scala } i numeri sono gradi della scala (n("0 2 4").scale("C:major")).
+export function eventiDaMini(testo, { scala = null, griglia = null } = {}) {
   let albero;
   try {
-    albero = leggiMini(testo);
+    albero = leggiMini(testo, scala);
   } catch (e) {
     return { errore: String(e.message ?? e) };
   }
   const p = periodo(albero);
   const cicli = CICLI.find((c) => c >= p && c % p === 0);
   if (!cicli) return { errore: `si ripete ogni ${p} cicli: il pianoroll legge 1, 2, 4 o 8` };
-  const eventi = [];
-  let fuoriGriglia = false;
+  const grezzi = [];
   for (let c = 0; c < cicli; c++) {
     const trovati = [];
     espandi(albero, 0, 1, c, trovati);
-    for (const e of trovati) {
-      const i = e.inizio * SCATTI;
-      const l = e.durata * SCATTI;
-      if (Math.abs(i - Math.round(i)) > 1e-6 || Math.abs(l - Math.round(l)) > 1e-6) fuoriGriglia = true;
-      eventi.push({ i: c * SCATTI + i, l, n: e.n });
-    }
+    for (const e of trovati) grezzi.push({ ciclo: c, inizio: e.inizio, durata: e.durata, n: e.n });
   }
+  const cade = (x, g) => Math.abs(x * g - Math.round(x * g)) < 1e-6;
+  const scelta = [griglia, ...GRIGLIE].filter(Boolean).find((g) => grezzi.every((e) => cade(e.inizio, g) && cade(e.durata, g)));
+  const g = scelta ?? SCATTI;
+  const eventi = grezzi.map((e) => ({ i: e.ciclo * g + e.inizio * g, l: e.durata * g, n: e.n }));
   eventi.sort((a, b) => a.i - b.i || a.n - b.n);
-  return { eventi: fuoriGriglia ? eventi : eventi.map((e) => ({ ...e, i: Math.round(e.i), l: Math.round(e.l) })), cicli, fuoriGriglia };
+  return { eventi: scelta ? eventi.map((e) => ({ ...e, i: Math.round(e.i), l: Math.round(e.l) })) : eventi, cicli, griglia: g, fuoriGriglia: !scelta };
 }
 
 // --- dagli eventi alla mini-notazione ---
 
 // Le note che partono insieme e durano uguale sono un accordo; gli accordi che si sovrappongono vanno su piste separate.
-function pisteDelCiclo(eventi, c) {
-  const da = c * SCATTI;
-  const a = da + SCATTI;
+function pisteDelCiclo(eventi, c, g) {
+  const da = c * g;
+  const a = da + g;
   const gruppi = new Map();
   for (const e of eventi) {
     if (e.i < da || e.i >= a) continue;
@@ -258,38 +292,38 @@ function pisteDelCiclo(eventi, c) {
   }
   const lista = [...gruppi.values()].sort((x, y) => x.i - y.i || y.l - x.l);
   const piste = [];
-  for (const g of lista) {
-    const pista = piste.find((p) => p.fine <= g.i);
+  for (const gr of lista) {
+    const pista = piste.find((p) => p.fine <= gr.i);
     if (pista) {
-      pista.gruppi.push(g);
-      pista.fine = g.i + g.l;
-    } else piste.push({ gruppi: [g], fine: g.i + g.l });
+      pista.gruppi.push(gr);
+      pista.fine = gr.i + gr.l;
+    } else piste.push({ gruppi: [gr], fine: gr.i + gr.l });
   }
   return piste;
 }
 
 const pesato = (testo, l) => (l === 1 ? testo : `${testo}@${l}`);
 
-function pistaInMini(pista) {
+function pistaInMini(pista, g, scrivi) {
   const pezzi = [];
   let cursore = 0;
-  for (const g of pista.gruppi) {
-    if (g.i > cursore) pezzi.push(pesato('~', g.i - cursore));
-    const note = [...new Set(g.note)].sort((a, b) => a - b).map(nomeNota);
-    pezzi.push(pesato(note.length === 1 ? note[0] : `[${note.join(',')}]`, g.l));
-    cursore = g.i + g.l;
+  for (const gr of pista.gruppi) {
+    if (gr.i > cursore) pezzi.push(pesato('~', gr.i - cursore));
+    const note = [...new Set(gr.note)].sort((a, b) => a - b).map(scrivi);
+    pezzi.push(pesato(note.length === 1 ? note[0] : `[${note.join(',')}]`, gr.l));
+    cursore = gr.i + gr.l;
   }
-  if (cursore < SCATTI) pezzi.push(pesato('~', SCATTI - cursore));
+  if (cursore < g) pezzi.push(pesato('~', g - cursore));
   // una nota sola lunga quanto il ciclo è solo la nota (un peso dentro <…> allungherebbe il passo)
-  return pezzi.length === 1 ? pezzi[0].replace(/@16$/, '') : pezzi.join(' ');
+  return pezzi.length === 1 ? pezzi[0].replace(new RegExp(`@${g}$`), '') : pezzi.join(' ');
 }
 
 // Gli eventi → mini-notazione (un ciclo: la sequenza; più cicli: <[…] […]>). Senza note: «~».
-export function miniDaEventi(eventi, cicli = 1) {
+export function miniDaEventi(eventi, cicli = 1, g = SCATTI, scrivi = nomeNota) {
   const perCiclo = [];
   for (let c = 0; c < cicli; c++) {
-    const piste = pisteDelCiclo(eventi, c);
-    perCiclo.push(piste.length ? piste.map(pistaInMini).join(', ') : '~');
+    const piste = pisteDelCiclo(eventi, c, g);
+    perCiclo.push(piste.length ? piste.map((pista) => pistaInMini(pista, g, scrivi)).join(', ') : '~');
   }
   if (cicli === 1) return perCiclo[0];
   // cicli uguali di seguito non servono: <a a> è a
@@ -300,17 +334,17 @@ export function miniDaEventi(eventi, cicli = 1) {
 
 // --- modifiche sugli eventi (immutabili) ---
 
-export function senzaCiclo(eventi, cicli) {
-  return eventi.filter((e) => e.i < cicli * SCATTI);
+export function senzaCiclo(eventi, cicli, g = SCATTI) {
+  return eventi.filter((e) => e.i < cicli * g);
 }
 
 // Il pattern portato a più (o meno) cicli: i cicli nuovi ripetono quelli che c'erano, così il suono non cambia.
-export function conCicli(eventi, da, a) {
-  if (a <= da) return eventi.filter((e) => e.i < a * SCATTI).map((e) => ({ ...e, l: Math.min(e.l, a * SCATTI - e.i) }));
+export function conCicli(eventi, da, a, g = SCATTI) {
+  if (a <= da) return eventi.filter((e) => e.i < a * g).map((e) => ({ ...e, l: Math.min(e.l, a * g - e.i) }));
   const fuori = [...eventi];
   for (let c = da; c < a; c++) {
     const k = c % da;
-    for (const e of eventi) if (Math.floor(e.i / SCATTI) === k) fuori.push({ ...e, i: e.i + (c - k) * SCATTI });
+    for (const e of eventi) if (Math.floor(e.i / g) === k) fuori.push({ ...e, i: e.i + (c - k) * g });
   }
   return fuori.sort((x, y) => x.i - y.i || x.n - y.n);
 }
@@ -330,7 +364,7 @@ export const senzaEvento = (eventi, e) => eventi.filter((x) => !(x.i === e.i && 
 
 // --- selezione, appunti, duplicato (le note scelte sono riferimenti { i, n }) ---
 
-const fineCiclo = (i) => (Math.floor(i / SCATTI) + 1) * SCATTI;
+const fineCiclo = (i, g = SCATTI) => (Math.floor(i / g) + 1) * g;
 const eScelta = (sel, e) => sel.some((s) => s.i === e.i && s.n === e.n);
 const riferimento = (e) => ({ i: e.i, n: e.n });
 
@@ -346,33 +380,33 @@ export const uniscisel = (a, b) => [...a, ...b.filter((x) => !eScelta(a, x))];
 
 // Le note scelte spostate di di scatti e dn semitoni. Si fermano al bordo (primo/ultimo scatto, c0–c7) tutte insieme;
 // una nota non esce dal suo ciclo. Quelle sotto cui arrivano restano coperte. Ritorna anche di e dn davvero applicati.
-export function muovi(eventi, sel, di, dn, cicli) {
+export function muovi(eventi, sel, di, dn, cicli, g = SCATTI) {
   const scelte = eventi.filter((e) => eScelta(sel, e));
   if (!scelte.length) return { eventi, sel, di: 0, dn: 0 };
   const iMin = Math.min(...scelte.map((e) => e.i));
   const iMax = Math.max(...scelte.map((e) => e.i));
   const nMin = Math.min(...scelte.map((e) => e.n));
   const nMax = Math.max(...scelte.map((e) => e.n));
-  const tetto = cicli * SCATTI; // il pattern finisce qui
+  const tetto = cicli * g; // il pattern finisce qui
   const d = Math.max(-iMin, Math.min(tetto - 1 - iMax, di));
   const t = Math.max(NOTA_MIN - nMin, Math.min(NOTA_MAX - nMax, dn));
   const mosse = scelte.map((e) => {
     const i = e.i + d;
-    return { i, l: Math.min(e.l, fineCiclo(i) - i), n: e.n + t };
+    return { i, l: Math.min(e.l, fineCiclo(i, g) - i), n: e.n + t };
   });
   const resto = eventi.filter((e) => !eScelta(sel, e) && !mosse.some((m) => m.i === e.i && m.n === e.n));
   return { eventi: [...resto, ...mosse].sort((x, y) => x.i - y.i || x.n - y.n), sel: mosse.map(riferimento), di: d, dn: t };
 }
 
 // Trasporre di delta semitoni: o tutte o niente (se una uscisse da c0–c7 non si muove nulla).
-export function trasponi(eventi, sel, delta, cicli) {
-  const r = muovi(eventi, sel, 0, delta, cicli);
+export function trasponi(eventi, sel, delta, cicli, g = SCATTI) {
+  const r = muovi(eventi, sel, 0, delta, cicli, g);
   return r.dn === delta ? r : { eventi, sel, di: 0, dn: 0 };
 }
 
 // Le note scelte allungate (o accorciate) di dl scatti, ognuna dentro il suo ciclo.
-export function allunga(eventi, sel, dl) {
-  return eventi.map((e) => (eScelta(sel, e) ? { ...e, l: Math.max(1, Math.min(fineCiclo(e.i) - e.i, e.l + dl)) } : e));
+export function allunga(eventi, sel, dl, g = SCATTI) {
+  return eventi.map((e) => (eScelta(sel, e) ? { ...e, l: Math.max(1, Math.min(fineCiclo(e.i, g) - e.i, e.l + dl)) } : e));
 }
 
 export const senzaScelte = (eventi, sel) => eventi.filter((e) => !eScelta(sel, e));
@@ -386,23 +420,23 @@ export function appunti(eventi, sel) {
 }
 
 // Gli appunti messi a partire dallo scatto i0. Quelle che cadono oltre la fine del pattern si scartano (fuori = quante).
-export function incolla(eventi, clip, i0, cicli) {
-  const fine = cicli * SCATTI;
+export function incolla(eventi, clip, i0, cicli, g = SCATTI) {
+  const fine = cicli * g;
   const nuove = [];
   let fuori = 0;
   for (const c of clip.note) {
     const i = i0 + c.d;
     if (i < 0 || i >= fine) fuori++;
-    else nuove.push({ i, l: Math.min(c.l, fineCiclo(i) - i), n: c.n });
+    else nuove.push({ i, l: Math.min(c.l, fineCiclo(i, g) - i), n: c.n });
   }
   const resto = eventi.filter((e) => !nuove.some((m) => m.i === e.i && m.n === e.n));
   return { eventi: [...resto, ...nuove].sort((x, y) => x.i - y.i || x.n - y.n), sel: nuove.map(riferimento), fuori, fine: i0 + clip.durata };
 }
 
 // Duplica le note scelte subito dopo il blocco (come ⌘D di Ableton).
-export function duplica(eventi, sel, cicli) {
+export function duplica(eventi, sel, cicli, g = SCATTI) {
   const clip = appunti(eventi, sel);
   if (!clip) return null;
   const da = Math.min(...eventi.filter((e) => eScelta(sel, e)).map((e) => e.i));
-  return incolla(eventi, clip, da + clip.durata, cicli);
+  return incolla(eventi, clip, da + clip.durata, cicli, g);
 }

@@ -4,10 +4,10 @@
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, noteValide, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
 import { PianoRoll } from './synth-roll.js';
-import { conCicli, eventiDaMini, miniDaEventi } from './synth-note.js';
+import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado } from './synth-note.js';
 import { OTTAVA_INIZIALE, inCampoDiTesto, notaDaTasto, ottavaDopo } from './synth-tastiera.js';
 import { Registratore } from './synth-rec.js';
-import { clip, codice, funzioniDi, leggiCodice, noteEffettive } from './synth-codice.js';
+import { clip, codice, funzioniDi, inGradi, leggiCodice, noteEffettive } from './synth-codice.js';
 import it from './testi/it.json';
 
 const T = it.synth;
@@ -190,6 +190,12 @@ export class VistaSynth {
       nota: (n) => this.provaNota(n),
       ciclo: () => this.opz.ciclo?.() ?? null,
       avviso: (chiave, vars) => this.avviso(formatta(T.note[chiave], vars)),
+      griglia: (g) => {
+        this.grigliaScelta = g;
+        this.chiaveNote = null;
+        this.disegna();
+        if (this.roll.griglia !== g) this.avviso(formatta(T.note.fuoriQuestaGriglia, { g: this.roll.grigliaEl.selectedOptions[0]?.textContent ?? '' }));
+      },
     });
     sinistra.append(schede, pannello, this.noteEl);
     corpo.append(sinistra, lato);
@@ -376,7 +382,7 @@ export class VistaSynth {
   avviaRec() {
     if (this.rec) return this.fermaRec(this.rec.fase() !== 'registra');
     if (this.opz.ciclo?.() == null) return this.avviso(T.msg.nessunTempo);
-    this.rec = new Registratore({ ciclo: () => this.opz.ciclo(), cicli: this.roll.cicli });
+    this.rec = new Registratore({ ciclo: () => this.opz.ciclo(), cicli: this.roll.cicli, griglia: this.roll.griglia });
     this.battitoClick = null;
     this.timerRec = setInterval(() => this.tickRec(), 20);
     this.avviso('');
@@ -430,12 +436,18 @@ export class VistaSynth {
   }
 
   // Dal pianoroll: le note nuove (e quanti cicli si vedono). Due cicli uguali si scrivono come uno solo: i cicli scelti si ricordano qui.
+  // Con n(…).scale(…) le note si riscrivono come gradi; se una esce dalla scala si passa a note("…") coi nomi, e lo dice.
   cambiaNote(eventi, cicli) {
     this.cicliScelti = cicli;
-    const mini = miniDaEventi(eventi, cicli);
+    const g = this.roll.griglia;
+    const sc = inGradi(this.stato) ? leggiScala(this.stato.scala) : null;
+    const fuoriScala = !!sc && eventi.some((e) => notaInGrado(e.n, sc) === null);
+    const mini = sc && !fuoriScala ? miniDaEventi(eventi, cicli, g, (n) => String(notaInGrado(n, sc))) : miniDaEventi(eventi, cicli, g);
+    const scala = fuoriScala ? '' : this.stato.scala;
     this.chiaveNote = null;
-    if (mini === noteEffettive(this.stato) && this.stato.anteprima === 'clip') return this.disegna();
-    this.passo(() => this.imponi({ ...this.stato, note: mini, anteprima: 'clip' }));
+    if (mini === noteEffettive(this.stato) && this.stato.anteprima === 'clip' && scala === this.stato.scala) return this.disegna();
+    this.passo(() => this.imponi({ ...this.stato, note: mini, scala, anteprima: 'clip' }));
+    if (fuoriScala) this.avviso(T.msg.fuoriScala);
   }
 
   // Il testo mini-notazione scritto a mano → le note (e il pianoroll). Un testo che non si può scrivere in un codice resta com'è.
@@ -529,6 +541,8 @@ export class VistaSynth {
     this.storia = [];
     this.ripeti = [];
     this.cicliScelti = 1;
+    this.grigliaScelta = null;
+    this.scalaDelPianoroll = null;
     this.disegna();
   }
 
@@ -540,6 +554,8 @@ export class VistaSynth {
     this.registra();
     this.slot = { A: pulisci({ ...stato, anteprima: 'clip' }), B: null, lato: 'A' };
     this.roll.sel = []; // le note scelte erano di un'altra clip
+    this.grigliaScelta = null;
+    this.scalaDelPianoroll = null;
     this.cicliScelti = 1;
     this.inGesto = false;
     this.avviso('');
@@ -615,8 +631,14 @@ export class VistaSynth {
 
   async suona() {
     const errore = await this.opz.suona(codice(this.stato), this.nome);
-    // l'errore di Strudel nomina tutta la catena: qui basta la parte che dice cosa non va
-    this.avviso(errore ? formatta(T.msg.codiceNonParte, { errore: String(errore).replace(/^[\s\S]*\)\.(\w+ is not a function)$/, '$1') }) : '');
+    // l'errore di Strudel nomina tutta la catena: qui basta la parte che dice cosa non va. Un suono che parte bene toglie solo quell'errore, non gli altri avvisi.
+    if (errore) {
+      this.avviso(formatta(T.msg.codiceNonParte, { errore: String(errore).replace(/^[\s\S]*\)\.(\w+ is not a function)$/, '$1') }));
+      this.erroreSuono = true;
+    } else if (this.erroreSuono) {
+      this.avviso('');
+      this.erroreSuono = false;
+    }
   }
 
   suonaOFerma() {
@@ -693,15 +715,19 @@ export class VistaSynth {
 
   disegnaNote(s) {
     const mini = noteEffettive(s);
-    const chiave = `${s.testa}|${mini}|${this.cicliScelti}`;
+    const chiave = `${s.testa}|${mini}|${inGradi(s) ? s.scala : ''}|${this.cicliScelti}|${this.grigliaScelta}`;
     if (chiave === this.chiaveNote) return;
     this.chiaveNote = chiave;
-    const r = s.testa ? null : eventiDaMini(mini);
+    const sc = inGradi(s) ? leggiScala(s.scala) : null;
+    // la scala del codice diventa la scala del pianoroll, una volta (poi la si può cambiare per scrivere note fuori scala)
+    if (sc && s.scala !== this.scalaDelPianoroll) this.roll.impostaScala(sc);
+    this.scalaDelPianoroll = sc ? s.scala : null;
+    const r = s.testa ? null : eventiDaMini(mini, { scala: sc, griglia: this.grigliaScelta });
     if (s.testa) this.roll.imposta({ eventi: [], cicli: 1, editabile: false, messaggio: it.synth.note.noteMano, mini: '' });
     else if (r.errore) this.roll.imposta({ eventi: [], cicli: 1, editabile: false, messaggio: r.errore, mini });
     else {
       const cicli = r.fuoriGriglia ? r.cicli : Math.max(r.cicli, this.cicliScelti);
-      this.roll.imposta({ eventi: cicli > r.cicli ? conCicli(r.eventi, r.cicli, cicli) : r.eventi, cicli, editabile: !r.fuoriGriglia, messaggio: r.fuoriGriglia ? it.synth.note.fuoriGriglia : '', mini });
+      this.roll.imposta({ eventi: cicli > r.cicli ? conCicli(r.eventi, r.cicli, cicli, r.griglia) : r.eventi, cicli, griglia: r.griglia, editabile: !r.fuoriGriglia, messaggio: r.fuoriGriglia ? it.synth.note.fuoriGriglia : '', mini });
     }
   }
 

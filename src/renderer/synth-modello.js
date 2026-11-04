@@ -3,6 +3,7 @@
 // I parametri sono verificati sul codice di superdough 1.3.0 (vedi docs/SYNTH.md): niente nomi inventati.
 
 import { eCategoria } from './categorie.js';
+import { leggiScala } from './synth-note.js';
 
 export const FORME = ['sine', 'sawtooth', 'square', 'triangle', 'supersaw', 'pulse', 'white', 'pink', 'brown', 'crackle'];
 const RUMORI = ['white', 'pink', 'brown', 'crackle'];
@@ -88,6 +89,8 @@ export function iniziale() {
   s.testa = ''; // l'inizio del codice se non è note("…") (scritto a mano nel pannello del codice): vuoto = note("…") delle note della clip
   s.mano = []; // le chiamate .nome(…) scritte a mano che il pannello non conosce: restano com'erano, in fondo, e non si perdono mai
   s.categoria = ''; // bass, lead, arp, pad, keys, fx o niente: i limiti di MUTATE e il gruppo della clip nel CUE
+  s.scala = ''; // «A2:minor»: se c'è, le note della clip sono gradi di quella scala e il codice è n("…").scale("…")
+  s.intro = ''; // i commenti scritti in cima al codice: restano dove sono
   return s;
 }
 
@@ -167,6 +170,9 @@ function sotto(s) {
 // Lo stato com'è scritto in un file o arrivato da fuori: solo le chiavi note, ognuna nel suo intervallo. Mai eval, mai codice.
 const MANO = /^\.[A-Za-z_]\w*\(.*\)$/;
 export const manoValida = (x) => typeof x === 'string' && x.length <= 300 && !x.includes('\n') && MANO.test(x.trim());
+export const scalaValida = (x) => typeof x === 'string' && leggiScala(x) !== null;
+// I commenti in cima al codice (// …): al massimo 6 righe, senza i segni che CUTX usa nel file (@synth, @clip…).
+export const introValida = (x) => typeof x === 'string' && x.length <= 400 && x.split('\n').length <= 6 && x.split('\n').every((r) => /^\s*\/\//.test(r) && !/@(synth|clip|scena|beat|apertura|sezione|pezzo|spina|momento)\b/.test(r));
 export const testaValida = (x) => typeof x === 'string' && x.length <= 300 && !x.includes('\n') && !x.includes('//') && x.trim().length > 0;
 
 // tetto: false lascia i pesi com'erano (il codice scritto a mano non si alleggerisce di nascosto: il pannello avvisa).
@@ -178,6 +184,8 @@ export function pulisci(grezzo, { tetto = true } = {}) {
   if (noteValide(g.note)) s.note = g.note.trim();
   if (eCategoria(g.categoria)) s.categoria = g.categoria;
   if (testaValida(g.testa)) s.testa = g.testa.trim();
+  if (scalaValida(g.scala)) s.scala = g.scala.trim();
+  if (introValida(g.intro) && g.intro.trim()) s.intro = g.intro.trim();
   if (Array.isArray(g.mano)) s.mano = g.mano.filter(manoValida).map((x) => x.trim()).slice(0, 40);
   // il supersaw ha fino a 7 voci, gli altri fino a 5
   if (s.forma !== 'supersaw') s.voci = Math.min(s.voci, LAYER_MAX);

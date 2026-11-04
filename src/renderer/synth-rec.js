@@ -1,10 +1,11 @@
 // Il REC del SYNTH: registra a tempo con il live. Si parte dal ciclo intero dopo, con un ciclo (una battuta) di conteggio; poi si registra
-// per `cicli` cicli; le note si quantizzano al 1/16. Modulo puro: l'orologio (ciclo()) gli arriva da fuori, così lo provano i test.
+// per `cicli` cicli; le note si quantizzano al 1/16 (o alla griglia del pianoroll: 1/12 per le terzine…). Modulo puro: l'orologio (ciclo()) gli arriva da fuori, così lo provano i test.
 import { SCATTI } from './synth-note.js';
 
 export class Registratore {
   // ciclo(): il ciclo di adesso (con la virgola), dal tempo del live. cicli: quanti si registrano.
-  constructor({ ciclo, cicli = 1 }) {
+  constructor({ ciclo, cicli = 1, griglia = SCATTI }) {
+    this.griglia = griglia;
     this.ciclo = ciclo;
     this.cicli = cicli;
     const c = ciclo();
@@ -49,13 +50,14 @@ export class Registratore {
 
   // Gli eventi quantizzati al 1/16: { i, l, n }. Una nota non esce dal suo ciclo; una che parte appena prima della fine torna all'inizio.
   risultato() {
-    const totale = this.cicli * SCATTI;
+    const g = this.griglia;
+    const totale = this.cicli * g;
     const fuori = [];
     for (const c of this.chiuse) {
-      const i0 = Math.max(0, Math.round((c.da - this.inizio) * SCATTI));
+      const i0 = Math.max(0, Math.round((c.da - this.inizio) * g));
       const i = i0 >= totale ? i0 - totale : i0;
-      const fineRel = Math.round((c.a - this.inizio) * SCATTI);
-      const bordo = (Math.floor(i / SCATTI) + 1) * SCATTI;
+      const fineRel = Math.round((c.a - this.inizio) * g);
+      const bordo = (Math.floor(i / g) + 1) * g;
       const l = Math.max(1, Math.min(fineRel - i0, bordo - i));
       if (!fuori.some((e) => e.i === i && e.n === c.n)) fuori.push({ i, l, n: c.n });
     }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACCORDI, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
+  ACCORDI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
 } from '../src/renderer/synth-note.js';
 
 const seme = (n) => () => ((n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -45,15 +45,19 @@ test('le alternanze <a b> sono cicli', () => {
   assert.equal(eventiDaMini('<c3 e3 g3 b3>').cicli, 4);
 });
 
-test('quello che non si legge dà un errore, e le terzine si vedono ma fuori griglia', () => {
+test('quello che non si legge dà un errore; le terzine hanno la loro griglia (12), le quintine restano fuori griglia', () => {
   for (const x of ['c3?', 'c3/2', 'c3(3,8)', 'bd sd', '[c3', 'c3]', '<c3', 'c3 | e3', 'c3:2']) assert.ok(eventiDaMini(x).errore, x);
   const t = eventiDaMini('[c3 e3 g3]');
-  assert.equal(t.fuoriGriglia, true);
-  assert.equal(t.eventi.length, 3);
-  assert.equal(eventiDaMini('c3 e3 g3').fuoriGriglia, true); // tre note in un ciclo: terzine di sedicesimi non intere
-  assert.equal(eventiDaMini('c3 e3 g3 b3').fuoriGriglia, false);
+  assert.equal(t.fuoriGriglia, false);
+  assert.equal(t.griglia, 12);
+  assert.deepEqual(t.eventi, [{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 52 }, { i: 8, l: 4, n: 55 }]);
+  assert.equal(eventiDaMini('c3 e3 g3').griglia, 12);
+  assert.equal(eventiDaMini('c3 e3 g3 b3').griglia, 16);
+  const q = eventiDaMini('c3 e3 g3 b3 d4');
+  assert.equal(q.fuoriGriglia, true);
+  assert.equal(q.eventi.length, 5);
+  assert.equal(q.griglia, 16);
 });
-
 test('eventi → mini-notazione: leggibile e fedele', () => {
   assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 51 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 58 }]), 'c3@4 eb3@4 g3@4 bb3@4');
   assert.equal(miniDaEventi([]), '~');
@@ -243,4 +247,63 @@ test('duplica: subito dopo il blocco, come ⌘D', () => {
 
 test('senzaScelte toglie solo quelle scelte', () => {
   assert.deepEqual(senzaScelte(base, rif(base[1])), [base[0], base[2], base[3]]);
+});
+
+test('scale di Strudel: nome, tonica con o senza ottava, gradi e ritorno', () => {
+  const am = leggiScala('A2:minor');
+  assert.deepEqual({ tipo: am.tipo, radice: am.radice, base: am.base }, { tipo: 'minore', radice: 9, base: 45 });
+  assert.equal(leggiScala('A:minor').base, 57, 'senza ottava è la 3');
+  assert.equal(leggiScala('a2:minor').base, 45);
+  assert.equal(leggiScala('C3:minor:pentatonic').tipo, 'pentatonica minore');
+  assert.equal(leggiScala('C3:major:pentatonic').tipo, 'pentatonica maggiore', 'come Strudel: i due punti sono spazi');
+  assert.equal(leggiScala('C3:minor pentatonic'), null, 'con lo spazio Strudel legge due passi: non è una scala sola');
+  assert.equal(leggiScala('a2 minor'), null);
+  assert.equal(leggiScala('Eb2:dorian').base, 39);
+  assert.equal(leggiScala('C:ritusen'), null);
+  assert.equal(leggiScala('minor'), null);
+  assert.equal(leggiScala(5), null);
+  // i gradi: 0 la tonica, 7 un'ottava sopra (sette note), −1 sotto
+  assert.deepEqual([0, 2, 7, 9, 12, -1].map((g) => gradoInNota(g, am)), [45, 48, 57, 60, 65, 43]);
+  const pm = leggiScala('C3:minor:pentatonic'); // 0 3 5 7 10
+  assert.deepEqual([0, 1, 4, 5, 6, -1].map((g) => gradoInNota(g, pm)), [48, 51, 58, 60, 63, 46]);
+  for (const sc of [am, pm, leggiScala('D3:blues')]) for (let g = -9; g < 20; g++) assert.equal(notaInGrado(gradoInNota(g, sc), sc), g);
+  assert.equal(notaInGrado(46, am), null, 'la#2 non è nella scala di la minore');
+});
+
+test('n(…).scale(…): i numeri sono gradi, le note stanno nella scala', () => {
+  const am = leggiScala('A2:minor');
+  const r = eventiDaMini('0 2 7 9 7 4 2 9 12 9 7 4', { scala: am });
+  assert.equal(r.griglia, 12);
+  assert.equal(r.fuoriGriglia, false);
+  assert.deepEqual(r.eventi.map((e) => e.n), [45, 48, 57, 60, 57, 52, 48, 60, 65, 60, 57, 52]);
+  assert.deepEqual(r.eventi.map((e) => [e.i, e.l]).slice(0, 3), [[0, 1], [1, 1], [2, 1]]);
+  assert.ok(eventiDaMini('c3 e3', { scala: am }).errore, 'con la scala vogliono numeri');
+  assert.deepEqual(eventiDaMini('[0,2,4]@2 ~', { scala: am }).eventi.map((e) => e.n), [45, 48, 52]);
+  assert.deepEqual(eventiDaMini('-1 0', { scala: am }).eventi.map((e) => e.n), [43, 45]);
+  // al ritorno si riscrivono i gradi
+  const mini = miniDaEventi(r.eventi, r.cicli, r.griglia, (n) => String(notaInGrado(n, am)));
+  assert.equal(mini, '0 2 7 9 7 4 2 9 12 9 7 4');
+  assert.equal(miniDaEventi([{ i: 0, l: 3, n: 48 }, { i: 3, l: 9, n: 52 }], 1, 12), 'c3@3 e3@9');
+  assert.equal(miniDaEventi([{ i: 0, l: 12, n: 48 }], 1, 12), 'c3');
+});
+
+test('griglie: la prima che le contiene tutte, o quella chiesta se va bene', () => {
+  assert.equal(eventiDaMini('c3 ~ e3 ~').griglia, 16);
+  assert.equal(eventiDaMini('c3 ~ e3 ~', { griglia: 12 }).griglia, 12, 'cadono anche sulle terzine: vale la chiesta');
+  assert.equal(eventiDaMini('c3 e3 g3 b3 d4 f4 a4 c5', { griglia: 12 }).griglia, 16, 'ma se non ci stanno si torna alla prima che va');
+  assert.equal(eventiDaMini('~', { griglia: 24 }).griglia, 24);
+  assert.equal(eventiDaMini('c3*6').griglia, 12);
+  assert.equal(eventiDaMini('c3*32').griglia, 32);
+  assert.equal(eventiDaMini('c3*24').griglia, 24);
+  assert.equal(eventiDaMini('[c3 e3 g3]*4').griglia, 12);
+  assert.deepEqual(GRIGLIE, [16, 12, 32, 24, 48]);
+});
+
+test('con la griglia di terzine: muovi, incolla e cicli contano in 12', () => {
+  const ev = [{ i: 0, l: 3, n: 48 }, { i: 6, l: 6, n: 52 }];
+  assert.deepEqual(conCicli(ev, 1, 2, 12).map((e) => e.i), [0, 6, 12, 18]);
+  assert.equal(muovi(ev, [{ i: 6, n: 52 }], 99, 0, 1, 12).di, 5, 'fino all\'ultimo scatto (11)');
+  assert.deepEqual(muovi(ev, [{ i: 0, n: 48 }], 11, 0, 1, 12).eventi.find((e) => e.n === 48), { i: 11, l: 1, n: 48 });
+  assert.equal(incolla([], { note: [{ d: 0, l: 8, n: 60 }], durata: 8 }, 8, 1, 12).eventi[0].l, 4, 'non esce dal ciclo di 12');
+  assert.equal(allunga(ev, [{ i: 6, n: 52 }], 9, 12)[1].l, 6);
 });

@@ -85,3 +85,6 @@ Seguono, prima del resto: **il controller nel SYNTH** (era il blocco 5).
 Piano concordato: 1 selezione, 2 matita, 3 scrittura a passi, 4 velocity; poi il controller (5 mappa e anelli, 6 tasti in basso).
 
 **Passo 1 · selezione (fatto).** Strumenti: selezione (di partenza) e matita (B li alterna). Selezione: rettangolo, doppio clic per una nota, ⇧ per aggiungere. Spostare e allungare valgono per tutte le scelte. ⌘A, ⌘C, ⌘X, ⌘V (al cursore), ⌘D, ↑↓, ⇧↑↓, ⌫. Cambia rispetto al blocco 2: un clic su una cella vuota non mette più la nota se lo strumento è la selezione (serve il doppio clic, o B per la matita), come Ableton.
+
+**Codice incollato → pianoroll (fatto).** `n("0 2 7").scale("A2:minor")` e `note("c3 e3")` (nomi o numeri midi) entrano nel pianoroll, che si può modificare: restando nella scala si riscrive n() coi gradi, con una nota fuori scala si passa a `note()` coi nomi e lo dice. I commenti in cima restano in cima; il resto (`sometimesBy`, `saw.range`…) resta «a mano». Il pianoroll ha più griglie: 1/16, 1/12 (terzine: 12 note in un ciclo), 1/32, 1/24, 1/48, scelte da sole o dal menu «griglia».
+

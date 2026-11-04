@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, limiti, noteValide, parametro, pulisci, pulisciValore, spento, testaValida } from './synth-modello.js';
+import { DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
 
 export const MARCA = '// @synth';
 const RIGA = /^[ \t]*\/\/[ \t]*@synth[ \t]+(\{.*\})[ \t]*$/m;
@@ -32,11 +32,17 @@ export function scarti(s) {
 
 const NEUTRO_CUTOFF = { lpf: 20000, hpf: 20 };
 
+// Le note della clip sono gradi di una scala (n("0 2 4").scale("A2:minor"))? Solo con la scala giusta e lo schema «clip».
+export const inGradi = (s) => !!s.scala && scalaValida(s.scala) && s.anteprima === 'clip' && noteValide(s.note);
+
 // Il codice del suono, con le note dello schema scelto. Righe corte: si legge anche sul proiettore.
 export function codice(stato) {
   const s = stato;
   const rumore = eRumore(s.forma);
-  const r = [s.testa && testaValida(s.testa) ? s.testa : `note("${noteEffettive(s)}")`];
+  const r = s.intro && introValida(s.intro) ? s.intro.split('\n').map((x) => x.trimEnd()) : [];
+  if (s.testa && testaValida(s.testa)) r.push(s.testa);
+  else if (inGradi(s)) r.push(`n("${s.note}")`, `  .scale("${s.scala}")`);
+  else r.push(`note("${noteEffettive(s)}")`);
 
   if (!rumore) {
     if (s.ottava) r.push(`  .trans(${s.ottava * 12})`);
@@ -103,7 +109,7 @@ export function rigaSynth(stato) {
 // Nella riga ci vanno le note che suonano davvero (schema «clip»): riaprendola nel synth le note sono quelle.
 export function clip(stato) {
   const s = pulisci(stato, { tetto: false });
-  return `${rigaSynth({ ...s, anteprima: 'clip', note: noteEffettive(s) })}\n${codice(s)}\n`;
+  return `${rigaSynth({ ...s, anteprima: 'clip', note: noteEffettive(s), scala: inGradi(s) ? s.scala : '' })}\n${codice(s)}\n`;
 }
 
 // Lo stato scritto nella riga @synth di un testo, o null se non c'è (o non si legge): le clip scritte a mano non si aprono nel synth.
@@ -135,6 +141,7 @@ export function spezza(testo) {
   let corrente = '';
   let profondita = 0;
   let aperta = null;
+  const intro = []; // i commenti prima del codice: non si perdono
   while (i < src.length) {
     const c = src[i];
     if (aperta) {
@@ -145,7 +152,9 @@ export function spezza(testo) {
       continue;
     }
     if (c === '/' && src[i + 1] === '/') {
-      while (i < src.length && src[i] !== '\n') i++; // un commento: non si tiene (le righe commentate non contano)
+      const da = i;
+      while (i < src.length && src[i] !== '\n') i++; // un commento: in cima si tiene (intro), altrove no (le righe commentate non contano)
+      if (!pezzi.length && !corrente.trim()) intro.push(src.slice(da, i).trimEnd());
       continue;
     }
     if (c === '"' || c === "'" || c === '`') {
@@ -176,7 +185,7 @@ export function spezza(testo) {
     if (!m) return { errore: `non leggo «${testoP.slice(0, 30)}»` };
     chiamate.push({ nome: m[1], args: m[2].trim(), testo: `.${m[1]}(${m[2].trim()})` });
   }
-  return { testa: t, chiamate };
+  return { testa: t, chiamate, intro: intro.join('\n') };
 }
 
 const NUM = /^-?(?:\d+\.?\d*|\.\d+)$/;
@@ -215,18 +224,25 @@ export function funzioniDi(k) {
 export function leggiCodice(testo, base = iniziale()) {
   const sp = spezza(testo);
   if (sp.errore) return { errore: sp.errore };
-  const s = { ...spento(), note: base.note, anteprima: base.anteprima, categoria: base.categoria, testa: '', mano: [] };
+  const s = { ...spento(), note: base.note, anteprima: base.anteprima, categoria: base.categoria, testa: '', mano: [], scala: '', intro: introValida(sp.intro) ? sp.intro : '' };
   const errori = [];
   const mano = [];
-  // la testa: note("…") sono le note della clip; qualsiasi altra cosa resta com'è
+  // la testa: note("…") sono le note della clip; n("…") con .scale("…") sono i gradi di una scala; qualsiasi altra cosa resta com'è
   const nota = /^note\(\s*"([^"]*)"\s*\)$/.exec(sp.testa);
+  const gradi = /^n\(\s*"([^"]*)"\s*\)$/.exec(sp.testa);
+  const scale = sp.chiamate.filter((c) => c.nome === 'scale');
+  const scalaLetta = gradi && scale.length === 1 ? stringa(scale[0].args) : null;
   if (nota && noteValide(nota[1])) {
     s.note = nota[1].trim();
+    s.anteprima = 'clip';
+  } else if (gradi && noteValide(gradi[1]) && scalaLetta && scalaValida(scalaLetta)) {
+    s.note = gradi[1].trim();
+    s.scala = scalaLetta.trim();
     s.anteprima = 'clip';
   } else if (testaValida(sp.testa)) s.testa = sp.testa.replace(/\s+/g, ' ');
   else return { errore: 'l\'inizio del codice non si legge' };
 
-  const chiamate = sp.chiamate;
+  const chiamate = s.scala ? sp.chiamate.filter((c) => c.nome !== 'scale') : sp.chiamate; // la scala è già nello stato
   // la forma per prima: da lei dipende cosa vale unison
   const forma = [...chiamate].reverse().map((c) => (c.nome === 's' ? stringa(c.args) : null)).find((f) => f && FORME.includes(f));
   if (forma) s.forma = forma;

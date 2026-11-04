@@ -323,6 +323,10 @@
     "roll-matita": {
       "nome": "matita",
       "testo": "Con la matita un clic mette una nota. Senza (selezione) un clic sceglie, il doppio clic mette una nota. B li alterna."
+    },
+    "roll-griglia": {
+      "nome": "griglia",
+      "testo": "Quanti passi ha un ciclo: 1/16, oppure 1/12 per le terzine. Si sceglie da sola in base alle note; la puoi cambiare se le note ci stanno."
     }
   },
   "impostazioni": {
@@ -519,7 +523,8 @@
       "codiceAMano": "a mano: il pannello non lo comanda",
       "registrate": "registrate {n} note",
       "nessunTempo": "nessun tempo dal live",
-      "recAnnullato": "REC annullato"
+      "recAnnullato": "REC annullato",
+      "fuoriScala": "fuori scala: ora note(\"…\")"
     },
     "categorie": {
       "": "tipo",
@@ -535,13 +540,6 @@
       "note": "note"
     },
     "note": {
-      "lunghezze": {
-        "1": "1/16",
-        "2": "1/8",
-        "4": "1/4",
-        "8": "1/2",
-        "16": "1"
-      },
       "lunghezza": "lunghezza",
       "scala": "scala",
       "accordo": "accordo",
@@ -567,7 +565,9 @@
       "matita": "matita",
       "copiate": "copiate: {n}",
       "appuntiVuoti": "appunti vuoti",
-      "fuoriPattern": "{n} note fuori dal pattern"
+      "fuoriPattern": "{n} note fuori dal pattern",
+      "griglia": "griglia",
+      "fuoriQuestaGriglia": "le note non stanno su {g}"
     }
   }
 }

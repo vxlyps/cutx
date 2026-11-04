@@ -286,9 +286,9 @@ test('quello che il pannello non conosce resta com\'è, in fondo, e non si perde
 });
 
 test('un\'inizio diverso da note("…") resta com\'è', () => {
-  const r = leggiCodice('n("0 3 7").scale("c:minor")\n  .s("triangle").lpf(900)', iniziale());
+  const r = leggiCodice('n("0 3 7").scale("c:ritusen")\n  .s("triangle").lpf(900)', iniziale());
   assert.equal(r.stato.testa, 'n("0 3 7")');
-  assert.deepEqual(r.mano, ['.scale("c:minor")']);
+  assert.deepEqual(r.mano, ['.scale("c:ritusen")']);
   assert.equal(r.stato.cutoff, 900);
   assert.match(codice(r.stato), /^n\("0 3 7"\)\n/);
 });
@@ -332,10 +332,74 @@ test('andata e ritorno: ogni suono (300 casuali, tutti i tipi) torna lo stesso d
 });
 
 test('lo stato con la mano sta nella riga @synth e si riapre uguale', () => {
-  const r = leggiCodice('n("0 3").scale("c:minor").s("triangle").vib(4)', iniziale());
+  const r = leggiCodice('n("0 3").scale("c:ritusen").s("triangle").vib(4)', iniziale());
   const testo = clip(r.stato);
   const letto = leggiRiga(testo);
   assert.equal(letto.testa, 'n("0 3")');
-  assert.deepEqual(letto.mano, ['.scale("c:minor")', '.vib(4)']);
+  assert.deepEqual(letto.mano, ['.scale("c:ritusen")', '.vib(4)']);
   assert.equal(codice(letto), codice(r.stato));
+});
+
+const ACIDA = `// Variante ACIDA
+n("0 2 7 9 7 4 2 9 12 9 7 4")
+  .scale("A2:minor")
+  .s("supersaw")
+  .lpf(saw.range(500, 6500).slow(4)).lpq(10)
+  .shape(.4)
+  .sometimesBy(.3, x => x.ply(2))
+  .delay(.4).delaytime(.1875).delayfeedback(.55)
+  .gain(.35)`;
+
+test('codice incollato con n(…).scale(…): le note e la scala sono nello stato, i commenti in cima restano', () => {
+  const r = leggiCodice(ACIDA);
+  assert.equal(r.errore, undefined);
+  const s = r.stato;
+  assert.equal(s.note, '0 2 7 9 7 4 2 9 12 9 7 4');
+  assert.equal(s.scala, 'A2:minor');
+  assert.equal(s.intro, '// Variante ACIDA');
+  assert.equal(s.anteprima, 'clip');
+  assert.equal(s.testa, '');
+  assert.equal(s.forma, 'supersaw');
+  assert.equal(s.q, 10);
+  assert.equal(s.shape, 0.4);
+  assert.equal(s.gain, 0.35);
+  // quello che non è una nota resta scritto com'era, a mano
+  assert.deepEqual(r.mano, ['.lpf(saw.range(500, 6500).slow(4))', '.sometimesBy(.3, x => x.ply(2))', '.delaytime(.1875)']);
+  const c = codice(s);
+  assert.ok(c.startsWith('// Variante ACIDA\nn("0 2 7 9 7 4 2 9 12 9 7 4")\n  .scale("A2:minor")\n  .s("supersaw")'), c);
+  assert.ok(c.includes('.sometimesBy(.3, x => x.ply(2))'));
+  // riletto, è lo stesso suono (la scala, le note e il commento non si perdono)
+  const r2 = leggiCodice(c);
+  assert.equal(r2.errore, undefined);
+  assert.deepEqual(r2.stato, s);
+});
+
+test('n(…) senza scala, due scale o una scala che non conosco: linizio resta a mano', () => {
+  assert.equal(leggiCodice('n("0 2 4").s("square")').stato.testa, 'n("0 2 4")');
+  assert.equal(leggiCodice('n("0 2 4").scale("C:major").scale("D:minor")').stato.testa, 'n("0 2 4")');
+  const r = leggiCodice('n("0 2 4").scale("C:ritusen").s("square")');
+  assert.equal(r.stato.testa, 'n("0 2 4")');
+  assert.deepEqual(r.mano, ['.scale("C:ritusen")']);
+});
+
+test('i gradi si scrivono solo con lo schema «clip»; la clip e la riga @synth li riportano giusti', () => {
+  const s = leggiCodice(ACIDA).stato;
+  assert.ok(codice({ ...s, anteprima: 'arpeggio' }).includes('note("c3 eb3 g3 bb3")'), 'con larpeggio di prova le note sono nomi, senza scala');
+  assert.ok(!codice({ ...s, anteprima: 'arpeggio' }).includes('.scale('));
+  const c = clip({ ...s, anteprima: 'arpeggio' });
+  const riga = leggiRiga(c);
+  assert.equal(riga.scala, '', 'note con i nomi: niente scala nella riga');
+  const c2 = clip(s);
+  assert.equal(leggiRiga(c2).scala, 'A2:minor');
+  assert.equal(leggiRiga(c2).note, '0 2 7 9 7 4 2 9 12 9 7 4');
+  assert.equal(leggiRiga(c2).intro, '// Variante ACIDA');
+});
+
+test('i commenti in cima: solo quelli, non quelli in mezzo; niente segni di CUTX', () => {
+  assert.equal(spezza('// uno\n// due\nnote("c3")\n  .gain(.5) // dopo').intro, '// uno\n// due');
+  assert.equal(spezza('note("c3") // qui\n  .gain(.5)').intro, '');
+  assert.equal(pulisci({ intro: '// @synth {}' }).intro, '', 'una riga di CUTX non entra');
+  assert.equal(pulisci({ intro: 'non è un commento' }).intro, '');
+  assert.equal(pulisci({ scala: 'C:ritusen' }).scala, '');
+  assert.equal(pulisci({ scala: 'D3:dorian' }).scala, 'D3:dorian');
 });
