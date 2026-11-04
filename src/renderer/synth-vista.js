@@ -339,6 +339,11 @@ export class VistaSynth {
   // Un tasto del Mac giù: ritorna true se era un tasto della tastiera (da non lasciare al resto dell'app).
   tastoGiu(e) {
     if (e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) return false;
+    // Spazio = ▶/■ della cuffia, come in Ableton (mai dentro un campo di testo: sopra). Un pulsante col fuoco non scatta.
+    if (e.code === 'Space') {
+      if (!e.repeat) this.suonaOFerma();
+      return true;
+    }
     const o = ottavaDopo(e.code, this.ottava);
     if (o !== null) {
       if (!e.repeat) this.ottava = o;
@@ -355,6 +360,7 @@ export class VistaSynth {
   }
 
   tastoSu(e) {
+    if (e.code === 'Space') return !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)); // niente clic sul pulsante col fuoco
     const n = this.tenuti.get(e.code);
     if (n === undefined) return false;
     this.tenuti.delete(e.code);

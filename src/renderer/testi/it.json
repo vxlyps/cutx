@@ -233,7 +233,7 @@
     },
     "synth-play": {
       "nome": "▶ cuffia",
-      "testo": "Fa sentire il suono in cuffia, in loop e a tempo col live, a volume prudente. Cambia una manopola e si sente subito.",
+      "testo": "Fa sentire il suono in cuffia, in loop e a tempo col live, a volume prudente. Cambia una manopola e si sente subito. Anche con Spazio (fuori dai campi di testo).",
       "azione": "provaCuffia"
     },
     "synth-schema": {

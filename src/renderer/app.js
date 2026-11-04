@@ -675,7 +675,7 @@ window.addEventListener('keydown', (e) => {
   if (vista === 'synth' && !dialogoAperto() && !imp.catturando && synth.tastoGiu(e)) e.preventDefault();
 });
 window.addEventListener('keyup', (e) => {
-  if (vista === 'synth') synth.tastoSu(e);
+  if (vista === 'synth' && !dialogoAperto() && !imp.catturando && synth.tastoSu(e)) e.preventDefault();
 });
 window.addEventListener('blur', () => synth.fermaNote());
 // ⌘X ⌘C ⌘V ⌘A dal menu: il pianoroll in primo piano li tiene, altrove sono i comandi normali (campi di testo, editor)

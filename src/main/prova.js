@@ -3511,6 +3511,29 @@ async function provaSynth({ finestre, scrivi }) {
   await premi('2', 'meta');
   await aspetta(0.5);
 
+  // Spazio = ▶/■ della cuffia nella vista SYNTH, come in Ableton; mai dentro un campo di testo, e non preme il pulsante col fuoco
+  await js(`cutxProva.synth.opz.ferma(); document.activeElement?.blur?.()`);
+  await aspetta(0.4);
+  controlla('prima di Spazio la prova in cuffia è ferma', (await js(`cutxProva.synth.opz.suonaOra()`)) === false);
+  await premi('Space');
+  await aspetta(0.5);
+  controlla('Spazio avvia la prova in cuffia', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await js(`document.querySelector('.synth-play').classList.contains('on')`)) === true);
+  await premi('Space');
+  await aspetta(0.4);
+  controlla('un altro Spazio la ferma', (await js(`cutxProva.synth.opz.suonaOra()`)) === false);
+  await js(`document.querySelector('.synth-nome').focus()`);
+  await premi('Space');
+  controlla('dentro un campo di testo Spazio non suona', (await js(`cutxProva.synth.opz.suonaOra()`)) === false);
+  await js(`document.querySelector('.synth-pre').focus()`);
+  await premi('Space');
+  controlla('nemmeno nel codice', (await js(`cutxProva.synth.opz.suonaOra()`)) === false);
+  await js(`document.activeElement?.blur?.(); document.querySelector('.synth-copia').focus()`);
+  await premi('Space');
+  await aspetta(0.4);
+  controlla('con un pulsante col fuoco, Spazio suona e il pulsante non scatta (B resta vuoto)', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await js(`cutxProva.synth.slot.B`)) === null);
+  await js(`cutxProva.synth.opz.ferma(); document.activeElement?.blur?.()`);
+  await aspetta(0.4);
+
   // REC: conteggio, registrazione a tempo, quantizzazione, le note nel pianoroll
   await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.05 }, B: null, lato: 'A', nome: 'synth' })`);
   await aspetta(0.4);
