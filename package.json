@@ -1,7 +1,7 @@
 {
   "name": "cutx",
   "productName": "CUTX",
-  "version": "0.3.0-beta.3",
+  "version": "0.4.0-beta.4",
   "description": "Live coding musicale come un CDJ, basato su Strudel",
   "license": "AGPL-3.0-or-later",
   "private": true,
@@ -45,6 +45,7 @@
       "!src/main/prova.js",
       "src/ableton/**",
       "src/renderer/brano.js",
+    "src/renderer/categorie.js",
       "src/renderer/coda.js",
       "src/renderer/colpi.js",
       "src/renderer/testi-pubblico.js",
