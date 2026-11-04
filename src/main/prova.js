@@ -3229,12 +3229,85 @@ async function provaSynth({ finestre, scrivi }) {
   await clicca(0, 48);
   controlla('un clic su una cella mette una nota (c3, 1/4)', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]' && (await js(`cutxProva.synth.stato.note`)) === 'c3 ~@3');
   await trascina(8, 52, 13);
-  controlla('trascinando a destra la nota si allunga (6 scatti)', (await rollEventi()).includes('{"i":8,"l":6,"n":52}'));
-  controlla('e il codice ha le note nuove', (await codiceSynth()).includes('note("c3@2 ~@2 e3@3 ~")'), await codiceSynth());
+  controlla('la matita trascinata mette una nota ogni «lunghezza» (1/4: a 8 e a 12)', (await rollEventi()).includes('{"i":8,"l":4,"n":52}') && (await rollEventi()).includes('{"i":12,"l":4,"n":52}'), await rollEventi());
+  controlla('e il codice ha le note nuove', (await codiceSynth()).includes('note("c3 ~ e3 e3")'), await codiceSynth());
   await clicca(0, 48, 'alt');
   controlla('⌥-clic su una nota la toglie', !(await rollEventi()).includes('"n":48'));
   await premi('Z', 'meta');
   controlla('⌘Z la rimette', (await rollEventi()).includes('"n":48'));
+  // la matita: una nota ogni «lunghezza» trascinando, l'altezza segue il mouse; sulle note cancella; B tenuto vale solo finché lo tengo
+  {
+    const lunghezza = (v) => js(`(() => { const r = cutxProva.synth.roll; r.lunghezzaEl.value = '${v}'; r.lunghezzaEl.dispatchEvent(new Event('change')); })()`);
+    const traccia = async (da, a, passi = 8) => {
+      const p = await cella(da[0], da[1]);
+      const q = await cella(a[0], a[1]);
+      const wc = finestre.controllo.webContents;
+      wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1 });
+      for (let k = 1; k <= passi; k++) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(p.x + ((q.x - p.x) * k) / passi), y: Math.round(p.y + ((q.y - p.y) * k) / passi) });
+      wc.sendInputEvent({ type: 'mouseUp', x: Math.round(q.x), y: Math.round(q.y), button: 'left', clickCount: 1 });
+      await aspetta(0.4);
+    };
+    const note = async () => JSON.parse(await rollEventi());
+    await js(`cutxProva.synth.roll.pulisci()`);
+    await aspetta(0.3);
+    await lunghezza(1);
+    await traccia([0, 48], [7, 48]);
+    let ev = await note();
+    controlla('la matita (1/16) trascinata mette una nota per passo: 8 note da 1', ev.length === 8 && ev.every((e, k) => e.i === k && e.l === 1 && e.n === 48), JSON.stringify(ev));
+    await premi('Z', 'meta');
+    controlla('e il trascinamento è un solo passo di ⌘Z', (await rollEventi()) === '[]');
+    await js(`cutxProva.synth.roll.pulisci()`);
+    await lunghezza(4);
+    await traccia([0, 48], [9, 48]);
+    ev = await note();
+    controlla('con la lunghezza 1/4 le note stanno ogni 4 (0, 4, 8), lunghe 4', ev.map((e) => `${e.i}:${e.l}`).join(' ') === '0:4 4:4 8:4', JSON.stringify(ev));
+    await js(`cutxProva.synth.roll.pulisci()`);
+    await lunghezza(1);
+    await traccia([0, 48], [7, 55]);
+    ev = await note();
+    controlla('l\'altezza segue il mouse: da do3 a sol3, mai in discesa', ev.length === 8 && ev[0].n === 48 && ev.at(-1).n === 55 && ev.every((e, k) => k === 0 || e.n >= ev[k - 1].n), JSON.stringify(ev.map((e) => e.n)));
+    await js(`cutxProva.synth.roll.pulisci()`);
+    await traccia([7, 48], [3, 48]);
+    controlla('si può disegnare anche a sinistra', (await note()).map((e) => e.i).join(',') === '3,4,5,6,7');
+    // sopra altre note: non le cancella
+    await js(`cutxProva.synth.roll.opz.cambia([0, 1, 2, 3].map((i) => ({ i, l: 1, n: 48 })), 1)`);
+    await aspetta(0.4);
+    await traccia([0, 50], [3, 50]);
+    controlla('disegnare sopra altre note (altra altezza) non le cancella', (await note()).length === 8 && (await note()).filter((e) => e.n === 48).length === 4);
+    // sulle note: cancella
+    await js(`cutxProva.synth.roll.opz.cambia([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ i, l: 1, n: 48 })), 1)`);
+    await aspetta(0.4);
+    await traccia([2, 48], [4, 48]);
+    controlla('partendo da una nota la matita cancella, e trascinando cancella quelle che incontra', (await note()).map((e) => e.i).join(',') === '0,1,5,6,7', JSON.stringify(await note()));
+    await premi('Z', 'meta');
+    controlla('un solo passo di ⌘Z rimette quelle cancellate', (await note()).length === 8);
+    await js(`cutxProva.synth.roll.opz.cambia([{ i: 0, l: 4, n: 48 }], 1)`);
+    await aspetta(0.4);
+    await clicca(1, 48);
+    controlla('un clic con la matita su una nota la cancella', (await rollEventi()) === '[]');
+    await lunghezza(4);
+    // B: un tocco alterna, tenuto vale solo finché lo tengo
+    const tastoB = async (ms) => {
+      const wc = finestre.controllo.webContents;
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'B' });
+      await aspetta(ms);
+      wc.sendInputEvent({ type: 'keyUp', keyCode: 'B' });
+      await aspetta(0.2);
+    };
+    const strumento = () => js(`cutxProva.synth.roll.strumento`);
+    controlla('prima di B: matita', (await strumento()) === 'matita');
+    await tastoB(0.9);
+    controlla('B tenuto a lungo: seleziona finché lo tengo, poi torna alla matita', (await strumento()) === 'matita');
+    await js(`cutxProva.synth.roll.usaStrumento('seleziona')`);
+    await tastoB(0.9);
+    controlla('e al contrario: dalla selezione, B tenuto dà la matita e poi torna', (await strumento()) === 'seleziona');
+    await tastoB(0.05);
+    controlla('un tocco di B alterna: matita', (await strumento()) === 'matita');
+    await tastoB(0.05);
+    controlla('un altro tocco: selezione', (await strumento()) === 'seleziona');
+    await tastoB(0.05);
+    controlla('e di nuovo la matita (come le prove che seguono si aspettano)', (await strumento()) === 'matita');
+  }
   // scala e accordi
   await js(`cutxProva.synth.roll.pulisci()`);
   await js(`(() => { const r = cutxProva.synth.roll; r.scalaEl.value = 'maggiore'; r.scalaEl.dispatchEvent(new Event('change')); })()`);

@@ -286,7 +286,7 @@
     },
     "roll": {
       "nome": "pianoroll",
-      "testo": "Selezione: trascini nel vuoto per un rettangolo, doppio clic mette una nota. Matita (B): un clic mette una nota, trascini per allungarla. Su una nota: la scegli, la sposti con tutte le scelte, dal bordo la allunghi. ⌥-clic, clic destro o ⌫ le tolgono. ⌘A tutte, ⌘C ⌘X ⌘V, ⌘D duplica, ↑↓ trasponi (⇧ un'ottava). Il testo mini sopra è la stessa cosa."
+      "testo": "Selezione: trascini nel vuoto per un rettangolo, doppio clic mette una nota. Matita (B, o tenuto premuto finché serve): trascinando mette una nota ogni «lunghezza», all'altezza del mouse; sulle note cancella. Su una nota (selezione): la scegli, la sposti con tutte le scelte, dal bordo la allunghi. ⌥-clic, clic destro o ⌫ le tolgono. ⌘A tutte, ⌘C ⌘X ⌘V, ⌘D duplica, ↑↓ trasponi (⇧ ottava). Il testo mini sopra è la stessa cosa."
     },
     "roll-cicli": {
       "nome": "cicli",
@@ -322,7 +322,7 @@
     },
     "roll-matita": {
       "nome": "matita",
-      "testo": "Con la matita un clic mette una nota. Senza (selezione) un clic sceglie, il doppio clic mette una nota. B li alterna."
+      "testo": "Con la matita un clic mette una nota; trascinando ne metti una ogni «lunghezza», all'altezza del mouse. Partendo da una nota, la matita cancella. B alterna matita e selezione; tenuto premuto vale solo finché lo tieni."
     },
     "roll-griglia": {
       "nome": "griglia",

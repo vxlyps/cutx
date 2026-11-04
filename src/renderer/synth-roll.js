@@ -7,7 +7,7 @@
 import it from './testi/it.json';
 import {
   ACCORDI, CICLI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, agganciaScala, allunga, appunti, conCicli, duplica, eNero, inScala, incolla, muovi,
-  nelRettangolo, nomeNota, senzaScelte, trasponi, uniscisel,
+  nelRettangolo, nomeNota, senzaEvento, senzaScelte, trasponi, uniscisel,
 } from './synth-note.js';
 
 const T = it.synth.note;
@@ -19,6 +19,7 @@ const LARGHEZZA_MIN = 12;
 const LARGHEZZA_MAX = 40;
 const BORDO_PX = 7; // gli ultimi pixel di una nota sono la maniglia per allungarla
 const DOPPIO_MS = 500; // due clic sulla stessa cella vuota
+const TENUTO_B_MS = 450; // B tenuto più di così: lo strumento torna com'era al rilascio
 const riferimento = (e) => ({ i: e.i, n: e.n });
 const mcd = (a, b) => (b ? mcd(b, a % b) : a);
 // k scatti di una griglia da g scatti per ciclo, come frazione del ciclo: 4 su 16 → «1/4», 1 su 12 → «1/12», 12 su 12 → «1»
@@ -138,6 +139,11 @@ export class PianoRoll {
       if (h && this.editabile) this.togli([h]);
     });
     this.canvas.addEventListener('keydown', (e) => this.tasto(e));
+    this.canvas.addEventListener('keyup', (e) => {
+      if (e.code !== 'KeyB' || !this.tastoB) return;
+      if (performance.now() - this.tastoB.quando > TENUTO_B_MS) this.usaStrumento(this.tastoB.prima);
+      this.tastoB = null;
+    });
     this.canvas.addEventListener(
       'wheel',
       (e) => {
@@ -243,6 +249,12 @@ export class PianoRoll {
     this.cursore = c.passo;
     const h = this.trova(c.passo, c.nota);
     if (h && e.altKey) return this.togli([h]);
+    if (h && this.strumento === 'matita') {
+      // la matita su una nota: cancella, e trascinando cancella tutte quelle che incontra
+      this.gesto = { tipo: 'cancella', ultima: c, cambiato: false };
+      this.cancellaTra(this.gesto, c, c);
+      return this.disegna();
+    }
     if (h) {
       if (e.shiftKey) {
         if (this.eScelta(h)) {
@@ -258,7 +270,12 @@ export class PianoRoll {
       const ora = performance.now();
       const doppio = this.vuoto && ora - this.vuoto.t < DOPPIO_MS && this.vuoto.passo === c.passo && this.vuoto.nota === c.nota;
       this.vuoto = this.strumento === 'matita' ? null : { t: ora, passo: c.passo, nota: c.nota };
-      if (this.strumento === 'matita' || doppio) {
+      if (this.strumento === 'matita') {
+        // la matita nel vuoto: una nota per ogni «lunghezza» (a passi di quella lunghezza, a partire dal clic) lungo il trascinamento; l'altezza segue il mouse
+        this.gesto = { tipo: 'matita', passo0: c.passo, L: this.lunghezza, fatti: new Set(), ultimoK: null, nuovi: [], base: this.eventi, cambiato: true };
+        this.matitaPassa(this.gesto, c);
+        this.vuoto = null;
+      } else if (doppio) {
         const n = agganciaScala(c.nota, this.scala.radice, this.scala.tipo);
         const fine = (Math.floor(c.passo / this.griglia) + 1) * this.griglia; // una nota non esce dal suo ciclo
         const l = Math.min(this.lunghezza, fine - c.passo);
@@ -276,8 +293,64 @@ export class PianoRoll {
     this.disegna();
   }
 
+  // La matita arriva sulla cella c: mette le note dei passi che ha attraversato (anche tutti insieme, se il mouse è veloce), all'altezza di adesso.
+  matitaPassa(g, c) {
+    const k1 = Math.floor((c.passo - g.passo0) / g.L);
+    const k0 = g.ultimoK ?? k1;
+    const n = agganciaScala(c.nota, this.scala.radice, this.scala.tipo);
+    for (let k = k0; k0 <= k1 ? k <= k1 : k >= k1; k += k0 <= k1 ? 1 : -1) {
+      if (g.fatti.has(k)) continue;
+      g.fatti.add(k);
+      const i = g.passo0 + k * g.L;
+      if (i < 0 || i >= this.cicli * this.griglia) continue;
+      const l = Math.min(g.L, (Math.floor(i / this.griglia) + 1) * this.griglia - i); // una nota non esce dal suo ciclo
+      g.nuovi.push(...accordoEventi(n, this.accordo, i, l).filter((x) => x.n >= NOTA_MIN && x.n <= NOTA_MAX));
+      if (k === k1) this.opz.nota?.(n);
+    }
+    g.ultimoK = k1;
+    this.eventi = this.unisci(g.base, g.nuovi);
+    this.sel = g.nuovi.map(riferimento);
+  }
+
+  // La matita-gomma passa da una cella all'altra: toglie le note che incontra (si seguono le celle in mezzo, il mouse può saltare).
+  cancellaTra(g, da, a) {
+    let [x, y] = [da.passo, da.nota];
+    const dx = Math.abs(a.passo - x);
+    const dy = -Math.abs(a.nota - y);
+    const sx = x < a.passo ? 1 : -1;
+    const sy = y < a.nota ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      const h = this.trova(x, y);
+      if (h) {
+        this.eventi = senzaEvento(this.eventi, h);
+        this.sel = this.sel.filter((q) => !(q.i === h.i && q.n === h.n));
+        g.cambiato = true;
+      }
+      if (x === a.passo && y === a.nota) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+    g.ultima = a;
+  }
+
   mosso(e) {
     const g = this.gesto;
+    if (g?.tipo === 'matita') {
+      this.matitaPassa(g, this.cella(e, true));
+      return this.disegna();
+    }
+    if (g?.tipo === 'cancella') {
+      this.cancellaTra(g, g.ultima, this.cella(e, true));
+      return this.disegna();
+    }
     if (g?.tipo === 'rettangolo') {
       const c = this.cella(e, true);
       g.a = c;
@@ -355,7 +428,11 @@ export class PianoRoll {
       return e.preventDefault();
     }
     if (e.code === 'KeyB') {
-      if (!e.repeat) this.usaStrumento(this.strumento === 'matita' ? 'seleziona' : 'matita');
+      if (!e.repeat) {
+        // un tocco alterna lo strumento; tenuto più di mezzo secondo vale solo finché lo tengo (come in Ableton)
+        this.tastoB = { quando: performance.now(), prima: this.strumento };
+        this.usaStrumento(this.strumento === 'matita' ? 'seleziona' : 'matita');
+      }
       return e.preventDefault();
     }
     if (!this.sel.length) return;
