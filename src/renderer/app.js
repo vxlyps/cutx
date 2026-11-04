@@ -725,6 +725,7 @@ const FA = {
   esci: () => {
     if (importa.aperto) importa.chiudi();
     else if (!$('impostazioni').hidden) impostazioni(false);
+    else if (vista === 'synth' && synth.roll.passi) synth.roll.passiAttiva(false); // esc: esce dalla scrittura a passi
     else if (!pila.annulla()) {
       if (pila.selezionato !== null) pila.seleziona(null); // esc toglie la scelta del livello
       else document.activeElement?.blur();

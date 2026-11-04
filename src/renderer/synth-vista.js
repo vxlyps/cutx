@@ -333,11 +333,13 @@ export class VistaSynth {
   notaOn(midi, vel = 100) {
     this.opz.nota?.({ on: true, midi, velocita: vel });
     this.rec?.noteOn(midi, vel);
+    if (!this.rec) this.roll.passiNota(midi, true); // con «passi» acceso la nota si scrive al cursore
   }
 
   notaOff(midi) {
     this.opz.nota?.({ on: false, midi });
     this.rec?.noteOff(midi);
+    this.roll.passiNota(midi, false);
   }
 
   // --- l'X-Touch (controller-synth.js): le sue azioni sul synth ---
@@ -407,6 +409,12 @@ export class VistaSynth {
   // Un tasto del Mac giù: ritorna true se era un tasto della tastiera (da non lasciare al resto dell'app).
   tastoGiu(e) {
     if (e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) return false;
+    // con «passi» acceso: Spazio = pausa, ⌫ = indietro, ←→ muovono il cursore
+    if (this.roll.passiAttivi) {
+      if (e.code === 'Space') return (e.repeat || this.roll.pausa(), true);
+      if (e.code === 'Backspace') return (e.repeat || this.roll.indietro(), true);
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') return (this.roll.muoviCursore((e.code === 'ArrowRight' ? 1 : -1) * this.roll.lunghezza), true);
+    }
     // Spazio = ▶/■ della cuffia, come in Ableton (mai dentro un campo di testo: sopra). Un pulsante col fuoco non scatta.
     if (e.code === 'Space') {
       if (!e.repeat) this.suonaOFerma();
@@ -443,7 +451,10 @@ export class VistaSynth {
   }
 
   fermaNote() {
-    for (const n of this.tenuti.values()) this.rec?.noteOff(n);
+    for (const n of this.tenuti.values()) {
+      this.rec?.noteOff(n);
+      this.roll.passiNota(n, false);
+    }
     this.tenuti.clear();
     this.opz.fermaNote?.();
   }

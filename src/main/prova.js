@@ -3308,6 +3308,81 @@ async function provaSynth({ finestre, scrivi }) {
     await tastoB(0.05);
     controlla('e di nuovo la matita (come le prove che seguono si aspettano)', (await strumento()) === 'matita');
   }
+  // scrittura a passi: i tasti del piano scrivono al cursore e lo fanno avanzare; spazio pausa, ⌫ indietro, esc esce
+  {
+    const wc = finestre.controllo.webContents;
+    const tasti = async (...codici) => {
+      for (const c of codici) wc.sendInputEvent({ type: 'keyDown', keyCode: c });
+      await aspetta(0.15);
+    };
+    const rilascia = async (...codici) => {
+      for (const c of codici) wc.sendInputEvent({ type: 'keyUp', keyCode: c });
+      await aspetta(0.25);
+    };
+    const tocca = async (c) => {
+      await tasti(c);
+      await rilascia(c);
+    };
+    const cursore = () => js(`cutxProva.synth.roll.cursore`);
+    const note = async () => JSON.parse(await rollEventi());
+    await js(`cutxProva.synth.opz.ferma()`);
+    await js(`cutxProva.synth.roll.pulisci()`);
+    await aspetta(0.3);
+    await js(`(() => { const r = cutxProva.synth.roll; r.lunghezzaEl.value = '4'; r.lunghezzaEl.dispatchEvent(new Event('change')); r.cursore = 0; r.passiEl.click(); document.activeElement?.blur?.(); })()`);
+    controlla('«passi» acceso: il cursore è a 0', (await js(`cutxProva.synth.roll.passiAttivi`)) === true && (await cursore()) === 0 && (await js(`cutxProva.synth.roll.passiEl.classList.contains('on')`)) === true);
+    await tasti('A');
+    controlla('un tasto (A, do3) scrive la nota al cursore, lunga un passo (1/4)', JSON.stringify(await note()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());
+    controlla('e il cursore resta finché il tasto è giù', (await cursore()) === 0);
+    await rilascia('A');
+    controlla('rilasciato, il cursore avanza di un passo', (await cursore()) === 4);
+    await tocca('S');
+    await tocca('D');
+    await tocca('F');
+    controlla('S D F: re mi fa nei passi dopo', (await note()).map((e) => `${e.i}:${e.n}`).join(' ') === '0:48 4:50 8:52 12:53', await rollEventi());
+    controlla('il testo è la melodia scritta', (await stato('note')) === 'c3 d3 e3 f3', await stato('note'));
+    controlla('a fine pattern il cursore è alla fine', (await cursore()) === 16);
+    await tocca('G');
+    controlla('oltre la fine non scrive, e lo dice', (await note()).length === 4 && (await js(`document.querySelector('.synth-avviso').textContent`)).includes('fuori dal pattern'));
+    await tocca('Backspace');
+    controlla('⌫: indietro di un passo e toglie la nota di quel passo (il fa)', (await cursore()) === 12 && (await note()).map((e) => e.n).join(',') === '48,50,52', await rollEventi());
+    await tocca('Space');
+    controlla('Spazio è la pausa: il cursore avanza, niente nota, e la prova non parte', (await cursore()) === 16 && (await note()).length === 3 && (await js(`cutxProva.synth.opz.suonaOra()`)) === false, `${await cursore()} · ${(await note()).length} · ${await js(`cutxProva.synth.opz.suonaOra()`)}`);
+    await tocca('Left');
+    await tocca('Left');
+    controlla('← muove il cursore senza cancellare', (await cursore()) === 8 && (await note()).length === 3);
+    // più tasti insieme: un accordo nello stesso passo
+    await js(`cutxProva.synth.roll.pulisci()`);
+    await js(`cutxProva.synth.roll.cursore = 0`);
+    await tasti('A', 'D', 'G');
+    await rilascia('A');
+    controlla('un accordo: il cursore aspetta che li lasci tutti', (await cursore()) === 0);
+    await rilascia('D', 'G');
+    controlla('A D G insieme sono do mi sol nello stesso passo', (await note()).map((e) => `${e.i}:${e.n}`).join(' ') === '0:48 0:52 0:55' && (await cursore()) === 4, await rollEventi());
+    // quello che si vede è quello che Strudel suona
+    await tocca('K');
+    await tocca('J');
+    {
+      const v = await chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1)`);
+      const ord = (x) => JSON.stringify([...x].sort((p, q) => p.i - q.i || p.n - q.n));
+      controlla('Strudel suona proprio le note scritte a passi', ord(v ?? []) === ord(await note()) && (await note()).length === 5, `${ord(v ?? [])} / ${ord(await note())}`);
+    }
+    await premi('Z', 'meta');
+    controlla('⌘Z toglie un solo tasto scritto', (await note()).length === 4);
+    // esc esce; poi i tasti non scrivono più
+    await premi('Escape');
+    controlla('esc esce dalla scrittura a passi', (await js(`cutxProva.synth.roll.passi`)) === false && (await js(`cutxProva.synth.roll.passiEl.classList.contains('on')`)) === false);
+    const prima = (await note()).length;
+    await tocca('A');
+    controlla('e il tasto A non scrive più', (await note()).length === prima);
+    // senza «passi», Spazio torna a essere ▶/■
+    await js(`cutxProva.synth.opz.ferma()`);
+    await tocca('Space');
+    await aspetta(0.4);
+    controlla('senza «passi» Spazio è di nuovo la prova in cuffia', (await js(`cutxProva.synth.opz.suonaOra()`)) === true);
+    await tocca('Space');
+    await aspetta(0.4);
+    controlla('e la ferma', (await js(`cutxProva.synth.opz.suonaOra()`)) === false);
+  }
   // scala e accordi
   await js(`cutxProva.synth.roll.pulisci()`);
   await js(`(() => { const r = cutxProva.synth.roll; r.scalaEl.value = 'maggiore'; r.scalaEl.dispatchEvent(new Event('change')); })()`);

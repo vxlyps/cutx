@@ -455,3 +455,21 @@ export function duplica(eventi, sel, cicli, g = SCATTI) {
   const da = Math.min(...eventi.filter((e) => eScelta(sel, e)).map((e) => e.i));
   return incolla(eventi, clip, da + clip.durata, cicli, g);
 }
+
+// --- scrittura a passi ---
+
+// Le note (un accordo, se sono più d'una) scritte allo scatto `cursore`, lunghe `lunghezza` (una nota non esce dal suo ciclo).
+// fuori = quante non ci stanno (il cursore è oltre la fine). Quelle uguali già lì (stessa altezza, stesso inizio) si sostituiscono.
+export function scriviPasso(eventi, cursore, lunghezza, note, cicli, g = SCATTI) {
+  if (cursore < 0 || cursore >= cicli * g) return { eventi, sel: [], fuori: note.length };
+  const l = Math.max(1, Math.min(lunghezza, fineCiclo(cursore, g) - cursore));
+  const nuove = note.filter((n) => n >= NOTA_MIN && n <= NOTA_MAX).map((n) => ({ i: cursore, l, n }));
+  const resto = eventi.filter((e) => !nuove.some((m) => m.i === e.i && m.n === e.n));
+  return { eventi: [...resto, ...nuove].sort((x, y) => x.i - y.i || x.n - y.n), sel: nuove.map(riferimento), fuori: 0 };
+}
+
+// Un passo indietro: il cursore va a `cursore − lunghezza` (non sotto 0) e le note che partono in quel passo si tolgono.
+export function indietroPasso(eventi, cursore, lunghezza) {
+  const nuovo = Math.max(0, cursore - lunghezza);
+  return { eventi: eventi.filter((e) => e.i < nuovo || e.i >= nuovo + lunghezza), cursore: nuovo };
+}

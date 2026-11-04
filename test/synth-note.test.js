@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACCORDI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, scalaDelCiclo, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
+  ACCORDI, GRIGLIE, indietroPasso, scriviPasso, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, scalaDelCiclo, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
 } from '../src/renderer/synth-note.js';
 
 const seme = (n) => () => ((n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -327,4 +327,27 @@ test('scala diversa a ogni ciclo: <A:minor A:minor F:major E:major>', () => {
   // al ritorno ogni ciclo si riscrive con la sua scala
   const mini = miniDaEventi(r.eventi, r.cicli, r.griglia, (n, c) => String(notaInGrado(n, scalaDelCiclo(sc, c))));
   assert.equal(mini, '<[0 ~ 4 ~ 7 ~ 5 ~] [0 ~ 4 ~ 7 ~ 3 ~] [0 ~ 4 ~ 7 ~ 5 ~] [0 ~ 4 ~ 7 ~ 3 ~]>');
+});
+
+test('scrittura a passi: una nota (o un accordo) al cursore, lunga un passo, dentro il ciclo', () => {
+  const r = scriviPasso([], 0, 4, [48], 1);
+  assert.deepEqual(r.eventi, [{ i: 0, l: 4, n: 48 }]);
+  assert.deepEqual(r.sel, [{ i: 0, n: 48 }]);
+  const accordo = scriviPasso(r.eventi, 4, 4, [48, 52, 55], 1);
+  assert.deepEqual(accordo.eventi.map((e) => [e.i, e.n]), [[0, 48], [4, 48], [4, 52], [4, 55]]);
+  assert.equal(scriviPasso([], 14, 4, [48], 1).eventi[0].l, 2, 'non esce dal ciclo');
+  assert.equal(scriviPasso([], 16, 4, [48], 1).fuori, 1, 'oltre la fine');
+  assert.equal(scriviPasso([], 16, 4, [48], 2).eventi.length, 1, 'ma con due cicli ci sta');
+  assert.deepEqual(scriviPasso([{ i: 0, l: 9, n: 48 }], 0, 2, [48], 1).eventi, [{ i: 0, l: 2, n: 48 }], 'la stessa nota nello stesso posto si sostituisce');
+  assert.equal(scriviPasso([], 0, 4, [2, 200], 1).eventi.length, 0, 'fuori da c0–c7 niente');
+  assert.equal(scriviPasso([], 9, 3, [48], 1, 12).eventi[0].l, 3, 'terzine: 12 scatti');
+  assert.equal(scriviPasso([], 10, 4, [48], 1, 12).eventi[0].l, 2);
+});
+
+test('scrittura a passi: ⌫ torna indietro di un passo e toglie le note di quel passo', () => {
+  const ev = [{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 52 }, { i: 4, l: 4, n: 55 }, { i: 8, l: 4, n: 60 }];
+  const r = indietroPasso(ev, 8, 4);
+  assert.equal(r.cursore, 4);
+  assert.deepEqual(r.eventi.map((e) => e.n), [48, 60], 'via le due del passo 4');
+  assert.deepEqual(indietroPasso(ev, 2, 4), { eventi: ev.filter((e) => e.i >= 4), cursore: 0 }, 'in cima: resta a 0 e toglie il passo 0');
 });

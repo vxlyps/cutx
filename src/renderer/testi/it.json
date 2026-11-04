@@ -327,6 +327,10 @@
     "roll-griglia": {
       "nome": "griglia",
       "testo": "Quanti passi ha un ciclo: 1/16, oppure 1/12 per le terzine. Si sceglie da sola in base alle note; la puoi cambiare se le note ci stanno."
+    },
+    "roll-passi": {
+      "nome": "scrittura a passi",
+      "testo": "Con «passi» acceso i tasti del piano (A S D F…) scrivono la nota al cursore, lunga una «lunghezza», e il cursore avanza; più tasti insieme sono un accordo. Spazio = pausa, ⌫ = indietro (toglie le note di quel passo), ←→ muovono il cursore, esc esce. Un clic nel pianoroll mette il cursore."
     }
   },
   "impostazioni": {
@@ -567,7 +571,8 @@
       "appuntiVuoti": "appunti vuoti",
       "fuoriPattern": "{n} note fuori dal pattern",
       "griglia": "griglia",
-      "fuoriQuestaGriglia": "le note non stanno su {g}"
+      "fuoriQuestaGriglia": "le note non stanno su {g}",
+      "passi": "passi"
     },
     "controller": {
       "segue": "controller → SYNTH",

@@ -7,7 +7,7 @@
 import it from './testi/it.json';
 import {
   ACCORDI, CICLI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, agganciaScala, allunga, appunti, conCicli, duplica, eNero, inScala, incolla, muovi,
-  nelRettangolo, nomeNota, senzaEvento, senzaScelte, trasponi, uniscisel,
+  indietroPasso, nelRettangolo, nomeNota, scriviPasso, senzaEvento, senzaScelte, trasponi, uniscisel,
 } from './synth-note.js';
 
 const T = it.synth.note;
@@ -54,6 +54,8 @@ export class PianoRoll {
     this.sel = []; // le note scelte: { i, n }
     this.cursore = null; // lo scatto dove ⌘V incolla (l'ultimo clic)
     this.strumento = 'seleziona'; // o 'matita'
+    this.passi = false; // scrittura a passi: i tasti del piano scrivono al cursore e lo fanno avanzare
+    this.attesaPasso = null; // { inizio, tenuti, sel }: il passo in corso (più tasti insieme = un accordo)
     this.gesto = null;
     this.larghezza = 16;
     this.costruisci();
@@ -108,7 +110,10 @@ export class PianoRoll {
     this.matitaEl = crea('button', 'key piccolo', T.matita);
     this.matitaEl.dataset.aiuto = 'roll-matita';
     this.matitaEl.onclick = () => this.usaStrumento(this.strumento === 'matita' ? 'seleziona' : 'matita');
-    barra.append(this.matitaEl, this.cicliEl, campo(T.griglia, this.grigliaEl, 'roll-griglia'), campo(T.lunghezza, this.lunghezzaEl, 'roll-lunghezza'), campo(T.scala, this.scalaEl, 'roll-scala'), this.radiceEl, campo(T.accordo, this.accordoEl, 'roll-accordo'), su, giu, pulisci);
+    this.passiEl = crea('button', 'key piccolo', T.passi);
+    this.passiEl.dataset.aiuto = 'roll-passi';
+    this.passiEl.onclick = () => this.passiAttiva(!this.passi);
+    barra.append(this.matitaEl, this.passiEl, this.cicliEl, campo(T.griglia, this.grigliaEl, 'roll-griglia'), campo(T.lunghezza, this.lunghezzaEl, 'roll-lunghezza'), campo(T.scala, this.scalaEl, 'roll-scala'), this.radiceEl, campo(T.accordo, this.accordoEl, 'roll-accordo'), su, giu, pulisci);
 
     // la stessa cosa in mini-notazione: si modifica l'una o l'altra e restano allineate
     const riga = crea('div', 'roll-mini');
@@ -197,6 +202,85 @@ export class PianoRoll {
     this.scala = { radice, tipo };
     this.scalaEl.value = tipo;
     this.radiceEl.value = String(radice);
+  }
+
+  // --- scrittura a passi ---
+  // Con «passi» acceso (e il pianoroll in vista) un tasto del piano scrive la nota al cursore, lunga una «lunghezza», e il cursore avanza quando
+  // li lasci tutti (più tasti insieme: un accordo). Spazio = pausa, ⌫ = indietro (toglie le note di quel passo), ←→ muovono il cursore.
+  get passiAttivi() {
+    return this.passi && this.editabile && !this.r.hidden;
+  }
+
+  passiAttiva(on) {
+    this.passi = on;
+    this.passiEl.classList.toggle('on', on);
+    this.attesaPasso = null;
+    if (on && this.cursore === null) this.cursore = 0;
+    this.disegna();
+  }
+
+  // Un tasto del piano giù (giu) o su. Ritorna true se il pianoroll ha scritto (o sta tenendo) il passo.
+  passiNota(midi, giu) {
+    if (!this.passiAttivi) return false;
+    const totale = this.cicli * this.griglia;
+    if (giu) {
+      const p = (this.attesaPasso ??= { inizio: this.cursore ?? 0, tenuti: new Set(), sel: [] });
+      p.tenuti.add(midi);
+      const note = ACCORDI[this.accordo].map((d) => midi + d);
+      const r = scriviPasso(this.eventi, p.inizio, this.lunghezza, note, this.cicli, this.griglia);
+      if (r.fuori) {
+        this.opz.avviso?.('fuoriPattern', { n: r.fuori });
+        return true;
+      }
+      this.fuoriVista(midi);
+      p.sel = uniscisel(p.sel, r.sel);
+      this.applica(r.eventi, p.sel);
+      return true;
+    }
+    const p = this.attesaPasso;
+    if (!p) return false;
+    p.tenuti.delete(midi);
+    if (!p.tenuti.size) {
+      this.attesaPasso = null;
+      this.cursore = Math.min(totale, p.inizio + this.lunghezza);
+      this.cursoreInVista();
+      this.disegna();
+    }
+    return true;
+  }
+
+  pausa() {
+    if (!this.passiAttivi) return;
+    this.muoviCursore(this.lunghezza);
+  }
+
+  indietro() {
+    if (!this.passiAttivi) return;
+    const r = indietroPasso(this.eventi, this.cursore ?? 0, this.lunghezza);
+    this.cursore = r.cursore;
+    this.cursoreInVista();
+    if (r.eventi.length !== this.eventi.length) this.applica(r.eventi, this.sel.filter((s) => r.eventi.some((e) => e.i === s.i && e.n === s.n)));
+    else this.disegna();
+  }
+
+  muoviCursore(delta) {
+    this.cursore = Math.max(0, Math.min(this.cicli * this.griglia, (this.cursore ?? 0) + delta));
+    this.cursoreInVista();
+    this.disegna();
+  }
+
+  // Una nota scritta fuori dalle tre ottave che si vedono: la vista la raggiunge.
+  fuoriVista(midi) {
+    if (midi >= this.basso && midi <= this.alto) return;
+    this.basso = Math.max(NOTA_MIN, Math.min(NOTA_MAX - RIGHE, Math.floor((midi - RIGHE / 2) / 12) * 12));
+  }
+
+  // Il cursore resta nella parte che si vede (il pianoroll scorre in orizzontale).
+  cursoreInVista() {
+    const x = TASTI_W + (this.cursore ?? 0) * this.larghezza;
+    const { scrollLeft, clientWidth } = this.scorri;
+    if (x < scrollLeft + TASTI_W) this.scorri.scrollLeft = Math.max(0, x - TASTI_W - 20);
+    else if (x + this.lunghezza * this.larghezza > scrollLeft + clientWidth) this.scorri.scrollLeft = x + this.lunghezza * this.larghezza - clientWidth + 20;
   }
 
   usaStrumento(s) {
@@ -436,7 +520,7 @@ export class PianoRoll {
       return e.preventDefault();
     }
     if (!this.sel.length) return;
-    if (e.code === 'Backspace' || e.code === 'Delete') {
+    if ((e.code === 'Backspace' && !this.passiAttivi) || e.code === 'Delete') { // con «passi» acceso ⌫ è «indietro» (lo gestisce la vista)
       this.togli(this.sel);
       return e.preventDefault();
     }
@@ -566,6 +650,13 @@ export class PianoRoll {
         g.lineWidth = 2;
         g.strokeRect(x + 1, y + 1, Math.max(3, e.l * this.larghezza - 2), RIGA_H - 2);
       }
+    }
+    if (this.passiAttivi && this.cursore !== null) {
+      // dove scriverà il prossimo tasto: una colonna lunga quanto la «lunghezza»
+      g.fillStyle = testo;
+      g.globalAlpha = 0.12;
+      g.fillRect(TASTI_W + this.cursore * this.larghezza, 0, Math.max(2, this.lunghezza * this.larghezza), h);
+      g.globalAlpha = 1;
     }
     if (this.cursore !== null) {
       const x = TASTI_W + this.cursore * this.larghezza;
