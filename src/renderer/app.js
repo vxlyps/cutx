@@ -678,6 +678,11 @@ window.addEventListener('keyup', (e) => {
   if (vista === 'synth') synth.tastoSu(e);
 });
 window.addEventListener('blur', () => synth.fermaNote());
+// ⌘X ⌘C ⌘V ⌘A dal menu: il pianoroll in primo piano li tiene, altrove sono i comandi normali (campi di testo, editor)
+window.cutx.suModifica((azione) => {
+  if (vista === 'synth' && synth.roll.inPrimoPiano()) synth.roll.modifica(azione);
+  else window.cutx.modificaNativa(azione);
+});
 $('vista-live').onclick = () => mostraVista('live');
 $('vista-synth-btn').onclick = () => mostraVista('synth');
 

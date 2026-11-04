@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld('cutx', {
   mostraLog: () => ipcRenderer.invoke('log:mostra'),
   log: (nome, riga) => ipcRenderer.send('log', nome, riga),
   percorsoLog: () => ipcRenderer.invoke('log:percorso'),
+  // ⌘X ⌘C ⌘V ⌘A arrivano dal menu: la pagina decide chi li prende, gli altri tornano come comandi normali
+  suModifica: (fn) => ipcRenderer.on('modifica', (_e, azione) => fn(azione)),
+  modificaNativa: (azione) => ipcRenderer.send('modifica:nativa', azione),
 });
 
 // I canali diretti tra controllo, live e cuffia: il preload li passa alla pagina.

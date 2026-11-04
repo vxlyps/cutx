@@ -503,12 +503,39 @@ ipcMain.on('log', async (_e, nome, riga) => {
   await appendFile(file, riga + '\n');
 });
 
+// ⌘X ⌘C ⌘V ⌘A: il menu di macOS si prende questi tasti prima della pagina. Nella finestra di controllo li passo alla pagina, che
+// decide (il pianoroll in primo piano li tiene per sé); se non li vuole li rimanda qui come comandi normali (campi di testo, editor).
+const MODIFICA = ['cut', 'copy', 'paste', 'selectAll'];
+function modificaMenu(azione, win) {
+  const wc = (win ?? BrowserWindow.getFocusedWindow())?.webContents;
+  if (!wc) return;
+  if (wc === wcDi('controllo')) wc.send('modifica', azione);
+  else wc[azione]();
+}
+ipcMain.on('modifica:nativa', (e, azione) => {
+  if (MODIFICA.includes(azione)) e.sender[azione]();
+});
+
 // Menu nostro: quello predefinito di Electron si prende tasti che servono a CUTX (⌘0, ⌘R…).
 function creaMenu() {
+  const voce = (azione, label, accelerator) => ({ id: `modifica-${azione}`, label, accelerator, click: (_voce, win) => modificaMenu(azione, win) });
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       { role: 'appMenu' },
-      { role: 'editMenu' },
+      {
+        label: 'Modifica',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          voce('cut', 'Taglia', 'CmdOrCtrl+X'),
+          voce('copy', 'Copia', 'CmdOrCtrl+C'),
+          voce('paste', 'Incolla', 'CmdOrCtrl+V'),
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          voce('selectAll', 'Seleziona tutto', 'CmdOrCtrl+A'),
+        ],
+      },
       { label: 'Sviluppo', submenu: [{ role: 'toggleDevTools' }] },
       { role: 'windowMenu' },
     ]),

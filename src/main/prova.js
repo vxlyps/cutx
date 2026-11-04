@@ -2,7 +2,7 @@
 // poi blocca e crasha interfaccia e cuffia, una cosa alla volta. Per ogni fase conta i click
 // che la sentinella del live ha sentito davvero in uscita: le casse non devono perderne uno.
 import path from 'node:path';
-import { app } from 'electron';
+import { Menu, app, clipboard } from 'electron';
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import * as stash from './stash.js';
 import { leggiAls, leggiAlsFile } from '../ableton/leggi.js';
@@ -3293,6 +3293,26 @@ async function provaSynth({ finestre, scrivi }) {
   await premi('V', 'meta');
   controlla('⌘V incolla al cursore (13, 55)', (await note_()).includes('13:3:55'), await note_());
   controlla('l\'incollata è scelta, il cursore va dopo (16 = fuori: nessuno)', (await scelte()) === '[{"i":13,"n":55}]' && (await js(`cutxProva.synth.roll.cursore`)) === null, await scelte());
+  // il menu del Mac si prende ⌘C ⌘V prima della pagina: il pianoroll in primo piano li tiene, i campi di testo no
+  {
+    const voceMenu = (azione) => Menu.getApplicationMenu().getMenuItemById(`modifica-${azione}`).click({}, finestre.controllo, finestre.controllo.webContents);
+    await js(`cutxProva.synth.roll.sel = [{ i: 8, n: 55 }]; cutxProva.synth.roll.canvas.focus()`);
+    voceMenu('copy');
+    await aspetta(0.4);
+    controlla('dal menu, ⌘C col pianoroll in primo piano copia le note', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('copiate: 1'));
+    await clicca(2, 40);
+    voceMenu('paste');
+    await aspetta(0.4);
+    controlla('e ⌘V le incolla al cursore (2, 55)', (await note_()).includes('2:4:55'), await note_());
+    await premi('Z', 'meta');
+    clipboard.writeText('xyz');
+    await js(`(() => { const e = document.querySelector('.synth-nome'); window.__nomePrima = e.value; e.focus(); e.select(); })()`);
+    voceMenu('paste');
+    await aspetta(0.4);
+    controlla('in un campo di testo, ⌘V incolla il testo normale', (await js(`document.querySelector('.synth-nome').value`)) === 'xyz');
+    await js(`(() => { const e = document.querySelector('.synth-nome'); e.value = window.__nomePrima; e.dispatchEvent(new Event('input')); })()`);
+    await js(`cutxProva.synth.roll.sel = [{ i: 13, n: 55 }]; cutxProva.synth.roll.canvas.focus()`);
+  }
   await premi('Backspace');
   controlla('⌫ toglie le scelte', !(await note_()).includes('13:3:55') && (await rollEventi()) !== '[]');
   await premi('A', 'meta');
@@ -3413,6 +3433,7 @@ async function provaSynth({ finestre, scrivi }) {
   await tasto_(true, 'D');
   await tasto_(false, 'Z');
   await tasto_(true, 'Z');
+  await aspetta(0.15);
   controlla('Z la riporta giù', (await js(`cutxProva.synth.ottava`)) === 3);
   await tasto_(false, 'A', ['meta']);
   await tasto_(true, 'A', ['meta']);

@@ -316,11 +316,10 @@ export class PianoRoll {
     if (!this.editabile || e.altKey) return;
     const cmd = e.metaKey || e.ctrlKey;
     if (cmd) {
-      if (e.code === 'KeyA') this.tutte();
-      else if (e.code === 'KeyC') this.copia();
-      else if (e.code === 'KeyX') this.copia(true);
-      else if (e.code === 'KeyV' && !e.repeat) this.incollaQui();
-      else if (e.code === 'KeyD' && !e.repeat) this.duplicaScelte();
+      const dalMenu = { KeyA: 'selectAll', KeyC: 'copy', KeyX: 'cut', KeyV: 'paste' }[e.code];
+      if (dalMenu) {
+        if (!e.repeat || dalMenu !== 'paste') this.modifica(dalMenu);
+      } else if (e.code === 'KeyD' && !e.repeat) this.duplicaScelte();
       else return;
       return e.preventDefault();
     }
@@ -342,6 +341,21 @@ export class PianoRoll {
         this.opz.nota?.(Math.min(...r.sel.map((s) => s.n)));
       }
     }
+  }
+
+  // Il pianoroll ha il fuoco: ⌘X ⌘C ⌘V ⌘A sono suoi (dal menu del Mac o dalla tastiera: una volta sola).
+  inPrimoPiano() {
+    return this.editabile && document.activeElement === this.canvas;
+  }
+
+  modifica(azione) {
+    const ora = performance.now();
+    if (this.ultimaModifica?.azione === azione && ora - this.ultimaModifica.t < 250) return;
+    this.ultimaModifica = { azione, t: ora };
+    if (azione === 'selectAll') this.tutte();
+    else if (azione === 'copy') this.copia();
+    else if (azione === 'cut') this.copia(true);
+    else if (azione === 'paste') this.incollaQui();
   }
 
   tutte() {
