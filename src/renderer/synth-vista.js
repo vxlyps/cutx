@@ -6,6 +6,7 @@ import { CATEGORIE } from './categorie.js';
 import { PianoRoll } from './synth-roll.js';
 import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado } from './synth-note.js';
 import { OTTAVA_INIZIALE, inCampoDiTesto, notaDaTasto, ottavaDopo } from './synth-tastiera.js';
+import { nuovoValore } from './controller-synth.js';
 import { Registratore } from './synth-rec.js';
 import { clip, codice, funzioniDi, inGradi, leggiCodice, noteEffettive } from './synth-codice.js';
 import it from './testi/it.json';
@@ -199,7 +200,10 @@ export class VistaSynth {
     });
     sinistra.append(schede, pannello, this.noteEl);
     corpo.append(sinistra, lato);
-    this.r.replaceChildren(barra, corpo);
+    // lo specchio dell'X-Touch (in ambra: il verde è del live); lo riempie l'app quando c'è un controller
+    this.specchioEl = crea('div', 'specchio synth-specchio');
+    this.specchioEl.hidden = true;
+    this.r.replaceChildren(barra, corpo, this.specchioEl);
     this.scheda = 'suono';
     this.mostraScheda('suono');
   }
@@ -334,6 +338,68 @@ export class VistaSynth {
   notaOff(midi) {
     this.opz.nota?.({ on: false, midi });
     this.rec?.noteOff(midi);
+  }
+
+  // --- l'X-Touch (controller-synth.js): le sue azioni sul synth ---
+
+  // Una manopola gira un parametro; un giro continuo è un passo solo di ⌘Z. `fine`: manopola premuta, un decimo del passo.
+  giraControllo(k, passi, fine) {
+    const p = PARAMETRI.find((x) => x.k === k);
+    if (!p) return;
+    const v = nuovoValore(p, this.stato, passi, fine);
+    if (v === this.stato[k]) return; // in fondo alla corsa
+    if (!this.timerManopola || this.manopolaDi !== k) this.inGesto = false; // un parametro nuovo è un passo nuovo di ⌘Z
+    this.manopolaDi = k;
+    clearTimeout(this.timerManopola);
+    this.timerManopola = setTimeout(() => ((this.timerManopola = null), (this.inGesto = false)), 400);
+    this.cambia(k, v);
+  }
+
+  // Premuta e rilasciata senza girare: il valore di partenza (quello del suono init).
+  reimpostaControllo(k) {
+    const p = PARAMETRI.find((x) => x.k === k);
+    if (p) this.passo(() => this.cambia(k, p.def));
+  }
+
+  comandoControllo(nome) {
+    switch (nome) {
+      case 'play':
+        return this.suonaOFerma();
+      case 'stop':
+        this.fermaAnteprima();
+        this.fermaNote();
+        return this.aggiorna();
+      case 'rec':
+        return this.avviaRec();
+      case 'cue':
+        return this.mandaCue();
+      case 'mutate':
+        return this.mutate();
+      case 'annulla':
+        return this.annulla();
+      case 'ripeti':
+        return this.rifai();
+      case 'ab':
+        return this.scegliSlot(this.slot.lato === 'A' ? 'B' : 'A');
+      default:
+    }
+  }
+
+  // Cosa il controller deve sapere del synth.
+  perControllo() {
+    return {
+      stato: () => this.stato,
+      nome: (k) => T.parametri[k] ?? k,
+      gruppo: (g) => T.gruppi[g] ?? g,
+      testo: (p, v) => etichettaValore(p, v),
+      nomeComando: (c) => T.controller.comandi[c] ?? c,
+      gira: (k, passi, fine) => this.giraControllo(k, passi, fine),
+      reset: (k) => this.reimpostaControllo(k),
+      comando: (c) => this.comandoControllo(c),
+      suona: () => !!this.opz.suonaOra?.(),
+      registra: () => !!this.rec,
+      lato: () => this.slot.lato,
+    };
   }
 
   // Un tasto del Mac giù: ritorna true se era un tasto della tastiera (da non lasciare al resto dell'app).

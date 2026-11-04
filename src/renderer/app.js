@@ -1685,12 +1685,19 @@ const controllerMidi = new Controller({
   paracaduteAperto: () => paracaduteAperto,
   avviso: (testo) => cue.avviso(testo, { persistente: true }),
   calibrazione: () => preferenze.controller,
+  // nel SYNTH il controller comanda il synth (se la preferenza lo vuole; con SHOW acceso, mai: il controller resta sul LIVE)
+  nelSynth: () => vista === 'synth' && (preferenze.controller?.nelSynth ?? 'segue') !== 'live',
+  nelSynthPreferenza: () => preferenze.controller?.nelSynth ?? 'segue',
+  nelSynthScegli: (v) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, nelSynth: v } }),
+  synth: synth.perControllo(),
   salvaCalibrazione: (c) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, ...c } }),
   faderScegli: (effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: effetto } }),
 });
 const paginaController = new PaginaController(controllerMidi);
 const specchio = new Specchio($('specchio'));
 setInterval(() => specchio.aggiorna(controllerMidi), 100);
+const specchioSynth = new Specchio(synth.specchioEl, { synth: true });
+setInterval(() => specchioSynth.aggiorna(controllerMidi), 100);
 // i numeri ②–⑦ sulle card compaiono solo con il controller collegato
 controllerMidi.quandoCambia(() => document.querySelector('.postazione').classList.toggle('con-controller', controllerMidi.collegato));
 controllerMidi.collega();

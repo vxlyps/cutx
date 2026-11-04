@@ -419,3 +419,53 @@
 .synth-ottava {
   min-width: 56px;
 }
+
+/* lo specchio dell'X-Touch dentro il SYNTH: stessa fotografia del LIVE ma in ambra (il verde è solo del live) */
+.synth-specchio {
+  flex-shrink: 0;
+  border-top: 1px solid var(--linea);
+  padding: 8px 14px;
+}
+
+.synth-specchio.attivo {
+  border-top: 2px solid var(--avviso);
+}
+
+.synth-specchio .spec-stato {
+  color: var(--spento);
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.synth-specchio.attivo .spec-stato {
+  color: #050604;
+  background: var(--avviso);
+  padding: 0 6px;
+  letter-spacing: 0.1em;
+}
+
+.synth-specchio .spec-riga {
+  max-width: 640px;
+}
+
+.synth-specchio .pag.on {
+  background: var(--avviso);
+  border-color: var(--avviso);
+}
+
+.synth-specchio .valore {
+  stroke: var(--avviso);
+}
+
+.synth-specchio .punto-valore {
+  fill: var(--avviso);
+}
+
+.synth-specchio .v {
+  color: var(--avviso);
+}
+
+.synth-specchio .spec-m.toccata {
+  border-color: var(--avviso);
+  background: rgba(224, 160, 58, 0.08);
+}

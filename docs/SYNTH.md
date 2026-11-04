@@ -88,3 +88,7 @@ Piano concordato: 1 selezione, 2 matita, 3 scrittura a passi, 4 velocity; poi il
 
 **Codice incollato → pianoroll (fatto).** `n("0 2 7").scale("A2:minor")` e `note("c3 e3")` (nomi o numeri midi) entrano nel pianoroll, che si può modificare: restando nella scala si riscrive n() coi gradi, con una nota fuori scala si passa a `note()` coi nomi e lo dice. I commenti in cima restano in cima; il resto (`sometimesBy`, `saw.range`…) resta «a mano». Il pianoroll ha più griglie: 1/16, 1/12 (terzine: 12 note in un ciclo), 1/32, 1/24, 1/48, scelte da sole o dal menu «griglia».
 
+## Controller nel SYNTH · fatto (4/11/2026)
+
+Con ⌘2 l'X-Touch comanda il synth (impostazione «nel SYNTH»: segue la vista / resta al LIVE; con SHOW sempre al LIVE). Tasti in alto 1–5: osc, filtro, amp, drive, space (di nuovo lo stesso = pagina 2). Manopole 1–7: i parametri della pagina; la 8 (generale), il fader e il paracadute (tasto 8) restano del LIVE. Push = valore init; push + giro = regolazione fine. In basso: DROP → CUE, REPLACE mutate, REWIND annulla, FORWARD ripeti, CYCLE A/B, STOP, PLAY, REC. Il riscontro è lo specchio ambra in fondo alla vista SYNTH.
+

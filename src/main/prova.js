@@ -3416,6 +3416,11 @@ async function provaSynth({ finestre, scrivi }) {
     controlla('quello che non è una nota resta a mano (sometimesBy, saw.range, delaytime)', (await js(`document.querySelector('.synth-mano').textContent`)).includes('sometimesBy') && (await js(`document.querySelector('.synth-mano').textContent`)).includes('saw.range'));
     await js(`document.querySelector('.synth-pre').dispatchEvent(new FocusEvent('blur'))`);
     await aspetta(0.3);
+    {
+      const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
+      await mkdir(cartella, { recursive: true });
+      await writeFile(path.join(cartella, 'incollato.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    }
     controlla('il commento in cima resta in cima', (await codiceSynth()).startsWith('// Variante ACIDA\nn("0 2 7 9 7 4 2 9 12 9 7 4")\n  .scale("A2:minor")'), (await codiceSynth()).slice(0, 80));
     controlla('la cuffia riceve il codice con il commento, la scala e il resto', ((await cuffiaStato())?.codice ?? '').includes('// Variante ACIDA') && ((await cuffiaStato())?.codice ?? '').includes('.sometimesBy(.3, x => x.ply(2))'));
     // modifico restando nella scala: si riscrive n() coi gradi
@@ -3533,6 +3538,147 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('con un pulsante col fuoco, Spazio suona e il pulsante non scatta (B resta vuoto)', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await js(`cutxProva.synth.slot.B`)) === null);
   await js(`cutxProva.synth.opz.ferma(); document.activeElement?.blur?.()`);
   await aspetta(0.4);
+
+  // L'X-Touch nel SYNTH: segue la vista; manopole 1–7 = parametri del gruppo, tasti in alto = gruppi, in basso = comandi; generale, fader e paracadute restano del LIVE
+  {
+    const C = 'cutxProva.controllerMidi';
+    const midi = (...b) => js(`${C}.riceve(${JSON.stringify(b)})`);
+    const giro = (n, passi) => midi(0xb0, 15 + n, passi > 0 ? passi : 0x40 | -passi);
+    const pushGiu = (n) => midi(0x90, 31 + n, 127);
+    const pushSu = (n) => midi(0x90, 31 + n, 0);
+    const nota = (i) => js(`${C}.tab.tasti[${i - 1}]`);
+    const premiTasto = async (i) => {
+      const n = await nota(i);
+      await midi(0x90, n, 127);
+      await midi(0x90, n, 0);
+      await aspetta(0.15);
+    };
+    const luce = async (i) => js(`${C}.desiderate().get('t' + ${C}.tab.tasti[${i - 1}])?.[2]`);
+    const anello = (n) => js(`${C}.desiderate().get('a${n}')`);
+    const cut = () => js(`cutxProva.synth.stato.cutoff`);
+    await js(`${C}.modo = 'MC'; ${C}.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; ${C}.cambiato(); window.cutx.salvaPreferenze({ controller: null })`);
+    await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.opz.ferma(); document.activeElement?.blur?.()`);
+    await aspetta(0.8);
+    controlla('nella vista SYNTH il controller comanda il synth', (await js(`${C}.nelSynth`)) === true);
+    controlla('lo specchio del synth compare, in ambra, e dice «controller → SYNTH»', (await js(`!document.querySelector('.synth-specchio').hidden && document.querySelector('.synth-specchio').classList.contains('attivo') && document.querySelector('.synth-specchio .spec-stato').textContent`)) === 'controller → SYNTH');
+    controlla('all\'inizio il gruppo è l\'oscillatore: la manopola 1 è la forma', (await js(`${C}.manopole()[0].corto`)) === 'forma' && (await js(`${C}.sy.gruppo`)) === 'osc');
+    await premiTasto(2);
+    controlla('il tasto 2 sceglie il filtro: la manopola 1 è il cutoff', (await js(`${C}.sy.gruppo`)) === 'filtro' && (await js(`${C}.manopole()[0].corto`)) === 'cutoff' && (await js(`${C}.manopole()[1].corto`)) === 'reso');
+    controlla('il tasto del gruppo è acceso', (await luce(2)) === 127 && (await luce(1)) === 0);
+    const c0 = await cut();
+    await giro(1, 4);
+    await giro(1, 4);
+    await giro(1, 4);
+    const c1 = await cut();
+    controlla('girare la manopola 1 alza il cutoff', c1 > c0, `${c0} → ${c1}`);
+    controlla('l\'anello (a ventaglio) lo mostra', ((await anello(1))?.[2] >> 4) === 2 && ((await anello(1))?.[2] & 15) > 1);
+    await giro(2, 10);
+    {
+      const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
+      await mkdir(cartella, { recursive: true });
+      await aspetta(0.3);
+      await writeFile(path.join(cartella, 'controller.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    }
+    controlla('la manopola 2 alza la risonanza', (await stato('q')) > 1);
+    await premi('Z', 'meta');
+    controlla('⌘Z annulla tutta la sequenza di giri di una manopola in un passo solo (la risonanza)', (await stato('q')) === 1 && (await cut()) === c1);
+    await aspetta(0.5);
+    await giro(1, 2);
+    await premi('Z', 'meta');
+    controlla('e quella del cutoff', (await cut()) === c1);
+    await premi('Z', 'meta');
+    controlla('un altro ⌘Z toglie i tre giri del cutoff', (await cut()) === c0);
+    // premuta e rilasciata = valore di partenza; premuta e girata = regolazione fine, senza reset
+    await giro(1, 8);
+    await aspetta(0.5);
+    await pushGiu(1);
+    await pushSu(1);
+    controlla('manopola 1 premuta e rilasciata: il cutoff torna al valore di partenza (2400)', (await cut()) === 2400, String(await cut()));
+    await aspetta(0.5);
+    await giro(1, 8);
+    const grosso = (await cut()) - 2400;
+    await premi('Z', 'meta');
+    await aspetta(0.5);
+    await pushGiu(1);
+    await giro(1, 8);
+    await pushSu(1);
+    const fineCut = (await cut()) - 2400;
+    controlla('premuta e girata: la regolazione è fine (molto meno di un giro libero) e non c\'è il reset', fineCut > 0 && fineCut < grosso / 4, `${fineCut} contro ${grosso}`);
+    await premi('Z', 'meta');
+    await aspetta(0.4);
+    // pagine: premere di nuovo il gruppo
+    await premiTasto(5);
+    controlla('il tasto 5 sceglie SPACE: la manopola 1 è il delay', (await js(`${C}.manopole()[0].corto`)) === 'delay' && (await js(`${C}.sy.pagina`)) === 0);
+    await premiTasto(5);
+    controlla('di nuovo il tasto 5: pagina 2 (tremolo), e il tasto lampeggia', (await js(`${C}.manopole()[0].corto`)) === 'tremol' && (await luce(5)) === 1);
+    controlla('la pagina 2 ha solo due manopole (le altre libere: anello spento)', (await js(`${C}.manopole().slice(0, 7).filter(Boolean).length`)) === 2);
+    await premiTasto(4);
+    controlla('un altro gruppo riparte dalla prima pagina', (await js(`${C}.sy.gruppo`)) === 'drive' && (await js(`${C}.sy.pagina`)) === 0 && (await js(`${C}.manopole()[0].corto`)) === 'shape');
+    await premiTasto(3);
+    controlla('ampiezza: la manopola 6 (pitch) ha l\'anello dal centro', ((await anello(6))?.[2] >> 4) === 1 && ((await anello(6))?.[2] & 15) === 6, JSON.stringify(await anello(6)));
+    // un parametro che non conta ha l'anello spento e non fa niente
+    await premiTasto(1);
+    controlla('oscillatore: la manopola 5 (stereo) non conta col sawtooth: anello spento', (await js(`${C}.manopole()[4].spenta`)) === true && (await anello(5))?.[2] === 0);
+    const prima = await js(`JSON.stringify(cutxProva.synth.stato)`);
+    await giro(5, 5);
+    controlla('e girarla non cambia il suono', (await js(`JSON.stringify(cutxProva.synth.stato)`)) === prima);
+    await giro(1, 1);
+    controlla('la manopola 1 (forma) cambia la forma d\'onda di un posto', (await stato('forma')) !== 'sawtooth');
+    await premi('Z', 'meta');
+    // i tasti in basso
+    await premiTasto(15);
+    await aspetta(0.6);
+    controlla('PLAY (in basso) avvia la prova in cuffia, e si accende', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await luce(15)) === 127);
+    await premiTasto(14);
+    controlla('STOP la ferma', (await js(`cutxProva.synth.opz.suonaOra()`)) === false && (await luce(15)) === 0);
+    await premiTasto(13);
+    controlla('CYCLE passa a B (e si accende)', (await js(`cutxProva.synth.slot.lato`)) === 'B' && (await luce(13)) === 127);
+    await premiTasto(13);
+    controlla('e di nuovo ad A', (await js(`cutxProva.synth.slot.lato`)) === 'A' && (await luce(13)) === 0);
+    const avanti = await js(`JSON.stringify(cutxProva.synth.stato)`);
+    await premiTasto(10);
+    controlla('REPLACE è mutate: il suono cambia', (await js(`JSON.stringify(cutxProva.synth.stato)`)) !== avanti);
+    await premiTasto(11);
+    controlla('REWIND annulla', (await js(`JSON.stringify(cutxProva.synth.stato)`)) === avanti);
+    await premiTasto(12);
+    controlla('FORWARD ripete', (await js(`JSON.stringify(cutxProva.synth.stato)`)) !== avanti);
+    await premiTasto(11);
+    await js(`window.__cueChiamato = 0; cutxProva.synth.mandaCue = () => { window.__cueChiamato++; }`);
+    await premiTasto(9);
+    controlla('DROP è → CUE', (await js(`window.__cueChiamato`)) === 1);
+    await js(`delete cutxProva.synth.mandaCue`);
+    // il LIVE resta in mano: generale, fader, paracadute
+    const gen0 = await js(`${C}.master`);
+    await giro(8, -5);
+    controlla('la manopola 8 è il volume generale del live, anche nel SYNTH', (await js(`${C}.master`)) < gen0);
+    await giro(8, 5);
+    const sPrima = await js(`JSON.stringify(cutxProva.synth.stato)`);
+    await midi(0xe0, 0, 100);
+    controlla('il fader è del live (il synth non si muove)', (await js(`${C}.fader`)) > 0 && (await js(`JSON.stringify(cutxProva.synth.stato)`)) === sPrima);
+    await midi(0xe0, 127, 127);
+    await premiTasto(8);
+    controlla('il tasto 8 è il paracadute (un tocco breve non cambia il gruppo né parte)', (await js(`${C}.sy.gruppo`)) === 'osc' && (await js(`${C}.paracaduteTenuto`)) === false);
+    controlla('i tasti layer A e B non fanno niente nel SYNTH', await (async () => { await midi(0x90, await js(`${C}.tab.layer.B`), 127); await midi(0x90, await js(`${C}.tab.layer.B`), 0); return (await js(`${C}.pagina`)) === 'A'; })());
+    // resta al LIVE, se lo dice l'impostazione
+    await js(`${C}.azioni.nelSynthScegli('live')`);
+    await aspetta(0.8);
+    controlla('con l\'impostazione «resta al LIVE» il controller non comanda il synth, e lo specchio lo dice', (await js(`${C}.nelSynth`)) === false && (await js(`document.querySelector('.synth-specchio .spec-stato').textContent`)) === 'controller → LIVE');
+    const fermo = await js(`JSON.stringify(cutxProva.synth.stato)`);
+    await giro(3, 5); // nel LIVE è il volume di un livello (qui non c'è): niente deve toccare il synth
+    controlla('e le manopole non toccano il synth', (await js(`JSON.stringify(cutxProva.synth.stato)`)) === fermo);
+    await js(`${C}.azioni.nelSynthScegli('segue')`);
+    await aspetta(0.8);
+    controlla('tornando a «segue la vista» comanda di nuovo il synth', (await js(`${C}.nelSynth`)) === true);
+    // uscendo dal SYNTH il controller è del LIVE
+    await premi('1', 'meta');
+    await aspetta(0.5);
+    controlla('in vista LIVE il controller è del live (manopola 8: generale, tasto in basso: un colpo)', (await js(`${C}.nelSynth`)) === false && (await js(`${C}.manopole()[7].corto`)) === 'gener');
+    await premi('2', 'meta');
+    await aspetta(0.4);
+    controlla('e tornando al SYNTH comanda il synth', (await js(`${C}.nelSynth`)) === true);
+    await js(`${C}.modo = 'sconosciuto'; ${C}.porta.ingresso = null; ${C}.cambiato(); window.cutx.salvaPreferenze({ controller: null })`);
+    await aspetta(0.3);
+  }
 
   // REC: conteggio, registrazione a tempo, quantizzazione, le note nel pianoroll
   await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.05 }, B: null, lato: 'A', nome: 'synth' })`);
@@ -3706,7 +3852,9 @@ async function provaSynth({ finestre, scrivi }) {
   const vai = `(() => { const c = [...document.querySelectorAll('#carte .card.sezione')].find((x) => x.querySelector('.nome-sezione')?.textContent.includes('volume test')); return c && [...c.querySelectorAll('.card-testa button')].find((b) => b.textContent.trim().startsWith('go live')); })()`;
   controlla('la clip è nel brano del CUE', !!(await js(`!!${vai}`)));
   await js(`${vai}.click()`);
-  await aspetta(4);
+  // la clip entra a fine frase: si aspetta che ci sia (dipende da dove cade il click nella frase), non un tempo fisso
+  for (let k = 0; k < 40 && !((await liveStato())?.livelli ?? []).some((l) => l.codice?.includes('@synth')); k++) await aspetta(0.5);
+  await aspetta(1);
   await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 0.1 })`);
   await aspetta(0.8);
   let picco = 0;

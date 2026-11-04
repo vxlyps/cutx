@@ -5,6 +5,8 @@ import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioA
 import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, calcolaFader, EFFETTI_FADER, FADER_PREDEFINITO, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
 import { GestoreColpi } from './controller-colpi.js';
+import { COMANDI_BASSO, GRUPPI_TASTI, dopoTasto, manopoleSynth, paginePerGruppo } from './controller-synth.js';
+import { PARAMETRI as PARAMETRI_SYNTH } from './synth-modello.js';
 
 const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», non un tocco (il muto non scatta)
 const PARACADUTE_MS = 1000;
@@ -45,6 +47,15 @@ export class Controller {
     this.lampi = new Map(); // nota → fino a quando resta accesa dopo l'azione (un lampo breve)
     this.toccata = null; // { n, quando }: l'ultima manopola toccata, per lo specchio
     this.tab = tabella(azioni.calibrazione?.());
+    this.sy = { gruppo: GRUPPI_TASTI[0], pagina: 0 }; // nel SYNTH: il gruppo di parametri e la sua pagina
+    this.pushSynth = new Map(); // nel SYNTH: n → { giu, usato } per il push delle manopole (premuto e rilasciato = valore di partenza)
+    this.synthPrima = false;
+  }
+
+  // Nella vista SYNTH l'X-Touch comanda il synth (se la preferenza lo vuole; con SHOW acceso, mai). Il volume generale, il fader e il
+  // paracadute restano sempre del LIVE. Lo decide l'app (`azioni.nelSynth`); le luci seguono da sole.
+  get nelSynth() {
+    return !!this.azioni.nelSynth?.();
   }
 
   quandoCambia(fn) {
@@ -128,7 +139,7 @@ export class Controller {
   esegui(e) {
     switch (e.tipo) {
       case 'layer':
-        if (e.giu) this.vaiA(e.pagina);
+        if (e.giu && !this.nelSynth) this.vaiA(e.pagina); // nel SYNTH le pagine A e B non esistono
         break;
       case 'manopola':
         this.giraManopola(e.n, e.passi);
@@ -239,6 +250,7 @@ export class Controller {
 
   giraManopola(n, passi) {
     if (!passi) return;
+    if (this.nelSynth) return this.giraSynth(n, passi);
     // la manopola 1 è la navigazione, in tutte e due le pagine: scorre la selezione nel CUE (beat, scene, clip, kit), in silenzio
     if (n === 1) return this.scorriCue(passi);
     if (this.pagina === 'A') {
@@ -432,6 +444,7 @@ export class Controller {
   // --- push delle manopole ---
 
   premiPush(n, giu) {
+    if (this.nelSynth) return this.premiPushSynth(n, giu);
     if (n === 1) {
       if (giu) this.ascoltaScelta();
       return;
@@ -476,6 +489,7 @@ export class Controller {
   // --- tasti ---
 
   premiTasto(n, giu) {
+    if (this.nelSynth && n !== 8) return this.premiTastoSynth(n, giu); // il tasto 8 è il paracadute, sempre
     // pagina B: i tasti 2–7 scelgono il livello (come le manopole: beat sul 2, clip sui 3–7); l'8 resta il paracadute (sempre raggiungibile);
     // il «globale» si sceglie premendo di nuovo il tasto layer B
     if (n <= 7 && this.pagina === 'B') {
@@ -595,6 +609,85 @@ export class Controller {
     }
   }
 
+  // --- nel SYNTH ---
+  // Le sette manopole del gruppo e della pagina scelti (posti fissi; null = vuoto).
+  slotSynth() {
+    const a = this.azioni.synth;
+    if (!a) return Array(7).fill(null);
+    return manopoleSynth(a.stato(), this.sy.gruppo, this.sy.pagina, PARAMETRI_SYNTH, { nome: a.nome, testo: a.testo });
+  }
+
+  // La testata dello specchio: quale gruppo e a che pagina.
+  testataSynth() {
+    return { gruppo: this.sy.gruppo, pagina: this.sy.pagina, pagine: paginePerGruppo(this.sy.gruppo) };
+  }
+
+  // Il nome del gruppo con la pagina («FILTRO 2/2») per il riscontro.
+  nomeGruppoSynth() {
+    const t = this.testataSynth();
+    const nome = String(this.azioni.synth?.gruppo(t.gruppo) ?? t.gruppo).toUpperCase();
+    return t.pagine > 1 ? `${nome} ${t.pagina + 1}/${t.pagine}` : nome;
+  }
+
+  // Il riscontro nel SYNTH sta solo nello specchio del synth: mai sulla scritta del LIVE né sul proiettore.
+  toccaSynth(n, testo) {
+    this.toccata = { n, quando: this.ora(), testo };
+  }
+
+  giraSynth(n, passi) {
+    if (n === 8) return this.giraMaster(passi); // il volume generale è sempre del LIVE
+    const m = this.slotSynth()[n - 1];
+    if (!m || !m.conta) return;
+    const premuta = this.pushSynth.get(n);
+    if (premuta?.giu) premuta.usato = true; // premuta e girata = regolazione fine, non un reset
+    this.azioni.synth.gira(m.k, passi, !!premuta?.giu);
+    const dopo = this.slotSynth()[n - 1];
+    this.toccaSynth(n, `${this.nomeGruppoSynth()} · ${String(m.nome).toUpperCase()} ${dopo.testo}`);
+  }
+
+  premiPushSynth(n, giu) {
+    if (n > 7) return; // il generale non ha il muto
+    const st = this.pushSynth.get(n) ?? { giu: false, usato: false };
+    this.pushSynth.set(n, st);
+    if (giu) {
+      st.giu = true;
+      st.usato = false;
+      return;
+    }
+    if (!st.giu) return;
+    st.giu = false;
+    if (st.usato) return; // era una regolazione fine
+    const m = this.slotSynth()[n - 1];
+    if (!m || !m.conta) return;
+    this.azioni.synth.reset(m.k);
+    this.toccaSynth(n, `${this.nomeGruppoSynth()} · ${String(m.nome).toUpperCase()} ${this.slotSynth()[n - 1].testo} · INIT`);
+  }
+
+  premiTastoSynth(n, giu) {
+    if (!giu) return;
+    if (n <= 5) {
+      this.sy = dopoTasto(this.sy.gruppo, this.sy.pagina, n);
+      this.ultime.clear();
+      this.toccaSynth(null, this.nomeGruppoSynth());
+      this.cambiato();
+      return;
+    }
+    if (n <= 8) return; // 6 e 7 liberi (mod, arpeggio)
+    const comando = COMANDI_BASSO[n - 9];
+    if (!comando) return;
+    if (!['play', 'rec', 'ab'].includes(comando)) this.lampo(this.tab.tasti[n - 1]); // quelli con uno stato (▶, REC, A/B) si accendono da soli
+    this.azioni.synth.comando(comando);
+    this.toccaSynth(null, `SYNTH · ${String(this.azioni.synth.nomeComando(comando)).toUpperCase()}`);
+    this.cambiato();
+  }
+
+  // Le manopole come le vede lo specchio e come si accendono gli anelli: le sette del gruppo e il generale (sempre del LIVE).
+  manopoleDelSynth() {
+    const m = this.slotSynth().map((x) => (x ? { stile: x.stile, valore: x.valore, nome: x.nome, corto: x.corto, testo: x.testo, spenta: !x.conta } : null));
+    m.push({ stile: 'fan', valore: this.master, nome: 'generale', corto: 'gener', testo: this.master.toFixed(2) });
+    return m;
+  }
+
   // --- calibrazione dei tasti (nelle impostazioni) ---
 
   avviaCalibrazione() {
@@ -645,6 +738,7 @@ export class Controller {
 
   // Cosa comanda ogni manopola adesso: null = libera (anello spento); altrimenti { stile: 'fan' | 'punto', valore 0..1 | null (muto) }.
   manopole() {
+    if (this.nelSynth) return this.manopoleDelSynth();
     const livelli = this.posti();
     const m = [this.manopolaCue()];
     if (this.pagina === 'A') {
@@ -702,13 +796,23 @@ export class Controller {
       luci.set(`a${n}`, !m || m.valore === null ? messaggioAnello(n, 0, 'punto') : anelloDa(n, m.valore, m.stile));
     });
     const stati = new Map(); // nota → true | 'lampeggia'
-    for (const i of this.colpi.attivi.keys()) stati.set(this.tab.tasti[8 + i], true); // un colpo si vede acceso finché lo tengo
-    stati.set(this.tab.layer[this.pagina], true); // la pagina
+    const sy = this.nelSynth;
+    if (!sy) {
+      for (const i of this.colpi.attivi.keys()) stati.set(this.tab.tasti[8 + i], true); // un colpo si vede acceso finché lo tengo
+      stati.set(this.tab.layer[this.pagina], true); // la pagina
+    }
     const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
     // il paracadute c'è in tutte e due le pagine (tasto 8, tenuto un secondo)
     if (this.paracaduteTenuto) stati.set(nota('paracadute'), 'lampeggia');
     else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
-    if (this.pagina === 'A') {
+    if (sy) {
+      // il gruppo acceso (lampeggia alla seconda pagina); in basso: ▶ se suona, REC mentre registra, CYCLE se è acceso B
+      const a = this.azioni.synth;
+      stati.set(this.tab.tasti[GRUPPI_TASTI.indexOf(this.sy.gruppo)], this.sy.pagina > 0 ? 'lampeggia' : true);
+      if (a?.suona()) stati.set(this.tab.tasti[8 + COMANDI_BASSO.indexOf('play')], true);
+      if (a?.registra()) stati.set(this.tab.tasti[8 + COMANDI_BASSO.indexOf('rec')], 'lampeggia');
+      if (a?.lato() === 'B') stati.set(this.tab.tasti[8 + COMANDI_BASSO.indexOf('ab')], true);
+    } else if (this.pagina === 'A') {
       if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
       // «prossimo brano»: acceso se sto guardando il ▸ prossimo; lampeggia mentre lo tengo o aspetta la fine della frase
       if (this.azioni.linguettaAttuale?.() === 'prossimo') stati.set(nota('prossimoBrano'), true);
@@ -731,6 +835,15 @@ export class Controller {
   }
 
   luci() {
+    const sy = this.nelSynth;
+    if (sy !== this.synthPrima) {
+      // la vista è passata dal LIVE al SYNTH (o ritorno): le luci si rifanno da capo, nessun push rimasto a metà
+      this.synthPrima = sy;
+      this.ultime.clear();
+      this.pushSynth.clear();
+      this.toccata = null;
+      this.cambiato();
+    }
     if (this.modo !== 'MC' || !this.porta.uscita || this.sequenzaLuci) return;
     for (const [k, bytes] of this.desiderate()) {
       const firma = bytes.join(',');

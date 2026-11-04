@@ -568,6 +568,34 @@
       "fuoriPattern": "{n} note fuori dal pattern",
       "griglia": "griglia",
       "fuoriQuestaGriglia": "le note non stanno su {g}"
+    },
+    "controller": {
+      "segue": "controller → SYNTH",
+      "live": "controller → LIVE",
+      "pagina": "{n}/{tot}",
+      "gruppi": {
+        "osc": "osc",
+        "filtro": "filtro",
+        "amp": "amp",
+        "drive": "drive",
+        "space": "space"
+      },
+      "comandi": {
+        "cue": "→ CUE",
+        "mutate": "mutate",
+        "annulla": "annulla",
+        "ripeti": "ripeti",
+        "ab": "A/B",
+        "stop": "stop",
+        "play": "▶ cuffia",
+        "rec": "REC"
+      },
+      "impostazione": {
+        "nome": "nel SYNTH",
+        "segue": "segue la vista",
+        "live": "resta al LIVE",
+        "nota": "Aprendo il SYNTH le manopole 1–7, i tasti in alto 1–5 e quelli in basso comandano il synth. Il volume generale (manopola 8), il fader e il paracadute (tasto 8) restano del LIVE."
+      }
     }
   }
 }

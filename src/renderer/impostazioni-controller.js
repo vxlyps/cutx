@@ -9,6 +9,7 @@ const crea = (tag, classe, testo) => {
 };
 
 import { EFFETTI_FADER } from './controller-mappa.js';
+import it from './testi/it.json';
 import { NOMI_TASTI } from './controller-mc.js';
 
 const RIGHE = 14; // quante righe tiene il monitor
@@ -106,7 +107,20 @@ export class PaginaController {
     }
     sceltaFader.onchange = () => c.azioni.faderScegli?.(sceltaFader.value);
     rigaFader.append(testoFader, sceltaFader);
-    fader.replaceChildren(rigaFader);
+    // nel SYNTH il controller segue la vista, oppure resta sul LIVE
+    const rigaSynth = crea('div', 'imp-riga');
+    const testoSynth = crea('div', 'imp-testo');
+    testoSynth.append(crea('span', '', it.synth.controller.impostazione.nome), crea('span', 'imp-nota', it.synth.controller.impostazione.nota));
+    const sceltaSynth = crea('select');
+    for (const chiave of ['segue', 'live']) {
+      const o = crea('option', '', it.synth.controller.impostazione[chiave]);
+      o.value = chiave;
+      o.selected = (c.azioni.nelSynthPreferenza?.() ?? 'segue') === chiave;
+      sceltaSynth.append(o);
+    }
+    sceltaSynth.onchange = () => c.azioni.nelSynthScegli?.(sceltaSynth.value);
+    rigaSynth.append(testoSynth, sceltaSynth);
+    fader.replaceChildren(rigaFader, rigaSynth);
 
     // i colpi: la griglia e i tasti
     const colpi = $('ctl-colpi');
