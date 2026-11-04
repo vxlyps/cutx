@@ -27,22 +27,18 @@ LIVE (quella di oggi: CUE e LIVE) e SYNTH. Si passa con ⌘1 / ⌘2 e dal contro
 
 ## Controller nel SYNTH
 
-- Aprendo il SYNTH, l'X-Touch passa al synth da solo; tornando al LIVE torna al live.
-- Tasti in alto 1-7: scelgono il modulo (oscillatore, filtro, ampiezza, effetti, mod, arpeggio, caos). Manopole 1-7: i parametri di quel modulo. Lo specchio mostra modulo e nomi.
-- SEMPRE del LIVE, anche nel SYNTH: manopola 8 (generale), fader, paracadute (tasto 8), per sicurezza in serata.
-- REC, ▶ cuffia e → CUE: da proporre (controller e scorciatoie che non si scontrano con i tasti del piano).
-- Un domani con due controller: la tastierina comanda il synth e l'X-Touch resta sempre al LIVE (impostazione).
+Fatto: vedi «Cosa c'è adesso». Resta da fare: i tasti 6 e 7 in alto (MOD e ARPEGGIO) quando ci saranno, e un domani con due controller la tastierina al synth e l'X-Touch sempre al LIVE.
 
 ## Blocchi di lavoro
 
 Uno alla volta, commit e prove per ognuno, poi mi fermo a provare.
 
-1. Vista SYNTH con oscillatore, filtro, ampiezza, effetti, pannello codice, preview in cuffia, → CUE.
-2. Note: pianoroll, tastiera del Mac, REC quantizzato.
-3. MOD trascinabili.
-4. ARPEGGIO e CAOS.
-5. Controller nel SYNTH.
-6. Tastiera MIDI (quando ce l'ho) e suoni salvati.
+1. Vista SYNTH con oscillatore, filtro, ampiezza, effetti, pannello codice, preview in cuffia, → CUE. **Fatto.**
+2. Note: pianoroll, tastiera del Mac, REC quantizzato. **Fatto** (con matita, passi e velocity).
+3. Controller nel SYNTH. **Fatto.**
+4. MOD trascinabili. **Da fare** (dopo la beta 4).
+5. ARPEGGIO e CAOS. **Da fare.**
+6. Tastiera MIDI (quando ce l'ho) e suoni salvati; campioni dello stash come forma d'onda. **Da fare.**
 
 ## Verificato in superdough 1.3.0
 
@@ -53,19 +49,43 @@ Uno alla volta, commit e prove per ognuno, poi mi fermo a provare.
 - **Effetti**: `shape`, `distort` (+ `distortvol`, `distorttype`), `crush`, `coarse`, `tremolo` (+ depth/phase/shape/sync), `phaser` (+ depth/center/sweep), `compressor` (+ ratio/knee/attack/release), `delay` (+ `delaytime`, `delayfeedback`, `delaysync`), `room` (+ `roomsize`, `roomfade`, `roomlp`, `roomdim`), `duckorbit` (sidechain).
 - Da ricontrollare caso per caso nel codice (non dare per scontato): `n`/`detune` del supersaw (in superdough `n` vale come detune se `detune` manca), valori consentiti di `ftype`.
 
-## Blocco 1 · fatto (2/11/2026)
+## Cosa c'è adesso (beta 4, 4/11/2026)
 
-Vista SYNTH nella stessa finestra (⌘1/⌘2), oscillatore, filtro, ampiezza, effetti (con phaser e tremolo), pannello codice, ▶ in cuffia a volume prudente (⌘↵), → CUE (brano attivo, prossimo, kit), «apri nel synth» sulle clip fatte dal synth, ⌘Z/⇧⌘Z, A/B, init, sorprendimi. Dettagli e scelte nella voce «SYNTH · blocco 1» di `CLAUDE.md`.
+Dettagli di codice e prove: voci «SYNTH · …» in `CLAUDE.md`. Tutte le parole dell'interfaccia del SYNTH sono in `src/renderer/testi/it.json` (chiave `synth`).
 
-Limiti scelti: sovrapposizioni (layer) al massimo 5; voci del supersaw al massimo 7; sub = una copia in più; peso stimato «pesante» da 10, tetto a 18; risonanza al massimo 25 (il limiter e il volume 0,5 proteggono le orecchie); gain al massimo 1; feedback del delay al massimo 0,85.
+### Vista e suono
+- **Vista**: ⌘1 LIVE, ⌘2 SYNTH (o i due tasti in barra). Il live non si ferma mai. **Spazio** = ▶/■ della prova in cuffia (non nei campi di testo); ⌘↵ come prima. ⌘Z / ⇧⌘Z.
+- **Pannello**: oscillatore (forma, voci, detune, stereo, width, FM, ottava, sub, pan), filtro (tipo, cutoff, reso, slope, env, vocale), ampiezza (ADSR, gain, pitch), DRIVE (shape, distort, crush, coarse), SPACE (delay, tempo, feedback, room, size, phaser, tremolo). Le manopole sono chiare (il verde è solo del live); gli avvisi in ambra.
+- **Tetti**: layer ≤ 5, unison ≤ 7, peso «pesante» da 10, tetto 18, reso ≤ 25. Cuffia: limiter e volume prudente (0,5 nel SYNTH).
+- **A/B**, **init**, **MUTATE** con «quanto» e **tipo del suono** (BASS · LEAD · ARP · PAD · KEYS · FX, limiti per tipo nella tabella più sotto).
+- **→ CUE**: brano attivo, prossimo o kit; la clip porta `// @synth {…}` e `// @clip nome · tipo`; nel CUE le clip sono raggruppate per tipo; × toglie la clip (⌘Z la riprende); «synth» sulla card la riapre.
 
-Non c'è ancora: pianoroll, tastiera, REC (blocco 2); modulatori (blocco 3); arpeggio e caos (blocco 4); controller (blocco 5); campioni dello stash come forma d'onda, MIDI e suoni salvati (blocco 6).
+### Codice
+- Il pannello del codice è un campo di testo: quello che il pannello conosce sposta le manopole, il resto resta scritto in fondo, segnato «a mano» (anello tratteggiato ambra sulle manopole scavalcate). Errori o valori fuori limiti non fermano il suono.
+- **Il codice mostra solo quello che serve**: non scrive quello che una chiamata a mano scrive già (niente `.delaysync` accanto a `.delaytime`, un solo `.lpf`) né quello che il motore fa da solo (unison 5, detune .18, spread .6, feedback .5, delaysync 3/16, roomsize 2, profondità phaser .75, l'inviluppo .001/.05/.6/.01). Il suono init ha un inviluppo suo e lo scrive. Un inviluppo scritto a metà si completa come fa superdough.
+- I commenti in cima restano in cima.
+- **Teste lette**: `note("…")` (nomi o numeri midi), `n("…").scale("A2:minor")` (anche scale alternate `<A:minor F:major>`), `.velocity("…")`. La scala di Strudel va scritta senza spazi (`C3:minor:pentatonic`). Scale conosciute: major/ionian, minor/aeolian, dorian, phrygian, lydian, mixolydian, major/minor pentatonic, blues.
 
-## Blocco 2 · fatto (2/11/2026)
+### Pianoroll (scheda «note»)
+- **Griglie**: 1/16 (predefinita), 1/12 (terzine), 1/32, 1/24, 1/48, scelta da sola in base alle note o dal menu. Più di 5 note in un ciclo che non cadono su nessuna griglia (quintine) si vedono ma non si modificano. 1, 2, 4 o 8 cicli; scala e radice con aggancio; accordi; lunghezza della nota.
+- **Mini-notazione** (il campo sopra) e pianoroll restano allineati. Quello che il pianoroll non legge (`? / | euclidei`) resta nel testo, con un avviso.
+- **Selezione** (strumento di partenza): rettangolo, doppio clic per una nota, ⇧ per aggiungere, spostare e allungare tutte le scelte, ⌘A, ⌘C ⌘X ⌘V (anche dal menu del Mac), ⌘D, ↑↓ e ⇧↑↓ per trasporre, ⌫.
+- **Matita** (B alterna, B tenuto = temporanea): un clic mette una nota; trascinando ne mette una ogni «lunghezza», all'altezza del mouse; sulle note cancella.
+- **Passi** (pulsante «passi», esc esce): i tasti del piano scrivono al cursore e lo fanno avanzare; più tasti insieme = accordo (un solo ⌘Z); Spazio = pausa, ⌫ = indietro, ←→ muovono il cursore.
+- **Velocity**: striscia sotto le note, una barra per ogni punto in cui parte una nota (un accordo ne ha una sola); clic o trascinamento, a passi di .05; nel codice `.velocity("1 .5 1@2")`.
+- **Tastiera del Mac**: A S D F G H J K bianchi, W E T Y U neri, Z/X ottava (A = do 3), suona subito in cuffia.
+- **REC**: una battuta di conteggio con click, poi un giro; note quantizzate alla griglia del pianoroll; con note già scritte si aggiunge.
+- La prova controlla che le note (e le velocity) del pianoroll siano quelle che Strudel suona davvero.
 
-Pianoroll (1/2/4/8 cicli, griglia 1/16, scala, accordi, disegno e modifica col mouse) allineato alla mini-notazione; tastiera del Mac (A S D F G H J K, W E T Y U, Z/X) che suona subito in cuffia; REC con conteggio, quantizzato, che scrive le note nel pianoroll. In più, chieste dopo le prove del blocco 1: codice modificabile a mano nei due sensi, A/B a due slot, MUTATE con «quanto», tipo del suono (BASS · LEAD · ARP · PAD · KEYS · FX) con i suoi limiti, clip raggruppate per tipo nel CUE, × sulla card. Dettagli nella voce «SYNTH · blocco 2» di `CLAUDE.md`.
+### Controller (X-Touch Mini in MC)
+Con ⌘2 l'X-Touch comanda il synth; impostazione «nel SYNTH: segue la vista / resta al LIVE» (con SHOW, quando ci sarà, sempre al LIVE).
+- **Tasti in alto 1–5**: oscillatore, filtro, ampiezza, DRIVE, SPACE. Di nuovo lo stesso tasto = pagina 2 (il tasto lampeggia). 6 e 7 liberi.
+- **Manopole 1–7**: i parametri del gruppo, posti fissi; un parametro che non conta ha l'anello spento. **Premuta e rilasciata** = valore di partenza (init); **premuta e girata** = regolazione fine (un decimo). Un giro continuo = un passo di ⌘Z.
+- **Sempre del LIVE**: manopola 8 (volume generale), fader, paracadute (tasto 8). I tasti layer A/B non fanno niente nel SYNTH.
+- **Tasti in basso**: DROP → CUE, REPLACE mutate, REWIND annulla, FORWARD ripeti, CYCLE A/B, STOP ferma, PLAY ▶ cuffia, REC.
+- **Specchio** in ambra in fondo alla vista SYNTH («controller → SYNTH» o «→ LIVE»), mai sul proiettore.
 
-Limiti di MUTATE per tipo (`PROFILI` in `synth-modello.js`):
+### Limiti di MUTATE per tipo (`PROFILI` in `synth-modello.js`)
 
 | tipo | forme | ottava | filtro | inviluppo | effetti |
 |---|---|---|---|---|---|
@@ -78,17 +98,11 @@ Limiti di MUTATE per tipo (`PROFILI` in `synth-modello.js`):
 
 Il gain non lo tocca mai MUTATE.
 
-Seguono, prima del resto: **il controller nel SYNTH** (era il blocco 5).
-
-## Pianoroll · passi (4/11/2026)
-
-Piano concordato: 1 selezione, 2 matita, 3 scrittura a passi, 4 velocity; poi il controller (5 mappa e anelli, 6 tasti in basso).
-
-**Passo 1 · selezione (fatto).** Strumenti: selezione (di partenza) e matita (B li alterna). Selezione: rettangolo, doppio clic per una nota, ⇧ per aggiungere. Spostare e allungare valgono per tutte le scelte. ⌘A, ⌘C, ⌘X, ⌘V (al cursore), ⌘D, ↑↓, ⇧↑↓, ⌫. Cambia rispetto al blocco 2: un clic su una cella vuota non mette più la nota se lo strumento è la selezione (serve il doppio clic, o B per la matita), come Ableton.
-
-**Codice incollato → pianoroll (fatto).** `n("0 2 7").scale("A2:minor")` e `note("c3 e3")` (nomi o numeri midi) entrano nel pianoroll, che si può modificare: restando nella scala si riscrive n() coi gradi, con una nota fuori scala si passa a `note()` coi nomi e lo dice. I commenti in cima restano in cima; il resto (`sometimesBy`, `saw.range`…) resta «a mano». Il pianoroll ha più griglie: 1/16, 1/12 (terzine: 12 note in un ciclo), 1/32, 1/24, 1/48, scelte da sole o dal menu «griglia».
-
-## Controller nel SYNTH · fatto (4/11/2026)
-
-Con ⌘2 l'X-Touch comanda il synth (impostazione «nel SYNTH»: segue la vista / resta al LIVE; con SHOW sempre al LIVE). Tasti in alto 1–5: osc, filtro, amp, drive, space (di nuovo lo stesso = pagina 2). Manopole 1–7: i parametri della pagina; la 8 (generale), il fader e il paracadute (tasto 8) restano del LIVE. Push = valore init; push + giro = regolazione fine. In basso: DROP → CUE, REPLACE mutate, REWIND annulla, FORWARD ripeti, CYCLE A/B, STOP, PLAY, REC. Il riscontro è lo specchio ambra in fondo alla vista SYNTH.
-
+### Limiti noti
+- L'arpeggio, i MOD e il CAOS non ci sono ancora.
+- Il pianoroll non legge `? / | euclidei`, le quintine e i pattern che si ripetono ogni più di 8 cicli; il testo resta com'è.
+- La velocity vale per le note scritte nel pianoroll; i tasti suonati dal vivo hanno velocity fissa. La velocity scritta a mano come segnale (`sine.range`) resta «a mano».
+- Le scale: solo quelle elencate; la scala di Strudel va scritta con i due punti, senza spazi.
+- Il «feeling» a mano (latenza dei tasti, rilascio) è stato provato solo da Valerio; le prove automatiche usano tasti e MIDI simulati.
+- Le prove automatiche (`--prova=synth`) a volte falliscono alla prima esecuzione dopo una build (guasti sparsi, rilanciate passano): vedi `CLAUDE.md`.
+- Tastiera MIDI (MiniLab 3) e suoni salvati: non ci sono ancora.
