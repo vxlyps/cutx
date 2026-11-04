@@ -3210,6 +3210,22 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.roll.pulisci()`);
   await aspetta(0.3);
   controlla('«pulisci» toglie le note: il testo diventa ~', (await js(`document.querySelector('.roll-mini-testo').value`)) === '~' && (await js(`cutxProva.synth.stato.note`)) === '~');
+  controlla('all\'inizio lo strumento è la selezione', (await js(`cutxProva.synth.roll.strumento`)) === 'seleziona');
+  await clicca(0, 48);
+  controlla('con la selezione un clic su una cella vuota non mette note', (await rollEventi()) === '[]');
+  {
+    const p = await cella(0, 48);
+    const wc = finestre.controllo.webContents;
+    for (let k = 0; k < 2; k++) {
+      wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: k + 1 });
+      wc.sendInputEvent({ type: 'mouseUp', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: k + 1 });
+    }
+    await aspetta(0.3);
+  }
+  controlla('il doppio clic mette una nota', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());
+  await js(`cutxProva.synth.roll.pulisci()`);
+  await premi('B');
+  controlla('B passa alla matita', (await js(`cutxProva.synth.roll.strumento`)) === 'matita' && (await js(`document.querySelector('.roll-barra .key.on').textContent`)).includes('matita'));
   await clicca(0, 48);
   controlla('un clic su una cella mette una nota (c3, 1/4)', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]' && (await js(`cutxProva.synth.stato.note`)) === 'c3@4 ~@12');
   await trascina(8, 52, 13);
@@ -3229,6 +3245,101 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('con l\'accordo maggiore un clic mette tre note insieme (fa la sa do)', (await js(`cutxProva.synth.roll.eventi.filter((e) => e.i === 8).map((e) => e.n).join(',')`)) === '53,57,60', await rollEventi());
   controlla('l\'accordo è un accordo nella mini-notazione', (await js(`cutxProva.synth.stato.note`)).includes('[f3,a3,c4]@8'), await js(`cutxProva.synth.stato.note`));
   await js(`(() => { const r = cutxProva.synth.roll; r.scalaEl.value = 'cromatica'; r.scalaEl.dispatchEvent(new Event('change')); r.accordoEl.value = 'nota'; r.accordoEl.dispatchEvent(new Event('change')); r.lunghezzaEl.value = '4'; r.lunghezzaEl.dispatchEvent(new Event('change')); })()`);
+  // selezione, appunti, duplica, trasponi: tutto sulle note vere (il confronto con Strudel in fondo)
+  await premi('B');
+  controlla('B torna alla selezione', (await js(`cutxProva.synth.roll.strumento`)) === 'seleziona');
+  const imposta_ = async (eventi, cicli = 1) => {
+    await js(`cutxProva.synth.roll.opz.cambia(${JSON.stringify(eventi)}, ${cicli}); cutxProva.synth.roll.sel = []; cutxProva.synth.roll.canvas.focus()`);
+    await aspetta(0.3);
+  };
+  const trascinaDa = async (da, a, ...mod) => {
+    const p = await cella(da[0], da[1]);
+    const q = await cella(a[0], a[1]);
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1, modifiers: mod });
+    for (let k = 1; k <= 6; k++) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(p.x + ((q.x - p.x) * k) / 6), y: Math.round(p.y + ((q.y - p.y) * k) / 6), modifiers: mod });
+    wc.sendInputEvent({ type: 'mouseUp', x: Math.round(q.x), y: Math.round(q.y), button: 'left', clickCount: 1, modifiers: mod });
+    await aspetta(0.3);
+  };
+  const scelte = () => js(`JSON.stringify([...cutxProva.synth.roll.sel].sort((a, b) => a.i - b.i || a.n - b.n))`);
+  const note_ = async () => JSON.parse(await rollEventi()).map((e) => `${e.i}:${e.l}:${e.n}`).join(' ');
+  const BASE = [{ i: 0, l: 4, n: 48 }, { i: 4, l: 2, n: 52 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 60 }];
+  await imposta_(BASE);
+  await trascinaDa([6, 46], [1, 53]);
+  controlla('il rettangolo sceglie le note che tocca', (await scelte()) === '[{"i":0,"n":48},{"i":4,"n":52}]', await scelte());
+  await trascinaDa([14, 40], [15, 41], 'shift');
+  controlla('⇧ e un rettangolo vuoto non toglie le scelte', (await scelte()) === '[{"i":0,"n":48},{"i":4,"n":52}]', await scelte());
+  await premi('Up');
+  controlla('↑ trasporta le scelte di un semitono', (await note_()) === '0:4:49 4:2:53 8:4:55 12:4:60', await note_());
+  controlla('e restano scelte, nella stessa posizione', (await scelte()) === '[{"i":0,"n":49},{"i":4,"n":53}]', await scelte());
+  await premi('Up', 'shift');
+  controlla('⇧↑ trasporta di un\'ottava', (await note_()) === '0:4:61 4:2:65 8:4:55 12:4:60', await note_());
+  await premi('Z', 'meta');
+  controlla('⌘Z annulla un passo solo (l\'ottava)', (await note_()) === '0:4:49 4:2:53 8:4:55 12:4:60', await note_());
+  controlla('e dopo ⌘Z le scelte che non esistono più non restano', (await scelte()) === '[]', await scelte());
+  await trascinaDa([6, 46], [1, 53]);
+  await premi('Down');
+  controlla('↓ torna giù', (await note_()) === '0:4:48 4:2:52 8:4:55 12:4:60', await note_());
+  await premi('D', 'meta');
+  controlla('⌘D le duplica subito dopo (da 6)', (await note_()) === '0:4:48 4:2:52 6:4:48 8:4:55 10:2:52 12:4:60', await note_());
+  controlla('le nuove diventano le scelte', (await scelte()) === '[{"i":6,"n":48},{"i":10,"n":52}]', await scelte());
+  await premi('Z', 'meta');
+  await trascinaDa([9, 44], [10, 56]);
+  controlla('un rettangolo sceglie la nota 55', (await scelte()) === '[{"i":8,"n":55}]', await scelte());
+  await premi('C', 'meta');
+  controlla('⌘C avvisa quante note', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('copiate: 1'));
+  await clicca(13, 40);
+  controlla('un clic nel vuoto toglie la scelta e mette il cursore', (await scelte()) === '[]' && (await js(`cutxProva.synth.roll.cursore`)) === 13);
+  await premi('V', 'meta');
+  controlla('⌘V incolla al cursore (13, 55)', (await note_()).includes('13:3:55'), await note_());
+  controlla('l\'incollata è scelta, il cursore va dopo (16 = fuori: nessuno)', (await scelte()) === '[{"i":13,"n":55}]' && (await js(`cutxProva.synth.roll.cursore`)) === null, await scelte());
+  await premi('Backspace');
+  controlla('⌫ toglie le scelte', !(await note_()).includes('13:3:55') && (await rollEventi()) !== '[]');
+  await premi('A', 'meta');
+  controlla('⌘A sceglie tutte', JSON.parse(await scelte()).length === JSON.parse(await rollEventi()).length);
+  await premi('D', 'meta');
+  controlla('⌘D con tutto il pattern scelto: niente posto, lo dice', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('fuori dal pattern'));
+  await premi('Backspace');
+  controlla('⌘A e ⌫ svuotano il pianoroll', (await rollEventi()) === '[]' && (await stato('note')) === '~');
+  // spostare più note insieme
+  await imposta_(BASE);
+  await trascinaDa([6, 46], [1, 53]);
+  await trascinaDa([0, 48], [2, 51]);
+  controlla('trascinando una nota scelta si muovono tutte le scelte (+2 scatti, +3 semitoni)', (await note_()) === '2:4:51 6:2:55 8:4:55 12:4:60', await note_());
+  controlla('e il trascinamento è un solo passo di ⌘Z', (await (async () => { await premi('Z', 'meta'); return note_(); })()) === '0:4:48 4:2:52 8:4:55 12:4:60');
+  // allungare più note insieme: dal bordo destro di una scelta
+  await trascinaDa([6, 46], [1, 53]);
+  {
+    // l'ultimo pixel della nota (la maniglia è larga 7): ci metto il mouse a 3 pixel dal bordo destro dell'ultima cella
+    const lar = await js(`cutxProva.synth.roll.larghezza`);
+    const p = await cella(3, 48);
+    const q = await cella(4, 48);
+    const wc = finestre.controllo.webContents;
+    const x0 = Math.round(p.x + lar / 2 - 3);
+    wc.sendInputEvent({ type: 'mouseDown', x: x0, y: Math.round(p.y), button: 'left', clickCount: 1 });
+    for (let k = 1; k <= 4; k++) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(x0 + ((q.x - p.x) * k) / 4), y: Math.round(p.y) });
+    wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x0 + q.x - p.x), y: Math.round(p.y), button: 'left', clickCount: 1 });
+    await aspetta(0.3);
+  }
+  controlla('dal bordo destro si allungano tutte le scelte (+1)', (await note_()) === '0:5:48 4:3:52 8:4:55 12:4:60', await note_());
+  // senza sorprese: ⌘V e ⌘D senza niente non rompono e le note scelte sparite da un ⌘Z non restano scelte
+  await premi('Z', 'meta');
+  {
+    const ev = JSON.parse(await rollEventi());
+    controlla('dopo ⌘Z le scelte che non esistono più si tolgono', JSON.parse(await scelte()).every((s) => ev.some((e) => e.i === s.i && e.n === s.n)));
+  }
+  // quello che si sente è quello che si vede
+  await imposta_(BASE);
+  await trascinaDa([6, 46], [1, 53]);
+  await premi('D', 'meta');
+  await premi('Up', 'shift');
+  {
+    const v = await chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1)`);
+    const a_ = await js(`cutxProva.synth.roll.eventi.map((e) => ({ i: e.i, l: e.l, n: e.n }))`);
+    const ord = (x) => JSON.stringify([...x].sort((p, q) => p.i - q.i || p.n - q.n));
+    controlla('Strudel suona proprio le note dopo duplica e trasposizione', ord(v ?? []) === ord(a_) && a_.length === 6, `${ord(v ?? [])} / ${ord(a_)}`);
+  }
+  await premi('B'); // le prove che seguono mettono note con un clic
   // il testo mini: l'altra metà
   const scriviMini = async (testo) => {
     await js(`(() => { const e = document.querySelector('.roll-mini-testo'); e.value = ${JSON.stringify(testo)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
@@ -3334,6 +3445,7 @@ async function provaSynth({ finestre, scrivi }) {
     if ((await js(`cutxProva.synth.rec?.fase()`)) === 'registra') inizioRec = await js(`cutxProva.synth.rec.inizio`);
     else await aspetta(0.05);
   }
+  await aspetta(0.1); // il testo del tasto segue la fase al tick successivo
   controlla('REC: il conteggio mostra 4, 3, 2, 1 e poi «● REC»', ['4', '3', '2', '1'].filter((x) => testiRec.has(x)).length >= 3 && (await js(`document.querySelector('.synth-rec').textContent`)).includes('REC') && inizioRec !== null, JSON.stringify([...testiRec]));
   // tre note: allo scatto 0 (lunga 4), allo scatto 8 (lunga 2), allo scatto 12 (lunga 3)
   const attendi = async (ciclo) => {

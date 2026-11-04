@@ -286,7 +286,7 @@
     },
     "roll": {
       "nome": "pianoroll",
-      "testo": "Clic su una cella: mette una nota (trascina per allungarla). Clic su una nota: la sposti; dal bordo la allunghi. ⌥-clic, clic destro o ⌫ la tolgono. Il testo mini sopra è la stessa cosa."
+      "testo": "Selezione: trascini nel vuoto per un rettangolo, doppio clic mette una nota. Matita (B): un clic mette una nota, trascini per allungarla. Su una nota: la scegli, la sposti con tutte le scelte, dal bordo la allunghi. ⌥-clic, clic destro o ⌫ le tolgono. ⌘A tutte, ⌘C ⌘X ⌘V, ⌘D duplica, ↑↓ trasponi (⇧ un'ottava). Il testo mini sopra è la stessa cosa."
     },
     "roll-cicli": {
       "nome": "cicli",
@@ -319,6 +319,10 @@
     "synth-tastiera": {
       "nome": "tastiera del Mac",
       "testo": "A S D F G H J K sono i tasti bianchi, W E T Y U i neri; Z e X cambiano ottava. Suonano in cuffia con il suono del pannello."
+    },
+    "roll-matita": {
+      "nome": "matita",
+      "testo": "Con la matita un clic mette una nota. Senza (selezione) un clic sceglie, il doppio clic mette una nota. B li alterna."
     }
   },
   "impostazioni": {
@@ -559,7 +563,11 @@
         "B"
       ],
       "fuoriGriglia": "fuori griglia: si modifica nel testo",
-      "noteMano": "note a mano nel codice"
+      "noteMano": "note a mano nel codice",
+      "matita": "matita",
+      "copiate": "copiate: {n}",
+      "appuntiVuoti": "appunti vuoti",
+      "fuoriPattern": "{n} note fuori dal pattern"
     }
   }
 }

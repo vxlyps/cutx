@@ -1,9 +1,14 @@
 // Il pianoroll del SYNTH: si disegna col mouse e resta allineato alla mini-notazione (synth-note.js).
-// Clic su una cella vuota: mette una nota (o un accordo) lunga quanto la «lunghezza»; trascinando a destra si allunga.
-// Clic su una nota: si sposta (anche in altezza); dal bordo destro si allunga; ⌥-clic, clic destro o ⌫ la tolgono.
+// Due strumenti (B li alterna). Selezione: trascini nel vuoto per un rettangolo, doppio clic mette una nota. Matita: un clic mette una
+// nota (o un accordo) lunga quanto la «lunghezza»; trascinando a destra si allunga.
+// Su una nota: la scegli, la sposti (anche in altezza, tutte le scelte insieme); dal bordo destro si allunga; ⌥-clic o clic destro
+// la tolgono, ⌫ toglie le scelte. ⌘A tutte, ⌘C ⌘X ⌘V, ⌘D duplica, ↑↓ trasponi (⇧ un'ottava).
 // Con la scala scelta le note si agganciano ai gradi della scala. Ogni gesto è un cambio solo (un passo di ⌘Z).
 import it from './testi/it.json';
-import { ACCORDI, CICLI, SCALE, SCATTI, accordoEventi, agganciaScala, conCicli, eNero, inScala, nomeNota, senzaEvento } from './synth-note.js';
+import {
+  ACCORDI, CICLI, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, agganciaScala, allunga, appunti, conCicli, duplica, eNero, inScala, incolla, muovi,
+  nelRettangolo, nomeNota, senzaScelte, trasponi, uniscisel,
+} from './synth-note.js';
 
 const T = it.synth.note;
 const TASTI_W = 52; // la colonna dei tasti a sinistra
@@ -13,8 +18,9 @@ const RIGHE = OTTAVE_VISTE * 12;
 const LARGHEZZA_MIN = 12;
 const LARGHEZZA_MAX = 40;
 const BORDO_PX = 7; // gli ultimi pixel di una nota sono la maniglia per allungarla
-const NOTA_MIN = 12;
-const NOTA_MAX = 108;
+const DOPPIO_MS = 500; // due clic sulla stessa cella vuota
+const riferimento = (e) => ({ i: e.i, n: e.n });
+let negliAppunti = null; // ⌘C: restano anche cambiando clip
 
 const crea = (tag, classe, testo) => {
   const el = document.createElement(tag);
@@ -37,7 +43,9 @@ export class PianoRoll {
     this.accordo = 'nota';
     this.lunghezza = 4; // in scatti
     this.basso = 36; // la nota più bassa che si vede (c2)
-    this.selezionato = null; // { i, n }
+    this.sel = []; // le note scelte: { i, n }
+    this.cursore = null; // lo scatto dove ⌘V incolla (l'ultimo clic)
+    this.strumento = 'seleziona'; // o 'matita'
     this.gesto = null;
     this.larghezza = 16;
     this.costruisci();
@@ -86,7 +94,10 @@ export class PianoRoll {
     su.dataset.aiuto = giu.dataset.aiuto = 'roll-ottava';
     const pulisci = crea('button', 'key piccolo', T.pulisci);
     pulisci.onclick = () => this.pulisci();
-    barra.append(this.cicliEl, campo(T.lunghezza, this.lunghezzaEl, 'roll-lunghezza'), campo(T.scala, this.scalaEl, 'roll-scala'), this.radiceEl, campo(T.accordo, this.accordoEl, 'roll-accordo'), su, giu, pulisci);
+    this.matitaEl = crea('button', 'key piccolo', T.matita);
+    this.matitaEl.dataset.aiuto = 'roll-matita';
+    this.matitaEl.onclick = () => this.usaStrumento(this.strumento === 'matita' ? 'seleziona' : 'matita');
+    barra.append(this.matitaEl, this.cicliEl, campo(T.lunghezza, this.lunghezzaEl, 'roll-lunghezza'), campo(T.scala, this.scalaEl, 'roll-scala'), this.radiceEl, campo(T.accordo, this.accordoEl, 'roll-accordo'), su, giu, pulisci);
 
     // la stessa cosa in mini-notazione: si modifica l'una o l'altra e restano allineate
     const riga = crea('div', 'roll-mini');
@@ -114,14 +125,9 @@ export class PianoRoll {
       e.preventDefault();
       const c = this.cella(e);
       const h = c && this.trova(c.passo, c.nota);
-      if (h && this.editabile) this.togli(h);
+      if (h && this.editabile) this.togli([h]);
     });
-    this.canvas.addEventListener('keydown', (e) => {
-      if ((e.key === 'Backspace' || e.key === 'Delete') && this.selezionato && this.editabile) {
-        e.preventDefault();
-        this.togli(this.selezionato);
-      }
-    });
+    this.canvas.addEventListener('keydown', (e) => this.tasto(e));
     this.canvas.addEventListener(
       'wheel',
       (e) => {
@@ -143,6 +149,8 @@ export class PianoRoll {
     if (mini !== undefined && document.activeElement !== this.miniEl) this.miniEl.value = mini;
     this.messaggioEl.textContent = messaggio;
     this.miniEl.classList.toggle('errore', !!messaggio && !editabile);
+    this.sel = this.sel.filter((s) => eventi.some((e) => e.i === s.i && e.n === s.n)); // ⌘Z, il testo o un'altra clip possono togliere note
+    if (this.cursore !== null && this.cursore >= cicli * SCATTI) this.cursore = null;
     for (const [c, b] of this.cicliBottoni) b.classList.toggle('on', c === cicli);
     const note = eventi.map((e) => e.n);
     if (note.length && !this.visitato) {
@@ -152,6 +160,16 @@ export class PianoRoll {
       this.visitato = true;
     }
     this.disegna();
+  }
+
+  usaStrumento(s) {
+    this.strumento = s;
+    this.matitaEl.classList.toggle('on', s === 'matita');
+    this.canvas.style.cursor = '';
+  }
+
+  eScelta(e) {
+    return this.sel.some((s) => s.i === e.i && s.n === e.n);
   }
 
   muoviVista(delta) {
@@ -165,14 +183,17 @@ export class PianoRoll {
 
   // --- geometria ---
 
-  cella(e) {
+  // La cella sotto il mouse; fuori dalla griglia è null, oppure (fermo = true) la cella più vicina.
+  cella(e, fermo = false) {
     const r = this.canvas.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    if (x < TASTI_W || y < 0) return null;
-    const passo = Math.floor((x - TASTI_W) / this.larghezza);
-    const nota = this.alto - Math.floor(y / RIGA_H);
-    if (passo < 0 || passo >= this.cicli * SCATTI || nota < this.basso || nota > this.alto) return null;
+    let passo = Math.floor((x - TASTI_W) / this.larghezza);
+    let nota = this.alto - Math.floor(y / RIGA_H);
+    if (fermo) {
+      passo = Math.max(0, Math.min(this.cicli * SCATTI - 1, passo));
+      nota = Math.max(this.basso, Math.min(this.alto, nota));
+    } else if (x < TASTI_W || y < 0 || passo < 0 || passo >= this.cicli * SCATTI || nota < this.basso || nota > this.alto) return null;
     return { passo, nota, x: x - TASTI_W - passo * this.larghezza };
   }
 
@@ -188,31 +209,53 @@ export class PianoRoll {
     const c = this.cella(e);
     if (!c) return;
     this.canvas.setPointerCapture(e.pointerId);
+    this.cursore = c.passo;
     const h = this.trova(c.passo, c.nota);
-    if (h && e.altKey) return this.togli(h);
+    if (h && e.altKey) return this.togli([h]);
     if (h) {
-      const alBordo = (h.i + h.l) * this.larghezza - ((c.passo * this.larghezza) + c.x) <= BORDO_PX;
-      this.selezionato = { i: h.i, n: h.n };
-      this.gesto = { tipo: alBordo ? 'allunga' : 'sposta', partenza: { ...h }, scostamento: c.passo - h.i, cambiato: false };
+      if (e.shiftKey) {
+        if (this.eScelta(h)) {
+          this.sel = this.sel.filter((s) => !(s.i === h.i && s.n === h.n)); // ⇧-clic su una scelta: la toglie dalla scelta
+          return this.disegna();
+        }
+        this.sel = [...this.sel, riferimento(h)];
+      } else if (!this.eScelta(h)) this.sel = [riferimento(h)];
+      const alBordo = (h.i + h.l) * this.larghezza - (c.passo * this.larghezza + c.x) <= BORDO_PX;
+      this.gesto = { tipo: alBordo ? 'allunga' : 'sposta', ancora: { ...h }, base: this.eventi, sel0: this.sel.map((s) => ({ ...s })), scostamento: c.passo - h.i, dn: 0, cambiato: false };
       this.opz.nota?.(h.n);
     } else {
-      const n = agganciaScala(c.nota, this.scala.radice, this.scala.tipo);
-      const fine = (Math.floor(c.passo / SCATTI) + 1) * SCATTI; // una nota non esce dal suo ciclo
-      const l = Math.min(this.lunghezza, fine - c.passo);
-      const nuovi = accordoEventi(n, this.accordo, c.passo, l).filter((x) => x.n >= NOTA_MIN && x.n <= NOTA_MAX);
-      this.gesto = { tipo: 'disegna', inizio: c.passo, fine, nuovi, base: this.eventi, cambiato: true };
-      this.eventi = this.unisci(this.eventi, nuovi);
-      this.selezionato = { i: nuovi[0].i, n: nuovi[0].n };
-      this.opz.nota?.(n);
+      const ora = performance.now();
+      const doppio = this.vuoto && ora - this.vuoto.t < DOPPIO_MS && this.vuoto.passo === c.passo && this.vuoto.nota === c.nota;
+      this.vuoto = this.strumento === 'matita' ? null : { t: ora, passo: c.passo, nota: c.nota };
+      if (this.strumento === 'matita' || doppio) {
+        const n = agganciaScala(c.nota, this.scala.radice, this.scala.tipo);
+        const fine = (Math.floor(c.passo / SCATTI) + 1) * SCATTI; // una nota non esce dal suo ciclo
+        const l = Math.min(this.lunghezza, fine - c.passo);
+        const nuovi = accordoEventi(n, this.accordo, c.passo, l).filter((x) => x.n >= NOTA_MIN && x.n <= NOTA_MAX);
+        this.gesto = { tipo: 'disegna', inizio: c.passo, fine, nuovi, base: this.eventi, cambiato: true };
+        this.eventi = this.unisci(this.eventi, nuovi);
+        this.sel = nuovi.map(riferimento);
+        this.vuoto = null;
+        this.opz.nota?.(n);
+      } else {
+        this.gesto = { tipo: 'rettangolo', da: c, a: c, prima: e.shiftKey ? this.sel : [], cambiato: false };
+        if (!e.shiftKey) this.sel = [];
+      }
     }
     this.disegna();
   }
 
   mosso(e) {
     const g = this.gesto;
+    if (g?.tipo === 'rettangolo') {
+      const c = this.cella(e, true);
+      g.a = c;
+      this.sel = uniscisel(g.prima, nelRettangolo(this.eventi, { i0: g.da.passo, i1: c.passo, n0: g.da.nota, n1: c.nota }));
+      return this.disegna();
+    }
     const c = this.cella(e);
     if (!g) {
-      this.canvas.style.cursor = c && this.trova(c.passo, c.nota) ? 'grab' : 'crosshair';
+      this.canvas.style.cursor = c && this.trova(c.passo, c.nota) ? 'grab' : this.strumento === 'matita' ? 'crosshair' : '';
       return;
     }
     if (!c) return;
@@ -220,23 +263,19 @@ export class PianoRoll {
       const l = Math.max(1, Math.min(g.fine - g.inizio, c.passo - g.inizio + 1));
       this.eventi = this.unisci(g.base, g.nuovi.map((x) => ({ ...x, l })));
     } else if (g.tipo === 'allunga') {
-      const fine = (Math.floor(g.partenza.i / SCATTI) + 1) * SCATTI;
-      const l = Math.max(1, Math.min(fine - g.partenza.i, c.passo - g.partenza.i + 1));
-      this.eventi = this.eventi.map((x) => (x.i === g.partenza.i && x.n === g.partenza.n ? { ...x, l } : x));
-      g.cambiato = l !== g.partenza.l;
+      const a = g.ancora;
+      const fine = (Math.floor(a.i / SCATTI) + 1) * SCATTI;
+      const l = Math.max(1, Math.min(fine - a.i, c.passo - a.i + 1));
+      this.eventi = allunga(g.base, g.sel0, l - a.l);
+      g.cambiato = l !== a.l;
     } else {
-      const i = Math.max(0, Math.min(this.cicli * SCATTI - 1, c.passo - g.scostamento));
-      const ciclo = Math.floor(i / SCATTI);
-      const l = Math.min(g.partenza.l, (ciclo + 1) * SCATTI - i);
       const n = agganciaScala(c.nota, this.scala.radice, this.scala.tipo);
-      const resto = senzaEvento(this.eventi, this.selezionato);
-      const nuovo = { i, l, n };
-      if (!resto.some((x) => x.i === i && x.n === n)) {
-        this.eventi = this.unisci(resto, [nuovo]);
-        if (this.selezionato.n !== n) this.opz.nota?.(n);
-        this.selezionato = { i, n };
-        g.cambiato = i !== g.partenza.i || n !== g.partenza.n;
-      }
+      const r = muovi(g.base, g.sel0, c.passo - g.scostamento - g.ancora.i, n - g.ancora.n, this.cicli);
+      this.eventi = r.eventi;
+      this.sel = r.sel;
+      if (r.dn !== g.dn) this.opz.nota?.(g.ancora.n + r.dn);
+      g.dn = r.dn;
+      g.cambiato = r.di !== 0 || r.dn !== 0;
     }
     this.disegna();
   }
@@ -254,18 +293,87 @@ export class PianoRoll {
     return [...fuori, ...nuovi].sort((a, b) => a.i - b.i || a.n - b.n);
   }
 
-  togli(h) {
-    this.eventi = senzaEvento(this.eventi, h);
-    this.selezionato = null;
+  // Cambia le note e lo dice (un solo passo di ⌘Z). Le scelte seguono se arrivano nuove (sel).
+  applica(eventi, sel = this.sel) {
+    this.eventi = eventi;
+    this.sel = sel;
     this.opz.cambia(this.eventi, this.cicli);
     this.disegna();
   }
 
+  togli(lista) {
+    this.applica(senzaScelte(this.eventi, lista), this.sel.filter((s) => !lista.some((x) => x.i === s.i && x.n === s.n)));
+  }
+
   pulisci() {
     if (!this.editabile || !this.eventi.length) return;
-    this.eventi = [];
-    this.selezionato = null;
-    this.opz.cambia(this.eventi, this.cicli);
+    this.applica([], []);
+  }
+
+  // --- tastiera (con il pianoroll in primo piano) ---
+
+  tasto(e) {
+    if (!this.editabile || e.altKey) return;
+    const cmd = e.metaKey || e.ctrlKey;
+    if (cmd) {
+      if (e.code === 'KeyA') this.tutte();
+      else if (e.code === 'KeyC') this.copia();
+      else if (e.code === 'KeyX') this.copia(true);
+      else if (e.code === 'KeyV' && !e.repeat) this.incollaQui();
+      else if (e.code === 'KeyD' && !e.repeat) this.duplicaScelte();
+      else return;
+      return e.preventDefault();
+    }
+    if (e.code === 'KeyB') {
+      if (!e.repeat) this.usaStrumento(this.strumento === 'matita' ? 'seleziona' : 'matita');
+      return e.preventDefault();
+    }
+    if (!this.sel.length) return;
+    if (e.code === 'Backspace' || e.code === 'Delete') {
+      this.togli(this.sel);
+      return e.preventDefault();
+    }
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+      e.preventDefault();
+      if (e.repeat) return;
+      const r = trasponi(this.eventi, this.sel, (e.code === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1), this.cicli);
+      if (r.dn) {
+        this.applica(r.eventi, r.sel);
+        this.opz.nota?.(Math.min(...r.sel.map((s) => s.n)));
+      }
+    }
+  }
+
+  tutte() {
+    this.sel = this.eventi.map(riferimento);
+    this.disegna();
+  }
+
+  copia(taglia = false) {
+    const clip = appunti(this.eventi, this.sel);
+    if (!clip) return;
+    negliAppunti = clip;
+    this.opz.avviso?.('copiate', { n: clip.note.length });
+    if (taglia) this.togli(this.sel);
+  }
+
+  incollaQui() {
+    if (!negliAppunti) return this.opz.avviso?.('appuntiVuoti');
+    this.mettiBlocco(incolla(this.eventi, negliAppunti, this.cursore ?? 0, this.cicli));
+  }
+
+  duplicaScelte() {
+    const r = duplica(this.eventi, this.sel, this.cicli);
+    if (r) this.mettiBlocco(r);
+  }
+
+  // Un blocco messo (incolla o duplica): le note nuove sono le scelte e il cursore va dopo, così ⌘V di seguito le accoda.
+  mettiBlocco(r) {
+    if (r.fuori) this.opz.avviso?.('fuoriPattern', { n: r.fuori });
+    if (r.sel.length) {
+      this.cursore = r.fine < this.cicli * SCATTI ? r.fine : null;
+      this.applica(r.eventi, r.sel);
+    }
   }
 
   cambiaCicli(c) {
@@ -328,7 +436,7 @@ export class PianoRoll {
       if (e.n < this.basso || e.n > this.alto) continue;
       const x = TASTI_W + e.i * this.larghezza;
       const y = (this.alto - e.n) * RIGA_H;
-      const scelta = this.selezionato && this.selezionato.i === e.i && this.selezionato.n === e.n;
+      const scelta = this.eScelta(e);
       g.fillStyle = this.editabile ? testo : spento;
       g.fillRect(x + 1, y + 1, Math.max(3, e.l * this.larghezza - 2), RIGA_H - 2);
       if (scelta) {
@@ -336,6 +444,32 @@ export class PianoRoll {
         g.lineWidth = 2;
         g.strokeRect(x + 1, y + 1, Math.max(3, e.l * this.larghezza - 2), RIGA_H - 2);
       }
+    }
+    if (this.cursore !== null) {
+      const x = TASTI_W + this.cursore * this.larghezza;
+      g.fillStyle = testo;
+      g.globalAlpha = 0.45;
+      g.fillRect(x, 0, 1, h);
+      g.beginPath();
+      g.moveTo(x - 4, 0);
+      g.lineTo(x + 5, 0);
+      g.lineTo(x + 0.5, 6);
+      g.fill();
+      g.globalAlpha = 1;
+    }
+    const rett = this.gesto?.tipo === 'rettangolo' ? this.gesto : null;
+    if (rett) {
+      const x0 = TASTI_W + Math.min(rett.da.passo, rett.a.passo) * this.larghezza;
+      const x1 = TASTI_W + (Math.max(rett.da.passo, rett.a.passo) + 1) * this.larghezza;
+      const y0 = (this.alto - Math.max(rett.da.nota, rett.a.nota)) * RIGA_H;
+      const y1 = (this.alto - Math.min(rett.da.nota, rett.a.nota) + 1) * RIGA_H;
+      g.fillStyle = avviso;
+      g.globalAlpha = 0.14;
+      g.fillRect(x0, y0, x1 - x0, y1 - y0);
+      g.globalAlpha = 1;
+      g.strokeStyle = avviso;
+      g.lineWidth = 1;
+      g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
     }
     this.sfondoH = h;
     this.disegnaTestina(g, w, h);

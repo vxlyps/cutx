@@ -189,6 +189,7 @@ export class VistaSynth {
       testo: (testoMini, fine) => this.daMini(testoMini, fine),
       nota: (n) => this.provaNota(n),
       ciclo: () => this.opz.ciclo?.() ?? null,
+      avviso: (chiave, vars) => this.avviso(formatta(T.note[chiave], vars)),
     });
     sinistra.append(schede, pannello, this.noteEl);
     corpo.append(sinistra, lato);
@@ -538,6 +539,7 @@ export class VistaSynth {
     this.nomeEl.value = this.nome;
     this.registra();
     this.slot = { A: pulisci({ ...stato, anteprima: 'clip' }), B: null, lato: 'A' };
+    this.roll.sel = []; // le note scelte erano di un'altra clip
     this.cicliScelti = 1;
     this.inGesto = false;
     this.avviso('');

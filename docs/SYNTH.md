@@ -79,3 +79,9 @@ Limiti di MUTATE per tipo (`PROFILI` in `synth-modello.js`):
 Il gain non lo tocca mai MUTATE.
 
 Seguono, prima del resto: **il controller nel SYNTH** (era il blocco 5).
+
+## Pianoroll · passi (4/11/2026)
+
+Piano concordato: 1 selezione, 2 matita, 3 scrittura a passi, 4 velocity; poi il controller (5 mappa e anelli, 6 tasti in basso).
+
+**Passo 1 · selezione (fatto).** Strumenti: selezione (di partenza) e matita (B li alterna). Selezione: rettangolo, doppio clic per una nota, ⇧ per aggiungere. Spostare e allungare valgono per tutte le scelte. ⌘A, ⌘C, ⌘X, ⌘V (al cursore), ⌘D, ↑↓, ⇧↑↓, ⌫. Cambia rispetto al blocco 2: un clic su una cella vuota non mette più la nota se lo strumento è la selezione (serve il doppio clic, o B per la matita), come Ableton.

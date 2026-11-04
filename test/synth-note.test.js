@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACCORDI, SCALE, SCATTI, accordoEventi, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
+  ACCORDI, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
 } from '../src/renderer/synth-note.js';
 
 const seme = (n) => () => ((n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -162,4 +162,85 @@ test('REC: più cicli, una nota che parte sul confine torna all\'inizio, una not
   r2.noteOn(60, 100, 2.999); // scatto 15,98 → 16 = la fine: torna sull'1
   r2.noteOff(60, 3.0);
   assert.deepEqual(r2.risultato(), [{ i: 0, l: 1, n: 60 }]);
+});
+
+const base = [{ i: 0, l: 4, n: 48 }, { i: 4, l: 2, n: 52 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 60 }];
+const rif = (...e) => e.map((x) => ({ i: x.i, n: x.n }));
+
+test('selezione: il rettangolo prende le note che lo toccano, anche solo con la coda', () => {
+  assert.deepEqual(nelRettangolo(base, { i0: 2, i1: 5, n0: 47, n1: 53 }), rif(base[0], base[1]));
+  assert.deepEqual(nelRettangolo(base, { i0: 5, i1: 2, n0: 53, n1: 47 }), rif(base[0], base[1]), 'a rovescio è lo stesso');
+  assert.deepEqual(nelRettangolo(base, { i0: 6, i1: 7, n0: 40, n1: 70 }), []);
+  assert.deepEqual(uniscisel(rif(base[0]), rif(base[0], base[1])), rif(base[0], base[1]));
+});
+
+test('trasponi: di semitoni o ottave, o tutte o niente ai bordi', () => {
+  const sel = rif(base[0], base[2]);
+  const su = trasponi(base, sel, 1, 1);
+  assert.deepEqual(su.eventi.map((e) => e.n), [49, 52, 56, 60]);
+  assert.deepEqual(su.sel, rif({ i: 0, n: 49 }, { i: 8, n: 56 }));
+  assert.deepEqual(trasponi(base, sel, -12, 1).eventi.map((e) => e.n), [36, 52, 43, 60]);
+  const alto = [{ i: 0, l: 4, n: NOTA_MAX }, { i: 4, l: 4, n: 60 }];
+  const fermo = trasponi(alto, rif(alto[0], alto[1]), 1, 1);
+  assert.deepEqual(fermo.eventi, alto, 'una sola uscirebbe: non si muove niente');
+  assert.equal(fermo.dn, 0);
+  const basso = [{ i: 0, l: 4, n: NOTA_MIN }];
+  assert.deepEqual(trasponi(basso, rif(basso[0]), -1, 1).eventi, basso);
+});
+
+test('muovi: tutte insieme, ferme ai bordi, una nota non esce dal suo ciclo', () => {
+  const sel = rif(base[1], base[2]);
+  const r = muovi(base, sel, 3, 2, 1);
+  assert.deepEqual(r.eventi.filter((e) => e.n >= 54 && e.n <= 57).map((e) => [e.i, e.n]), [[7, 54], [11, 57]]);
+  assert.equal(r.di, 3);
+  // al bordo destro (1 ciclo = 16 scatti): la nota che arriva più in là (i 8 → max 15) frena tutte
+  assert.equal(muovi(base, sel, 20, 0, 1).di, 7);
+  assert.equal(muovi(base, sel, -20, 0, 1).di, -4);
+  // la lunghezza si accorcia al ciclo: la nota di 4 che parte dallo scatto 14 ne ha 2
+  const m = muovi([{ i: 0, l: 4, n: 48 }], rif({ i: 0, n: 48 }), 14, 0, 1);
+  assert.deepEqual(m.eventi, [{ i: 14, l: 2, n: 48 }]);
+  // con 2 cicli il confine è 32
+  assert.equal(muovi([{ i: 0, l: 1, n: 48 }], rif({ i: 0, n: 48 }), 99, 0, 2).di, 31);
+  // quello che le note scelte coprono sparisce, ma quelle altrove restano
+  const c = muovi(base, rif(base[0]), 4, 4, 1);
+  assert.deepEqual(c.eventi.map((e) => [e.i, e.n]), [[4, 52], [8, 55], [12, 60]], 'la 48 va a (4, 52) e sostituisce la nota che c\'era');
+  assert.deepEqual(muovi(base, [], 3, 3, 1).eventi, base);
+});
+
+test('allunga: tutte le scelte insieme, dentro il loro ciclo, mai meno di 1', () => {
+  const sel = rif(base[0], base[3]);
+  assert.deepEqual(allunga(base, sel, 2).map((e) => e.l), [6, 2, 4, 4], 'la nota a 12 è già al bordo del ciclo');
+  assert.deepEqual(allunga(base, sel, -9).map((e) => e.l), [1, 2, 4, 1]);
+});
+
+test('appunti e incolla: il blocco si rimette dove vuoi, con l\'inizio contato dalla prima nota', () => {
+  const clip = appunti(base, rif(base[1], base[2]));
+  assert.deepEqual(clip, { note: [{ d: 0, l: 2, n: 52 }, { d: 4, l: 4, n: 55 }], durata: 8 });
+  assert.equal(appunti(base, []), null);
+  const r = incolla([], clip, 2, 2);
+  assert.deepEqual(r.eventi, [{ i: 2, l: 2, n: 52 }, { i: 6, l: 4, n: 55 }]);
+  assert.deepEqual(r.sel, rif({ i: 2, n: 52 }, { i: 6, n: 55 }));
+  assert.equal(r.fine, 10);
+  assert.equal(r.fuori, 0);
+  const tardi = incolla([], clip, 28, 2);
+  assert.deepEqual(tardi.eventi, [{ i: 28, l: 2, n: 52 }]);
+  assert.equal(tardi.fuori, 1, 'la seconda nota cade a 32: oltre il pattern');
+  assert.equal(incolla(base, clip, 40, 2).fuori, 2);
+  // sopra una nota uguale la sostituisce
+  assert.equal(incolla([{ i: 2, l: 9, n: 52 }], clip, 2, 1).eventi.find((e) => e.n === 52).l, 2);
+});
+
+test('duplica: subito dopo il blocco, come ⌘D', () => {
+  const r = duplica(base, rif(base[0], base[1]), 2);
+  assert.deepEqual(r.eventi.filter((e) => e.i >= 6).map((e) => [e.i, e.l, e.n]), [[6, 4, 48], [8, 4, 55], [10, 2, 52], [12, 4, 60]]);
+  assert.deepEqual(r.sel, rif({ i: 6, n: 48 }, { i: 10, n: 52 }));
+  assert.equal(duplica(base, [], 2), null);
+  // il blocco arriva al fondo: non c'è posto
+  const tutto = duplica(base, rif(...base), 1);
+  assert.equal(tutto.fuori, 4);
+  assert.deepEqual(tutto.eventi, base);
+});
+
+test('senzaScelte toglie solo quelle scelte', () => {
+  assert.deepEqual(senzaScelte(base, rif(base[1])), [base[0], base[2], base[3]]);
 });

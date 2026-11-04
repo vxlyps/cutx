@@ -7,6 +7,8 @@
 export const SCATTI = 16; // scatti per ciclo (griglia 1/16)
 export const CICLI = [1, 2, 4, 8];
 const CICLI_MAX = 8;
+export const NOTA_MIN = 12; // le note del pianoroll stanno tra c0 e c7
+export const NOTA_MAX = 108;
 
 // --- nomi delle note ---
 const SEMITONI = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
@@ -325,3 +327,82 @@ export function conEvento(eventi, nuovo) {
 }
 
 export const senzaEvento = (eventi, e) => eventi.filter((x) => !(x.i === e.i && x.n === e.n));
+
+// --- selezione, appunti, duplicato (le note scelte sono riferimenti { i, n }) ---
+
+const fineCiclo = (i) => (Math.floor(i / SCATTI) + 1) * SCATTI;
+const eScelta = (sel, e) => sel.some((s) => s.i === e.i && s.n === e.n);
+const riferimento = (e) => ({ i: e.i, n: e.n });
+
+// Le note che toccano il rettangolo (scatti i0..i1, altezze n0..n1, estremi compresi).
+export function nelRettangolo(eventi, { i0, i1, n0, n1 }) {
+  const [a, b] = [Math.min(i0, i1), Math.max(i0, i1)];
+  const [lo, hi] = [Math.min(n0, n1), Math.max(n0, n1)];
+  return eventi.filter((e) => e.n >= lo && e.n <= hi && e.i <= b && e.i + e.l - 1 >= a).map(riferimento);
+}
+
+// Le scelte unite, senza doppioni.
+export const uniscisel = (a, b) => [...a, ...b.filter((x) => !eScelta(a, x))];
+
+// Le note scelte spostate di di scatti e dn semitoni. Si fermano al bordo (primo/ultimo scatto, c0–c7) tutte insieme;
+// una nota non esce dal suo ciclo. Quelle sotto cui arrivano restano coperte. Ritorna anche di e dn davvero applicati.
+export function muovi(eventi, sel, di, dn, cicli) {
+  const scelte = eventi.filter((e) => eScelta(sel, e));
+  if (!scelte.length) return { eventi, sel, di: 0, dn: 0 };
+  const iMin = Math.min(...scelte.map((e) => e.i));
+  const iMax = Math.max(...scelte.map((e) => e.i));
+  const nMin = Math.min(...scelte.map((e) => e.n));
+  const nMax = Math.max(...scelte.map((e) => e.n));
+  const tetto = cicli * SCATTI; // il pattern finisce qui
+  const d = Math.max(-iMin, Math.min(tetto - 1 - iMax, di));
+  const t = Math.max(NOTA_MIN - nMin, Math.min(NOTA_MAX - nMax, dn));
+  const mosse = scelte.map((e) => {
+    const i = e.i + d;
+    return { i, l: Math.min(e.l, fineCiclo(i) - i), n: e.n + t };
+  });
+  const resto = eventi.filter((e) => !eScelta(sel, e) && !mosse.some((m) => m.i === e.i && m.n === e.n));
+  return { eventi: [...resto, ...mosse].sort((x, y) => x.i - y.i || x.n - y.n), sel: mosse.map(riferimento), di: d, dn: t };
+}
+
+// Trasporre di delta semitoni: o tutte o niente (se una uscisse da c0–c7 non si muove nulla).
+export function trasponi(eventi, sel, delta, cicli) {
+  const r = muovi(eventi, sel, 0, delta, cicli);
+  return r.dn === delta ? r : { eventi, sel, di: 0, dn: 0 };
+}
+
+// Le note scelte allungate (o accorciate) di dl scatti, ognuna dentro il suo ciclo.
+export function allunga(eventi, sel, dl) {
+  return eventi.map((e) => (eScelta(sel, e) ? { ...e, l: Math.max(1, Math.min(fineCiclo(e.i) - e.i, e.l + dl)) } : e));
+}
+
+export const senzaScelte = (eventi, sel) => eventi.filter((e) => !eScelta(sel, e));
+
+// Gli appunti: le note scelte con l'inizio contato da quella che parte per prima, e quanto dura il blocco.
+export function appunti(eventi, sel) {
+  const scelte = eventi.filter((e) => eScelta(sel, e));
+  if (!scelte.length) return null;
+  const da = Math.min(...scelte.map((e) => e.i));
+  return { note: scelte.map((e) => ({ d: e.i - da, l: e.l, n: e.n })), durata: Math.max(...scelte.map((e) => e.i + e.l)) - da };
+}
+
+// Gli appunti messi a partire dallo scatto i0. Quelle che cadono oltre la fine del pattern si scartano (fuori = quante).
+export function incolla(eventi, clip, i0, cicli) {
+  const fine = cicli * SCATTI;
+  const nuove = [];
+  let fuori = 0;
+  for (const c of clip.note) {
+    const i = i0 + c.d;
+    if (i < 0 || i >= fine) fuori++;
+    else nuove.push({ i, l: Math.min(c.l, fineCiclo(i) - i), n: c.n });
+  }
+  const resto = eventi.filter((e) => !nuove.some((m) => m.i === e.i && m.n === e.n));
+  return { eventi: [...resto, ...nuove].sort((x, y) => x.i - y.i || x.n - y.n), sel: nuove.map(riferimento), fuori, fine: i0 + clip.durata };
+}
+
+// Duplica le note scelte subito dopo il blocco (come ⌘D di Ableton).
+export function duplica(eventi, sel, cicli) {
+  const clip = appunti(eventi, sel);
+  if (!clip) return null;
+  const da = Math.min(...eventi.filter((e) => eScelta(sel, e)).map((e) => e.i));
+  return incolla(eventi, clip, da + clip.durata, cicli);
+}
