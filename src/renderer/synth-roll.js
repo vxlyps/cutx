@@ -7,18 +7,19 @@
 import it from './testi/it.json';
 import {
   ACCORDI, CICLI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, agganciaScala, allunga, appunti, conCicli, duplica, eNero, inScala, incolla, muovi,
-  indietroPasso, nelRettangolo, nomeNota, scriviPasso, senzaEvento, senzaScelte, trasponi, uniscisel,
+  indietroPasso, nelRettangolo, nomeNota, scriviPasso, senzaEvento, senzaScelte, trasponi, uniformaVel, uniscisel, VEL_MIN,
 } from './synth-note.js';
 
 const T = it.synth.note;
 const TASTI_W = 52; // la colonna dei tasti a sinistra
-const RIGA_H = 13;
+const RIGA_H = 11;
 const OTTAVE_VISTE = 3;
 const RIGHE = OTTAVE_VISTE * 12;
 const LARGHEZZA_MIN = 12;
 const LARGHEZZA_MAX = 40;
 const BORDO_PX = 7; // gli ultimi pixel di una nota sono la maniglia per allungarla
 const DOPPIO_MS = 500; // due clic sulla stessa cella vuota
+const STRIP_H = 56; // la striscia della velocity sotto le note
 const TENUTO_B_MS = 450; // B tenuto più di così: lo strumento torna com'era al rilascio
 const riferimento = (e) => ({ i: e.i, n: e.n });
 const mcd = (a, b) => (b ? mcd(b, a % b) : a);
@@ -48,6 +49,9 @@ export class PianoRoll {
     this.messaggio = '';
     this.scala = { radice: 0, tipo: 'cromatica' };
     this.accordo = 'nota';
+    this.rigaH = RIGA_H; // misure del disegno (le usano anche le prove per mirare il mouse)
+    this.stripH = STRIP_H;
+    this.righe = RIGHE;
     this.griglia = SCATTI; // scatti per ciclo: 16 (1/16), 12 (terzine)…
     this.lunghezza = 4; // in scatti
     this.basso = 36; // la nota più bassa che si vede (c2)
@@ -234,7 +238,8 @@ export class PianoRoll {
       }
       this.fuoriVista(midi);
       p.sel = uniscisel(p.sel, r.sel);
-      this.applica(r.eventi, p.sel);
+      this.applica(r.eventi, p.sel, p.tenuti.size === 1 && !p.scritto ? 'inizio' : 'continua'); // i tasti dello stesso passo sono un solo passo di ⌘Z
+      p.scritto = true;
       return true;
     }
     const p = this.attesaPasso;
@@ -242,6 +247,7 @@ export class PianoRoll {
     p.tenuti.delete(midi);
     if (!p.tenuti.size) {
       this.attesaPasso = null;
+      this.opz.fineGesto?.();
       this.cursore = Math.min(totale, p.inizio + this.lunghezza);
       this.cursoreInVista();
       this.disegna();
@@ -327,6 +333,12 @@ export class PianoRoll {
   premuto(e) {
     this.canvas.focus();
     if (e.button !== 0 || !this.editabile) return;
+    if (e.clientY - this.canvas.getBoundingClientRect().top >= RIGHE * RIGA_H) {
+      // la striscia della velocity
+      this.canvas.setPointerCapture(e.pointerId);
+      this.gesto = { tipo: 'vel', cambiato: false };
+      return this.velocityPunto(e);
+    }
     const c = this.cella(e);
     if (!c) return;
     this.canvas.setPointerCapture(e.pointerId);
@@ -427,6 +439,7 @@ export class PianoRoll {
 
   mosso(e) {
     const g = this.gesto;
+    if (g?.tipo === 'vel') return this.velocityPunto(e);
     if (g?.tipo === 'matita') {
       this.matitaPassa(g, this.cella(e, true));
       return this.disegna();
@@ -443,7 +456,8 @@ export class PianoRoll {
     }
     const c = this.cella(e);
     if (!g) {
-      this.canvas.style.cursor = c && this.trova(c.passo, c.nota) ? 'grab' : this.strumento === 'matita' ? 'crosshair' : '';
+      const nellaStriscia = e.clientY - this.canvas.getBoundingClientRect().top >= RIGHE * RIGA_H;
+      this.canvas.style.cursor = nellaStriscia ? 'ns-resize' : c && this.trova(c.passo, c.nota) ? 'grab' : this.strumento === 'matita' ? 'crosshair' : '';
       return;
     }
     if (!c) return;
@@ -472,8 +486,10 @@ export class PianoRoll {
     const g = this.gesto;
     this.gesto = null;
     if (this.canvas.hasPointerCapture?.(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
-    if (g?.cambiato) this.opz.cambia(this.eventi, this.cicli);
-    else if (g) this.disegna();
+    if (g?.cambiato) {
+      this.eventi = uniformaVel(this.eventi);
+      this.opz.cambia(this.eventi, this.cicli);
+    } else if (g) this.disegna();
   }
 
   unisci(base, nuovi) {
@@ -482,10 +498,10 @@ export class PianoRoll {
   }
 
   // Cambia le note e lo dice (un solo passo di ⌘Z). Le scelte seguono se arrivano nuove (sel).
-  applica(eventi, sel = this.sel) {
-    this.eventi = eventi;
+  applica(eventi, sel = this.sel, gesto = undefined) {
+    this.eventi = uniformaVel(eventi);
     this.sel = sel;
-    this.opz.cambia(this.eventi, this.cicli);
+    this.opz.cambia(this.eventi, this.cicli, gesto);
     this.disegna();
   }
 
@@ -594,7 +610,8 @@ export class PianoRoll {
     const disponibile = Math.max(200, this.scorri.clientWidth - TASTI_W - 2);
     this.larghezza = Math.max(LARGHEZZA_MIN, Math.min(LARGHEZZA_MAX, Math.floor(disponibile / passi)));
     const w = TASTI_W + passi * this.larghezza;
-    const h = RIGHE * RIGA_H;
+    const hN = RIGHE * RIGA_H; // le note
+    const h = hN + STRIP_H; // più la striscia della velocity
     const dpr = window.devicePixelRatio || 1;
     if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(h * dpr)) {
       this.canvas.width = Math.round(w * dpr);
@@ -630,14 +647,15 @@ export class PianoRoll {
       g.fillRect(0, y, TASTI_W - 2, RIGA_H - 1);
       if (nota % 12 === 0) {
         g.fillStyle = '#050604';
-        g.font = '10px ui-monospace, monospace';
-        g.fillText(nomeNota(nota), 6, y + RIGA_H - 3);
+        g.font = '9px ui-monospace, monospace';
+        g.fillText(nomeNota(nota), 6, y + RIGA_H - 2);
       }
     }
     for (let p = 0; p <= passi; p++) {
       g.fillStyle = p % this.griglia === 0 ? spento : p % (this.griglia / 4) === 0 ? bordo : linea;
       g.fillRect(TASTI_W + p * this.larghezza, 0, 1, h);
     }
+    this.disegnaVelocity(g, w, hN, { testo, spento, avviso, bordo, pannello });
     for (const e of this.eventi) {
       if (e.n < this.basso || e.n > this.alto) continue;
       const x = TASTI_W + e.i * this.larghezza;
@@ -655,14 +673,14 @@ export class PianoRoll {
       // dove scriverà il prossimo tasto: una colonna lunga quanto la «lunghezza»
       g.fillStyle = testo;
       g.globalAlpha = 0.12;
-      g.fillRect(TASTI_W + this.cursore * this.larghezza, 0, Math.max(2, this.lunghezza * this.larghezza), h);
+      g.fillRect(TASTI_W + this.cursore * this.larghezza, 0, Math.max(2, this.lunghezza * this.larghezza), hN);
       g.globalAlpha = 1;
     }
     if (this.cursore !== null) {
       const x = TASTI_W + this.cursore * this.larghezza;
       g.fillStyle = testo;
       g.globalAlpha = 0.45;
-      g.fillRect(x, 0, 1, h);
+      g.fillRect(x, 0, 1, hN);
       g.beginPath();
       g.moveTo(x - 4, 0);
       g.lineTo(x + 5, 0);
@@ -685,7 +703,54 @@ export class PianoRoll {
       g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
     }
     this.sfondoH = h;
-    this.disegnaTestina(g, w, h);
+    this.disegnaTestina(g, w, hN);
+  }
+
+  // La striscia della velocity: una barra per ogni punto in cui parte una nota (le note insieme, un accordo, ne hanno una sola); più alta = più forte.
+  disegnaVelocity(g, w, y0, { testo, spento, avviso, bordo, pannello }) {
+    g.fillStyle = pannello;
+    g.fillRect(TASTI_W, y0, w - TASTI_W, STRIP_H);
+    g.fillStyle = bordo;
+    g.fillRect(0, y0, w, 1);
+    g.fillStyle = spento;
+    g.font = '10px ui-monospace, monospace';
+    g.fillText(T.velocity, 6, y0 + 16);
+    const alto = STRIP_H - 10;
+    const scelti = new Set(this.sel.map((q) => q.i));
+    const visti = new Set();
+    for (const e of this.eventi) {
+      if (visti.has(e.i)) continue;
+      visti.add(e.i);
+      const bh = Math.max(2, Math.round((e.v ?? 1) * alto));
+      const x = TASTI_W + e.i * this.larghezza;
+      g.fillStyle = this.editabile ? testo : spento;
+      g.fillRect(x + 1, y0 + STRIP_H - 4 - bh, Math.max(3, this.larghezza - 3), bh);
+      if (scelti.has(e.i)) {
+        g.strokeStyle = avviso;
+        g.lineWidth = 1.5;
+        g.strokeRect(x + 1, y0 + STRIP_H - 4 - bh, Math.max(3, this.larghezza - 3), bh);
+      }
+    }
+  }
+
+  // Un clic o un trascinamento nella striscia: la barra del punto sotto il mouse prende l'altezza del mouse (in alto = 1). Se la barra è fra le scelte, le prendono tutte.
+  velocityPunto(e) {
+    const r = this.canvas.getBoundingClientRect();
+    const passo = Math.floor((e.clientX - r.left - TASTI_W) / this.larghezza);
+    const yy = e.clientY - r.top - RIGHE * RIGA_H;
+    const alto = STRIP_H - 10;
+    const grezzo = 1 - (yy - 4) / alto;
+    const v = grezzo >= 0.97 ? 1 : Math.max(VEL_MIN, Math.min(1, Math.round(grezzo * 20) / 20)); // a passi di .05: il codice resta pulito
+    if (!this.eventi.some((x) => x.i === passo)) return;
+    const scelti = new Set(this.sel.map((q) => q.i));
+    const bersagli = scelti.has(passo) ? scelti : new Set([passo]);
+    this.eventi = this.eventi.map((x) => {
+      if (!bersagli.has(x.i)) return x;
+      if (v === 1) return { i: x.i, l: x.l, n: x.n };
+      return { ...x, v };
+    });
+    this.gesto.cambiato = true;
+    this.disegna();
   }
 
   // La testina: dov'è la prova in cuffia nel loop (la sezione si ripete ogni `cicli` cicli).

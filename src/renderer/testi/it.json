@@ -331,6 +331,10 @@
     "roll-passi": {
       "nome": "scrittura a passi",
       "testo": "Con «passi» acceso i tasti del piano (A S D F…) scrivono la nota al cursore, lunga una «lunghezza», e il cursore avanza; più tasti insieme sono un accordo. Spazio = pausa, ⌫ = indietro (toglie le note di quel passo), ←→ muovono il cursore, esc esce. Un clic nel pianoroll mette il cursore."
+    },
+    "roll-velocity": {
+      "nome": "velocity",
+      "testo": "Sotto le note: una barra per ogni punto in cui parte una nota (le note di un accordo ne hanno una sola). Clicca o trascina nella striscia per cambiarla: in alto è la velocity piena (non si scrive), più in basso è più piano. Nel codice diventa .velocity(\"…\") dopo le note. Se la barra è fra le note scelte le cambi tutte."
     }
   },
   "impostazioni": {
@@ -572,7 +576,8 @@
       "fuoriPattern": "{n} note fuori dal pattern",
       "griglia": "griglia",
       "fuoriQuestaGriglia": "le note non stanno su {g}",
-      "passi": "passi"
+      "passi": "passi",
+      "velocity": "vel"
     },
     "controller": {
       "segue": "controller → SYNTH",

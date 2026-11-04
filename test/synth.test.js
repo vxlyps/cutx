@@ -436,3 +436,22 @@ test('un inviluppo scritto a metà: il pannello lo riempie come superdough (e lo
   const u = leggiCodice('note("c3")\n  .attack(.01).decay(.2)').stato;
   assert.deepEqual([u.attack, u.decay, u.sustain, u.release], [0.01, 0.2, 0, 0.01]);
 });
+
+test('velocity: .velocity(\"…\") dopo le note, e il codice scritto a mano la legge', () => {
+  const s = { ...iniziale(), anteprima: 'clip', note: 'c3 e3 g3 b3', vel: '1 .5 1 .8' };
+  const c = codice(s);
+  assert.ok(c.startsWith('note("c3 e3 g3 b3")\n  .velocity("1 .5 1 .8")\n  .s('), c);
+  assert.equal(leggiCodice(c).stato.vel, '1 .5 1 .8');
+  assert.equal(leggiCodice(c).stato.note, 'c3 e3 g3 b3');
+  assert.equal(leggiCodice('note("c3 e3").velocity(.6).s("square")').stato.vel, '.6', 'un numero solo vale per tutte');
+  const boh = leggiCodice('note("c3 e3").velocity(sine.range(.3,1)).s("square")');
+  assert.equal(boh.stato.vel, '');
+  assert.ok(boh.mano.some((m) => m.startsWith('.velocity(')), 'quello che non si legge resta a mano');
+  assert.ok(!codice({ ...s, anteprima: 'arpeggio' }).includes('.velocity('), 'con lo schema di prova non c\'è');
+  assert.equal(leggiRiga(clip(s)).vel, '1 .5 1 .8');
+  assert.equal(leggiRiga(clip({ ...s, anteprima: 'arpeggio' })).vel, '');
+  // con n().scale() la velocity sta dopo la scala
+  const g = leggiCodice('n("0 2")\n  .scale("C:major")\n  .velocity("1 .5")\n  .s("square")').stato;
+  assert.equal(g.vel, '1 .5');
+  assert.ok(codice(g).startsWith('n("0 2")\n  .scale("C:major")\n  .velocity("1 .5")'), codice(g));
+});

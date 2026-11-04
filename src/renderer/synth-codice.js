@@ -4,6 +4,7 @@
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
 import { DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
+import { velValida } from './synth-note.js';
 
 export const MARCA = '// @synth';
 const RIGA = /^[ \t]*\/\/[ \t]*@synth[ \t]+(\{.*\})[ \t]*$/m;
@@ -36,6 +37,9 @@ const NEUTRO_CUTOFF = { lpf: 20000, hpf: 20 };
 const MOTORE = { voci: 5, detune: 0.18, spread: 0.6, pw: 0.5, fmh: 1, phaserdepth: 0.75, tremolodepth: 1, delayfeedback: 0.5, delaysync: '3/16', roomsize: 2, attack: 0.001, decay: 0.05, sustain: 0.6, release: 0.01 };
 
 // Le note della clip sono gradi di una scala (n("0 2 4").scale("A2:minor"))? Solo con la scala giusta e lo schema «clip».
+// Le note della clip hanno una velocity scritta (.velocity("…"))? Solo con lo schema «clip» e le note del pianoroll (non con un inizio scritto a mano).
+export const conVelocity = (s) => !!s.vel && s.anteprima === 'clip' && noteValide(s.note) && !(s.testa && testaValida(s.testa));
+
 export const inGradi = (s) => !!s.scala && scalaValida(s.scala) && s.anteprima === 'clip' && noteValide(s.note);
 
 // Il codice del suono, con le note dello schema scelto. Righe corte: si legge anche sul proiettore.
@@ -46,6 +50,7 @@ export function codice(stato) {
   if (s.testa && testaValida(s.testa)) r.push(s.testa);
   else if (inGradi(s)) r.push(`n("${s.note}")`, `  .scale("${s.scala}")`);
   else r.push(`note("${noteEffettive(s)}")`);
+  if (conVelocity(s)) r.push(`  .velocity("${s.vel}")`);
 
   if (!rumore) {
     if (s.ottava) r.push(`  .trans(${s.ottava * 12})`);
@@ -116,7 +121,7 @@ export function rigaSynth(stato) {
 // Nella riga ci vanno le note che suonano davvero (schema «clip»): riaprendola nel synth le note sono quelle.
 export function clip(stato) {
   const s = pulisci(stato, { tetto: false });
-  return `${rigaSynth({ ...s, anteprima: 'clip', note: noteEffettive(s), scala: inGradi(s) ? s.scala : '' })}\n${codice(s)}\n`;
+  return `${rigaSynth({ ...s, anteprima: 'clip', note: noteEffettive(s), scala: inGradi(s) ? s.scala : '', vel: conVelocity(s) ? s.vel : '' })}\n${codice(s)}\n`;
 }
 
 // Lo stato scritto nella riga @synth di un testo, o null se non c'è (o non si legge): le clip scritte a mano non si aprono nel synth.
@@ -231,7 +236,7 @@ export function funzioniDi(k) {
 export function leggiCodice(testo, base = iniziale()) {
   const sp = spezza(testo);
   if (sp.errore) return { errore: sp.errore };
-  const s = { ...spento(), note: base.note, anteprima: base.anteprima, categoria: base.categoria, testa: '', mano: [], scala: '', intro: introValida(sp.intro) ? sp.intro : '' };
+  const s = { ...spento(), note: base.note, anteprima: base.anteprima, categoria: base.categoria, testa: '', mano: [], scala: '', vel: '', intro: introValida(sp.intro) ? sp.intro : '' };
   const errori = [];
   const mano = [];
   // la testa: note("…") sono le note della clip; n("…") con .scale("…") sono i gradi di una scala; qualsiasi altra cosa resta com'è
@@ -306,6 +311,13 @@ export function leggiCodice(testo, base = iniziale()) {
       preso = true;
     } else if (n === 'add' && !visti.has(n) && !eRumore(s.forma)) {
       preso = leggiAdd(c.args, s);
+    } else if (n === 'velocity' && !visti.has(n) && s.anteprima === 'clip' && !s.testa) {
+      // .velocity("1 .5 .8") o .velocity(.6): la velocity delle note, se si legge nel pianoroll; altrimenti resta a mano
+      const testo = str ?? (v !== null ? num(v) : null);
+      if (testo !== null && velValida(testo)) {
+        s.vel = testo.trim();
+        preso = true;
+      }
     } else {
       // le funzioni dell'inviluppo del filtro: lpenv, lpattack… (solo quelle del tipo di filtro in uso)
       const m = /^(lp|hp|bp)(env|attack|decay|sustain|release)$/.exec(n);

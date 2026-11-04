@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACCORDI, GRIGLIE, indietroPasso, scriviPasso, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, scalaDelCiclo, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
+  ACCORDI, GRIGLIE, indietroPasso, uniformaVel, velDaEventi, velValida, velocitaPerNote, scriviPasso, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, scalaDelCiclo, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
 } from '../src/renderer/synth-note.js';
 
 const seme = (n) => () => ((n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -350,4 +350,51 @@ test('scrittura a passi: ⌫ torna indietro di un passo e toglie le note di quel
   assert.equal(r.cursore, 4);
   assert.deepEqual(r.eventi.map((e) => e.n), [48, 60], 'via le due del passo 4');
   assert.deepEqual(indietroPasso(ev, 2, 4), { eventi: ev.filter((e) => e.i >= 4), cursore: 0 }, 'in cima: resta a 0 e toglie il passo 0');
+});
+
+test('velocity: i valori scritti nel testo vanno alle note che partono in quegli istanti', () => {
+  const note = [{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 52 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 60 }];
+  const v = (testo, ev = note) => velocitaPerNote(testo, ev).map((e) => e.v ?? 1);
+  assert.deepEqual(v('1 .5 .8 1'), [1, 0.5, 0.8, 1]);
+  assert.deepEqual(v('.6'), [0.6, 0.6, 0.6, 0.6]);
+  assert.deepEqual(v('1 .5@2 1'), [1, 0.5, 0.5, 1], 'un valore che dura più note');
+  assert.deepEqual(v('[1 .5] .8'), [1, 0.5, 0.8, 0.8], 'sedicesimi dentro le parentesi');
+  assert.deepEqual(v('<1 .5>').length, 4);
+  assert.deepEqual(v('1 ~ .8 1'), [1, 1, 0.8, 1], 'un riposo vale 1');
+  assert.equal(velocitaPerNote('boh', note), note, 'se non si legge le note restano');
+  // accordo: stessa velocity
+  const accordo = [{ i: 0, l: 4, n: 48 }, { i: 0, l: 4, n: 52 }, { i: 8, l: 4, n: 55 }];
+  assert.deepEqual(v('.4 1', accordo), [0.4, 0.4, 1]);
+  assert.deepEqual(velocitaPerNote('<.5 1>', [{ i: 0, l: 4, n: 48 }, { i: 16, l: 4, n: 48 }]).map((e) => e.v ?? 1), [0.5, 1], 'cicli alternati');
+});
+
+test('velocity: dalle note al testo e ritorno', () => {
+  const base = [{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 52 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 60 }];
+  assert.equal(velDaEventi(base), '', 'tutte 1: niente');
+  const con = base.map((e, k) => (k === 1 ? { ...e, v: 0.5 } : k === 3 ? { ...e, v: 0.8 } : e));
+  const t = velDaEventi(con);
+  assert.equal(t, '1 .5 1 .8');
+  assert.deepEqual(velocitaPerNote(t, base).map((e) => e.v ?? 1), [1, 0.5, 1, 0.8]);
+  assert.equal(velDaEventi(base.map((e) => ({ ...e, v: 0.6 }))), '.6', 'tutte uguali: un valore solo');
+  // la prima nota non parte dall'inizio: il primo valore copre anche il vuoto prima
+  assert.equal(velDaEventi([{ i: 4, l: 4, n: 48, v: 0.5 }, { i: 8, l: 4, n: 48 }]), '.5 1', 'il primo valore copre anche il vuoto prima');
+  // più cicli
+  const due = [{ i: 0, l: 4, n: 48, v: 0.5 }, { i: 16, l: 4, n: 48 }];
+  assert.equal(velDaEventi(due, 2), '<.5 1>');
+  assert.deepEqual(velocitaPerNote('<.5 1>', due.map(({ v, ...e }) => e), 16).map((e) => e.v ?? 1), [0.5, 1]);
+  // gli accordi hanno una velocity sola, e una nota nuova (1) prende quella dell'accordo
+  const u = uniformaVel([{ i: 0, l: 4, n: 48, v: 0.5 }, { i: 0, l: 4, n: 52 }, { i: 4, l: 4, n: 55 }, { i: 4, l: 4, n: 57, v: 1 }]);
+  assert.deepEqual(u.map((e) => e.v ?? 1), [0.5, 0.5, 1, 1]);
+  assert.ok(!('v' in u[3]), 'un 1 non si porta');
+  assert.ok(velValida('1 .5 .8@2') && velValida('<[1 .5] .8>') && !velValida('c3') && !velValida('') && !velValida('1 ('));
+});
+
+test('velocity: viaggia con le note quando si muovono, copiano e duplicano', () => {
+  const ev = [{ i: 0, l: 4, n: 48, v: 0.5 }, { i: 4, l: 4, n: 52 }];
+  const m = muovi(ev, [{ i: 0, n: 48 }], 2, 3, 1);
+  assert.equal(m.eventi.find((e) => e.n === 51).v, 0.5);
+  const d = duplica(ev, [{ i: 0, n: 48 }], 1);
+  assert.equal(d.eventi.find((e) => e.i === 4 && e.n === 48).v, 0.5);
+  const c = incolla([], appunti(ev, [{ i: 0, n: 48 }]), 8, 1);
+  assert.equal(c.eventi[0].v, 0.5);
 });

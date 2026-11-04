@@ -115,7 +115,7 @@ export const inScala = (n, radice = 0, scala = 'cromatica') => !SCALE[scala] || 
 
 // --- dalla mini-notazione agli eventi ---
 
-function leggiMini(testo, scala = null) {
+function leggiMini(testo, scala = null, numeri = false) {
   const src = String(testo);
   let i = 0;
   const salta = () => {
@@ -174,14 +174,19 @@ function leggiMini(testo, scala = null) {
         if (!figli.length) throw new Error('<> vuoto');
         nodo = { t: 'alt', figli: figli.map((f) => ({ t: 'seq', passi: [{ w: 1, nodo: f.nodo }] })) };
       } else {
-        const m = /^[A-Za-z#]+-?\d*|^-?\d+/.exec(src.slice(i));
+        const m = (numeri ? /^-?(?:\d+\.?\d*|\.\d+)/ : /^[A-Za-z#]+-?\d*|^-?\d+/).exec(src.slice(i));
         if (!m) throw new Error(`non leggo «${src.slice(i, i + 6)}»`);
+        if (numeri) {
+          i += m[0].length;
+          nodo = { t: 'nota', n: Number(m[0]), g: null }; // un valore (la velocity), non una nota
+        } else {
         // con n(…).scale(…) i numeri sono gradi della scala (la nota vera si sa dopo: dipende dal ciclo)
         const g = scala && /^-?\d+$/.test(m[0]) ? Number(m[0]) : null;
         const n = scala ? 0 : notaDaNome(m[0]);
         if (scala ? g === null : n === null) throw new Error(scala ? `«${m[0]}»: con la scala vogliono numeri (gradi)` : `«${m[0]}» non è una nota`);
         i += m[0].length;
         nodo = { t: 'nota', n, g };
+        }
       }
       const passo = { w: 1, nodo };
       for (;;) {
@@ -379,6 +384,7 @@ export const senzaEvento = (eventi, e) => eventi.filter((x) => !(x.i === e.i && 
 
 // --- selezione, appunti, duplicato (le note scelte sono riferimenti { i, n }) ---
 
+const conVel = (e) => (e.v !== undefined && e.v !== 1 ? { v: e.v } : {}); // la velocity va con la nota (1 = quella di sempre, non si porta)
 const fineCiclo = (i, g = SCATTI) => (Math.floor(i / g) + 1) * g;
 const eScelta = (sel, e) => sel.some((s) => s.i === e.i && s.n === e.n);
 const riferimento = (e) => ({ i: e.i, n: e.n });
@@ -407,7 +413,7 @@ export function muovi(eventi, sel, di, dn, cicli, g = SCATTI) {
   const t = Math.max(NOTA_MIN - nMin, Math.min(NOTA_MAX - nMax, dn));
   const mosse = scelte.map((e) => {
     const i = e.i + d;
-    return { i, l: Math.min(e.l, fineCiclo(i, g) - i), n: e.n + t };
+    return { i, l: Math.min(e.l, fineCiclo(i, g) - i), n: e.n + t, ...conVel(e) };
   });
   const resto = eventi.filter((e) => !eScelta(sel, e) && !mosse.some((m) => m.i === e.i && m.n === e.n));
   return { eventi: [...resto, ...mosse].sort((x, y) => x.i - y.i || x.n - y.n), sel: mosse.map(riferimento), di: d, dn: t };
@@ -431,7 +437,7 @@ export function appunti(eventi, sel) {
   const scelte = eventi.filter((e) => eScelta(sel, e));
   if (!scelte.length) return null;
   const da = Math.min(...scelte.map((e) => e.i));
-  return { note: scelte.map((e) => ({ d: e.i - da, l: e.l, n: e.n })), durata: Math.max(...scelte.map((e) => e.i + e.l)) - da };
+  return { note: scelte.map((e) => ({ d: e.i - da, l: e.l, n: e.n, ...conVel(e) })), durata: Math.max(...scelte.map((e) => e.i + e.l)) - da };
 }
 
 // Gli appunti messi a partire dallo scatto i0. Quelle che cadono oltre la fine del pattern si scartano (fuori = quante).
@@ -442,7 +448,7 @@ export function incolla(eventi, clip, i0, cicli, g = SCATTI) {
   for (const c of clip.note) {
     const i = i0 + c.d;
     if (i < 0 || i >= fine) fuori++;
-    else nuove.push({ i, l: Math.min(c.l, fineCiclo(i, g) - i), n: c.n });
+    else nuove.push({ i, l: Math.min(c.l, fineCiclo(i, g) - i), n: c.n, ...conVel(c) });
   }
   const resto = eventi.filter((e) => !nuove.some((m) => m.i === e.i && m.n === e.n));
   return { eventi: [...resto, ...nuove].sort((x, y) => x.i - y.i || x.n - y.n), sel: nuove.map(riferimento), fuori, fine: i0 + clip.durata };
@@ -472,4 +478,85 @@ export function scriviPasso(eventi, cursore, lunghezza, note, cicli, g = SCATTI)
 export function indietroPasso(eventi, cursore, lunghezza) {
   const nuovo = Math.max(0, cursore - lunghezza);
   return { eventi: eventi.filter((e) => e.i < nuovo || e.i >= nuovo + lunghezza), cursore: nuovo };
+}
+
+// --- velocity ---
+// Ogni nota può avere una velocity v (0–1, 1 = quella di sempre: non si scrive). Le note che partono insieme (un accordo) hanno la stessa.
+// Nel codice è `.velocity("…")` dopo le note: un numero per ogni punto in cui parte una nota, nei tempi giusti (in Strudel il valore che conta è
+// quello che c'è nell'istante in cui la nota parte).
+
+export const VEL_MIN = 0.05;
+export const velValida = (t) => typeof t === 'string' && t.length > 0 && t.length <= 1500 && /^[0-9.<>[\]@~\s-]+$/.test(t) && leggiVelocita(t) !== null;
+
+// Il testo della velocity → { albero, periodo } o null se non si legge (solo numeri, @ pesi, [ ] < >).
+export function leggiVelocita(testo) {
+  try {
+    const albero = leggiMini(testo, null, true);
+    return { albero, periodo: periodo(albero) };
+  } catch {
+    return null;
+  }
+}
+
+// Le note con la loro velocity: per ogni nota il valore che c'è nel suo istante di partenza (1 se il testo non lo dice). Il testo non si legge: le note restano com'erano.
+export function velocitaPerNote(testo, eventi, g = SCATTI) {
+  const v = leggiVelocita(testo);
+  if (!v) return eventi;
+  const perCiclo = new Map();
+  const segmenti = (c) => {
+    if (!perCiclo.has(c)) {
+      const trovati = [];
+      espandi(v.albero, 0, 1, c, trovati);
+      perCiclo.set(c, trovati);
+    }
+    return perCiclo.get(c);
+  };
+  return eventi.map((e) => {
+    const t = e.i / g;
+    const c = Math.floor(t + 1e-9);
+    const f = t - c;
+    const seg = segmenti(c).find((x) => x.inizio - 1e-9 <= f && f < x.inizio + x.durata - 1e-9);
+    const val = seg ? Math.max(VEL_MIN, Math.min(1, seg.n)) : 1;
+    return val === 1 ? e : { ...e, v: Math.round(val * 100) / 100 };
+  });
+}
+
+// Chi parte insieme ha la stessa velocity: se differiscono vale la prima che non è 1 (una nota nuova, 1, prende quella dell'accordo).
+export function uniformaVel(eventi) {
+  const per = new Map();
+  for (const e of eventi) if (e.v !== undefined && e.v !== 1 && !per.has(e.i)) per.set(e.i, e.v);
+  return eventi.map((e) => {
+    const v = per.get(e.i);
+    if (v !== undefined) return e.v === v ? e : { ...e, v };
+    if (e.v === 1) return { i: e.i, l: e.l, n: e.n };
+    return e;
+  });
+}
+
+// Le note → il testo della velocity ('' se sono tutte 1). Un valore per ogni ciclo, ogni valore dura fino alla nota dopo (il primo parte dall'inizio del ciclo).
+export function velDaEventi(eventi, cicli = 1, g = SCATTI) {
+  if (!eventi.some((e) => e.v !== undefined && e.v !== 1)) return '';
+  const perCiclo = [];
+  for (let c = 0; c < cicli; c++) {
+    const inizi = [...new Set(eventi.filter((e) => Math.floor(e.i / g) === c).map((e) => e.i - c * g))].sort((a, b) => a - b);
+    if (!inizi.length) {
+      perCiclo.push('1');
+      continue;
+    }
+    const valore = (i) => eventi.find((e) => e.i === i + c * g)?.v ?? 1;
+    const pezzi = []; // { v, peso }
+    inizi.forEach((i, k) => {
+      const da = k === 0 ? 0 : i;
+      const a = k + 1 < inizi.length ? inizi[k + 1] : g;
+      const v = valore(i);
+      const ultimo = pezzi.at(-1);
+      if (ultimo && ultimo.v === v) ultimo.peso += a - da;
+      else pezzi.push({ v, peso: a - da });
+    });
+    const comune = pezzi.reduce((m, x) => mcd(m, x.peso), 0) || 1;
+    const testo = (x) => String(Math.round(x * 100) / 100).replace(/^(-?)0\./, '$1.');
+    perCiclo.push(pezzi.length === 1 ? testo(pezzi[0].v) : pezzi.map((x) => (x.peso / comune === 1 ? testo(x.v) : `${testo(x.v)}@${x.peso / comune}`)).join(' '));
+  }
+  if (cicli === 1 || perCiclo.every((x) => x === perCiclo[0])) return perCiclo[0];
+  return `<${perCiclo.map((x) => (x.includes(' ') ? `[${x}]` : x)).join(' ')}>`;
 }

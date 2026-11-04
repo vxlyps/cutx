@@ -3190,7 +3190,7 @@ async function provaSynth({ finestre, scrivi }) {
   const rollEventi = () => js(`JSON.stringify(cutxProva.synth.roll.eventi)`);
   controlla('la scheda «note» mostra il pianoroll e il testo mini', (await js(`!document.querySelector('.synth-note').hidden && document.querySelector('.synth-pannello').hidden`)) === true && (await js(`document.querySelector('.roll-mini-testo').value`)) === 'c3 eb3 g3 bb3');
   controlla('le quattro note del suono di partenza sono nel pianoroll', (await js(`cutxProva.synth.roll.eventi.length`)) === 4);
-  const cella = (passo, nota) => js(`(() => { const r = cutxProva.synth.roll; const b = r.canvas.getBoundingClientRect(); return { x: b.left + 52 + (${passo} + 0.5) * r.larghezza, y: b.top + (r.alto - ${nota} + 0.5) * 13 }; })()`);
+  const cella = (passo, nota) => js(`(() => { const r = cutxProva.synth.roll; const b = r.canvas.getBoundingClientRect(); return { x: b.left + 52 + (${passo} + 0.5) * r.larghezza, y: b.top + (r.alto - ${nota} + 0.5) * r.rigaH }; })()`);
   const clicca = async (passo, nota, ...mod) => {
     const p = await cella(passo, nota);
     const wc = finestre.controllo.webContents;
@@ -3358,6 +3358,11 @@ async function provaSynth({ finestre, scrivi }) {
     controlla('un accordo: il cursore aspetta che li lasci tutti', (await cursore()) === 0);
     await rilascia('D', 'G');
     controlla('A D G insieme sono do mi sol nello stesso passo', (await note()).map((e) => `${e.i}:${e.n}`).join(' ') === '0:48 0:52 0:55' && (await cursore()) === 4, await rollEventi());
+    await premi('Z', 'meta');
+    controlla('l\'accordo scritto a passi è un passo solo di ⌘Z', (await note()).length === 0, await rollEventi());
+    await premi('Z', 'meta', 'shift');
+    controlla('e ⇧⌘Z lo rimette intero', (await note()).length === 3, await rollEventi());
+    await js(`cutxProva.synth.roll.cursore = 4`);
     // quello che si vede è quello che Strudel suona
     await tocca('K');
     await tocca('J');
@@ -3382,6 +3387,86 @@ async function provaSynth({ finestre, scrivi }) {
     await tocca('Space');
     await aspetta(0.4);
     controlla('e la ferma', (await js(`cutxProva.synth.opz.suonaOra()`)) === false);
+  }
+  // velocity: una barra per ogni punto in cui parte una nota; il codice è .velocity("…") e Strudel suona quelle velocity
+  {
+    const punto = (passo, v) => js(`(() => { const r = cutxProva.synth.roll; const b = r.canvas.getBoundingClientRect(); return { x: b.left + 52 + (${passo} + 0.5) * r.larghezza, y: b.top + r.righe * r.rigaH + 4 + (1 - ${v}) * (r.stripH - 10) }; })()`);
+    const wc = finestre.controllo.webContents;
+    const velClic = async (passo, v) => {
+      const p = await punto(passo, v);
+      wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1 });
+      wc.sendInputEvent({ type: 'mouseUp', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1 });
+      await aspetta(0.4);
+    };
+    const velTraccia = async (da, a) => {
+      const p = await punto(da[0], da[1]);
+      const q = await punto(a[0], a[1]);
+      wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: 1 });
+      for (let k = 1; k <= 10; k++) wc.sendInputEvent({ type: 'mouseMove', x: Math.round(p.x + ((q.x - p.x) * k) / 10), y: Math.round(p.y + ((q.y - p.y) * k) / 10) });
+      wc.sendInputEvent({ type: 'mouseUp', x: Math.round(q.x), y: Math.round(q.y), button: 'left', clickCount: 1 });
+      await aspetta(0.4);
+    };
+    const note = async () => JSON.parse(await rollEventi());
+    const vels = async () => (await note()).map((e) => e.v ?? 1);
+    const norm = (x) => JSON.stringify([...x].map((e) => ({ i: e.i, l: e.l, n: e.n, ...(e.v !== undefined && e.v !== 1 ? { v: e.v } : {}) })).sort((p, q) => p.i - q.i || p.n - q.n));
+    const veri = async (g = 16) => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1, ${g}, true)`);
+    await js(`cutxProva.synth.opz.ferma()`);
+    await js(`cutxProva.synth.roll.opz.cambia([{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 52 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 60 }], 1)`);
+    await aspetta(0.5);
+    controlla('senza velocity il codice non ha .velocity', !(await codiceSynth()).includes('.velocity(') && (await stato('vel')) === '');
+    await velClic(4, 0.5);
+    const circa = (x, y) => Math.abs(x - y) < 0.04;
+    {
+      const v = await vels();
+      controlla('un clic nella striscia dà la velocity alla nota di quel punto (circa .5), le altre restano 1', v[0] === 1 && circa(v[1], 0.5) && v[2] === 1 && v[3] === 1, JSON.stringify(v));
+    }
+    controlla('il codice ha .velocity("…") dopo le note', /^1 \.5\d? 1@2$/.test(await stato('vel')) && (await codiceSynth()).includes('.velocity("1 .5') && (await codiceSynth()).indexOf('.velocity(') < (await codiceSynth()).indexOf('.s('), `${await stato('vel')} · ${await codiceSynth()}`);
+    {
+      const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
+      await mkdir(cartella, { recursive: true });
+      await writeFile(path.join(cartella, 'velocity.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    }
+    controlla('Strudel suona le note con quelle velocity', norm((await veri()) ?? []) === norm(await note()), `${norm((await veri()) ?? [])} / ${norm(await note())}`);
+    const prima = await stato('vel');
+    await velTraccia([8, 0.8], [12, 0.2]);
+    const v2 = await vels();
+    controlla('trascinando nella striscia si cambiano le barre che si attraversano', v2[2] < 1 && v2[3] < 0.35 && circa(v2[1], 0.5), JSON.stringify(v2));
+    controlla('e Strudel suona anche quelle', norm((await veri()) ?? []) === norm(await note()), `${norm((await veri()) ?? [])} / ${norm(await note())}`);
+    await premi('Z', 'meta');
+    controlla('un trascinamento è un solo passo di ⌘Z', (await stato('vel')) === prima, `${await stato('vel')} / ${prima}`);
+    // le note insieme (un accordo) hanno una velocity sola
+    await js(`cutxProva.synth.roll.opz.cambia([{ i: 0, l: 4, n: 48 }, { i: 0, l: 4, n: 52 }, { i: 4, l: 4, n: 55 }], 1)`);
+    await aspetta(0.4);
+    await velClic(0, 0.5);
+    {
+      const v = await vels();
+      controlla('un accordo ha una velocity sola: le sue note la prendono insieme', circa(v[0], 0.5) && v[0] === v[1] && v[2] === 1, JSON.stringify(v));
+    }
+    controlla('e Strudel la suona su tutte e due', norm((await veri()) ?? []) === norm(await note()), `${norm((await veri()) ?? [])} / ${norm(await note())}`);
+    // la velocity viaggia con le note: trasporto di tutte
+    const prima2 = JSON.stringify(await vels());
+    await premi('A', 'meta');
+    await premi('Up');
+    controlla('trasportando le note la velocity resta con loro', JSON.stringify(await vels()) === prima2 && (await note()).map((e) => e.n).join(',') === '49,53,56', `${JSON.stringify(await vels())} ${await rollEventi()}`);
+    // un clic in alto la riporta a 1 e la riga sparisce
+    await velClic(0, 1);
+    controlla('in alto è 1: la velocity sparisce dal codice', (await stato('vel')) === '' && !(await codiceSynth()).includes('.velocity('), await stato('vel'));
+    // dal codice: .velocity("1 .5 .8 1") arriva nelle barre
+    await js(`(() => { const t = document.querySelector('.synth-pre'); t.focus(); t.value = ${JSON.stringify('note("c3 e3 g3 b3")\n  .velocity("1 .5 .8 1")\n  .s("square").gain(.02)')}; t.dispatchEvent(new Event('input')); })()`);
+    await aspetta(1.0);
+    await js(`(() => { const t = document.querySelector('.synth-pre'); t.dispatchEvent(new FocusEvent('blur')); t.blur(); })()`);
+    await aspetta(0.4);
+    controlla('scritta nel codice, la velocity arriva nelle barre del pianoroll', JSON.stringify(await vels()) === '[1,0.5,0.8,1]', JSON.stringify(await vels()));
+    controlla('e il codice la mantiene', (await codiceSynth()).includes('.velocity("1 .5 .8 1")'));
+    controlla('Strudel suona quelle del codice', norm((await veri()) ?? []) === norm(await note()), `${norm((await veri()) ?? [])} / ${norm(await note())}`);
+    // più cicli: velocity diverse per ciclo
+    await js(`cutxProva.synth.roll.opz.cambia([{ i: 0, l: 4, n: 48, v: 0.5 }, { i: 16, l: 4, n: 48 }], 2)`);
+    await aspetta(0.5);
+    {
+      const c = await codiceSynth();
+      const v = await chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(c)}, 0, 2, 16, true)`);
+      controlla('con due cicli la velocity è per ciclo (<.5 1>) e Strudel la suona', (await stato('vel')) === '<.5 1>' && norm(v ?? []) === norm(await note()), `${await stato('vel')} · ${norm(v ?? [])} / ${norm(await note())}`);
+    }
   }
   // scala e accordi
   await js(`cutxProva.synth.roll.pulisci()`);

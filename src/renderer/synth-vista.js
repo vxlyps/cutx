@@ -4,11 +4,11 @@
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, noteValide, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
 import { PianoRoll } from './synth-roll.js';
-import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado, scalaDelCiclo } from './synth-note.js';
+import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado, scalaDelCiclo, velDaEventi, velocitaPerNote } from './synth-note.js';
 import { OTTAVA_INIZIALE, inCampoDiTesto, notaDaTasto, ottavaDopo } from './synth-tastiera.js';
 import { nuovoValore } from './controller-synth.js';
 import { Registratore } from './synth-rec.js';
-import { clip, codice, funzioniDi, inGradi, leggiCodice, noteEffettive } from './synth-codice.js';
+import { clip, codice, conVelocity, funzioniDi, inGradi, leggiCodice, noteEffettive } from './synth-codice.js';
 import it from './testi/it.json';
 
 const T = it.synth;
@@ -186,7 +186,8 @@ export class VistaSynth {
     this.noteEl = crea('div', 'synth-note');
     this.noteEl.hidden = true;
     this.roll = new PianoRoll(this.noteEl, {
-      cambia: (eventi, cicli) => this.cambiaNote(eventi, cicli),
+      cambia: (eventi, cicli, gesto) => this.cambiaNote(eventi, cicli, gesto),
+      fineGesto: () => (this.inGesto = false),
       testo: (testoMini, fine) => this.daMini(testoMini, fine),
       nota: (n) => this.provaNota(n),
       ciclo: () => this.opz.ciclo?.() ?? null,
@@ -522,16 +523,23 @@ export class VistaSynth {
 
   // Dal pianoroll: le note nuove (e quanti cicli si vedono). Due cicli uguali si scrivono come uno solo: i cicli scelti si ricordano qui.
   // Con n(…).scale(…) le note si riscrivono come gradi; se una esce dalla scala si passa a note("…") coi nomi, e lo dice.
-  cambiaNote(eventi, cicli) {
+  // gesto: 'inizio' | 'continua' = i cambi di uno stesso passo (un accordo scritto a passi) sono un solo passo di ⌘Z; senza, ogni cambio è un passo.
+  cambiaNote(eventi, cicli, gesto) {
     this.cicliScelti = cicli;
     const g = this.roll.griglia;
     const sc = inGradi(this.stato) ? leggiScala(this.stato.scala) : null;
     const fuoriScala = !!sc && eventi.some((e) => notaInGrado(e.n, scalaDelCiclo(sc, Math.floor(e.i / g))) === null);
     const mini = sc && !fuoriScala ? miniDaEventi(eventi, cicli, g, (n, c) => String(notaInGrado(n, scalaDelCiclo(sc, c)))) : miniDaEventi(eventi, cicli, g);
     const scala = fuoriScala ? '' : this.stato.scala;
+    const vel = velDaEventi(eventi, cicli, g);
     this.chiaveNote = null;
-    if (mini === noteEffettive(this.stato) && this.stato.anteprima === 'clip' && scala === this.stato.scala) return this.disegna();
-    this.passo(() => this.imponi({ ...this.stato, note: mini, scala, anteprima: 'clip' }));
+    if (mini === noteEffettive(this.stato) && this.stato.anteprima === 'clip' && scala === this.stato.scala && vel === (conVelocity(this.stato) ? this.stato.vel : '')) return this.disegna();
+    const fa = () => this.imponi({ ...this.stato, note: mini, scala, vel, anteprima: 'clip' });
+    if (gesto === 'continua') fa();
+    else if (gesto === 'inizio') {
+      this.inGesto = false;
+      fa();
+    } else this.passo(fa);
     if (fuoriScala) this.avviso(T.msg.fuoriScala);
   }
 
@@ -801,7 +809,7 @@ export class VistaSynth {
 
   disegnaNote(s) {
     const mini = noteEffettive(s);
-    const chiave = `${s.testa}|${mini}|${inGradi(s) ? s.scala : ''}|${this.cicliScelti}|${this.grigliaScelta}`;
+    const chiave = `${s.testa}|${mini}|${inGradi(s) ? s.scala : ''}|${conVelocity(s) ? s.vel : ''}|${this.cicliScelti}|${this.grigliaScelta}`;
     if (chiave === this.chiaveNote) return;
     this.chiaveNote = chiave;
     const sc = inGradi(s) ? leggiScala(s.scala) : null;
@@ -813,7 +821,8 @@ export class VistaSynth {
     else if (r.errore) this.roll.imposta({ eventi: [], cicli: 1, editabile: false, messaggio: r.errore, mini });
     else {
       const cicli = r.fuoriGriglia ? r.cicli : Math.max(r.cicli, this.cicliScelti);
-      this.roll.imposta({ eventi: cicli > r.cicli ? conCicli(r.eventi, r.cicli, cicli, r.griglia) : r.eventi, cicli, griglia: r.griglia, editabile: !r.fuoriGriglia, messaggio: r.fuoriGriglia ? it.synth.note.fuoriGriglia : '', mini });
+      const eventi = cicli > r.cicli ? conCicli(r.eventi, r.cicli, cicli, r.griglia) : r.eventi;
+      this.roll.imposta({ eventi: conVelocity(s) ? velocitaPerNote(s.vel, eventi, r.griglia) : eventi, cicli, griglia: r.griglia, editabile: !r.fuoriGriglia, messaggio: r.fuoriGriglia ? it.synth.note.fuoriGriglia : '', mini });
     }
   }
 
