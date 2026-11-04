@@ -66,7 +66,7 @@ export function anelloDi(p, s) {
 
 // Le sette manopole del gruppo e della pagina: null = posto vuoto; altrimenti { k, p, conta (false = spento, l'anello si spegne), valore, stile, nome, testo }.
 // nomi(k) dà il nome del parametro, testo(p, v) il valore come si legge; corto() lo accorcia per lo specchio.
-export function manopoleSynth(s, gruppo, pagina, parametri, { nome = (k) => k, testo = (p, v) => String(v) } = {}) {
+export function manopoleSynth(s, gruppo, pagina, parametri, { nome = (k) => k, corto = (k) => String(nome(k)).replace(/\s+/g, '').slice(0, 8), testo = (p, v) => String(v) } = {}) {
   const lista = PAGINE_SYNTH[gruppo]?.[pagina] ?? [];
   return Array.from({ length: 7 }, (_, i) => {
     const k = lista[i];
@@ -74,6 +74,6 @@ export function manopoleSynth(s, gruppo, pagina, parametri, { nome = (k) => k, t
     if (!p) return null;
     const conta = attivo(p, s);
     const { valore, stile } = anelloDi(p, s);
-    return { k, p, conta, valore: conta ? valore : null, stile, nome: nome(k), corto: String(nome(k)).replace(/\s+/g, '').slice(0, 6), testo: conta ? testo(p, s[k]) : '' };
+    return { k, p, conta, valore: conta ? valore : null, stile, nome: nome(k), corto: corto(k), testo: conta ? testo(p, s[k]) : '' };
   });
 }

@@ -489,7 +489,7 @@
       "categoria": "Tipo del suono",
       "codiceSlot": "codice · {lato}",
       "rec": "REC",
-      "tastiera": "ottava {n}"
+      "tastiera": "tasti C{n}"
     },
     "destinazioni": {
       "attivo": "brano attivo",
@@ -595,6 +595,49 @@
         "segue": "segue la vista",
         "live": "resta al LIVE",
         "nota": "Aprendo il SYNTH le manopole 1–7, i tasti in alto 1–5 e quelli in basso comandano il synth. Il volume generale (manopola 8), il fader e il paracadute (tasto 8) restano del LIVE."
+      },
+      "generale": "master",
+      "corti": {
+        "forma": "forma",
+        "voci": "voci",
+        "detune": "detune",
+        "spread": "stereo",
+        "pw": "width",
+        "fm": "FM",
+        "fmh": "FM rat",
+        "ottava": "ottava",
+        "sub": "sub",
+        "pan": "pan",
+        "tipo": "tipo",
+        "cutoff": "cutoff",
+        "q": "reso",
+        "ftype": "slope",
+        "fenv": "env",
+        "fattacco": "env atk",
+        "fdecay": "env dec",
+        "fsustain": "env sus",
+        "frelease": "env rel",
+        "vowel": "vocale",
+        "attack": "attack",
+        "decay": "decay",
+        "sustain": "sustain",
+        "release": "release",
+        "gain": "gain",
+        "penv": "pitch",
+        "pdecay": "pit dec",
+        "shape": "shape",
+        "distort": "distort",
+        "crush": "crush",
+        "coarse": "coarse",
+        "delay": "delay",
+        "delaysync": "time",
+        "delayfeedback": "feedbk",
+        "room": "room",
+        "roomsize": "size",
+        "phaser": "phaser",
+        "phaserdepth": "ph amt",
+        "tremolo": "tremolo",
+        "tremolodepth": "trem amt"
       }
     }
   }

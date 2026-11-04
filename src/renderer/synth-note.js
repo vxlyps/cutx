@@ -68,7 +68,14 @@ const SCALE_STRUDEL = {
 // Come in Strudel: la stringa passa dalla mini-notazione, quindi niente spazi (due parole sarebbero due passi) e i due punti fanno da spazio.
 // Senza ottava la tonica è all'ottava 3.
 export function leggiScala(spec) {
-  if (typeof spec !== 'string' || spec.length > 60 || /\s/.test(spec)) return null;
+  if (typeof spec !== 'string' || spec.length > 120) return null;
+  // una scala diversa a ogni ciclo: <A:minor F:major E:major> (le alternanze si leggono; il pianoroll prende per radice e tipo la prima)
+  const turni = /^<([^<>]+)>$/.exec(spec.trim());
+  if (turni) {
+    const lista = turni[1].trim().split(/\s+/).map(leggiScala);
+    return lista.length >= 1 && lista.length <= 8 && lista.every((x) => x && !x.lista) ? { ...lista[0], lista } : null;
+  }
+  if (spec.length > 60 || /\s/.test(spec)) return null;
   const [tonica, ...nome] = spec.split(':');
   const m = /^([A-Ga-g])([#b]?)(-?\d)?$/.exec(tonica);
   const tipo = SCALE_STRUDEL[nome.join(' ').toLowerCase()];
@@ -78,6 +85,9 @@ export function leggiScala(spec) {
   const ottava = m[3] === undefined ? 3 : Number(m[3]);
   return { tipo, radice: ((pc % 12) + 12) % 12, base: (ottava + 1) * 12 + pc, gradi: SCALE[tipo] };
 }
+
+// La scala che vale al ciclo c (se sono alternate, a turno).
+export const scalaDelCiclo = (sc, c) => (sc.lista ? sc.lista[((c % sc.lista.length) + sc.lista.length) % sc.lista.length] : sc);
 
 // Il grado della scala (0 = la tonica, 7 = l'ottava sopra in una scala di sette note, −1 = sotto) → nota midi, e ritorno (null se la nota non è nella scala).
 export function gradoInNota(g, sc) {
@@ -166,11 +176,12 @@ function leggiMini(testo, scala = null) {
       } else {
         const m = /^[A-Za-z#]+-?\d*|^-?\d+/.exec(src.slice(i));
         if (!m) throw new Error(`non leggo «${src.slice(i, i + 6)}»`);
-        // con n(…).scale(…) i numeri sono gradi della scala
-        const n = scala ? (/^-?\d+$/.test(m[0]) ? gradoInNota(Number(m[0]), scala) : null) : notaDaNome(m[0]);
-        if (n === null) throw new Error(scala ? `«${m[0]}»: con la scala vogliono numeri (gradi)` : `«${m[0]}» non è una nota`);
+        // con n(…).scale(…) i numeri sono gradi della scala (la nota vera si sa dopo: dipende dal ciclo)
+        const g = scala && /^-?\d+$/.test(m[0]) ? Number(m[0]) : null;
+        const n = scala ? 0 : notaDaNome(m[0]);
+        if (scala ? g === null : n === null) throw new Error(scala ? `«${m[0]}»: con la scala vogliono numeri (gradi)` : `«${m[0]}» non è una nota`);
         i += m[0].length;
-        nodo = { t: 'nota', n };
+        nodo = { t: 'nota', n, g };
       }
       const passo = { w: 1, nodo };
       for (;;) {
@@ -225,7 +236,7 @@ function periodo(nodo) {
 function espandi(nodo, t0, durata, ciclo, fuori) {
   switch (nodo.t) {
     case 'nota':
-      fuori.push({ inizio: t0, durata, n: nodo.n });
+      fuori.push({ inizio: t0, durata, n: nodo.n, g: nodo.g });
       return;
     case 'seq': {
       const totale = nodo.passi.reduce((s, p) => s + p.w, 0);
@@ -259,14 +270,14 @@ export function eventiDaMini(testo, { scala = null, griglia = null } = {}) {
   } catch (e) {
     return { errore: String(e.message ?? e) };
   }
-  const p = periodo(albero);
+  const p = scala?.lista ? mcm(periodo(albero), scala.lista.length) : periodo(albero);
   const cicli = CICLI.find((c) => c >= p && c % p === 0);
   if (!cicli) return { errore: `si ripete ogni ${p} cicli: il pianoroll legge 1, 2, 4 o 8` };
   const grezzi = [];
   for (let c = 0; c < cicli; c++) {
     const trovati = [];
     espandi(albero, 0, 1, c, trovati);
-    for (const e of trovati) grezzi.push({ ciclo: c, inizio: e.inizio, durata: e.durata, n: e.n });
+    for (const e of trovati) grezzi.push({ ciclo: c, inizio: e.inizio, durata: e.durata, n: scala ? gradoInNota(e.g, scalaDelCiclo(scala, c)) : e.n });
   }
   const cade = (x, g) => Math.abs(x * g - Math.round(x * g)) < 1e-6;
   const scelta = [griglia, ...GRIGLIE].filter(Boolean).find((g) => grezzi.every((e) => cade(e.inizio, g) && cade(e.durata, g)));
@@ -302,20 +313,24 @@ function pisteDelCiclo(eventi, c, g) {
   return piste;
 }
 
+const mcd = (a, b) => (b ? mcd(b, a % b) : a);
 const pesato = (testo, l) => (l === 1 ? testo : `${testo}@${l}`);
 
-function pistaInMini(pista, g, scrivi) {
-  const pezzi = [];
+function pistaInMini(pista, g, scrivi, ciclo) {
+  const pezzi = []; // { testo, peso }
   let cursore = 0;
   for (const gr of pista.gruppi) {
-    if (gr.i > cursore) pezzi.push(pesato('~', gr.i - cursore));
-    const note = [...new Set(gr.note)].sort((a, b) => a - b).map(scrivi);
-    pezzi.push(pesato(note.length === 1 ? note[0] : `[${note.join(',')}]`, gr.l));
+    if (gr.i > cursore) pezzi.push({ testo: '~', peso: gr.i - cursore });
+    const note = [...new Set(gr.note)].sort((a, b) => a - b).map((n) => scrivi(n, ciclo));
+    pezzi.push({ testo: note.length === 1 ? note[0] : `[${note.join(',')}]`, peso: gr.l });
     cursore = gr.i + gr.l;
   }
-  if (cursore < g) pezzi.push(pesato('~', g - cursore));
+  if (cursore < g) pezzi.push({ testo: '~', peso: g - cursore });
+  // i pesi contano solo fra loro: se sono tutti multipli dello stesso numero si dividono (a b c d invece di a@2 b@2 c@2 d@2)
+  const comune = pezzi.reduce((m, x) => mcd(m, x.peso), 0) || 1;
+  const scritti = pezzi.map((x) => pesato(x.testo, x.peso / comune));
   // una nota sola lunga quanto il ciclo è solo la nota (un peso dentro <…> allungherebbe il passo)
-  return pezzi.length === 1 ? pezzi[0].replace(new RegExp(`@${g}$`), '') : pezzi.join(' ');
+  return pezzi.length === 1 ? pezzi[0].testo : scritti.join(' ');
 }
 
 // Gli eventi → mini-notazione (un ciclo: la sequenza; più cicli: <[…] […]>). Senza note: «~».
@@ -323,7 +338,7 @@ export function miniDaEventi(eventi, cicli = 1, g = SCATTI, scrivi = nomeNota) {
   const perCiclo = [];
   for (let c = 0; c < cicli; c++) {
     const piste = pisteDelCiclo(eventi, c, g);
-    perCiclo.push(piste.length ? piste.map((pista) => pistaInMini(pista, g, scrivi)).join(', ') : '~');
+    perCiclo.push(piste.length ? piste.map((pista) => pistaInMini(pista, g, scrivi, c)).join(', ') : '~');
   }
   if (cicli === 1) return perCiclo[0];
   // cicli uguali di seguito non servono: <a a> è a

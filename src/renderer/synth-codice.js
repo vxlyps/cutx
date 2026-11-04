@@ -32,6 +32,9 @@ export function scarti(s) {
 
 const NEUTRO_CUTOFF = { lpf: 20000, hpf: 20 };
 
+// Cosa fa il motore (superdough 1.3.0) quando una chiamata non c'è: se il pannello ha lo stesso valore, non lo scrive. L'inviluppo conta tutto insieme.
+const MOTORE = { voci: 5, detune: 0.18, spread: 0.6, pw: 0.5, fmh: 1, phaserdepth: 0.75, tremolodepth: 1, delayfeedback: 0.5, delaysync: '3/16', roomsize: 2, attack: 0.001, decay: 0.05, sustain: 0.6, release: 0.01 };
+
 // Le note della clip sono gradi di una scala (n("0 2 4").scale("A2:minor"))? Solo con la scala giusta e lo schema «clip».
 export const inGradi = (s) => !!s.scala && scalaValida(s.scala) && s.anteprima === 'clip' && noteValide(s.note);
 
@@ -50,48 +53,52 @@ export function codice(stato) {
     if (lista.length > 1) r.push(`  .add(note("${lista.map(num).join(',')}"))`);
   }
 
-  // oscillatore
-  let osc = `  .s("${s.forma}")`;
-  if (s.forma === 'supersaw') osc += `.unison(${s.voci}).detune(${num(s.detune)}).spread(${num(s.spread)})`;
-  if (s.forma === 'pulse') osc += `.pw(${num(s.pw)})`;
-  r.push(osc);
-  if (!rumore && s.fm > 0) r.push(`  .fm(${num(s.fm)}).fmh(${num(s.fmh)})`);
-  if (!rumore && s.penv !== 0) r.push(`  .penv(${num(s.penv)}).pdecay(${num(s.pdecay)})`);
-  if (s.pan !== 0.5) r.push(`  .pan(${num(s.pan)})`);
-
-  // filtro
+  // Il pannello scrive solo quello che serve: non quello che il codice scritto a mano scrive già (le sue chiamate, in fondo, vincono) e non
+  // quello che il motore fa da solo senza che glielo si dica (MOTORE: i valori di superdough). Così il codice incollato non si riempie di numeri nuovi.
+  const nomiMano = new Set((s.mano ?? []).map((m) => /^\.(\w+)/.exec(m.trim())?.[1]).filter(Boolean));
+  const mio = (k) => !funzioniDi(k).some((f) => nomiMano.has(f));
+  const scrivi = (k) => mio(k) && !(k in MOTORE && MOTORE[k] === s[k]);
   const t = s.tipo;
   const prefisso = t.slice(0, 2);
-  const neutro = NEUTRO_CUTOFF[t];
-  if (s.cutoff !== neutro || s.q !== 1 || s.fenv > 0) {
-    let f = `  .${t}(${num(s.cutoff)})`;
-    if (s.q !== 1) f += `.${prefisso}q(${num(s.q)})`;
-    if (s.ftype !== '12db') f += `.ftype("${s.ftype}")`;
-    r.push(f);
+
+  // oscillatore
+  let osc = `  .s("${s.forma}")`;
+  if (s.forma === 'supersaw') osc += [scrivi('voci') && `.unison(${s.voci})`, scrivi('detune') && `.detune(${num(s.detune)})`, scrivi('spread') && `.spread(${num(s.spread)})`].filter(Boolean).join('');
+  if (s.forma === 'pulse' && scrivi('pw')) osc += `.pw(${num(s.pw)})`;
+  r.push(osc);
+  const riga = (...pezzi) => {
+    const v = pezzi.filter(Boolean).join('');
+    if (v) r.push(`  ${v}`);
+  };
+  if (!rumore) {
+    riga(s.fm > 0 && scrivi('fm') && `.fm(${num(s.fm)})`, s.fm > 0 && scrivi('fmh') && `.fmh(${num(s.fmh)})`);
+    riga(s.penv !== 0 && mio('penv') && `.penv(${num(s.penv)})`, s.penv !== 0 && mio('pdecay') && `.pdecay(${num(s.pdecay)})`);
+  }
+  if (s.pan !== 0.5 && mio('pan')) r.push(`  .pan(${num(s.pan)})`);
+
+  // filtro (solo le chiamate del filtro in uso contano per il «a mano»)
+  if (s.cutoff !== NEUTRO_CUTOFF[t] || s.q !== 1 || s.fenv > 0) {
+    riga(!nomiMano.has(t) && `.${t}(${num(s.cutoff)})`, s.q !== 1 && !nomiMano.has(`${prefisso}q`) && `.${prefisso}q(${num(s.q)})`, s.ftype !== '12db' && !nomiMano.has('ftype') && `.ftype("${s.ftype}")`);
     if (s.fenv > 0) {
-      r.push(`  .${prefisso}env(${num(s.fenv)}).${prefisso}attack(${num(s.fattacco)}).${prefisso}decay(${num(s.fdecay)})`);
-      r.push(`  .${prefisso}sustain(${num(s.fsustain)}).${prefisso}release(${num(s.frelease)})`);
+      const f = (suffisso, v) => !nomiMano.has(`${prefisso}${suffisso}`) && `.${prefisso}${suffisso}(${num(v)})`;
+      riga(f('env', s.fenv), f('attack', s.fattacco), f('decay', s.fdecay));
+      riga(f('sustain', s.fsustain), f('release', s.frelease));
     }
   }
-  if (s.vowel) r.push(`  .vowel("${s.vowel}")`);
+  if (s.vowel && mio('vowel')) r.push(`  .vowel("${s.vowel}")`);
 
-  // ampiezza
-  r.push(`  .attack(${num(s.attack)}).decay(${num(s.decay)}).sustain(${num(s.sustain)}).release(${num(s.release)})`);
-  if (s.gain !== 0.8) r.push(`  .gain(${num(s.gain)})`);
+  // ampiezza: l'inviluppo intero (un ADSR a metà in superdough riempie i buchi), ma niente se è quello che il motore fa da solo
+  if (!(s.attack === MOTORE.attack && s.decay === MOTORE.decay && s.sustain === MOTORE.sustain && s.release === MOTORE.release)) {
+    riga(...['attack', 'decay', 'sustain', 'release'].map((k) => mio(k) && `.${k}(${num(s[k])})`));
+  }
+  if (s.gain !== 0.8 && mio('gain')) r.push(`  .gain(${num(s.gain)})`);
 
   // effetti
-  const fx = [];
-  if (s.shape > 0) fx.push(`.shape(${num(s.shape)})`);
-  if (s.distort > 0) fx.push(`.distort(${num(s.distort)})`);
-  if (s.crush < 16) fx.push(`.crush(${s.crush})`);
-  if (s.coarse > 1) fx.push(`.coarse(${s.coarse})`);
-  if (fx.length) r.push(`  ${fx.join('')}`);
-  const mod = [];
-  if (s.phaser > 0) mod.push(`.phaser(${num(s.phaser)}).phaserdepth(${num(s.phaserdepth)})`);
-  if (s.tremolo > 0) mod.push(`.tremolosync(${s.tremolo}).tremolodepth(${num(s.tremolodepth)})`);
-  if (mod.length) r.push(`  ${mod.join('')}`);
-  if (s.delay > 0) r.push(`  .delay(${num(s.delay)}).delaysync(${s.delaysync}).delayfeedback(${num(s.delayfeedback)})`);
-  if (s.room > 0) r.push(`  .room(${num(s.room)}).roomsize(${num(s.roomsize)})`);
+  riga(s.shape > 0 && mio('shape') && `.shape(${num(s.shape)})`, s.distort > 0 && mio('distort') && `.distort(${num(s.distort)})`, s.crush < 16 && mio('crush') && `.crush(${s.crush})`, s.coarse > 1 && mio('coarse') && `.coarse(${s.coarse})`);
+  riga(s.phaser > 0 && mio('phaser') && `.phaser(${num(s.phaser)})`, s.phaser > 0 && scrivi('phaserdepth') && `.phaserdepth(${num(s.phaserdepth)})`);
+  riga(s.tremolo > 0 && mio('tremolo') && `.tremolosync(${s.tremolo})`, s.tremolo > 0 && scrivi('tremolodepth') && `.tremolodepth(${num(s.tremolodepth)})`);
+  riga(s.delay > 0 && mio('delay') && `.delay(${num(s.delay)})`, s.delay > 0 && scrivi('delaysync') && `.delaysync(${s.delaysync})`, s.delay > 0 && scrivi('delayfeedback') && `.delayfeedback(${num(s.delayfeedback)})`);
+  riga(s.room > 0 && mio('room') && `.room(${num(s.room)})`, s.room > 0 && scrivi('roomsize') && `.roomsize(${num(s.roomsize)})`);
   for (const m of s.mano ?? []) r.push(`  ${m.trim()}`); // le chiamate scritte a mano, com'erano, in fondo (l'ultimo valore vince)
   return r.join('\n');
 }
@@ -213,7 +220,7 @@ export function funzioniDi(k) {
   if (k === 'forma') l.push('s');
   if (k === 'voci') l.push('unison');
   if (k === 'vowel') l.push('vowel');
-  if (k === 'delaysync') l.push('delaysync');
+  if (k === 'delaysync') l.push('delaysync', 'delaytime');
   if (k === 'ottava') l.push('trans');
   if (k === 'sub') l.push('add');
   for (const [suffisso, chiave] of Object.entries(ENV)) if (chiave === k) for (const pf of Object.values(PREFISSO)) l.push(`${pf}${suffisso}`);
@@ -308,6 +315,15 @@ export function leggiCodice(testo, base = iniziale()) {
     else mano.push(c.testo);
   }
   if (forma === 'supersaw' && !visti.has('unison')) s.voci = Math.min(5, UNISON_MAX); // superdough: 5 voci se non si dice
+  // un inviluppo scritto a metà: superdough riempie i buchi a modo suo (decay e sustain minimi, o sustain pieno se c'è solo l'attack), e il pannello fa lo stesso
+  const adsr = ['attack', 'decay', 'sustain', 'release'].map((k) => (visti.has(k) ? s[k] : undefined));
+  if (adsr.some((x) => x !== undefined)) {
+    const [a1, d1, s1, r1] = adsr;
+    s.attack = Math.max(a1 ?? 0, 0.001);
+    s.decay = Math.max(d1 ?? 0, 0.001);
+    s.sustain = Math.min(s1 ?? ((a1 !== undefined && d1 === undefined) || (a1 === undefined && d1 === undefined) ? 1 : 0.001), 1);
+    s.release = Math.max(r1 ?? 0, 0.01);
+  }
   s.mano = mano.filter((x) => x.length <= 300).slice(0, 40);
   if (errori.length) return { errore: errori[0], errori };
   return { stato: pulisci(s, { tetto: false }), mano: s.mano };

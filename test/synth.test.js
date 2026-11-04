@@ -27,13 +27,16 @@ test('supersaw con filtro, inviluppo e effetti', () => {
   const c = codice(s);
   assert.match(c, /\.trans\(12\)/);
   assert.match(c, /\.add\(note\("0,-12"\)\)/);
-  assert.match(c, /\.s\("supersaw"\)\.unison\(5\)\.detune\(\.18\)\.spread\(\.6\)/);
+  assert.match(c, /\.s\("supersaw"\)\n/, 'unison 5, detune .18 e spread .6 sono quello che il motore fa da solo: non si scrivono');
+  assert.match(codice({ ...s, voci: 3, detune: 0.3, spread: 0.2 }), /\.s\("supersaw"\)\.unison\(3\)\.detune\(\.3\)\.spread\(\.2\)/);
   assert.match(c, /\.lpf\(2400\)\.lpq\(8\)/);
   assert.match(c, /\.lpenv\(3\)\.lpattack\(\.01\)\.lpdecay\(\.2\)/);
   assert.match(c, /\.lpsustain\(\.2\)\.lprelease\(\.3\)/);
   assert.match(c, /\.distort\(1\.5\)/);
-  assert.match(c, /\.delay\(\.3\)\.delaysync\(3\/16\)\.delayfeedback\(\.5\)/);
-  assert.match(c, /\.room\(\.2\)\.roomsize\(2\)/);
+  assert.match(c, /\.delay\(\.3\)\n/, 'delaysync 3/16 e feedback .5 sono del motore: non si scrivono');
+  assert.match(c, /\.room\(\.2\)\n|\.room\(\.2\)$/);
+  assert.match(codice({ ...s, delaysync: '1/8', delayfeedback: 0.7, roomsize: 4 }), /\.delay\(\.3\)\.delaysync\(1\/8\)\.delayfeedback\(\.7\)/);
+  assert.match(codice({ ...s, roomsize: 4 }), /\.room\(\.2\)\.roomsize\(4\)/);
 });
 
 test('le voci sovrapposte: scarti simmetrici, sub a −12', () => {
@@ -71,7 +74,8 @@ test('pulse, FM, pitch env, effetti a griglia', () => {
   assert.match(c, /\.fm\(2\)\.fmh\(2\)/);
   assert.match(c, /\.penv\(7\)\.pdecay\(\.05\)/);
   assert.match(c, /\.shape\(\.4\)\.crush\(6\)\.coarse\(4\)/);
-  assert.match(c, /\.phaser\(2\)\.phaserdepth\(\.75\)\.tremolosync\(4\)\.tremolodepth\(\.5\)/);
+  assert.match(c, /\.phaser\(2\)\n/, 'la profondità .75 è del motore');
+  assert.match(c, /\.tremolosync\(4\)\.tremolodepth\(\.5\)/);
   assert.match(c, /\.pan\(\.2\)/);
 });
 
@@ -239,7 +243,7 @@ test('i tipi nel file: la riga della clip e i gruppi del CUE', () => {
   assert.deepEqual(gruppiClip([{ info: {} }, { info: {} }]), [{ categoria: null, indici: [0, 1] }]); // senza tipi: niente gruppi né titoli
 });
 
-import { leggiCodice, spezza } from '../src/renderer/synth-codice.js';
+import { funzioniDi, leggiCodice, spezza } from '../src/renderer/synth-codice.js';
 
 test('spezza: testa e chiamate, stringhe e parentesi rispettate, commenti tolti', () => {
   const r = spezza('note("c3 e3")\n  .s("sawtooth").lpf(sine.range(300, 2400).slow(8)) // modulato\n  .gain(.5);');
@@ -402,4 +406,33 @@ test('i commenti in cima: solo quelli, non quelli in mezzo; niente segni di CUTX
   assert.equal(pulisci({ intro: 'non è un commento' }).intro, '');
   assert.equal(pulisci({ scala: 'C:ritusen' }).scala, '');
   assert.equal(pulisci({ scala: 'D3:dorian' }).scala, 'D3:dorian');
+});
+
+test('codice a mano: i valori scritti vincono, il pannello non ne aggiunge di suoi, e non scrive quello che il motore fa da solo', () => {
+  const r = leggiCodice(ACIDA.replace('.gain(.02)', '.gain(.35)'));
+  const s = r.stato;
+  assert.equal(s.gain, 0.35);
+  const c = codice(s);
+  assert.ok(c.includes('.gain(.35)'), c);
+  assert.ok(!c.includes('.unison('), 'unison 5, detune e spread sono del motore');
+  assert.ok(!c.includes('.detune(') && !c.includes('.spread('));
+  assert.ok(!c.includes('.attack(') && !c.includes('.decay(') && !c.includes('.release('), 'l\'inviluppo del motore non si scrive');
+  // lpf e delaytime scritti a mano: il pannello non scrive i suoi
+  assert.equal((c.match(/\.lpf\(/g) ?? []).length, 1, c);
+  assert.ok(c.includes('.lpf(saw.range(500, 6500).slow(4))') && c.includes('.lpq(10)'));
+  assert.ok(!c.includes('.delaysync(') && c.includes('.delaytime(.1875)') && c.includes('.delayfeedback(.55)'), c);
+  // la manopola che il codice a mano scavalca si segna
+  assert.ok(funzioniDi('cutoff').includes('lpf') && funzioniDi('delaysync').includes('delaytime'));
+  // rileggere il codice scritto dal pannello dà lo stesso suono
+  assert.deepEqual(leggiCodice(c).stato, s);
+});
+
+test('un inviluppo scritto a metà: il pannello lo riempie come superdough (e lo scrive intero)', () => {
+  const s = leggiCodice('note("c3")\n  .attack(.5)').stato;
+  assert.deepEqual([s.attack, s.decay, s.sustain, s.release], [0.5, 0.001, 1, 0.01]);
+  assert.ok(codice(s).includes('.attack(.5).decay(.001).sustain(1).release(.01)'));
+  const t = leggiCodice('note("c3")\n  .release(2)').stato;
+  assert.deepEqual([t.attack, t.decay, t.sustain, t.release], [0.001, 0.001, 1, 2]);
+  const u = leggiCodice('note("c3")\n  .attack(.01).decay(.2)').stato;
+  assert.deepEqual([u.attack, u.decay, u.sustain, u.release], [0.01, 0.2, 0, 0.01]);
 });

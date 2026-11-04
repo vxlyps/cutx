@@ -4,7 +4,7 @@
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, noteValide, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
 import { PianoRoll } from './synth-roll.js';
-import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado } from './synth-note.js';
+import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado, scalaDelCiclo } from './synth-note.js';
 import { OTTAVA_INIZIALE, inCampoDiTesto, notaDaTasto, ottavaDopo } from './synth-tastiera.js';
 import { nuovoValore } from './controller-synth.js';
 import { Registratore } from './synth-rec.js';
@@ -390,6 +390,8 @@ export class VistaSynth {
     return {
       stato: () => this.stato,
       nome: (k) => T.parametri[k] ?? k,
+      corto: (k) => T.controller.corti[k] ?? String(T.parametri[k] ?? k).slice(0, 8),
+      generale: () => T.controller.generale,
       gruppo: (g) => T.gruppi[g] ?? g,
       testo: (p, v) => etichettaValore(p, v),
       nomeComando: (c) => T.controller.comandi[c] ?? c,
@@ -513,8 +515,8 @@ export class VistaSynth {
     this.cicliScelti = cicli;
     const g = this.roll.griglia;
     const sc = inGradi(this.stato) ? leggiScala(this.stato.scala) : null;
-    const fuoriScala = !!sc && eventi.some((e) => notaInGrado(e.n, sc) === null);
-    const mini = sc && !fuoriScala ? miniDaEventi(eventi, cicli, g, (n) => String(notaInGrado(n, sc))) : miniDaEventi(eventi, cicli, g);
+    const fuoriScala = !!sc && eventi.some((e) => notaInGrado(e.n, scalaDelCiclo(sc, Math.floor(e.i / g))) === null);
+    const mini = sc && !fuoriScala ? miniDaEventi(eventi, cicli, g, (n, c) => String(notaInGrado(n, scalaDelCiclo(sc, c)))) : miniDaEventi(eventi, cicli, g);
     const scala = fuoriScala ? '' : this.stato.scala;
     this.chiaveNote = null;
     if (mini === noteEffettive(this.stato) && this.stato.anteprima === 'clip' && scala === this.stato.scala) return this.disegna();
@@ -549,6 +551,7 @@ export class VistaSynth {
     this.erroreCodice = null;
     this.codiceEl.classList.remove('errore');
     if (JSON.stringify(r.stato) === JSON.stringify(this.stato)) return this.avviso('');
+    if (r.stato.note !== this.stato.note || r.stato.scala !== this.stato.scala) this.cicliScelti = 1; // un codice incollato porta i suoi cicli
     this.imponi(r.stato);
   }
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ACCORDI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
+  ACCORDI, GRIGLIE, NOTA_MAX, NOTA_MIN, SCALE, SCATTI, accordoEventi, allunga, scalaDelCiclo, gradoInNota, leggiScala, notaInGrado, appunti, duplica, incolla, muovi, nelRettangolo, senzaScelte, trasponi, uniscisel, agganciaScala, conCicli, conEvento, eventiDaMini, inScala, miniDaEventi, nomeNota, notaDaNome, senzaEvento,
 } from '../src/renderer/synth-note.js';
 
 const seme = (n) => () => ((n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -59,15 +59,15 @@ test('quello che non si legge dà un errore; le terzine hanno la loro griglia (1
   assert.equal(q.griglia, 16);
 });
 test('eventi → mini-notazione: leggibile e fedele', () => {
-  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 51 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 58 }]), 'c3@4 eb3@4 g3@4 bb3@4');
+  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 4, l: 4, n: 51 }, { i: 8, l: 4, n: 55 }, { i: 12, l: 4, n: 58 }]), 'c3 eb3 g3 bb3');
   assert.equal(miniDaEventi([]), '~');
   assert.equal(miniDaEventi([{ i: 0, l: 16, n: 48 }]), 'c3');
-  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 8, l: 8, n: 52 }]), 'c3@4 ~@4 e3@8');
-  assert.equal(miniDaEventi([{ i: 0, l: 8, n: 48 }, { i: 0, l: 8, n: 52 }, { i: 0, l: 8, n: 55 }]), '[c3,e3,g3]@8 ~@8');
-  assert.equal(miniDaEventi([{ i: 0, l: 16, n: 48 }, { i: 0, l: 8, n: 52 }]), 'c3, e3@8 ~@8');
-  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 16, l: 4, n: 52 }], 2), '<[c3@4 ~@12] [e3@4 ~@12]>');
-  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }], 4), '<[c3@4 ~@12] ~ ~ ~>');
-  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 16, l: 4, n: 48 }], 2), 'c3@4 ~@12'); // cicli uguali: basta uno
+  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 8, l: 8, n: 52 }]), 'c3 ~ e3@2');
+  assert.equal(miniDaEventi([{ i: 0, l: 8, n: 48 }, { i: 0, l: 8, n: 52 }, { i: 0, l: 8, n: 55 }]), '[c3,e3,g3] ~');
+  assert.equal(miniDaEventi([{ i: 0, l: 16, n: 48 }, { i: 0, l: 8, n: 52 }]), 'c3, e3 ~');
+  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 16, l: 4, n: 52 }], 2), '<[c3 ~@3] [e3 ~@3]>');
+  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }], 4), '<[c3 ~@3] ~ ~ ~>');
+  assert.equal(miniDaEventi([{ i: 0, l: 4, n: 48 }, { i: 16, l: 4, n: 48 }], 2), 'c3 ~@3'); // cicli uguali: basta uno
 });
 
 test('andata e ritorno: eventi a caso (griglia 1/16, 1–8 cicli, accordi, sovrapposizioni)', () => {
@@ -283,7 +283,7 @@ test('n(…).scale(…): i numeri sono gradi, le note stanno nella scala', () =>
   // al ritorno si riscrivono i gradi
   const mini = miniDaEventi(r.eventi, r.cicli, r.griglia, (n) => String(notaInGrado(n, am)));
   assert.equal(mini, '0 2 7 9 7 4 2 9 12 9 7 4');
-  assert.equal(miniDaEventi([{ i: 0, l: 3, n: 48 }, { i: 3, l: 9, n: 52 }], 1, 12), 'c3@3 e3@9');
+  assert.equal(miniDaEventi([{ i: 0, l: 3, n: 48 }, { i: 3, l: 9, n: 52 }], 1, 12), 'c3 e3@3');
   assert.equal(miniDaEventi([{ i: 0, l: 12, n: 48 }], 1, 12), 'c3');
 });
 
@@ -306,4 +306,25 @@ test('con la griglia di terzine: muovi, incolla e cicli contano in 12', () => {
   assert.deepEqual(muovi(ev, [{ i: 0, n: 48 }], 11, 0, 1, 12).eventi.find((e) => e.n === 48), { i: 11, l: 1, n: 48 });
   assert.equal(incolla([], { note: [{ d: 0, l: 8, n: 60 }], durata: 8 }, 8, 1, 12).eventi[0].l, 4, 'non esce dal ciclo di 12');
   assert.equal(allunga(ev, [{ i: 6, n: 52 }], 9, 12)[1].l, 6);
+});
+
+test('scala diversa a ogni ciclo: <A:minor A:minor F:major E:major>', () => {
+  const sc = leggiScala('<A:minor A:minor F:major E:major>');
+  assert.equal(sc.lista.length, 4);
+  assert.deepEqual({ tipo: sc.tipo, radice: sc.radice }, { tipo: 'minore', radice: 9 }, 'il pianoroll prende la prima');
+  assert.equal(scalaDelCiclo(sc, 2).radice, 5);
+  assert.equal(scalaDelCiclo(sc, 5).radice, 9, 'dopo il quarto si ricomincia');
+  assert.equal(leggiScala('<A:minor C:ritusen>'), null);
+  assert.equal(leggiScala('<A:minor <C:major>>'), null);
+  const r = eventiDaMini('0 ~ 4 ~ 7 ~ <5 3> ~', { scala: sc });
+  assert.equal(r.cicli, 4, 'l\'alternanza delle note (2) e quella delle scale (4) insieme');
+  assert.equal(r.griglia, 16);
+  const ciclo = (c) => r.eventi.filter((e) => Math.floor(e.i / 16) === c).map((e) => e.n);
+  assert.deepEqual(ciclo(0), [57, 64, 69, 65], 'la minore da la3: gradi 0 4 7 5');
+  assert.deepEqual(ciclo(1), [57, 64, 69, 62], 'ciclo 2: 0 4 7 3');
+  assert.deepEqual(ciclo(2), [53, 60, 65, 62], 'fa maggiore da fa3');
+  assert.deepEqual(ciclo(3), [52, 59, 64, 57], 'mi maggiore da mi3');
+  // al ritorno ogni ciclo si riscrive con la sua scala
+  const mini = miniDaEventi(r.eventi, r.cicli, r.griglia, (n, c) => String(notaInGrado(n, scalaDelCiclo(sc, c))));
+  assert.equal(mini, '<[0 ~ 4 ~ 7 ~ 5 ~] [0 ~ 4 ~ 7 ~ 3 ~] [0 ~ 4 ~ 7 ~ 5 ~] [0 ~ 4 ~ 7 ~ 3 ~]>');
 });

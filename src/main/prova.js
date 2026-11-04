@@ -3227,10 +3227,10 @@ async function provaSynth({ finestre, scrivi }) {
   await premi('B');
   controlla('B passa alla matita', (await js(`cutxProva.synth.roll.strumento`)) === 'matita' && (await js(`document.querySelector('.roll-barra .key.on').textContent`)).includes('matita'));
   await clicca(0, 48);
-  controlla('un clic su una cella mette una nota (c3, 1/4)', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]' && (await js(`cutxProva.synth.stato.note`)) === 'c3@4 ~@12');
+  controlla('un clic su una cella mette una nota (c3, 1/4)', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]' && (await js(`cutxProva.synth.stato.note`)) === 'c3 ~@3');
   await trascina(8, 52, 13);
   controlla('trascinando a destra la nota si allunga (6 scatti)', (await rollEventi()).includes('{"i":8,"l":6,"n":52}'));
-  controlla('e il codice ha le note nuove', (await codiceSynth()).includes('note("c3@4 ~@4 e3@6 ~@2")'), await codiceSynth());
+  controlla('e il codice ha le note nuove', (await codiceSynth()).includes('note("c3@2 ~@2 e3@3 ~")'), await codiceSynth());
   await clicca(0, 48, 'alt');
   controlla('⌥-clic su una nota la toglie', !(await rollEventi()).includes('"n":48'));
   await premi('Z', 'meta');
@@ -3243,7 +3243,7 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`(() => { const r = cutxProva.synth.roll; r.accordoEl.value = 'magg'; r.accordoEl.dispatchEvent(new Event('change')); r.lunghezzaEl.value = '8'; r.lunghezzaEl.dispatchEvent(new Event('change')); })()`);
   await clicca(8, 53);
   controlla('con l\'accordo maggiore un clic mette tre note insieme (fa la sa do)', (await js(`cutxProva.synth.roll.eventi.filter((e) => e.i === 8).map((e) => e.n).join(',')`)) === '53,57,60', await rollEventi());
-  controlla('l\'accordo è un accordo nella mini-notazione', (await js(`cutxProva.synth.stato.note`)).includes('[f3,a3,c4]@8'), await js(`cutxProva.synth.stato.note`));
+  controlla('l\'accordo è un accordo nella mini-notazione', (await js(`cutxProva.synth.stato.note`)).includes('[f3,a3,c4]@2'), await js(`cutxProva.synth.stato.note`));
   await js(`(() => { const r = cutxProva.synth.roll; r.scalaEl.value = 'cromatica'; r.scalaEl.dispatchEvent(new Event('change')); r.accordoEl.value = 'nota'; r.accordoEl.dispatchEvent(new Event('change')); r.lunghezzaEl.value = '4'; r.lunghezzaEl.dispatchEvent(new Event('change')); })()`);
   // selezione, appunti, duplica, trasponi: tutto sulle note vere (il confronto con Strudel in fondo)
   await premi('B');
@@ -3377,9 +3377,9 @@ async function provaSynth({ finestre, scrivi }) {
   // cicli: 2 cicli ripetono il pattern, un'aggiunta nel secondo lo cambia
   await scriviMini('c3@4 ~@12');
   await clic('.roll-cicli .key:nth-child(2)');
-  controlla('passando a 2 cicli il suono non cambia (il pattern si ripete)', (await js(`cutxProva.synth.roll.cicli`)) === 2 && (await js(`cutxProva.synth.stato.note`)) === 'c3@4 ~@12');
+  controlla('passando a 2 cicli il suono non cambia (il pattern si ripete)', (await js(`cutxProva.synth.roll.cicli`)) === 2 && (await js(`cutxProva.synth.stato.note`)) === 'c3 ~@3');
   await clicca(16 + 8, 55);
-  controlla('una nota nel secondo ciclo: il testo diventa un\'alternanza', (await js(`cutxProva.synth.stato.note`)) === '<[c3@4 ~@12] [c3@4 ~@4 g3@4 ~@4]>', await js(`cutxProva.synth.stato.note`));
+  controlla('una nota nel secondo ciclo: il testo diventa un\'alternanza', (await js(`cutxProva.synth.stato.note`)) === '<[c3 ~@3] [c3 ~ g3 ~]>', await js(`cutxProva.synth.stato.note`));
   // Strudel e il pianoroll dicono la stessa cosa (le note vere, dal motore della cuffia)
   const haps = async (n) => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, ${n})`);
   const vero = await haps(2);
@@ -3408,6 +3408,48 @@ async function provaSynth({ finestre, scrivi }) {
     const eventiRoll = () => js(`cutxProva.synth.roll.eventi.map((e) => ({ i: e.i, l: e.l, n: e.n }))`);
     const ord = (x) => JSON.stringify([...x].sort((p, q) => p.i - q.i || p.n - q.n).map((e) => ({ i: +e.i.toFixed(2), l: +e.l.toFixed(2), n: e.n })));
     const veri = async (g) => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1, ${g})`);
+    // il testo esatto di Valerio (gain .35: il valore scritto a mano vince; la prova è ferma, quindi non suona)
+    await js(`cutxProva.synth.opz.ferma()`);
+    await aspetta(0.3);
+    await scriviCodice(ACIDA.replace('.gain(.02)', '.gain(.35)'));
+    controlla('il gain scritto a mano (.35) vince, e resta nel codice', (await stato('gain')) === 0.35 && (await codiceSynth()).includes('.gain(.35)') && !(await codiceSynth()).includes('.gain(.02)'), (await codiceSynth()).slice(-120));
+    {
+      const c = await codiceSynth();
+      controlla('il codice non si riempie di numeri non scritti (unison, detune, spread, attack, decay, sustain, release)', !/\.(unison|detune|spread|attack|decay|sustain|release)\(/.test(c), c);
+      controlla('un parametro scritto a mano non si scrive due volte (lpf, delaytime/delaysync)', (c.match(/\.lpf\(/g) ?? []).length === 1 && c.includes('.lpf(saw.range(500, 6500).slow(4))') && c.includes('.delaytime(.1875)') && !c.includes('.delaysync('), c);
+      controlla('le manopole scavalcate dal codice a mano sono segnate «a mano»', (await js(`document.querySelectorAll('.synth-pannello .ctl.a-mano').length`)) >= 1);
+    }
+    await clic('.synth-schede .key:nth-child(2)');
+    await aspetta(0.5);
+    {
+      const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
+      await mkdir(cartella, { recursive: true });
+      await writeFile(path.join(cartella, 'incollato.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    }
+    // note() con le scale alternate e le note alternate: il pianoroll le scrive tutte, 4 cicli
+    await scriviCodice(`n("0 ~ 4 ~ 7 ~ <5 3> ~")\n  .scale("<A:minor A:minor F:major E:major>")\n  .s("triangle").lpf(3000)\n  .delay(.4).delaytime(.265).delayfeedback(.5)\n  .room(.5).gain(1)`);
+    controlla('scale alternate e <5 3>: il pianoroll ha le note (16 in 4 cicli) e si modifica', (await js(`cutxProva.synth.roll.eventi.length`)) === 16 && (await js(`cutxProva.synth.roll.cicli`)) === 4 && (await js(`cutxProva.synth.roll.editabile`)) === true, await rollEventi());
+    controlla('scala e radice del pianoroll: la prima (la minore)', (await js(`JSON.stringify(cutxProva.synth.roll.scala)`)) === '{"radice":9,"tipo":"minore"}');
+    controlla('il testo mini resta com\'è scritto', (await js(`document.querySelector('.roll-mini-testo').value`)) === '0 ~ 4 ~ 7 ~ <5 3> ~', await js(`document.querySelector('.roll-mini-testo').value`));
+    {
+      const c = await codiceSynth();
+      controlla('il codice resta quello scritto (gain 1, un solo lpf, delaytime a mano, niente delaysync)', c.includes('.scale("<A:minor A:minor F:major E:major>")') && c.includes('.gain(1)') && (c.match(/\.lpf\(/g) ?? []).length === 1 && c.includes('.delaytime(.265)') && !c.includes('.delaysync(') && !/\.(unison|attack|decay|release)\(/.test(c), c);
+      const v = await chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(c)}, 0, 4, 16)`);
+      const roll = await eventiRoll();
+      controlla('Strudel suona le note del pianoroll, ciclo per ciclo, con le scale alternate', roll.length === 16 && ord(v ?? []) === ord(roll), `${ord(v ?? [])} / ${ord(roll)}`);
+    }
+    {
+      // sposto una nota restando nella scala del suo ciclo: n() coi gradi, la scala alternata resta
+      const e1 = await eventiRoll();
+      const ciclo2 = e1.find((e) => e.i >= 32 && e.i < 48); // fa maggiore: fa3 (53) → sol3 (55)
+      await js(`cutxProva.synth.roll.opz.cambia(${JSON.stringify(e1.map((e) => (e === ciclo2 || (e.i === ciclo2.i && e.n === ciclo2.n) ? { ...e, n: ciclo2.n + 2 } : e)))}, 4)`);
+      await aspetta(0.6);
+      const c = await codiceSynth();
+      controlla('una nota spostata dentro la scala del suo ciclo: resta n() con la scala alternata', (await stato('scala')) === '<A:minor A:minor F:major E:major>' && c.includes('n("<') && c.includes('.scale("<A:minor'), c.slice(0, 200));
+      const v = await chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(c)}, 0, 4, 16)`);
+      controlla('e Strudel suona ancora le note del pianoroll', ord(v ?? []) === ord(await eventiRoll()), `${ord(v ?? [])} / ${ord(await eventiRoll())}`);
+    }
+    await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' })`);
     await scriviCodice(ACIDA);
     controlla('incollo il codice con n(…).scale(…): 12 note nel pianoroll, griglia 12, modificabili', (await js(`cutxProva.synth.roll.eventi.length`)) === 12 && (await js(`cutxProva.synth.roll.griglia`)) === 12 && (await js(`cutxProva.synth.roll.editabile`)) === true, await rollEventi());
     controlla('le note sono i gradi di la minore (la2 do3 la3 do4…)', (await eventiRoll()).map((e) => e.n).join(',') === '45,48,57,60,57,52,48,60,65,60,57,52');
@@ -3416,13 +3458,8 @@ async function provaSynth({ finestre, scrivi }) {
     controlla('quello che non è una nota resta a mano (sometimesBy, saw.range, delaytime)', (await js(`document.querySelector('.synth-mano').textContent`)).includes('sometimesBy') && (await js(`document.querySelector('.synth-mano').textContent`)).includes('saw.range'));
     await js(`document.querySelector('.synth-pre').dispatchEvent(new FocusEvent('blur'))`);
     await aspetta(0.3);
-    {
-      const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'synth');
-      await mkdir(cartella, { recursive: true });
-      await writeFile(path.join(cartella, 'incollato.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
-    }
     controlla('il commento in cima resta in cima', (await codiceSynth()).startsWith('// Variante ACIDA\nn("0 2 7 9 7 4 2 9 12 9 7 4")\n  .scale("A2:minor")'), (await codiceSynth()).slice(0, 80));
-    controlla('la cuffia riceve il codice con il commento, la scala e il resto', ((await cuffiaStato())?.codice ?? '').includes('// Variante ACIDA') && ((await cuffiaStato())?.codice ?? '').includes('.sometimesBy(.3, x => x.ply(2))'));
+    controlla('il codice ha il commento, la scala e il resto', (await codiceSynth()).includes('// Variante ACIDA') && (await codiceSynth()).includes('.sometimesBy(.3, x => x.ply(2))'));
     // modifico restando nella scala: si riscrive n() coi gradi
     const e0 = await eventiRoll();
     await js(`cutxProva.synth.roll.opz.cambia(${JSON.stringify(e0.map((e, k) => (k === 1 ? { ...e, n: 50 } : e)))}, 1)`);
@@ -3453,7 +3490,7 @@ async function provaSynth({ finestre, scrivi }) {
     controlla('si può scegliere la griglia di terzine (1/12) su un pianoroll vuoto', (await js(`cutxProva.synth.roll.griglia`)) === 12 && (await js(`cutxProva.synth.roll.grigliaEl.value`)) === '12' && (await js(`cutxProva.synth.roll.lunghezzaEl.options.length`)) === 6);
     await js(`cutxProva.synth.roll.opz.cambia([{ i: 0, l: 3, n: 48 }, { i: 3, l: 9, n: 52 }], 1)`);
     await aspetta(0.6);
-    controlla('e le note scritte in terzine si leggono giuste in Strudel', (await stato('note')) === 'c3@3 e3@9' && ord((await veri(12)) ?? []) === ord(await eventiRoll()), `${await stato('note')} · ${JSON.stringify(await veri(12))} / ${ord(await eventiRoll())} · ${JSON.stringify(await codiceSynth())}`);
+    controlla('e le note scritte in terzine si leggono giuste in Strudel', (await stato('note')) === 'c3 e3@3' && ord((await veri(12)) ?? []) === ord(await eventiRoll()), `${await stato('note')} · ${JSON.stringify(await veri(12))} / ${ord(await eventiRoll())} · ${JSON.stringify(await codiceSynth())}`);
     await scriviCodice(`note("c3 e3 g3 b3 d4")\n  .s("square").gain(.02)`);
     controlla('cinque note in un ciclo non stanno su nessuna griglia: si vedono, non si modificano', (await js(`cutxProva.synth.roll.editabile`)) === false);
     await js(`cutxProva.synth.roll.opz.griglia(16)`);
@@ -3557,7 +3594,7 @@ async function provaSynth({ finestre, scrivi }) {
     const anello = (n) => js(`${C}.desiderate().get('a${n}')`);
     const cut = () => js(`cutxProva.synth.stato.cutoff`);
     await js(`${C}.modo = 'MC'; ${C}.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; ${C}.cambiato(); window.cutx.salvaPreferenze({ controller: null })`);
-    await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), gain: 0.02 }, B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.opz.ferma(); document.activeElement?.blur?.()`);
+    await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'synth' }); cutxProva.synth.opz.ferma(); document.activeElement?.blur?.()`);
     await aspetta(0.8);
     controlla('nella vista SYNTH il controller comanda il synth', (await js(`${C}.nelSynth`)) === true);
     controlla('lo specchio del synth compare, in ambra, e dice «controller → SYNTH»', (await js(`!document.querySelector('.synth-specchio').hidden && document.querySelector('.synth-specchio').classList.contains('attivo') && document.querySelector('.synth-specchio .spec-stato').textContent`)) === 'controller → SYNTH');
@@ -3610,7 +3647,7 @@ async function provaSynth({ finestre, scrivi }) {
     await premiTasto(5);
     controlla('il tasto 5 sceglie SPACE: la manopola 1 è il delay', (await js(`${C}.manopole()[0].corto`)) === 'delay' && (await js(`${C}.sy.pagina`)) === 0);
     await premiTasto(5);
-    controlla('di nuovo il tasto 5: pagina 2 (tremolo), e il tasto lampeggia', (await js(`${C}.manopole()[0].corto`)) === 'tremol' && (await luce(5)) === 1);
+    controlla('di nuovo il tasto 5: pagina 2 (tremolo), e il tasto lampeggia', (await js(`${C}.manopole()[0].corto`)) === 'tremolo' && (await luce(5)) === 1);
     controlla('la pagina 2 ha solo due manopole (le altre libere: anello spento)', (await js(`${C}.manopole().slice(0, 7).filter(Boolean).length`)) === 2);
     await premiTasto(4);
     controlla('un altro gruppo riparte dalla prima pagina', (await js(`${C}.sy.gruppo`)) === 'drive' && (await js(`${C}.sy.pagina`)) === 0 && (await js(`${C}.manopole()[0].corto`)) === 'shape');
@@ -3625,7 +3662,8 @@ async function provaSynth({ finestre, scrivi }) {
     await giro(1, 1);
     controlla('la manopola 1 (forma) cambia la forma d\'onda di un posto', (await stato('forma')) !== 'sawtooth');
     await premi('Z', 'meta');
-    // i tasti in basso
+    // i tasti in basso (da qui il suono parte: gain basso)
+    await js(`cutxProva.synth.cambia('gain', 0.02)`);
     await premiTasto(15);
     await aspetta(0.6);
     controlla('PLAY (in basso) avvia la prova in cuffia, e si accende', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await luce(15)) === 127);

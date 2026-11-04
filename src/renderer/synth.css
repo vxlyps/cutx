@@ -152,8 +152,8 @@
 }
 
 .ctl-anello .valore {
-  stroke: var(--marcio);
-  filter: drop-shadow(0 0 3px rgba(159, 194, 58, 0.5));
+  stroke: var(--testo); /* il verde è solo del live: le manopole del synth sono chiare */
+  filter: drop-shadow(0 0 3px rgba(217, 220, 204, 0.3));
 }
 
 .ctl-valore {
@@ -206,8 +206,8 @@
 }
 
 .ctl-b.ctl-interruttore.on {
-  background: var(--marcio);
-  border-color: var(--marcio);
+  background: var(--testo);
+  border-color: var(--testo);
 }
 
 .ctl.ctl-scelta {

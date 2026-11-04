@@ -614,7 +614,7 @@ export class Controller {
   slotSynth() {
     const a = this.azioni.synth;
     if (!a) return Array(7).fill(null);
-    return manopoleSynth(a.stato(), this.sy.gruppo, this.sy.pagina, PARAMETRI_SYNTH, { nome: a.nome, testo: a.testo });
+    return manopoleSynth(a.stato(), this.sy.gruppo, this.sy.pagina, PARAMETRI_SYNTH, { nome: a.nome, corto: a.corto, testo: a.testo });
   }
 
   // La testata dello specchio: quale gruppo e a che pagina.
@@ -684,7 +684,7 @@ export class Controller {
   // Le manopole come le vede lo specchio e come si accendono gli anelli: le sette del gruppo e il generale (sempre del LIVE).
   manopoleDelSynth() {
     const m = this.slotSynth().map((x) => (x ? { stile: x.stile, valore: x.valore, nome: x.nome, corto: x.corto, testo: x.testo, spenta: !x.conta } : null));
-    m.push({ stile: 'fan', valore: this.master, nome: 'generale', corto: 'gener', testo: this.master.toFixed(2) });
+    m.push({ stile: 'fan', valore: this.master, nome: 'generale', corto: this.azioni.synth?.generale?.() ?? 'master', testo: this.master.toFixed(2) });
     return m;
   }
 
