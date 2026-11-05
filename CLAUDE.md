@@ -3,6 +3,7 @@
 App per Mac di live coding musicale basata su Strudel, usata come un CDJ. Progetto di Valerio (vxlyps), poi regalato alla community. Si chiamava DANEEL. Repo: https://github.com/vxlyps/cutx (pubblico, `main`). Roadmap e criteri: `docs/PIANO.md`. **Fase 1 fatta, in verifica di Valerio (decisioni in `docs/FASE-1.md`). Fase 2 (importare progetti Ableton): piano in `docs/ableton/ESTENSIONE-ABLETON.md`, prototipo Python di riferimento `docs/ableton/als2cutx.py`; da leggere prima di toccare la fase 2.** Grafica: `design/DESIGN.md` e le tavole in `design/riferimenti/`.
 
 ## Regole di lavoro
+- **Come si lavora (ruoli, quando fermarsi, ordine dei lavori): `docs/DIREZIONE.md`. Da leggere a inizio sessione, insieme a `.claude/ultimo.md`.**
 - Italiano, diretto, conciso. Niente linguaggio corporate.
 - Codice dell'app: prima spiego cosa voglio fare, aspetto l'ok, poi scrivo.
 - Soluzione più semplice che funziona. Niente over-engineering, niente dipendenze inutili.
