@@ -3198,11 +3198,21 @@ input[type='checkbox'] {
   bottom: 0;
   height: 3px;
   width: 0;
-  background: var(--marcio);
+  background: var(--avviso, #e0a03a); /* mentre carica è «a mano»: ambra */
 }
 .key.tenere.carica .riempi {
   width: 100%;
   transition: width 1s linear;
+}
+/* scattato: piena e verde (da qui suona live), poi sparisce */
+.key.tenere.scatta .riempi {
+  width: 100%;
+  background: var(--marcio);
+  animation: passo-scatta 0.7s ease-out forwards;
+}
+@keyframes passo-scatta {
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 .passaggio {
   margin: 0 0 8px;

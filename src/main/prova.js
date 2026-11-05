@@ -2902,7 +2902,9 @@ async function provaPassaggio({ finestre, scrivi }) {
     await midi(0x90, t3, 127);
     await aspetta(0.4);
     controlla('il tasto 3 lampeggia mentre lo tengo', (await js(`cutxProva.controllerMidi.desiderate().get('t${t3}')[2]`)) === 1);
+    controlla('e la barra del pulsante «prossimo brano» si riempie (classe carica)', await js(`document.getElementById('passa-brano').classList.contains('carica')`));
     await aspetta(0.9);
+    controlla('scattato: la barra è verde e piena (classe scatta), non più in carica', await js(`document.getElementById('passa-brano').classList.contains('scatta') && !document.getElementById('passa-brano').classList.contains('carica')`));
     await midi(0x90, t3, 0);
     const visti = [];
     let dopoPasso = [];

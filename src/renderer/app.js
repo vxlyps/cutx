@@ -571,6 +571,14 @@ function passaDoppio() {
   cue.avviso('di nuovo ⇧⌘P per passare al prossimo brano');
 }
 
+// Il tenuto è arrivato in fondo: la barra resta piena e verde un attimo, poi sparisce (stile.css, .scatta).
+function scattato(b) {
+  b.classList.remove('scatta');
+  void b.offsetWidth; // riparte l'animazione anche se scatta due volte di fila
+  b.classList.add('scatta');
+  setTimeout(() => b.classList.remove('scatta'), 800);
+}
+
 // Un pulsante che si tiene premuto un secondo (si riempie): niente passaggi per sbaglio.
 function pulsanteTenuto(b, fa) {
   let timer = null;
@@ -582,6 +590,7 @@ function pulsanteTenuto(b, fa) {
     b.classList.add('carica');
     timer = setTimeout(() => {
       lascia();
+      scattato(b);
       fa();
     }, 1000);
   };
@@ -1685,6 +1694,11 @@ const controllerMidi = new Controller({
   inCuffia: () => !!cuffia.stato.codice,
   paracadute: () => lanciaParacadute(),
   paracaduteCarica: (on) => $('paracadute').classList.toggle('carica', on),
+  passoCarica: (on) => $('passa-brano').classList.toggle('carica', on), // tasto 3 tenuto: la barra del pulsante si riempie come col clic
+  passoScattato: () => {
+    $('passa-brano').classList.remove('carica');
+    scattato($('passa-brano'));
+  },
   scritta: (testo) => mostraScritta(testo),
   riga: (testo) => mostraRiga(testo),
   tocca: (id) => pila.tocca(id),

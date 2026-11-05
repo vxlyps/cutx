@@ -548,8 +548,10 @@ export class Controller {
         const stato = { passato: false };
         this.passaTenuto = stato;
         this.riga('prossimo brano: tieni premuto per passare');
+        this.azioni.passoCarica?.(true);
         this.passaTimer = this.imposta(() => {
           stato.passato = true;
+          this.azioni.passoScattato?.();
           if (this.azioni.passaBrano) {
             Promise.resolve(this.azioni.passaBrano()).then((r) => {
               if (r?.brano) {
@@ -563,6 +565,7 @@ export class Controller {
       } else if (this.passaTenuto) {
         const stato = this.passaTenuto;
         this.passaTenuto = null;
+        if (!stato.passato) this.azioni.passoCarica?.(false); // rilasciato prima: la barra si svuota
         if (!stato.passato) {
           const r = this.azioni.linguetta?.();
           if (r) {
