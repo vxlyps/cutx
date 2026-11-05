@@ -11,6 +11,7 @@ import { durataWav, risolviFile } from './ableton.js';
 import * as finto from '../../test/als-finto.js';
 import os from 'node:os';
 import { AZIONI } from '../renderer/scorciatoie.js';
+import { frazioneAmbra } from '../../strumenti/analizza-prova-lib.mjs';
 import { existsSync } from 'node:fs';
 
 // Lo stesso click del test di sfasamento, più piano: la prova suona dalle casse del Mac.
@@ -5599,6 +5600,14 @@ async function provaMoviola({ finestre, scrivi }) {
     const eAmbra = ([r, g, bl]) => r > 190 && g > 110 && bl < 130;
     await aspetta(0.1); // il tempo di disegnare il primo fotogramma del lampo (dura 0,5 s)
     const sulControllo = await bordo(finestre.controllo.webContents);
+    // il lampo vero, ridotto come lo guarda analizza-prova (192×108): deve restare ben visibile tra i pixel ambra
+    const foto = (await finestre.controllo.webContents.capturePage()).resize({ width: 192, height: 108, quality: 'best' });
+    const bgra = foto.toBitmap();
+    const rgb = new Uint8Array((bgra.length / 4) * 3);
+    for (let i = 0, j = 0; i < bgra.length; i += 4, j += 3) rgb.set([bgra[i + 2], bgra[i + 1], bgra[i]], j);
+    const frazione = frazioneAmbra(rgb);
+    controlla('il lampo vero, a 192×108, si distingue per analizza-prova (almeno l\'1% di pixel ambra)', frazione > 0.01, `${(frazione * 100).toFixed(2)}%`);
+    scrivi(`INFO  frazione di ambra del lampo a 192×108: ${(frazione * 100).toFixed(2)}%`);
     const sulProiettore = finestre.uscita ? await bordo(finestre.uscita.webContents) : null;
     const lampo = await js(`document.querySelector('.segno-lampo')?.classList.contains('acceso') ?? false`);
     controlla('SEGNA: il lampo ambra si accende sul controllo', lampo === true && eAmbra(sulControllo), JSON.stringify(sulControllo));
