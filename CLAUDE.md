@@ -14,6 +14,7 @@ App per Mac di live coding musicale basata su Strudel, usata come un CDJ. Proget
 - Non fidarsi della memoria su Strudel/Electron/Web Audio: leggere `node_modules`, docs ufficiali, sorgente https://codeberg.org/uzu/strudel.
 - Se un'idea è cattiva o impossibile, dirlo subito con un'alternativa.
 - Stash di prova: `~/Progetti/cutx-stash-test` (fuori dal repo).
+- **Mai prove a volume pieno.** Prima di ogni prova che può suonare: leggo il volume del Mac e lo salvo, lo abbasso al 20% (`osascript -e 'set volume output volume 20'`) e azzero il master del live. A fine prova rimetto il volume com'era (anche se la prova fallisce) e lo dico.
 - **Prove, foto e script di screenshot girano SEMPRE con una cartella dati separata** (`CUTX-prova`, `CUTX-chiusura`), mai con le preferenze vere di Valerio (`~/Library/Application Support/CUTX`). Ogni nuovo flag di prova (`--prova`, `--foto`, `--schermate`, `--sfondo`, `--chiusura`, …) va in `PER_PROVE` in `main.js`. Prima di lanciare uno script nuovo, controllare che quel flag ci sia.
 
 ## Cosa non fare
