@@ -328,6 +328,7 @@ export class Impostazioni {
     riga.append(testo, scelta);
     $('imp-proiezione').append(riga);
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
+    this.disegnaMoviola();
     this.disegnaScorciatoie();
     this.disegnaAbleton();
     this.disegnaCopia();
@@ -402,6 +403,46 @@ export class Impostazioni {
   }
 
   // --- scorciatoie ---
+
+  // La MOVIOLA: interruttore, il tasto SEGNA del controller (quello della tastiera sta tra le scorciatoie), la cartella delle prove.
+  disegnaMoviola() {
+    const p = this.dati.preferenze();
+    const m = it.moviola;
+    $('imp-titolo-moviola').textContent = m.titolo;
+    const righe = [rigaInterruttore(m.interruttore, !!p.moviola, (x) => this.dati.salvaPreferenze({ moviola: x }))];
+    const nota = p.moviolaTastoController ?? null;
+    const tasto = crea('div', 'imp-riga');
+    const testo = crea('div', 'imp-testo');
+    testo.append(crea('span', '', m.tastoController.nome), crea('span', 'imp-nota', m.tastoController.testo));
+    const gruppoTasto = crea('div', 'segmenti');
+    const scegli = crea('button', `key${this.scegliendoTasto ? ' on' : ''}`, this.scegliendoTasto ? m.premi : nota === null ? m.scegli : this.dati.moviolaPosto(nota) || `nota ${nota}`);
+    scegli.onclick = () => {
+      if (this.scegliendoTasto) {
+        this.scegliendoTasto = false;
+        this.dati.moviolaAnnullaScelta();
+      } else {
+        this.scegliendoTasto = true;
+        this.dati.moviolaScegliTasto((n) => {
+          this.scegliendoTasto = false;
+          this.dati.salvaPreferenze({ moviolaTastoController: n });
+        });
+      }
+      this.disegnaMoviola();
+    };
+    gruppoTasto.append(scegli);
+    if (nota !== null) {
+      const togli = crea('button', 'key', m.togli);
+      togli.onclick = () => this.dati.salvaPreferenze({ moviolaTastoController: null });
+      gruppoTasto.append(togli);
+    }
+    tasto.append(testo, gruppoTasto);
+    const cartella = crea('div', 'imp-riga');
+    const apri = crea('button', 'key', m.apri);
+    apri.onclick = () => this.dati.moviolaApriCartella();
+    cartella.append(crea('div', 'imp-testo'), apri);
+    righe.push(tasto, cartella);
+    $('imp-moviola').replaceChildren(...righe);
+  }
 
   disegnaScorciatoie() {
     const mappa = effettive(this.dati.preferenze().scorciatoie);

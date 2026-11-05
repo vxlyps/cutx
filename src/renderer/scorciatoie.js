@@ -33,6 +33,7 @@ export const AZIONI = [
   { id: 'vistaLive', nome: 'vista LIVE (CUE e LIVE)', predefinita: 'Meta+Digit1' },
   { id: 'vistaSynth', nome: 'vista SYNTH', predefinita: 'Meta+Digit2' },
   { id: 'sfondo', nome: 'sfondo del proiettore (niente, note, oscilloscopio)', predefinita: 'Ctrl+Meta+KeyB' },
+  { id: 'segna', nome: 'MOVIOLA · segna (un segno nel registro e il lampo ambra)', predefinita: '' }, // il tasto lo scelgo io
 ];
 
 // Quelle di macOS e dell'editor che non si toccano.

@@ -9,6 +9,7 @@ import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-mode
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
 import * as T from './transizioni.js';
+import { moviola, midiPerRegistro } from './moviola.js';
 import { misuraLimiter, misuraMicroEntrata } from './limiter.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
@@ -19,11 +20,11 @@ import { Controller } from './controller.js';
 import { PaginaController } from './impostazioni-controller.js';
 import { Specchio } from './specchio.js';
 import { FADER_PREDEFINITO } from './controller-mappa.js';
-import { AZIONI, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
+import { AZIONI, comboDa, corrisponde, effettive, scriveTesto } from './scorciatoie.js';
 import { modoDopo, modoValido } from './sfondo.js';
 import { Cronologia } from './cronologia.js';
 import { ControlloBpm } from './bpm.js';
-import { arrotondaBpm, bpmDi, cicloDi, cpsAl, fraseDi, tempoInArrivo } from './tempo.js';
+import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } from './tempo.js';
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
@@ -54,6 +55,16 @@ s("sine*4").freq(1000).attack(0).decay(.02).sustain(0).gain(.8)
 
 const live = new Motore('live');
 const cuffia = new Motore('cuffia');
+// La MOVIOLA: ogni comando mandato ai motori (il codice intero) e ogni risposta, con l'ora; per un livello che entra anche quanto manca al suo ingresso.
+for (const motore of [live, cuffia]) {
+  motore.suInvio = (msg) => moviola.scrivi(motore.ruolo, 'invio', msg);
+  motore.suRisposta = (r) => {
+    if (!moviola.acceso) return;
+    const dati = { ...r };
+    if (motore === live && Number.isFinite(r.da) && mappa) dati.ingressoMs = Math.round(epocaDi(mappa, r.da) - (performance.timeOrigin + performance.now()));
+    moviola.scrivi(motore.ruolo, 'risposta', dati);
+  };
+}
 const misuratore = new Misuratore();
 
 let inTest = false;
@@ -135,6 +146,7 @@ async function manda(motore, codice, etichetta = {}) {
 }
 
 function mostraErrore(errore, chi) {
+  if (errore) moviola.scrivi('app', 'errore', { chi, errore });
   if (errore) cue.avviso(`${chi}: ${errore}`, { persistente: true });
   else if (erroreInVista) cue.avviso('');
   erroreInVista = !!errore;
@@ -341,6 +353,7 @@ async function passaBrano(k = 0) {
   mostraErrore(r.errore, 'live');
   if (r.errore) return r;
   passaggio = { nome, da: r.da };
+  moviola.scrivi('live', 'transizione', { brano: nome, tipo: transizione.tipo, cicli: transizione.cicli, tieni, da: r.da, tempo: t.tipo, bpmDa: attuale, bpmA: nuovo });
   if (scartata) cue.avviso(`transizione «${scartata}» non valida: uso ${T.scriviTransizione(transizione)}`);
   const n = (x) => Math.round(x * 10) / 10;
   if (t.tipo === 'salto') {
@@ -735,6 +748,9 @@ const FA = {
     cue.cambiaLinguetta();
   },
   passaBrano: passaDoppio,
+  segna: () => {
+    if (!moviola.segna()) cue.avviso(it.moviola.spenta);
+  },
   passaCueLive: () => (document.activeElement?.closest?.('.live') ? cue.focus() : pila.focusJam()),
   help: helpOnOff,
   esci: () => {
@@ -761,8 +777,13 @@ const FA = {
 window.addEventListener(
   'keydown',
   (e) => {
-    if (dialogoAperto() || imp.catturando) return; // i dialoghi e la scelta di un tasto se li gestiscono da soli
     const scrivendo = e.target.closest?.('.cm-editor, input, select, textarea');
+    // la MOVIOLA: le scorciatoie e i tasti nominati, non ogni lettera che scrivo in un editor
+    if (moviola.acceso && !e.repeat && !(scrivendo && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1)) {
+      const combo = comboDa(e);
+      if (combo) moviola.scrivi('tastiera', 'tasto', { combo });
+    }
+    if (dialogoAperto() || imp.catturando) return; // i dialoghi e la scelta di un tasto se li gestiscono da soli
     const mappa = effettive(preferenze.scorciatoie);
     for (const a of AZIONI) {
       const r = corrisponde(e, a, mappa[a.id]);
@@ -849,6 +870,10 @@ const imp = new Impostazioni({
   salvaPreferenze: (m) => window.cutx.salvaPreferenze(m),
   config: () => config,
   salvaConfig: (m) => salva(m),
+  moviolaApriCartella: () => window.cutx.apriCartellaMoviola(),
+  moviolaScegliTasto: (fine) => controllerMidi.scegliTastoSegna(fine),
+  moviolaAnnullaScelta: () => controllerMidi.annullaScelta(),
+  moviolaPosto: (nota) => controllerMidi.postoDelTasto(nota),
   percorsoStash: () => $('stash').title === 'Scegli lo stash' ? null : $('stash').title,
   scegliStash: async () => apriStash(await window.cutx.scegliStash()),
   provaInCuffia: (codice) => (inTest ? null : (dovaCuffia = null, manda(cuffia, codice, { nome: 'paracadute', provenienza: 'impostazioni' }))),
@@ -1401,6 +1426,7 @@ for (const m of [live, cuffia]) {
     else window.cutx.logEvento('info', m.ruolo, 'di nuovo vivo');
   };
   m.suMessaggio = (msg) => {
+    if (moviola.acceso) registraMessaggio(m, msg);
     if (msg.tipo === 'mappa') mappa = msg;
     else if (msg.tipo === 'livelli') {
       if (m === live) spintaLivelli = performance.now();
@@ -1422,7 +1448,20 @@ for (const m of [live, cuffia]) {
   };
 }
 // Un live rinato dopo un crash riparte vuoto: l'interfaccia gli rimette quello che suonava (se non aveva perso niente, non fa niente).
+// Dai motori alla MOVIOLA: il master ogni secondo (picco e medio, anche in dB) insieme a quello che il live dice di sé; gli interventi del guardiano.
+const arrotonda = (x, n) => Math.round(x * 10 ** n) / 10 ** n;
+const inDb = (x) => (x > 1e-6 ? arrotonda(20 * Math.log10(x), 1) : -120);
+function registraMessaggio(motore, msg) {
+  if (motore !== live) return;
+  if (msg.tipo === 'livello-master') {
+    moviola.scrivi('live', 'master', { picco: arrotonda(msg.picco, 4), piccoDb: inDb(msg.picco), medio: arrotonda(msg.medio, 4), medioDb: inDb(msg.medio) });
+    const s = live.stato;
+    moviola.scrivi('live', 'stato', { tardi: s.tardi, giroMax: s.giroMax, riduzioneDb: s.limiter?.riduzioneDb, livelli: s.livelli?.filter((l) => l.a === Infinity || l.a === null).length, cps: s.cps, ciclo: s.ciclo, eventi: s.eventi });
+  } else if (msg.tipo === 'guardiano') moviola.scrivi('live', 'guardiano', msg);
+}
+
 live.suCollegato = () => {
+  live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (ripreso) ripristinaLive();
 };
@@ -1683,6 +1722,15 @@ const controllerMidi = new Controller({
   cuffia: () => (cuffia.stato.codice ? fermaCuffia() : provaInCuffia()),
   inCuffia: () => !!cuffia.stato.codice,
   paracadute: () => lanciaParacadute(),
+  registra: (bytes) => {
+    if (!moviola.acceso) return;
+    const d = midiPerRegistro(bytes);
+    if (d) moviola.scrivi('controller', 'midi', d);
+  },
+  tastoSegna: () => (preferenze.moviola ? (preferenze.moviolaTastoController ?? null) : null), // spenta la MOVIOLA, quel tasto fa il suo mestiere
+  segna: () => {
+    if (!moviola.segna()) cue.avviso(it.moviola.spenta);
+  },
   paracaduteCarica: (on) => $('paracadute').classList.toggle('carica', on),
   passoCarica: (on) => $('passa-brano').classList.toggle('carica', on), // tasto 3 tenuto: la barra del pulsante si riempie come col clic
   passoScattato: () => {
@@ -1735,6 +1783,9 @@ function applicaPreferenze(p) {
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   $('paracadute').hidden = p.paracadute === false;
+  moviola.imposta(!!p.moviola);
+  live.manda({ tipo: 'moviola', on: !!p.moviola });
+  $('moviola-spia').hidden = !p.moviola;
   document.body.classList.toggle('senza-gatto', p.gatto === false);
   document.body.classList.toggle('senza-insegna', p.insegna === false);
   aiuto.aggiorna(p);
@@ -1743,5 +1794,6 @@ function applicaPreferenze(p) {
 }
 window.cutx.suPreferenze(applicaPreferenze);
 applicaPreferenze(await window.cutx.preferenze());
+$('moviola-spia').textContent = it.moviola.spia;
 $('percorso-log').textContent = `log: ${await window.cutx.percorsoLog()}`;
 await apriStash(await window.cutx.stash());

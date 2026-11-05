@@ -654,5 +654,25 @@
         "tremolodepth": "trem amt"
       }
     }
+  },
+  "moviola": {
+    "titolo": "MOVIOLA",
+    "interruttore": {
+      "nome": "MOVIOLA",
+      "testo": "la scatola nera delle prove: mentre suono scrive un registro con l'ora al millisecondo (controller, tastiera, codice mandato, errori, guardiano, master, CPU, segni). Non tocca il suono. Spenta finché non la accendi."
+    },
+    "tastoController": {
+      "nome": "SEGNA dal controller",
+      "testo": "un tasto del controller che mette un segno nel registro e il lampo ambra. Quel tasto perde la sua funzione. Quello della tastiera si sceglie tra le scorciatoie («MOVIOLA · segna»)."
+    },
+    "scegli": "scegli il tasto",
+    "premi": "premi il tasto sul controller…",
+    "nessuno": "nessuno",
+    "perde": "perde:",
+    "togli": "togli",
+    "apri": "apri cartella MOVIOLA",
+    "spia": "● MOVIOLA",
+    "spenta": "MOVIOLA spenta: accendila nelle impostazioni",
+    "segno": "SEGNO"
   }
 }

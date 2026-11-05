@@ -21,6 +21,8 @@ export const PREDEFINITE = {
   stopTorna: 'battuta', // lo stop dei colpi torna sull'1 della battuta (il vuoto prima del drop) o sul battito
   colpiGriglia: 0.25, // i colpi del controller entrano e escono sulla griglia: ¼ di ciclo (un battito) o ⅛
   scivolata: 0.25, // quanto scivola un numero della coda cambiato a mano, in cicli (battute): 0, ¼ (un battito), ½, 1
+  moviola: false, // la scatola nera delle prove (moviola.js): spenta finché non la accendo
+  moviolaTastoController: null, // il numero MIDI del tasto del controller che mette un SEGNO nel registro
   paracaduteCicli: 2, // la transizione del paracadute
   transizione: 'sweep 8', // come si passa al prossimo brano: 'sweep 8' | 'sweep 4' | 'cut' (transizioni.js); il set può scriverne una per brano
   sfondoProiettore: 'niente', // dietro al codice sul proiettore: niente, note, oscilloscopio

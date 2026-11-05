@@ -11,6 +11,7 @@ import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
 import * as log from './log.js';
+import { Moviola } from './moviola.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(QUI, '../../dist');
@@ -98,6 +99,30 @@ app.on('child-process-gone', (_e, d) => ev('errore', 'processo', `${d.type} term
 let chiudendo = false; // l'app sta chiudendo: niente più riavvii né messaggi alle finestre
 app.on('before-quit', () => (chiudendo = true));
 const viva = (f) => !!f && !f.isDestroyed();
+
+// La MOVIOLA (moviola.js): la scatola nera delle prove. Si accende e si spegne dalle impostazioni; scrive solo da qui, in modo asincrono.
+const arrotonda1 = (x) => Math.round(x * 10) / 10;
+function cpuProcessi() {
+  const processi = new Map(app.getAppMetrics().map((m) => [m.pid, m.cpu.percentCPUUsage]));
+  const out = { totale: arrotonda1([...processi.values()].reduce((a, b) => a + b, 0)) };
+  for (const ruolo of ['controllo', 'live', 'cuffia', 'uscita']) {
+    const pid = finestre[ruolo] && !finestre[ruolo].isDestroyed() ? finestre[ruolo].webContents.getOSProcessId() : 0;
+    if (processi.has(pid)) out[ruolo] = arrotonda1(processi.get(pid));
+  }
+  return out;
+}
+const moviola = new Moviola({ cartella: path.join(app.getPath('userData'), 'prove'), cpu: cpuProcessi });
+log.agganciaA((livello, fonte, messaggio) => moviola.evento('log', livello, { fonte, messaggio })); // errori, avvisi e guardiano
+function moviolaSegui(prefs) {
+  if (prefs?.moviola && !moviola.accesa) {
+    const file = moviola.avvia({ app: app.getVersion(), electron: process.versions.electron, sistema: `${process.platform} ${process.arch}` });
+    ev(file ? 'info' : 'avviso', 'moviola', file ? `accesa: ${file}` : 'non riesco a scrivere la cartella delle prove');
+  } else if (!prefs?.moviola && moviola.accesa) {
+    moviola.ferma();
+    ev('info', 'moviola', 'spenta');
+  }
+}
+app.on('before-quit', () => moviola.ferma());
 // Il contenuto web di una finestra, se esiste ancora (una finestra chiusa non si tocca).
 const wcDi = (nome) => (viva(finestre[nome]) ? finestre[nome].webContents : null);
 const padre = () => (viva(finestre.controllo) ? finestre.controllo : undefined);
@@ -359,6 +384,12 @@ ipcMain.handle('kit:scrivi', (_e, testo) => stash.scriviKit(testo));
 ipcMain.handle('libreria:leggi', (_e, nome) => stash.leggiBrano(nome));
 ipcMain.handle('libreria:scrivi', (_e, nome, testo, opzioni) => stash.scriviBrano(nome, testo, opzioni));
 ipcMain.handle('preferenze:leggi', () => preferenze.leggi());
+// Gli eventi delle finestre per la MOVIOLA arrivano a pacchetti, senza risposta; la cartella delle prove si apre dalle impostazioni.
+ipcMain.on('moviola:eventi', (_e, pacchetto) => moviola.eventi(pacchetto));
+ipcMain.handle('moviola:apri-cartella', async () => {
+  mkdirSync(moviola.cartella, { recursive: true });
+  return shell.openPath(moviola.cartella);
+});
 ipcMain.handle('preferenze:salva', (_e, modifiche) => salvaPreferenze(modifiche));
 
 // Il titolo della finestra del pubblico segue i testi per il pubblico (si vede solo se non è a tutto schermo).
@@ -392,6 +423,7 @@ ipcMain.handle('immagine:leggi', async (_e, percorso) => {
 // --- Ableton: le cartelle dei progetti (solo lette) ---
 async function salvaPreferenze(modifiche) {
   const nuove = await preferenze.salva(modifiche);
+  moviolaSegui(nuove);
   for (const f of Object.values(finestre)) if (f && !f.isDestroyed()) f.webContents.send('preferenze-cambiate', nuove);
   aggiornaTitoloUscita();
   return nuove;
@@ -605,6 +637,7 @@ app.whenReady().then(async () => {
   app.dock?.setIcon(ICONA);
   ev('info', 'avvio', `CUTX ${app.getVersion()} · Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · ${process.platform} ${process.arch}${PER_PROVE ? ' · prova' : ''}`);
   creaMenu();
+  moviolaSegui(preferenze.leggi());
   stash.carica();
   stash.stato().then((st) => ev(st.mancante ? 'avviso' : 'info', 'avvio', st.percorso ? `stash: ${st.percorso}${st.mancante ? ' — NON COLLEGATO' : ''}` : 'nessuno stash scelto'), () => {});
   protocol.handle('cutx', serviFile);

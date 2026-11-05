@@ -10,6 +10,7 @@ import { converti } from '../ableton/converti.js';
 import { durataWav, risolviFile } from './ableton.js';
 import * as finto from '../../test/als-finto.js';
 import os from 'node:os';
+import { AZIONI } from '../renderer/scorciatoie.js';
 import { existsSync } from 'node:fs';
 
 // Lo stesso click del test di sfasamento, più piano: la prova suona dalle casse del Mac.
@@ -60,7 +61,7 @@ async function primoPiano(finestre) {
   await aspetta(0.2);
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita', 'moviola'] }) {
   const righe = [];
   // --silenzioso: a schermo solo i fallimenti e il conteggio finale (il file di log ha tutto)
   const silenzioso = process.argv.includes('--silenzioso');
@@ -201,6 +202,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('clip-visibili')) ok = (await sicura('clip-visibili', provaClipVisibili)) && ok;
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
+  if (parti.includes('moviola')) ok = (await sicura('moviola', provaMoviola)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
@@ -947,7 +949,7 @@ async function provaImpostazioni({ finestre, scrivi }) {
     // --- scorciatoie rimappabili ---
     await vai('scorciatoie');
     const righe = await js(`document.querySelectorAll('#scorciatoie-elenco .imp-riga').length`);
-    controlla('l\'elenco ha tutte le azioni', righe === 27, String(righe)); // (20 + cuffia in pausa, sfondo, annulla e rifai del set, scelta del livello, linguetta del CUE)
+    controlla('l\'elenco ha tutte le azioni', righe === AZIONI.length, `${righe} su ${AZIONI.length}`); // quante sono in scorciatoie.js: così non resta indietro quando se ne aggiunge una
     const cap = (id) => `#scorciatoie-elenco [data-azione="${id}"] .cap-gruppo`;
     await js(`document.querySelector('${cap('goLive')}').click()`);
     controlla('un clic sul tasto aspetta la combinazione nuova', (await js(`document.querySelector('#scorciatoie-elenco [data-azione="goLive"]').textContent`)).includes('premi un tasto'));
@@ -5556,5 +5558,73 @@ async function provaAnnulla({ finestre, scrivi }) {
   await aspetta(0.4);
   controlla('dentro un editor ⌘Z non tocca il set', (await js('cutxProva.cronologia.conta')) === conta);
   await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- la MOVIOLA (la scatola nera delle prove): scrive quello che deve, pesa zero sul suono (i click del live arrivano tutti) (npx electron . --prova=moviola) ---
+async function provaMoviola({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const stato = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const cartella = path.join(app.getPath('userData'), 'prove');
+  await rm(cartella, { recursive: true, force: true });
+  const NOTA_SEGNA = 25; // un tasto qualsiasi del controller finto
+  try {
+    await js(`window.cutx.salvaPreferenze({ controller: null, moviola: true, moviolaTastoController: ${NOTA_SEGNA}, scorciatoie: { segna: 'F9' } })`);
+    await aspetta(1.5);
+    controlla('accesa: la spia «MOVIOLA» è in barra', (await js(`!document.getElementById('moviola-spia').hidden`)) === true);
+    await js(`cutxProva.avviaTest(${JSON.stringify(CODICE)})`);
+    await aspetta(3); // il click gira e la sentinella lo ascolta
+    const prima = (await stato()).sentinella;
+    const tardiPrima = (await stato()).tardi;
+    // un po' di lavoro: una raffica di fader, tasti, un codice nuovo mandato al live, due segni (tastiera e controller)
+    await js(`for (let i = 0; i < 200; i++) cutxProva.controllerMidi.riceve([0xe0, i & 127, 64]); cutxProva.controllerMidi.riceve([0x90, 21, 127]); cutxProva.controllerMidi.riceve([0x90, 21, 0])`);
+    await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK', key: 'k', metaKey: true, bubbles: true }))`).catch(() => null);
+    await js(`document.activeElement?.blur?.(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'F9', key: 'F9', bubbles: true }))`);
+    await js(`cutxProva.controllerMidi.riceve([0x90, ${NOTA_SEGNA}, 127]); cutxProva.controllerMidi.riceve([0x90, ${NOTA_SEGNA}, 0])`);
+    const lampo = await js(`document.querySelector('.segno-lampo')?.classList.contains('acceso') ?? false`);
+    controlla('SEGNA: il lampo ambra si accende', lampo === true);
+    await js(`cutxProva.valuta('live', ${JSON.stringify(CODICE.replace('setcpm(120/4)', 'setcpm(124/4)'))})`);
+    await aspetta(7);
+    // pesa zero: tutti i click del live arrivano, in orario, nessuno in più
+    const dopo = await stato();
+    const d = (k) => dopo.sentinella[k] - prima[k];
+    controlla('peso zero: nessun click perso né fuori tempo, nessun giro in ritardo', d('mancati') === 0 && d('extra') === 0 && dopo.tardi === tardiPrima && d('sentiti') >= 10, `sentiti ${d('sentiti')}, persi ${d('mancati')}, extra ${d('extra')}, tardi ${dopo.tardi - tardiPrima}`);
+    // spenta: il file si chiude e non scrive più
+    await js(`window.cutx.salvaPreferenze({ moviola: false })`);
+    await aspetta(1.5);
+    const file = (await readdir(cartella)).filter((f) => f.endsWith('.jsonl')).sort().at(-1);
+    controlla('un file in prove/ con la data e l\'ora nel nome', /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.jsonl$/.test(file ?? ''), String(file));
+    const righe = (await readFile(path.join(cartella, file), 'utf8')).trim().split('\n').map((r) => JSON.parse(r));
+    const di = (f, t) => righe.filter((r) => r.fonte === f && r.tipo === t);
+    controlla('comincia con «inizio» e finisce con «fine»', righe[0].tipo === 'inizio' && righe.at(-1).tipo === 'fine', `${righe[0].tipo} … ${righe.at(-1).tipo}`);
+    controlla('l\'ora è al millisecondo e in ordine', righe.every((r) => /^\d\d:\d\d:\d\d\.\d{3}$/.test(r.ora)) && righe.every((r, i) => i === 0 || r.t >= righe[i - 1].t - 5));
+    controlla('la CPU ogni secondo (almeno 8 righe, con il live)', di('main', 'cpu').length >= 8 && di('main', 'cpu').every((r) => typeof r.dati.live === 'number'), String(di('main', 'cpu').length));
+    const master = di('live', 'master');
+    controlla('il master ogni secondo, con picco e medio (almeno 8; il click si sente)', master.length >= 8 && master.some((r) => r.dati.picco > 0.01 && r.dati.medio > 0), `${master.length} · ${JSON.stringify(master.at(-1)?.dati)}`);
+    controlla('lo stato del live ogni secondo (ritardi, ciclo, tempo)', di('live', 'stato').length >= 8 && di('live', 'stato').every((r) => 'tardi' in r.dati && 'ciclo' in r.dati));
+    const invii = di('live', 'invio').filter((r) => r.dati.tipo === 'valuta' || r.dati.codice);
+    controlla('il codice mandato al live è nel registro, intero', invii.some((r) => r.dati.codice?.includes('setcpm(124/4)') && r.dati.codice === CODICE.replace('setcpm(120/4)', 'setcpm(124/4)')), String(invii.length));
+    controlla('la risposta del live è nel registro', di('live', 'risposta').length >= 1);
+    const midi = di('controller', 'midi');
+    controlla('i messaggi del controller ci sono, e la raffica dei fader è sfoltita (un fader ogni 30 ms)', midi.length >= 4 && midi.length < 100, String(midi.length));
+    controlla('le scorciatoie della tastiera ci sono (⌘K, F9) ma non le lettere negli editor', di('tastiera', 'tasto').some((r) => r.dati.combo === 'Meta+KeyK') && di('tastiera', 'tasto').some((r) => r.dati.combo === 'F9'), JSON.stringify(di('tastiera', 'tasto').map((r) => r.dati.combo)));
+    const segni = di('app', 'segno');
+    controlla('due segni, numerati 1 e 2 (tastiera e controller)', segni.length === 2 && segni[0].dati.n === 1 && segni[1].dati.n === 2, JSON.stringify(segni.map((r) => r.dati)));
+    controlla('il tasto SEGNA del controller non finisce tra i messaggi che fanno qualcosa: il suo MIDI è nel registro ma c\'è il segno', midi.some((r) => r.dati.byte?.[1] === NOTA_SEGNA));
+    // spenta non scrive più
+    const n = righe.length;
+    await js(`cutxProva.controllerMidi.riceve([0x90, 30, 127]); cutxProva.controllerMidi.riceve([0x90, 30, 0])`);
+    await aspetta(1);
+    const dopoSpenta = (await readFile(path.join(cartella, file), 'utf8')).trim().split('\n').length;
+    controlla('spenta non scrive più', dopoSpenta === n, `${n} → ${dopoSpenta}`);
+    controlla('spenta, la spia sparisce e il tasto SEGNA torna un tasto normale (niente segno)', (await js(`document.getElementById('moviola-spia').hidden`)) === true && (await js(`cutxProva.controllerMidi.azioni.tastoSegna()`)) === null);
+  } finally {
+    await js(`window.cutx.salvaPreferenze({ moviola: false, moviolaTastoController: null, scorciatoie: {} }); cutxProva.fermaTutto()`).catch(() => null);
+  }
   return ok;
 }

@@ -16,11 +16,20 @@ export function inizia(dove) {
   }
 }
 
+// Chi vuole sentire ogni riga che si scrive (la MOVIOLA): fn(livello, fonte, messaggio). Un errore suo non tocca il log.
+let ascolto = null;
+export const agganciaA = (fn) => (ascolto = fn);
+
 export const cartellaDeiLog = () => cartella;
 export const fileDelLog = () => (cartella ? path.join(cartella, 'cutx.log') : null);
 
 // livello: 'info' | 'avviso' | 'errore'; fonte: chi parla (main, controllo, live, cuffia, uscita, uscite…)
 export function scrivi(livello, fonte, messaggio) {
+  try {
+    ascolto?.(livello, fonte, String(messaggio).replace(/\s+$/, ''));
+  } catch {
+    // mai far cadere l'app per chi ascolta
+  }
   const riga = `${new Date().toISOString()} [${livello}] [${fonte}] ${String(messaggio).replace(/\s+$/, '').replace(/\n/g, '\n    ')}\n`;
   if (!cartella) return;
   try {

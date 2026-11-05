@@ -17,6 +17,8 @@ export class Motore {
     this.suStato = null; // (viva) => {}
     this.suCollegato = null; // () => {}: canale nuovo, il motore può essere appena rinato
     this.suMessaggio = null; // (m) => {}: eco, anello…
+    this.suInvio = null; // (m) => {}: ogni comando mandato al motore (la MOVIOLA); i ping no
+    this.suRisposta = null; // (m) => {}: ogni risposta a una richiesta o a una valutazione
     window.addEventListener('message', (e) => {
       if (e.data?.porta === ruolo && e.ports[0]) this.collega(e.ports[0]);
     });
@@ -32,6 +34,7 @@ export class Motore {
   }
 
   manda(m) {
+    if (m.tipo !== 'ping') this.suInvio?.(m);
     this.porta?.postMessage(m);
   }
 
@@ -71,6 +74,7 @@ export class Motore {
       this.stato = m;
       if (!this.viva) this.ping();
     } else if (m.tipo === 'valutato' || m.tipo === 'risposta') {
+      this.suRisposta?.(m);
       this.attese.get(m.id)?.(m.tipo === 'valutato' ? m.errore : m);
       this.attese.delete(m.id);
     } else {

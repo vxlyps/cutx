@@ -114,6 +114,21 @@ export class Controller {
     this.manda(MESSAGGIO_MC);
   }
 
+  // --- la MOVIOLA: scegliere il tasto SEGNA ---
+
+  // Il prossimo tasto premuto sul controller diventa il SEGNA: fine(nota). Un altro ritorno (annullaScelta) lo ferma.
+  scegliTastoSegna(fine) {
+    this.attesaSegna = fine;
+  }
+  annullaScelta() {
+    this.attesaSegna = null;
+  }
+  // Dove sta una nota: «in alto 5», «in basso 3», o '' se non è un tasto della fila.
+  postoDelTasto(nota) {
+    const i = this.tab.tasti.indexOf(nota);
+    return i < 0 ? '' : i < 8 ? `in alto ${i + 1}` : `in basso ${i - 7}`;
+  }
+
   // --- quello che arriva ---
 
   riceve(bytes) {
@@ -129,6 +144,18 @@ export class Controller {
         this.passaAMC();
         this.azioni.avviso?.('il controller era in modalità standard: gli ho chiesto di passare a MC (se non cambia: tasto MC in basso a sinistra tenuto premuto mentre colleghi l\'USB)');
       }
+    }
+    this.azioni.registra?.(bytes); // la MOVIOLA
+    const segna = this.azioni.tastoSegna?.() ?? null;
+    const giuNota = bytes[0] === 0x90 && bytes[2] > 0;
+    if (giuNota && this.attesaSegna) {
+      const fine = this.attesaSegna;
+      this.attesaSegna = null;
+      return fine(bytes[1]);
+    }
+    if (segna !== null && bytes[1] === segna && (giuNota || bytes[0] === 0x80 || bytes[0] === 0x90)) {
+      if (giuNota) this.azioni.segna?.(); // il tasto SEGNA mette un segno e basta: non fa quello che faceva
+      return;
     }
     this.suMonitor?.(parole(e), esadecimale(bytes), e);
     if (this.calibrazione) return this.calibra(e);

@@ -87,8 +87,40 @@ function piccoUscita() {
   return d.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
 }
 
+let misuraMaster = null; // la MOVIOLA: il timer che misura il master (in cima: un messaggio può arrivare prima che il modulo sia tutto letto)
 const porte = {}; // controllo, live o cuffia → MessagePort
 const manda = (a, m) => porte[a]?.postMessage(m);
+
+// La MOVIOLA: il picco e il livello medio (RMS) del master, uno per secondo. Si legge l'analizzatore che c'è già (in derivazione dall'uscita, non tocca
+// il suono) ogni 40 ms con il suo blocco di 2048 campioni, così il secondo è coperto tutto; il conto si fa qui, sul thread della pagina, mai su quello audio.
+function misuraMasterOnOff(on) {
+  if (!LIVE || !!misuraMaster === !!on) return;
+  if (!on) {
+    clearInterval(misuraMaster.timer);
+    misuraMaster = null;
+    return;
+  }
+  const blocco = new Float32Array(2048);
+  const m = { picco: 0, somma: 0, campioni: 0, ultimo: performance.now(), timer: null };
+  m.timer = setInterval(() => {
+    if (!limiter) return;
+    limiter.analisi.getFloatTimeDomainData(blocco);
+    for (const x of blocco) {
+      const a = Math.abs(x);
+      if (a > m.picco) m.picco = a;
+      m.somma += x * x;
+    }
+    m.campioni += blocco.length;
+    if (performance.now() - m.ultimo >= 1000) {
+      manda('controllo', { tipo: 'livello-master', picco: m.picco, medio: Math.sqrt(m.somma / m.campioni) });
+      m.picco = 0;
+      m.somma = 0;
+      m.campioni = 0;
+      m.ultimo = performance.now();
+    }
+  }, 40);
+  misuraMaster = m;
+}
 
 // L'onda per lo sfondo «oscilloscopio» del proiettore: l'analizzatore esiste solo finché la finestra dell'uscita lo chiede
 // (spento non costa niente) e sta in derivazione dall'uscita: non tocca il suono.
@@ -1146,6 +1178,9 @@ async function ricevi(da, m) {
       eco = m.attivo;
       if (eco) sentinella.attiva(getSuperdoughAudioController().output.destinationGain);
       else sentinella.disattiva();
+      return;
+    case 'moviola':
+      misuraMasterOnOff(m.on);
       return;
     case 'ping':
       return manda(da, { tipo: 'pong', ...stato() });

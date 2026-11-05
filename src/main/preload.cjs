@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('cutx', {
   uscitaSchermoIntero: () => ipcRenderer.invoke('uscita:schermo-intero'),
   uscitaAperta: () => ipcRenderer.invoke('uscita:aperta'),
   suUscita: (fn) => ipcRenderer.on('uscita-stato', (_e, aperta) => fn(aperta)),
+  moviola: (eventi) => ipcRenderer.send('moviola:eventi', eventi),
+  apriCartellaMoviola: () => ipcRenderer.invoke('moviola:apri-cartella'),
   logEvento: (livello, fonte, testo) => ipcRenderer.send('log:evento', livello, fonte, testo),
   infoApp: () => ipcRenderer.invoke('app:info'),
   mostraLog: () => ipcRenderer.invoke('log:mostra'),
