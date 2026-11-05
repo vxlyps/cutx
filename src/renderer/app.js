@@ -957,28 +957,18 @@ browser = new Browser(
 );
 // --- il set e il kit ---
 
-// La selezione col controller (manopola 1) scorre le voci del CUE (apertura, scene, clip) e poi le clip del kit, come un elenco solo.
+// La selezione col controller (manopola 1) scorre le voci del CUE (apertura, scene, clip): solo cose utili. Le clip del kit si scelgono col mouse.
 // Ritorna il nome scelto, o null.
 function spostaSelezione(delta) {
   const nCue = cue.vociControllo().length;
-  const kit = serata.kit?.modello.sezioni ?? [];
-  const totale = nCue + kit.length;
-  if (!totale) return null;
-  const ora = serata.scelta !== null ? nCue + serata.scelta : cue.indiceControllo();
-  const k = Math.max(0, Math.min(totale - 1, (ora < 0 ? (delta > 0 ? -1 : totale) : ora) + delta));
-  if (k < nCue) {
-    serata.scegliKit(null);
-    return cue.scegliControllo(k);
-  }
-  if (browser && browser.scheda !== 'set') browser.vai('set'); // la clip del kit si vede nel SET
-  serata.scegliKit(k - nCue);
-  return `kit · ${kit[k - nCue].nome}`;
+  if (!nCue) return null;
+  const ora = cue.indiceControllo();
+  const k = Math.max(0, Math.min(nCue - 1, (ora < 0 ? (delta > 0 ? -1 : nCue) : ora) + delta));
+  serata.scegliKit(null); // una clip del kit scelta col mouse lascia il posto alla voce del CUE
+  return cue.scegliControllo(k);
 }
 function posizioneSelezione() {
-  const nCue = cue.vociControllo().length;
-  const kit = serata.kit?.modello.sezioni ?? [];
-  if (serata.scelta !== null) return { indice: nCue + serata.scelta, totale: nCue + kit.length, nome: kit[serata.scelta]?.nome ?? '' };
-  return { indice: cue.indiceControllo(), totale: nCue + kit.length, nome: cue.nomeSezioneScelta() ?? '' };
+  return { indice: cue.indiceControllo(), totale: cue.vociControllo().length, nome: cue.nomeSezioneScelta() ?? '' };
 }
 
 const serata = new Serata({

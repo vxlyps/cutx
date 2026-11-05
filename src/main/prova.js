@@ -3046,19 +3046,16 @@ async function provaSfoglia({ finestre, scrivi }) {
   for (let i = 0; i < 14; i++) { await giro(1, -1); su.push(await scelta()); }
   await midi(0x90, cuffia, 0);
   scrivi(`giù: ${JSON.stringify(giu)} su: ${JSON.stringify(su)}`);
-  // oltre l'ultima clip del brano ci sono le clip del kit (kit.cutx dello stash)
+  // il kit non è nel giro della manopola 1: oltre l'ultima clip del brano si resta lì, e il kit non viene scelto
   const nKit = await js(`cutxProva.serata.kit?.modello.sezioni.length ?? 0`);
   controlla('il kit dello stash è caricato (almeno una clip)', nKit > 0, String(nKit));
   for (let i = 0; i < 30; i++) await giro(1, 1);
-  const inKit = await js(`cutxProva.serata.scelta`);
-  controlla('scorrendo ancora si entra nelle clip del kit e si arriva all\'ultima', inKit === nKit - 1, String(inKit));
-  controlla('la riga del kit scelta è segnata nel SET', (await js(`document.querySelectorAll('#elenco .kit-riga.scelta').length`)) === 1);
-  const pezzo = await js(`JSON.stringify(cutxProva.serata.pezzoScelto()?.provenienza ?? null)`);
-  controlla('cuffia e go live mandano quella clip (provenienza «kit §n»)', /kit §\d/.test(pezzo), pezzo);
+  controlla('scorrendo ancora si resta sull\'ultima clip del brano: il kit non entra nel giro', (await js(`cutxProva.serata.scelta`)) === null && (await scelta()) === 'pad', `${await js('cutxProva.serata.scelta')} · ${await scelta()}`);
+  await js(`cutxProva.serata.scegliKit(0)`);
   await giro(1, -1);
-  controlla('tornando su si resta nel kit, una clip prima', (await js(`cutxProva.serata.scelta`)) === nKit - 2);
+  controlla('una clip del kit scelta col mouse: la manopola 1 torna alle voci del CUE', (await js(`cutxProva.serata.scelta`)) === null);
   for (let i = 0; i < 30; i++) await giro(1, -1);
-  controlla('e risalendo ancora si torna nel CUE (kit non più scelto), fino all\'apertura', (await js(`cutxProva.serata.scelta`)) === null && (await js(`cutxProva.cue.nomeSezioneScelta()`)) === 'apertura');
+  controlla('risalendo si arriva all\'apertura', (await js(`cutxProva.serata.scelta`)) === null && (await js(`cutxProva.cue.nomeSezioneScelta()`)) === 'apertura');
   controlla('giù arriva in fondo (pad)', giu.at(-1) === 'pad', JSON.stringify(giu));
   controlla('su torna fino all\'apertura, in cima, senza bloccarsi', su.at(-1) === 'apertura' && su.includes('intro') && su.indexOf('intro') < su.indexOf('apertura'), JSON.stringify(su));
   
