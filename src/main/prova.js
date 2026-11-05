@@ -5575,7 +5575,9 @@ async function provaMoviola({ finestre, scrivi }) {
   const NOTA_SEGNA = 25; // un tasto qualsiasi del controller finto
   try {
     await js(`window.cutx.salvaPreferenze({ controller: null, moviola: true, moviolaTastoController: ${NOTA_SEGNA}, scorciatoie: { segna: 'F9' } })`);
-    await aspetta(1.5);
+    const apertaPrima = await js(`window.cutx.uscitaAperta()`);
+    if (!apertaPrima) await js(`window.cutx.uscitaOnOff()`); // il proiettore deve esserci, per vedere che il lampo non ci arriva
+    await aspetta(2.5);
     controlla('accesa: la spia «MOVIOLA» è in barra', (await js(`!document.getElementById('moviola-spia').hidden`)) === true);
     await js(`cutxProva.avviaTest(${JSON.stringify(CODICE)})`);
     await aspetta(3); // il click gira e la sentinella lo ascolta
@@ -5586,8 +5588,24 @@ async function provaMoviola({ finestre, scrivi }) {
     await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK', key: 'k', metaKey: true, bubbles: true }))`).catch(() => null);
     await js(`document.activeElement?.blur?.(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'F9', key: 'F9', bubbles: true }))`);
     await js(`cutxProva.controllerMidi.riceve([0x90, ${NOTA_SEGNA}, 127]); cutxProva.controllerMidi.riceve([0x90, ${NOTA_SEGNA}, 0])`);
+    // subito dopo il segno: i bordi del controllo sono ambra, quelli del proiettore no (il lampo sta solo nella pagina di controllo)
+    const bordo = async (wc) => {
+      const img = await wc.capturePage();
+      const { width, height } = img.getSize();
+      const b = img.toBitmap(); // BGRA
+      const i = (Math.floor(height / 2) * width + 4) * 4;
+      return [b[i + 2], b[i + 1], b[i]];
+    };
+    const eAmbra = ([r, g, bl]) => r > 190 && g > 110 && bl < 130;
+    await aspetta(0.1); // il tempo di disegnare il primo fotogramma del lampo (dura 0,5 s)
+    const sulControllo = await bordo(finestre.controllo.webContents);
+    const sulProiettore = finestre.uscita ? await bordo(finestre.uscita.webContents) : null;
     const lampo = await js(`document.querySelector('.segno-lampo')?.classList.contains('acceso') ?? false`);
-    controlla('SEGNA: il lampo ambra si accende', lampo === true);
+    controlla('SEGNA: il lampo ambra si accende sul controllo', lampo === true && eAmbra(sulControllo), JSON.stringify(sulControllo));
+    controlla('il proiettore è aperto per la verifica', !!finestre.uscita);
+    controlla('SEGNA: sul proiettore il bordo NON diventa ambra', !!sulProiettore && !eAmbra(sulProiettore), JSON.stringify(sulProiettore));
+    const nelProiettore = await chiedi(finestre.uscita, `JSON.stringify({ lampo: document.querySelectorAll('.segno-lampo').length, spia: document.querySelectorAll('#moviola-spia').length, fogli: [...document.styleSheets].map((f) => (f.href ?? '').split('/').pop()) })`);
+    controlla('nel proiettore non esistono né il lampo né la spia, e non carica lo stile del controllo', /"lampo":0,"spia":0/.test(nelProiettore) && !/stile\.css/.test(nelProiettore), nelProiettore);
     await js(`cutxProva.valuta('live', ${JSON.stringify(CODICE.replace('setcpm(120/4)', 'setcpm(124/4)'))})`);
     await aspetta(7);
     // pesa zero: tutti i click del live arrivano, in orario, nessuno in più
@@ -5602,7 +5620,14 @@ async function provaMoviola({ finestre, scrivi }) {
     const righe = (await readFile(path.join(cartella, file), 'utf8')).trim().split('\n').map((r) => JSON.parse(r));
     const di = (f, t) => righe.filter((r) => r.fonte === f && r.tipo === t);
     controlla('comincia con «inizio» e finisce con «fine»', righe[0].tipo === 'inizio' && righe.at(-1).tipo === 'fine', `${righe[0].tipo} … ${righe.at(-1).tipo}`);
-    controlla('l\'ora è al millisecondo e in ordine', righe.every((r) => /^\d\d:\d\d:\d\d\.\d{3}$/.test(r.ora)) && righe.every((r, i) => i === 0 || r.t >= righe[i - 1].t - 5));
+    // gli eventi dalle finestre arrivano a pacchetti: nel file non sono sempre in ordine di tempo (l'analisi li riordina), ma per ogni fonte sì
+    const perFonte = new Map();
+    const dentro = righe.every((r) => {
+      const prima = perFonte.get(r.fonte) ?? -Infinity;
+      perFonte.set(r.fonte, r.t);
+      return r.t >= prima - 5;
+    });
+    controlla('l\'ora è al millisecondo, e in ordine per ogni fonte', righe.every((r) => /^\d\d:\d\d:\d\d\.\d{3}$/.test(r.ora)) && dentro);
     controlla('la CPU ogni secondo (almeno 8 righe, con il live)', di('main', 'cpu').length >= 8 && di('main', 'cpu').every((r) => typeof r.dati.live === 'number'), String(di('main', 'cpu').length));
     const master = di('live', 'master');
     controlla('il master ogni secondo, con picco e medio (almeno 8; il click si sente)', master.length >= 8 && master.some((r) => r.dati.picco > 0.01 && r.dati.medio > 0), `${master.length} · ${JSON.stringify(master.at(-1)?.dati)}`);
@@ -5625,6 +5650,7 @@ async function provaMoviola({ finestre, scrivi }) {
     controlla('spenta, la spia sparisce e il tasto SEGNA torna un tasto normale (niente segno)', (await js(`document.getElementById('moviola-spia').hidden`)) === true && (await js(`cutxProva.controllerMidi.azioni.tastoSegna()`)) === null);
   } finally {
     await js(`window.cutx.salvaPreferenze({ moviola: false, moviolaTastoController: null, scorciatoie: {} }); cutxProva.fermaTutto()`).catch(() => null);
+    if (finestre.uscita && !finestre.uscita.isDestroyed()) await js(`window.cutx.uscitaOnOff()`).catch(() => null); // il proiettore torna chiuso, com'era
   }
   return ok;
 }
