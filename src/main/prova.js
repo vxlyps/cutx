@@ -62,8 +62,10 @@ async function primoPiano(finestre) {
 
 export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita'] }) {
   const righe = [];
+  // --silenzioso: a schermo solo i fallimenti e il conteggio finale (il file di log ha tutto)
+  const silenzioso = process.argv.includes('--silenzioso');
   const scrivi = (r) => {
-    console.log(`[prova] ${r}`);
+    if (!silenzioso || /FALLITO|ERRORE|\bNO\b/.test(r)) console.log(`[prova] ${r}`);
     righe.push(r);
   };
   const stato = (ruolo) => chiedi(finestre[ruolo], 'globalThis.cutxStato?.()');
@@ -218,7 +220,13 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
 
+  if (silenzioso) {
+    const buone = righe.filter((r) => r.startsWith('OK')).length;
+    const cattive = righe.filter((r) => /FALLITO|ERRORE/.test(r)).length;
+    console.log(`[prova] ${buone} ok, ${cattive} falliti`);
+  }
   scrivi(ok ? 'PROVA SUPERATA' : 'PROVA FALLITA');
+  if (silenzioso) console.log(`[prova] ${ok ? 'PROVA SUPERATA' : 'PROVA FALLITA'}`);
 
   await mkdir(cartellaLog, { recursive: true });
   const file = path.join(cartellaLog, `prova-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.log`);
