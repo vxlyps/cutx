@@ -393,6 +393,10 @@
       "chiave": "paracadute",
       "nome": "paracadute",
       "testo": "il pulsante CUTX, scelgo te! nel LIVE; spento = non c'è"
+    },
+    "transizione": {
+      "nome": "transizione tra brani",
+      "testo": "come si passa al prossimo brano (tasto 3 tenuto). sweep: il vecchio si chiude e il nuovo si apre in 8 o 4 cicli; cut: il vecchio si ferma sull'1. Sull'1 in cui entra il nuovo, tutto il vecchio perde i bassi. Un brano può avere la sua nel set: «brano.cutx · transizione sweep 4». Il livello scelto sul controller resta."
     }
   },
   "importa": {

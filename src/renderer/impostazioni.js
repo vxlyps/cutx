@@ -311,6 +311,7 @@ export class Impostazioni {
       sceltaPref('tipo', 'solo volume, oppure volume più filtro (entra aprendo un passa-basso, esce con un filtro)', [['volume', 'volume'], ['filtro', 'volume + filtro']], 'dissolvenzaTipo', 'volume'),
       sceltaPref('filtro in uscita', 'come si chiude un livello che esce con il filtro', [['hp', 'passa-alto che sale'], ['lp', 'passa-basso che chiude']], 'dissolvenzaFiltroUscita', 'hp'),
       sceltaPref('scivolata dei valori', 'un numero della coda cambiato a mano (.lpf, .delay, .room…) scivola dal vecchio al nuovo in questo tempo; dalle manopole segue subito la mano', [[0, '0'], [0.25, '¼ (1 battito)'], [0.5, '½'], [1, '1 battuta']], 'scivolata', 0.25),
+      sceltaPref(it.impostazioni.transizione.nome, it.impostazioni.transizione.testo, [['sweep 8', 'sweep 8'], ['sweep 4', 'sweep 4'], ['cut', 'cut']], 'transizione', 'sweep 8'),
       sceltaPref('transizione del paracadute', 'cicli in cui il paracadute sostituisce quello che suona (esce col passa-alto, lui entra aprendo il filtro). 0: di botto', [[0, '0'], [1, '1'], [2, '2'], [4, '4']], 'paracaduteCicli', 2),
     );
     gruppo('imp-proiezione', it.impostazioni.proiezione);

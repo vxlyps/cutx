@@ -72,3 +72,14 @@ test('un set nuovo ha il nome e si riempie', () => {
   s = S.aggiungi(S.aggiungi(s, 'a'), 'b');
   assert.equal(S.scriviSet(s), '// @set serata prova\n\na.cutx\nb.cutx\n');
 });
+
+test('la transizione scritta in una riga si legge e si riscrive uguale', async () => {
+  const S = await import('../src/renderer/set.js');
+  const set = S.leggiSet('// @set s\n\na.cutx · apre\nb.cutx · transizione sweep 4\nc.cutx · chiude · transizione cut\n');
+  assert.equal(S.transizioneDi(set, 'b.cutx'), 'sweep 4');
+  assert.equal(S.transizioneDi(set, 'c.cutx'), 'cut');
+  assert.equal(S.transizioneDi(set, 'a.cutx'), '');
+  assert.equal(S.scriviRiga(S.brani(set)[1]), 'b.cutx · transizione sweep 4');
+  assert.equal(S.scriviRiga(S.brani(set)[2]), 'c.cutx · chiude · transizione cut');
+  assert.deepEqual(S.brani(set)[0], { file: 'a.cutx', apre: true, chiude: false });
+});

@@ -8,7 +8,7 @@
 //   test_jungle_1.cutx · chiude
 //
 // Un brano per riga (il nome del file in libreria/), nell'ordine in cui si suona; `· apre` e `· chiude` segnano il primo e l'ultimo
-// (come `· volume 0.6` nei brani). Le righe // sono commenti, le righe vuote si saltano. Il file si tiene riga per riga:
+// (come `· volume 0.6` nei brani). `· transizione sweep 8` dice come si passa a quel brano dal precedente (vedi transizioni.js). Le righe // sono commenti, le righe vuote si saltano. Il file si tiene riga per riga:
 // riscriverlo dà esattamente il testo di partenza. Modulo puro: lo provano i test.
 
 const SEP = ' · ';
@@ -16,16 +16,17 @@ const NOME = /^\s*\/\/\s*@set\b\s*(.*)$/;
 
 const comeFile = (nome) => (/\.cutx$/i.test(nome) ? nome : `${nome}.cutx`);
 
-// Una riga di brano → { file, apre, chiude }, o null se è un commento o una riga vuota.
+// Una riga di brano → { file, apre, chiude, transizione? }, o null se è un commento o una riga vuota.
 export function leggiRiga(riga) {
   const r = String(riga).trim();
   if (!r || r.startsWith('//')) return null;
   const [nome, ...segni] = r.split(/\s+·\s+/).map((x) => x.trim());
   if (!nome) return null;
-  return { file: comeFile(nome), apre: segni.includes('apre'), chiude: segni.includes('chiude') };
+  const transizione = segni.map((s) => /^transizione\s+(.+)$/i.exec(s)?.[1]?.trim()).find(Boolean);
+  return { file: comeFile(nome), apre: segni.includes('apre'), chiude: segni.includes('chiude'), ...(transizione && { transizione }) };
 }
 
-export const scriviRiga = ({ file, apre, chiude }) => [file, apre && 'apre', chiude && 'chiude'].filter(Boolean).join(SEP);
+export const scriviRiga = ({ file, apre, chiude, transizione }) => [file, apre && 'apre', chiude && 'chiude', transizione && `transizione ${transizione}`].filter(Boolean).join(SEP);
 
 // Il testo → { righe: [{ testo } | { brano }], nome }
 export function leggiSet(testo) {
@@ -95,6 +96,9 @@ export function segna(set, i, cosa) {
 
 // Il brano da cui si parte: quello che apre, altrimenti il primo.
 export const primo = (set) => (brani(set).find((b) => b.apre) ?? brani(set)[0])?.file ?? null;
+
+// La transizione scritta per arrivare al brano `file` (testo, come «sweep 8»), o '' se non c'è.
+export const transizioneDi = (set, file) => brani(set).find((b) => b.file === file)?.transizione ?? '';
 
 // Il brano dopo `file` nell'ordine del set (null se è l'ultimo o non c'è).
 export function dopo(set, file) {

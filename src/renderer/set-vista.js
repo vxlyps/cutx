@@ -43,6 +43,11 @@ export class Serata {
     this.kit = testoKit === null ? null : { modello: B.leggi(testoKit), testo: testoKit };
   }
 
+  // La transizione scritta nel set per arrivare a `file` («sweep 8»), o '' se non c'è.
+  transizioneDi(file) {
+    return this.set ? S.transizioneDi(this.set, file) : '';
+  }
+
   // Il brano da cui si parte (quello che apre), o null.
   primo() {
     return this.set ? S.primo(this.set) : null;

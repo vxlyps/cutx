@@ -29,7 +29,8 @@ export const filtroEntra = (tipo) => (tipo === 'filtro' ? 'lp' : null);
 
 // Una dissolvenza completa dei nodi { fade, lp, hp } (GainNode e due BiquadFilterNode).
 // verso 'entra' | 'esce'; da e fine sono tempi del contesto audio; filtro 'lp' | 'hp' | null.
-export function programma({ ac, fade, lp, hp }, { verso, da, fine, filtro = null }) {
+// partenzaHz: da dove parte il passa-alto in uscita (di solito 20 Hz = aperto; 150 = lo scambio dei bassi: sull'1 i bassi se ne vanno di colpo).
+export function programma({ ac, fade, lp, hp }, { verso, da, fine, filtro = null, partenzaHz = 20 }) {
   const nyquist = ac.sampleRate / 2;
   const adesso = ac.currentTime;
   const t0 = Math.max(da, adesso);
@@ -51,7 +52,7 @@ export function programma({ ac, fade, lp, hp }, { verso, da, fine, filtro = null
   if (filtro === 'hp') {
     hp.frequency.cancelScheduledValues(adesso);
     hp.frequency.setValueAtTime(0, adesso);
-    hp.frequency.setValueAtTime(20, t0);
+    hp.frequency.setValueAtTime(Math.max(20, partenzaHz), t0);
     hp.frequency.exponentialRampToValueAtTime(FILTRO_ALTO_HZ, t0 + durata);
   } else if (filtro === 'lp') {
     lp.frequency.cancelScheduledValues(adesso);

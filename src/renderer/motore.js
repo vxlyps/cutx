@@ -25,6 +25,7 @@ import { Sentinella, Anello } from './ascolto.js';
 import { avviaOnda } from './sfondo.js';
 import { suoniNuovi } from './suoni-nuovi.js';
 import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
+import { chiEsce } from './transizioni.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
 const LIVE = RUOLO === 'live';
@@ -228,10 +229,10 @@ function nuovoLivello(codice, pattern, { nome, provenienza, scritto = false } = 
 }
 
 // Una dissolvenza di un livello, da un ciclo e per tot cicli (dissolvenza.js). Senza cicli non fa niente: di botto, come sempre.
-function dissolvi(l, verso, da, cicli, filtro) {
+function dissolvi(l, verso, da, cicli, filtro, partenzaHz) {
   if (!LIVE || !(cicli > 0) || !Number.isFinite(da) || !rip.mappa) return;
   const g = guadagnoDi(l);
-  programma({ ac, fade: g.fade, lp: g.lp, hp: g.hp }, { verso, da: rip.tempo(da), fine: rip.tempo(da + cicli), filtro });
+  programma({ ac, fade: g.fade, lp: g.lp, hp: g.hp }, { verso, da: rip.tempo(da), fine: rip.tempo(da + cicli), filtro, partenzaHz });
   l.sfuma = { verso, da, a: da + cicli, filtro };
 }
 // Una dissolvenza che non serve più (il livello rientra, o è sparito): i nodi tornano aperti.
@@ -239,6 +240,13 @@ function annullaDissolvi(l) {
   const g = guadagni.get(l.id);
   if (g) annulla({ ac, fade: g.fade, lp: g.lp, hp: g.hp });
   l.sfuma = null;
+}
+// La transizione tra due brani (transizioni.js) come arriva dal controllo: { tipo, cicli, hz, tieni }, o null.
+function transizioneDi(x) {
+  if (!x || (x.tipo !== 'sweep' && x.tipo !== 'cut')) return null;
+  const cicli = x.tipo === 'cut' ? 0 : Math.max(1, Math.min(32, Math.round(Number(x.cicli) || 0)));
+  const hz = Math.max(20, Math.min(1000, Number(x.hz) || 150));
+  return { tipo: x.tipo, cicli, hz, tieni: Array.isArray(x.tieni) ? x.tieni.filter(Number.isInteger) : [] };
 }
 const dissolvenzaDi = (d) => ({ cicli: Math.max(0, Math.round(Number(d?.cicli) || 0)), entra: filtroEntra(d?.tipo), esce: filtroEsce(d?.tipo, d?.filtroUscita) });
 
@@ -387,7 +395,7 @@ function cambiaCoda(m) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null }) {
+async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   // il guardiano: un codice che si rompe in uno dei primi cicli (un errore pigro) non entra, e quello che suona continua
@@ -423,6 +431,11 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     // il preambolo (che il proiettore può nascondere) resta quello di prima finché il codice comincia uguale
     if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
   }
+  // la transizione: sull'1 in cui entra il nuovo, tutti gli altri livelli che suonano (tranne i tenuti) cominciano a uscire,
+  // con il passa-alto che parte da `hz` (lo scambio dei bassi: la cassa del vecchio se ne va con tutto il resto)
+  const tr = transizioneDi(transizione);
+  const altri = tr ? chiEsce(livelli, { da, nuovo: l.id, tieni: tr.tieni }) : [];
+  for (const v of altri) v.a = da + tr.cicli;
   if (Number.isFinite(inizio)) l.inizio = Math.max(0, Math.min(codice.length, inizio));
   if (Array.isArray(coda)) l.coda = coda.filter((t) => leggiVoce(t)).map((t) => leggiVoce(t).testo); // quella scritta nella sezione vince
   if (l.coda.length || globali.size) metteCoda(l);
@@ -434,7 +447,8 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   iniziaSet(da);
   aggiornaLivelli();
   dissolvi(l, 'entra', da, d.cicli, d.entra);
-  for (const vecchio of scambi) dissolvi(vecchio, 'esce', da, d.cicli, d.esce);
+  for (const vecchio of scambi) dissolvi(vecchio, 'esce', da, d.cicli, tr ? 'hp' : d.esce, tr?.hz);
+  for (const v of altri) dissolvi(v, 'esce', da, tr.cicli, 'hp', tr.hz);
   entraMorbido(l, da);
   return { da, livello: l.id };
 }

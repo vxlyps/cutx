@@ -2871,6 +2871,14 @@ async function provaPassaggio({ finestre, scrivi }) {
     await js(`document.getElementById('go-live').click()`);
     await aspetta(4);
     controlla('sotto le linguette: passando a brano 2 il tempo sale con una rampa (+2%)', /rampa/.test(await js(`document.getElementById('passaggio').textContent`)) && /\+2/.test(await js(`document.getElementById('passaggio').textContent`)), await js(`document.getElementById('passaggio').textContent`));
+    // una seconda clip di brano 1 (sub), e melodia scelta sul controller: con la transizione sub esce, melodia resta
+    await js(`cutxProva.cue.cambiaLinguetta('attivo'); cutxProva.cue.scegliSezione(cutxProva.cue.sezioniNav().indexOf('sub'))`);
+    await js(`document.getElementById('go-live').click()`);
+    await aspetta(4);
+    const idMelodia = (await live()).livelli.find((l) => l.nome === 'melodia' && l.a === null)?.id;
+    const viviPrima = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome);
+    controlla('prima del passaggio suonano beat, melodia e sub', ['beat', 'melodia', 'sub'].every((n) => viviPrima.includes(n)), JSON.stringify(viviPrima));
+    await js(`cutxProva.pila.seleziona(${idMelodia})`);
     // CUFFIA tenuto + ◀ ▶: il prossimo secondo l'ordine del set (e senza il brano che suona)
     const cuffia = await tasto(4);
     const giu = await tasto(1);
@@ -2897,14 +2905,19 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(0.9);
     await midi(0x90, t3, 0);
     const visti = [];
+    let dopoPasso = [];
     for (let i = 0; i < 40; i++) {
       visti.push(Math.round((await bpm()) * 100) / 100);
+      if (i === 4) dopoPasso = (await live()).livelli; // un'istantanea poco dopo l'entrata del brano nuovo (la rampa dura ~3 s, lo sweep 11)
       await aspetta(0.35);
     }
+    const sub = dopoPasso.find((l) => l.nome === 'sub');
+    controlla('transizione (sweep 8): la clip vecchia non scelta (sub) esce, con una fine già programmata', !!sub && sub.a !== null && Number.isFinite(sub.a), JSON.stringify(sub));
+    controlla('transizione: la clip scelta sul controller (melodia) resta', dopoPasso.some((l) => l.nome === 'melodia' && l.a === null), JSON.stringify(dopoPasso.map((l) => [l.nome, l.a])));
     controlla('brano 2: il tempo sale a gradini fino a 174 (rampa, non salto)', visti[0] < 171 && visti.at(-1) > 173.9 && visti.some((x) => x > 170.3 && x < 173.7) && visti.every((x, i) => i === 0 || x >= visti[i - 1] - 0.01), JSON.stringify([...new Set(visti)]));
     controlla('brano 2 è adesso l\'attivo (● brano 2) e il prossimo è brano 3', (await ling('attivo')).includes('● brano 2') && (await ling('prossimo')).includes('▸ brano 3'), `${await ling('attivo')} | ${await ling('prossimo')}`);
     const vivi = (await live()).livelli.filter((l) => l.a === null).map((l) => l.nome).sort();
-    controlla('la clip di brano 1 resta live (melodia), accanto al beat nuovo', vivi.includes('melodia') && vivi.includes('beat'), JSON.stringify(vivi));
+    controlla('la clip scelta di brano 1 resta live (melodia), accanto al beat nuovo', vivi.includes('melodia') && vivi.includes('beat'), JSON.stringify(vivi));
     controlla('sotto le linguette: passando a brano 3 il tempo salta e nomina la clip ritmica', /salta/.test(await js(`document.getElementById('passaggio').textContent`)) && /melodia/.test(await js(`document.getElementById('passaggio').textContent`)), await js(`document.getElementById('passaggio').textContent`));
     // il salto
     await js(`cutxProva.passaBrano()`);

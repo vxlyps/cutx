@@ -8,6 +8,7 @@ import it from './testi/it.json';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
+import * as T from './transizioni.js';
 import { misuraLimiter, misuraMicroEntrata } from './limiter.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
@@ -321,7 +322,11 @@ async function passaBrano(k = 0) {
   const p = cue.pezzoScena(m, Math.min(k, m.beat.scene.length - 1), 'brano', null, nome);
   const attuale = bpmSet();
   const nuovo = B.bpmDelBrano(m);
-  const t = P.decidiTempo(attuale, nuovo, livelliLive.some((l) => l.a === null));
+  const occupato = livelliLive.some((l) => l.a === null);
+  const t = P.decidiTempo(attuale, nuovo, occupato);
+  // la transizione: quella scritta nel set per questo brano, altrimenti la predefinita (sweep 8). Il livello scelto col controller resta.
+  const { transizione, scartata } = T.sceglieTransizione(serata.transizioneDi(prossimo.file), preferenze.transizione ?? T.PREDEFINITA);
+  const tieni = livelloVivo(pila.selezionato) ? [pila.selezionato] : [];
   let { codice, inizio } = p;
   let rampa = null;
   if (t.tipo === 'rampa') {
@@ -329,19 +334,20 @@ async function passaBrano(k = 0) {
     const pre = B.senzaTempo(codice.slice(0, inizio));
     codice = pre + codice.slice(inizio);
     inizio = pre.length;
-    rampa = { bpm: nuovo, cicli: preferenze.rampaCicli ?? P.CICLI_RAMPA };
+    rampa = { bpm: nuovo, cicli: preferenze.rampaCicli ?? (transizione.tipo === 'sweep' ? transizione.cicli : P.CICLI_RAMPA) }; // il tempo ci arriva dentro la transizione
   }
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: { cicli: transizione.cicli, tipo: 'filtro', filtroUscita: 'hp' }, transizione: T.perIlLive(transizione, tieni) });
   mostraErrore(r.errore, 'live');
   if (r.errore) return r;
   passaggio = { nome, da: r.da };
+  if (scartata) cue.avviso(`transizione «${scartata}» non valida: uso ${T.scriviTransizione(transizione)}`);
   const n = (x) => Math.round(x * 10) / 10;
   if (t.tipo === 'salto') {
     const ritmiche = ritmicheRimaste();
     cue.avviso(`il tempo salta da ${n(attuale)} a ${n(nuovo)} bpm quando entra «${nome}»${ritmiche.length ? ` · clip ritmiche rimaste che cambiano velocità: ${ritmiche.join(', ')}` : ''}`, { persistente: ritmiche.length > 0 });
   } else if (t.tipo === 'rampa') cue.avviso(`«${nome}»: il tempo va da ${n(attuale)} a ${n(nuovo)} bpm con una rampa`);
-  else cue.avviso(`passo a «${nome}»`);
+  else cue.avviso(`passo a «${nome}» · ${T.scriviTransizione(transizione)}`);
   portaUscita?.postMessage({ tipo: 'brano', nome });
   if (!cue.slot.attivo) cue.promuovi(); // il primo brano della serata
   return { brano: nome, da: r.da };
