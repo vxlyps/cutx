@@ -114,6 +114,8 @@ export function trovaMotivi(eventi, soglie = SOGLIE) {
   const motivi = [];
   const aggiungi = (e, tipo, testo, dettaglio) => motivi.push({ t: e.t, tipo, fonte: e.fonte, testo, ...(dettaglio ? { dettaglio } : {}) });
 
+  const segniT = eventi.filter((e) => e.fonte === 'app' && e.tipo === 'segno').map((e) => e.t);
+  const eUnSegno = (e) => segniT.some((t) => t - e.t >= -50 && t - e.t <= 300); // il tasto SEGNA premuto: non è un tentativo ripetuto
   const invii = new Map(); // id → invio, per misurare quanto ci mette a rispondere
   const ultimoStato = { tardi: null, giroMax: 0 };
   const recenti = { invio: new Map(), midi: new Map(), tasto: new Map() };
@@ -147,8 +149,8 @@ export function trovaMotivi(eventi, soglie = SOGLIE) {
       if (Number.isFinite(d.giroMax)) ultimoStato.giroMax = Math.max(ultimoStato.giroMax, d.giroMax);
     } else if (e.fonte === 'controller' && e.tipo === 'midi' && Array.isArray(d.byte)) {
       const [stato, nota, vel] = d.byte;
-      if ((stato & 0xf0) === 0x90 && vel > 0) ripetuto('midi', `n${nota}`, e, `tasto ${nota} del controller`);
-    } else if (e.fonte === 'tastiera' && e.tipo === 'tasto') ripetuto('tasto', d.combo ?? '', e, `tasto ${d.combo}`);
+      if ((stato & 0xf0) === 0x90 && vel > 0 && !eUnSegno(e)) ripetuto('midi', `n${nota}`, e, `tasto ${nota} del controller`);
+    } else if (e.fonte === 'tastiera' && e.tipo === 'tasto' && !eUnSegno(e)) ripetuto('tasto', d.combo ?? '', e, `tasto ${d.combo}`);
   }
 
   // CPU alta per qualche secondo

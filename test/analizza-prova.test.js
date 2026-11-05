@@ -144,3 +144,14 @@ test('il rapporto ha le tre parti, i motivi, quello che hai detto e i fotogrammi
   assert.ok(!html.includes('<b>')); // il testo è sempre scappato
   assert.equal(minuti(62), '01:02');
 });
+
+test('il tasto SEGNA premuto più volte non è un tentativo ripetuto; un altro tasto sì', () => {
+  const eventi = [];
+  for (let i = 0; i < 5; i++) {
+    eventi.push(ev(10 + i, 'controller', 'midi', { byte: [0x90, 93, 127] }), ev(10 + i + 0.01, 'app', 'segno', { n: i + 1 }));
+    eventi.push(ev(20 + i, 'controller', 'midi', { byte: [0x90, 40, 127] }));
+  }
+  const testi = trovaMotivi(eventi).map((x) => x.testo);
+  assert.ok(!testi.some((x) => /tasto 93/.test(x)));
+  assert.ok(testi.some((x) => /provato 4 volte di fila: tasto 40/.test(x)));
+});

@@ -11,10 +11,10 @@ import { SOGLIE, allinea, frazioneAmbra, istantiFotogrammi, leggiRegistro, leggi
 
 process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${os.homedir()}/.local/bin:${process.env.PATH}`;
 
-const AIUTO = `uso: analizza-prova REGISTRO VIDEO [opzioni]
+const AIUTO = `uso: analizza-prova REGISTRO [VIDEO] [opzioni]
 
   REGISTRO   il file .jsonl della MOVIOLA (o «ultimo»: l'ultimo in prove/ della cartella dati)
-  VIDEO      il video della prova (con il lampo ambra di SEGNA dentro)
+  VIDEO      il video della prova (con il lampo ambra di SEGNA dentro). Senza video: solo il registro, niente voce né fotogrammi
 
   --srt FILE        la trascrizione già fatta (se manca, la faccio con \`trascrivi\`)
   --senza-voce      niente trascrizione
@@ -43,7 +43,7 @@ function esci(testo, codice = 2) {
   console.error(testo);
   process.exit(codice);
 }
-if (pos.length < 2) esci(AIUTO);
+if (pos.length < 1) esci(AIUTO);
 
 // ---------- i file ----------
 function ultimoRegistro() {
@@ -59,9 +59,9 @@ function ultimoRegistro() {
 }
 const registro = pos[0] === 'ultimo' ? ultimoRegistro() : path.resolve(pos[0]);
 if (!registro || !existsSync(registro)) esci(`non trovo il registro: ${pos[0]}`);
-const video = path.resolve(pos[1]);
-if (!existsSync(video)) esci(`non trovo il video: ${pos[1]}`);
-for (const programma of ['ffmpeg', 'ffprobe']) if (spawnSync(programma, ['-version']).error) esci(`manca ${programma}: brew install ffmpeg`);
+const video = pos[1] ? path.resolve(pos[1]) : null;
+if (video && !existsSync(video)) esci(`non trovo il video: ${pos[1]}`);
+if (video) for (const programma of ['ffmpeg', 'ffprobe']) if (spawnSync(programma, ['-version']).error) esci(`manca ${programma}: brew install ffmpeg`);
 
 const nome = path.basename(registro, '.jsonl');
 const fuori = path.resolve(opz.fuori ?? path.join(path.dirname(registro), `analisi-${nome}`));
@@ -75,7 +75,7 @@ const segni = eventi.filter((e) => e.fonte === 'app' && e.tipo === 'segno').map(
 log(`registro: ${eventi.length} eventi, ${segni.length} SEGNO`);
 
 // ---------- il ciak: i lampi nel video ----------
-const durataVideo = Number(spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', video], { encoding: 'utf8' }).stdout) || Infinity;
+const durataVideo = !video ? Infinity : Number(spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', video], { encoding: 'utf8' }).stdout) || Infinity;
 const FPS = 15;
 const L = 192;
 const A = 108;
@@ -98,20 +98,20 @@ async function cercaLampi(minuti) {
 const sposta = opz.sposta !== undefined ? Number(opz.sposta) : null;
 if (sposta !== null && !Number.isFinite(sposta)) esci('--sposta vuole un numero di secondi');
 let lampi = [];
-if (sposta === null) {
+if (video && sposta === null) {
   log(`cerco i lampi ambra nei primi ${opz.scansiona ?? 5} minuti del video…`);
   lampi = trovaLampi(await cercaLampi(Number(opz.scansiona) || 5), FPS);
   log(`lampi trovati: ${lampi.length}${lampi.length ? ` (${lampi.map((x) => `${x.toFixed(1)} s`).join(', ')})` : ''}`);
 }
-const al = allinea(segni, lampi, sposta);
+const al = video ? allinea(segni, lampi, sposta) : { offsetMs: null, come: 'nessun video: solo il registro', avvisi: [] };
 const allineato = al.offsetMs !== null;
 log(`allineamento: ${al.come}`);
 for (const a of al.avvisi) log(`  ⚠ ${a}`);
 
 // ---------- la voce ----------
 let voci = [];
-let notaVoce = 'non richiesta';
-if (!opz['senza-voce']) {
+let notaVoce = video ? 'non richiesta' : 'senza video: niente voce';
+if (video && !opz['senza-voce']) {
   let srt = opz.srt ? path.resolve(opz.srt) : path.join(path.dirname(video), `${path.basename(video, path.extname(video))}.srt`);
   if (!existsSync(srt) && !opz.srt) {
     log('non c\'è la trascrizione: la faccio con `trascrivi` (serve il disco A002)…');
@@ -149,9 +149,9 @@ momenti.forEach((m, i) => {
 const info = {
   nome,
   registro: path.basename(registro),
-  video: path.basename(video),
+  video: video ? path.basename(video) : '(nessuno)',
   allineamento: al.come,
-  avvisi: al.avvisi.concat(allineato ? [] : ['senza allineamento: niente voce e niente fotogrammi, solo il registro']),
+  avvisi: al.avvisi.concat(allineato ? [] : [video ? 'senza allineamento: niente voce e niente fotogrammi, solo il registro' : 'senza video: solo il registro']),
   voce: notaVoce,
 };
 writeFileSync(path.join(fuori, 'rapporto.md'), rapportoMd({ momenti, info }));
@@ -161,4 +161,4 @@ console.log(`difetti ${conta('difetti')} · inciampi ${conta('inciampi')} · ide
 console.log(`rapporto: ${path.join(fuori, 'rapporto.html')}`);
 console.log(`          ${path.join(fuori, 'rapporto.md')}`);
 if (!opz['senza-aprire']) spawnSync('open', [path.join(fuori, 'rapporto.html')]);
-process.exit(allineato ? 0 : 3);
+process.exit(allineato || !video ? 0 : 3);

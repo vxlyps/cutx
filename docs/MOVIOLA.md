@@ -11,7 +11,11 @@ Serve a rivedere una prova: mentre suono scrive un registro, e dopo un comando m
 
 Nel registro (una riga JSON per evento, ora al millisecondo): MIDI del controller, scorciatoie della tastiera, codice mandato ai motori (intero) e risposte con `ingressoMs`, errori e avvisi, guardiano, transizioni, master ogni secondo (picco e medio, anche in dB), stato del live (ritardi, giro massimo, ciclo, tempo), CPU per processo, segni. Scrive solo il processo principale, in modo asincrono: sul suono pesa zero (lo prova `--prova=moviola`). Le finestre mandano gli eventi a pacchetti, quindi nel file non sono sempre in ordine di tempo (l'analisi li riordina).
 
+## Il video: da dove viene
+Il video è la registrazione dello schermo del Mac: ⇧⌘5 → «Registra l'intero schermo» → in **Opzioni** scegli il microfono (così c'è la tua voce) → Registra. Premi SEGNA subito (il lampo ambra deve finire nel video), alla fine ferma con il tasto ⏹ nella barra dei menu. Il file `Registrazione schermo ….mov` compare di solito sulla Scrivania. Il registro invece è quello della MOVIOLA: `ultimo` lo prende da solo.
+
 ## Analizzare
+Senza video: `analizza-prova ultimo` guarda solo il registro (niente voce né fotogrammi).
 ```
 analizza-prova ultimo ~/Movies/prova.mov
 analizza-prova registro.jsonl video.mov --srt prova.srt
