@@ -77,6 +77,18 @@ Postazione a tre colonne: **browser** a sinistra (suoni, libreria, help), **CUE*
 ## Hardware
 Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuffie nel jack frontale (= cuffia), MiniFuse 1 alle casse (= live), un monitor piccolo per me (controllo), proiettore come secondo schermo. Arturia MiniFuse 1 (la sua uscita cuffie copia le casse: NON è il preascolto), PO-33 K.O., Akai APC mini mk2, Ableton Live per gli stem.
 
+## Delega a Codex (plugin `codex@openai-codex`, login ChatGPT)
+Io (Claude) sono il capo progetto: decido architettura, approccio, priorità. Codex esegue e basta. Scopo: risparmiare i miei token facendo scrivere a Codex il grosso del codice, **senza peggiorare la qualità**. Le sue istruzioni stanno in `AGENTS.md` (corto, tenerlo corto).
+- **Metodo**: subagent `codex:codex-rescue` (stesso Codex, stesso login). Mai `codex exec` a mano.
+- **Cosa si delega**: solo implementazioni grosse e ben definite (indicativamente 50+ righe, isolate, con test puri). Le modifiche piccole le faccio io: passarle costa più token. Mai motori audio, tempo, guardiano, sicurezza, né decisioni di design.
+- **Brief preciso**: file da toccare, comportamento atteso, vincoli, criteri di «finito», test da lanciare. Codex lavora in un branch, non su `main`.
+- **Prima di delegare**: commit git, così ogni modifica si annulla.
+- **Quando Codex finisce**: controllo solo il diff, lancio il test del pezzo, verifico il brief. Qualità prima del risparmio: se il diff non mi convince, non passa.
+- **Se non va**: rimando con correzioni precise, al massimo 2 volte. Poi sistemo io o rollback.
+- **Divieti per Codex**: cambiare architettura, aggiungere dipendenze, toccare file fuori dal brief, refactoring non richiesti, commit/push, prove audio (`npm run prova`).
+- **Se Codex finisce i crediti o non risponde**: continuo da solo e avviso Valerio.
+- Valerio fa il merge. Io non faccio merge di rami di Codex senza il suo ok.
+
 ## Risparmio (regole di lavoro con Claude)
 - **File grandi** (`prova.js` 5500 righe, `it.json`, `docs/STATO.md`, `synth-*.js`): prima `grep -n`, poi leggo solo le righe che servono (`sed -n` / Read con offset e limit). Mai un file intero "per vedere".
 - **Prove**: mentre lavoro lancio solo la prova del pezzo che tocco, in silenzio: `npm run prova:parte -- synth` (più parti: `synth,tempo`). Stampa solo i fallimenti e il conteggio. Test puri: `node --test test/<file>.test.js`. La sequenza completa (`npm run prova`, `npm test`) solo prima di una release o se Valerio la chiede.
