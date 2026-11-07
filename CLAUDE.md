@@ -84,8 +84,9 @@ Io (Claude) sono il capo progetto: decido architettura, approccio, priorità. Co
   codex exec -s workspace-write -C . --ephemeral -o $S/ultimo-codex.txt - < $S/brief.md > $S/codex.log 2>&1
   ```
   Poi leggo solo `$S/ultimo-codex.txt` (3 righe), `git status` e `git diff`. Il `codex.log` non si legge, salvo errori. `$S` = scratchpad. Verificato il 7/11/2026 (47 s per un brief minuscolo). Se serve una seconda correzione sulla stessa sessione: stesso comando con un nuovo brief (senza `--ephemeral` e con `resume --last` solo se serve il contesto).
-- **Cosa si delega**: solo implementazioni grosse e ben definite (indicativamente 50+ righe, isolate, con test puri). Le modifiche piccole le faccio io: passarle costa più token. Mai motori audio, tempo, guardiano, sicurezza, né decisioni di design.
-- **Brief preciso**: file da toccare, comportamento atteso, vincoli, criteri di «finito», test da lanciare. Codex lavora in un branch, non su `main`.
+- **Regola automatica (uso Codex da solo, senza chiedere)** quando sono vere TUTTE queste: (1) lavoro da circa 100+ righe di codice o test, nuovo o ripetitivo; (2) isolato: file nuovi o pochi file, interfaccia chiara che so scrivere nel brief; (3) si prova con test puri, senza audio; (4) non è tra i divieti sotto; (5) sono sicuro che il brief basta, cioè non resta nessuna decisione di design. Se anche una sola è dubbia, scrivo io. Sotto le ~100 righe scrivo io: il brief costa quanto il codice. Mai motori audio, tempo, guardiano, sicurezza, né decisioni di design.
+- **Con la regola di Valerio**: prima spiego il piano e aspetto l'ok come sempre; la delega a Codex è solo il modo di eseguire il piano approvato, non serve un secondo ok. A fine passo dico in una riga «scritto da Codex» o «scritto da me perché …».
+- **Brief preciso**: file da toccare, comportamento atteso, vincoli, criteri di «finito», test da lanciare. Lavora nel ramo corrente; si annulla con `git restore`.
 - **Prima di delegare**: commit git, così ogni modifica si annulla.
 - **Quando Codex finisce**: controllo solo il diff, lancio il test del pezzo, verifico il brief. Qualità prima del risparmio: se il diff non mi convince, non passa.
 - **Se non va**: rimando con correzioni precise, al massimo 2 volte. Poi sistemo io o rollback.
