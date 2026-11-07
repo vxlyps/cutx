@@ -79,7 +79,11 @@ Mac mini M4, per sviluppare **e per le serate**. Setup da serata: Mac mini, cuff
 
 ## Delega a Codex (plugin `codex@openai-codex`, login ChatGPT)
 Io (Claude) sono il capo progetto: decido architettura, approccio, priorità. Codex esegue e basta. Scopo: risparmiare i miei token facendo scrivere a Codex il grosso del codice, **senza peggiorare la qualità**. Le sue istruzioni stanno in `AGENTS.md` (corto, tenerlo corto).
-- **Metodo**: subagent `codex:codex-rescue` (stesso Codex, stesso login). Mai `codex exec` a mano.
+- **Metodo**: `codex exec` da Bash, **mai** il subagent `codex:codex-rescue` (costava ~22.500 token miei a delega). Si scrive il brief in un file nel scratchpad e si lancia, con tutto l'output lungo su file e solo l'ultimo messaggio di Codex a schermo:
+  ```
+  codex exec -s workspace-write -C . --ephemeral -o $S/ultimo-codex.txt - < $S/brief.md > $S/codex.log 2>&1
+  ```
+  Poi leggo solo `$S/ultimo-codex.txt` (3 righe), `git status` e `git diff`. Il `codex.log` non si legge, salvo errori. `$S` = scratchpad. Verificato il 7/11/2026 (47 s per un brief minuscolo). Se serve una seconda correzione sulla stessa sessione: stesso comando con un nuovo brief (senza `--ephemeral` e con `resume --last` solo se serve il contesto).
 - **Cosa si delega**: solo implementazioni grosse e ben definite (indicativamente 50+ righe, isolate, con test puri). Le modifiche piccole le faccio io: passarle costa più token. Mai motori audio, tempo, guardiano, sicurezza, né decisioni di design.
 - **Brief preciso**: file da toccare, comportamento atteso, vincoli, criteri di «finito», test da lanciare. Codex lavora in un branch, non su `main`.
 - **Prima di delegare**: commit git, così ogni modifica si annulla.
