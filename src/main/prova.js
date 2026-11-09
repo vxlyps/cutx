@@ -204,6 +204,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('moviola')) ok = (await sicura('moviola', provaMoviola)) && ok;
+  if (parti.includes('card-togli')) ok = (await sicura('card-togli', provaCardTogli)) && ok;
   if (parti.includes('fader')) ok = (await sicura('fader', provaFader)) && ok;
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
@@ -5762,6 +5763,62 @@ async function provaFader({ finestre, scrivi }) {
     controlla('prova del fader', false, String(e.message ?? e));
   } finally {
     await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); window.cutx.salvaPreferenze({ controller: null })`).catch(() => {});
+  }
+  return ok;
+}
+
+// Le card del LIVE con il mouse fermo sopra: dopo la × le altre devono salire subito, anche se il puntatore non esce dalla zona.
+async function provaCardTogli({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const wc = () => finestre.controllo.webContents;
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const ciclo = async () => (await live())?.ciclo ?? -Infinity;
+  const goLive = async (codice) => {
+    await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue(${JSON.stringify(codice)}); cutxProva.scegliEntraTra(1)`);
+    return wc().executeJavaScript('cutxProva.goLive()');
+  };
+  const schede = () => js(`[...document.querySelectorAll('#livelli .card.livello')].map((c) => { const r = c.getBoundingClientRect(); return { nome: c.querySelector('.nome, .card-nome')?.textContent ?? '', top: Math.round(r.top), x: Math.round(r.left + r.width / 2), togliX: Math.round(c.querySelector('button[data-aiuto=livello-togli]').getBoundingClientRect().left + 8), togliY: Math.round(c.querySelector('button[data-aiuto=livello-togli]').getBoundingClientRect().top + 8) }; })`);
+  const mouse = (tipo, x, y) => wc().sendInputEvent({ type: tipo, x, y, button: 'left', clickCount: 1 });
+  const clic = async (x, y) => {
+    mouse('mouseMove', x, y);
+    await aspetta(0.1);
+    mouse('mouseDown', x, y);
+    mouse('mouseUp', x, y);
+    await aspetta(0.2);
+  };
+  try {
+    await js(`cutxProva.valuta('live', 'setcpm(120/4)'); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+    const nomi = ['a', 'b', 'c', 'd'];
+    const r = [];
+    for (const n of nomi) r.push(await goLive(`// @sezione ${n}\ns("sine*4").freq(60).gain(.0001)`));
+    for (const e = Date.now() + 9000; Date.now() < e && (await ciclo()) < Math.max(...r.map((x) => x.da)) + 0.3; ) await aspetta(0.2);
+    await aspetta(1);
+    const prima = await schede();
+    controlla('card presenti (scratch + quattro)', prima.length === 5, JSON.stringify(prima));
+    // il mouse resta nella zona: due × di fila (la prima e la seconda), senza uscire
+    await clic(prima[0].togliX, prima[0].togliY);
+    await clic(prima[1].togliX, prima[1].togliY);
+    const fine = (await ciclo()) + 2.5;
+    for (const e = Date.now() + 9000; Date.now() < e && (await ciclo()) < fine; ) await aspetta(0.2);
+    await aspetta(0.6);
+    const dopo = await schede();
+    controlla('le due tolte sono sparite', dopo.length === 3, JSON.stringify(dopo));
+    controlla('col mouse ancora sopra le altre NON si sono mosse', dopo.length === 3 && dopo.every((c, i) => Math.abs(c.top - prima[i + 2].top) <= 1), `prima ${prima.map((c) => c.top)}, dopo ${dopo.map((c) => c.top)}`);
+    // il mouse esce dalla zona: i buchi si chiudono
+    const fuori = await js(`(() => { const r = document.querySelector('header, .barra')?.getBoundingClientRect(); return { x: 5, y: Math.round(r ? r.top + 4 : 4) }; })()`);
+    mouse('mouseMove', fuori.x, fuori.y);
+    await aspetta(0.6);
+    const chiuso = await schede();
+    controlla('uscito il mouse, le card salgono a chiudere i buchi', chiuso.length === 3 && chiuso[0].top <= prima[0].top + 1, `dopo l'uscita ${chiuso.map((c) => c.top)}`);
+  } catch (e) {
+    controlla('prova delle card', false, String(e.message ?? e));
+  } finally {
+    await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto()`).catch(() => {});
   }
   return ok;
 }

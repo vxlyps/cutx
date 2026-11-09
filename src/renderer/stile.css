@@ -3291,3 +3291,8 @@ input[type='checkbox'] {
   60% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* il posto di una card appena tolta, finché il puntatore resta sulle card (pila.js): le altre non si spostano */
+.segnaposto {
+  flex-shrink: 0;
+}

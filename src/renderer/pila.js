@@ -38,7 +38,27 @@ export class Pila {
     this.strisce = new Map(); // id del livello → { ciclo: eventi } (le note vere, dal motore live)
     this.selezionato = null; // id del livello scelto con un clic sulla card: a lui vanno le code da sole (e, col controller, i colpi)
     this.modifiche = new Map(); // nome del livello → { editor, carta } mentre lo modifico
+    // Come le schede di Chrome: mentre il puntatore sta sulle card, il posto di una card tolta resta vuoto e le altre non si muovono,
+    // così si possono cliccare più × di fila senza inseguirle. Appena il puntatore esce i buchi si chiudono.
+    this.sopra = false;
+    this.segnaposti = new Set();
+    const zona = contenitore.parentElement ?? contenitore;
+    zona.addEventListener('mouseenter', () => (this.sopra = true));
+    zona.addEventListener('mouseleave', () => this.chiudiBuchi());
     this.creaJam(jam);
+  }
+
+  chiudiBuchi() {
+    this.sopra = false;
+    if (!this.segnaposti.size) return;
+    for (const s of this.segnaposti) s.remove();
+    this.segnaposti.clear();
+    this.adatta(true);
+  }
+
+  // le card vere nell'ordine in cui stanno (senza i buchi lasciati dalle card tolte)
+  elementiCarte() {
+    return [...this.contenitore.children].filter((e) => !this.segnaposti.has(e));
   }
 
   // --- il jam: si scrive direttamente live ---
@@ -63,7 +83,12 @@ export class Pila {
     const ids = new Set(this.livelli.map((l) => l.id));
     for (const [id, c] of this.carte) {
       if (!ids.has(id)) {
-        c.el.remove();
+        if (this.sopra && c.el.isConnected) {
+          const buco = el('div', 'segnaposto');
+          buco.style.height = `${c.el.getBoundingClientRect().height}px`;
+          this.segnaposti.add(buco);
+          c.el.replaceWith(buco);
+        } else c.el.remove();
         this.carte.delete(id);
         this.inizioUscita.delete(id);
       }
@@ -91,7 +116,7 @@ export class Pila {
       c.codaTesto.title = l.codaErrore ?? '';
       c.el.classList.toggle('muto', l.muto);
       // solo se è fuori posto: spostare la carta toglierebbe il fuoco a chi ci sta scrivendo
-      if (this.contenitore.children[ordine.indexOf(l)] !== c.el) this.contenitore.append(c.el);
+      if (this.elementiCarte()[ordine.indexOf(l)] !== c.el) this.contenitore.append(c.el);
     }
     this.mostraSelezione();
     this.adatta();
