@@ -57,7 +57,11 @@ export function decodifica(bytes, tab = tabella()) {
     if (i >= 0) return { tipo: 'tasto', n: i + 1, giu, nota: a };
     return { tipo: 'altro', nota: a, giu };
   }
-  if (tipo === 0xe0) return { tipo: 'fader', canale, valore: ((b << 7) | a) / 16383, grezzo: (b << 7) | a };
+  if (tipo === 0xe0) {
+    // 14 bit: byte bassi e alti di 7 bit l'uno; il valore sta sempre in 0..1 (cima = 1 = tutto aperto, fondo = 0)
+    const grezzo = ((b & 0x7f) << 7) | (a & 0x7f);
+    return { tipo: 'fader', canale, valore: Math.max(0, Math.min(1, grezzo / 16383)), grezzo };
+  }
   return { tipo: 'altro' };
 }
 

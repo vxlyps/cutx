@@ -77,7 +77,9 @@ const ultimoBend = new Map();
 export function midiPerRegistro(bytes) {
   if ((bytes[0] & 0xf0) === 0xe0) {
     const ora = performance.now();
-    if (ora - (ultimoBend.get(bytes[0]) ?? -1e9) < 30) return null;
+    const grezzo = ((bytes[2] & 0x7f) << 7) | (bytes[1] & 0x7f);
+    const estremo = grezzo >= 16000 || grezzo <= 300; // cima e fondo si registrano sempre: lì si vede cosa manda il fader in battuta
+    if (!estremo && ora - (ultimoBend.get(bytes[0]) ?? -1e9) < 30) return null;
     ultimoBend.set(bytes[0], ora);
   }
   return { byte: bytes };

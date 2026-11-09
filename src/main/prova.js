@@ -204,6 +204,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('moviola')) ok = (await sicura('moviola', provaMoviola)) && ok;
+  if (parti.includes('fader')) ok = (await sicura('fader', provaFader)) && ok;
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
@@ -5723,6 +5724,44 @@ async function provaStrudel({ finestre, scrivi }) {
     controlla('prova dei suoni di Strudel', false, String(e.message ?? e));
   } finally {
     await js(`window.cutx.salvaPreferenze({ cartellaSuoni: null }); cutxProva.fermaTutto()`).catch(() => {});
+  }
+  return ok;
+}
+
+// Il fader del controller (pitch bend): in cima il filtro deve essere tutto aperto (nessuna riga globale), in fondo chiuso.
+async function provaFader({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const globali = async () => (await chiedi(finestre.live, 'globalThis.cutxStato?.()'))?.globali ?? null;
+  const manda = (grezzo) => js(`cutxProva.controllerMidi.riceve([0xe0, ${grezzo & 127}, ${grezzo >> 7}])`);
+  try {
+    await js(`window.cutx.salvaPreferenze({ controller: { fader: 'filtro' } })`);
+    await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+    const caso = async (nome, valori, atteso) => {
+      for (const v of valori) {
+        await manda(v);
+        await aspetta(0.01);
+      }
+      await aspetta(0.4);
+      const g = await globali();
+      const aperto = Array.isArray(g) && g.length === 0;
+      controlla(`${nome}: ${atteso === 'aperto' ? 'tutto aperto' : 'filtro attivo'}`, atteso === 'aperto' ? aperto : Array.isArray(g) && g.length === 1, `globali: ${JSON.stringify(g)}`);
+    };
+    await caso('a metà', [8000], 'chiuso');
+    await caso('in cima (16383)', [16383], 'aperto');
+    await caso('in fondo (0)', [0], 'chiuso');
+    await caso('quasi in cima (16300)', [16300], 'aperto');
+    await caso('salita e battuta in cima', [8000, 12000, 15000, 16000, 16383, 16383, 16383], 'aperto');
+    await caso('cima da un fader da 10 bit (16368)', [16368], 'aperto');
+    await caso('cima ripetuta 30 volte', Array(30).fill(16383), 'aperto');
+  } catch (e) {
+    controlla('prova del fader', false, String(e.message ?? e));
+  } finally {
+    await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); window.cutx.salvaPreferenze({ controller: null })`).catch(() => {});
   }
   return ok;
 }
