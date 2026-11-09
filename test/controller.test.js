@@ -333,7 +333,7 @@ test('manopola 1 = navigazione (in tutte e due le pagine): gira scorre il CUE in
   c.riceve(giro(1, -1));
   c.riceve(giro(1, -3));
   avanza(2000);
-  assert.deepEqual(log.filter((x) => x[0] === 'cueSposta').map((x) => x[1]), [2, -1, -3]);
+  assert.deepEqual(log.filter((x) => x[0] === 'cueSposta').map((x) => x[1]), [1, -1, -1], 'uno scatto, una voce: anche se il giro è veloce (2, 3 passi insieme)');
   assert.equal(k, 0, 'salendo si arriva fino in cima (l\'apertura)');
   assert.equal(c.toccata.testo, 'CUE · apertura', 'lo specchio dice dove sono');
   assert.equal(log.filter((x) => x[0] === 'cuffia').length, 0, 'sfogliando non parte niente in cuffia');

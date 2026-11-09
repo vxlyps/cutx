@@ -302,7 +302,7 @@ export class Controller {
 
   // Si sfoglia in silenzio: niente parte in cuffia da solo; la cosa scelta si ascolta premendo la manopola 1 (o «cuffia»).
   scorriCue(passi) {
-    const nome = this.azioni.cueSposta?.(Math.sign(passi) * Math.min(3, Math.abs(passi)));
+    const nome = this.azioni.cueSposta?.(Math.sign(passi)); // uno scatto, una voce: niente salti né accelerazioni, anche se il giro è veloce
     if (nome === undefined || nome === null) return this.riga('CUE: niente da scorrere');
     this.toccata = { n: 1, quando: this.ora(), testo: `CUE · ${nome}` };
     this.azioni.scritta?.(`CUE · ${nome.toUpperCase()}`);

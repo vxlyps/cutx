@@ -592,7 +592,7 @@ export class Cue {
             this.mostraLive = true;
             this.mostraBrano(false);
           }
-          c?.el.scrollIntoView({ block: 'nearest' });
+          if (c) this.mostraInVista(c.el);
           c?.editor.focus();
         };
         b.ondblclick = () => this.rinomina(i);
@@ -957,7 +957,7 @@ export class Cue {
       this.attiva(carta);
       if (voce.scena !== undefined) this.mostraBrano(false);
       carta.el.hidden = false;
-      carta.el.scrollIntoView({ block: 'nearest' });
+      this.mostraInVista(carta.el);
     } else {
       const { blocchi } = B.blocchi(this.libero.codice);
       const b = blocchi.find((x) => (voce.scena !== undefined ? x.sezione === -2 && x.scena === voce.scena : x.sezione === voce.sezione));
@@ -994,12 +994,26 @@ export class Cue {
     return this.scegliSezione(k);
   }
 
+  // Porta una card tutta in vista nella lista scorrevole (.corpo) e basta: scrollIntoView sposta anche i contenitori con overflow nascosto,
+  // e la card in cima restava coperta. La prima card riporta la lista in cima (si vede anche quello che sta sopra).
+  mostraInVista(el) {
+    const corpo = el.closest('.corpo');
+    if (!corpo) return;
+    const visibili = [...el.parentElement.children].filter((x) => !x.hidden && !x.classList.contains('preambolo') && !x.classList.contains('senza-apertura') && !x.classList.contains('senza-beat')); // preambolo e posti vuoti non sono voci
+    const respiro = 6;
+    if (visibili[0] === el) corpo.scrollTop = 0; // la prima voce: in cima, si vede anche quello che sta sopra
+    const c = corpo.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.top < c.top + respiro || r.height > c.height) corpo.scrollTop += r.top - c.top - respiro;
+    else if (r.bottom > c.bottom - respiro) corpo.scrollTop += r.bottom - c.bottom + respiro; // la voce intera viene prima del resto
+  }
+
   scegliApertura() {
     const carta = this.carte.find((c) => c.apertura);
     if (!carta) return null;
     this.attiva(carta);
     carta.el.hidden = false;
-    carta.el.scrollIntoView({ block: 'nearest' });
+    this.mostraInVista(carta.el);
     this.mostraModo();
     return 'apertura';
   }

@@ -205,6 +205,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('moviola')) ok = (await sicura('moviola', provaMoviola)) && ok;
   if (parti.includes('card-togli')) ok = (await sicura('card-togli', provaCardTogli)) && ok;
+  if (parti.includes('cue-vista')) ok = (await sicura('cue-vista', provaCueVista)) && ok;
   if (parti.includes('fader')) ok = (await sicura('fader', provaFader)) && ok;
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
@@ -5819,6 +5820,61 @@ async function provaCardTogli({ finestre, scrivi }) {
     controlla('prova delle card', false, String(e.message ?? e));
   } finally {
     await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto()`).catch(() => {});
+  }
+  return ok;
+}
+
+// Manopola 1: uno scatto = una voce (anche se il giro è veloce) e la voce scelta sta sempre tutta in vista; la prima riporta la lista in cima.
+async function provaCueVista({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const giro = (passi) => midi(0xb0, 16, passi > 0 ? passi : 0x40 | -passi);
+  try {
+    await js(`window.cutx.salvaPreferenze({ controller: null })`);
+    await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+    const righe = (n) => Array.from({ length: n }, (_, i) => `// riga ${i}`).join('\n');
+    let brano = '// @brano lungo\n// @bpm 120\nsetcpm(120/4)\n// @sezione beat\ns("sine*2").gain(.0001)\n' + righe(2) + '\n';
+    for (let i = 1; i <= 12; i++) brano += `// @sezione clip${i}\nnote("c${(i % 4) + 2}").s("sine").gain(.0001)\n${righe(6)}\n`;
+    await js(`cutxProva.cue.apriModello('lungo.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
+    await aspetta(1.5);
+    const stato = () => js(`(() => {
+      const corpo = document.querySelector('#carte').closest('.corpo');
+      const c = corpo.getBoundingClientRect();
+      const a = document.querySelector('#carte .card.sezione.attiva');
+      const r = a?.getBoundingClientRect();
+      return { nome: a?.querySelector('.nome-sezione')?.textContent ?? null, tutta: !!r && r.top >= c.top - 1 && r.bottom <= c.bottom + 1, alta: !!r && r.height > c.height, scroll: Math.round(corpo.scrollTop), corpoAlto: Math.round(c.height) };
+    })()`);
+    const iniziale = await stato();
+    controlla('la lista è scorrevole per la prova', iniziale.corpoAlto > 0, JSON.stringify(iniziale));
+    await giro(-3); // alla prima voce, con un giro veloce
+    await aspetta(0.2);
+    const primo = await stato();
+    // scendo di uno scatto alla volta, anche con messaggi da 3 passi: una voce ciascuno
+    const visti = [];
+    for (let i = 0; i < 8; i++) {
+      await giro(3);
+      await aspetta(0.15);
+      const s = await stato();
+      visti.push(s.nome);
+      controlla(`scendendo, «${s.nome}» è tutta in vista`, s.tutta || s.alta, JSON.stringify(s));
+    }
+    controlla('uno scatto da 3 passi = una voce sola', new Set(visti).size === 8 && visti[0] !== primo.nome, JSON.stringify([primo.nome, ...visti]));
+    for (let i = 0; i < 12; i++) {
+      await giro(-2);
+      await aspetta(0.15);
+    }
+    const su = await stato();
+    controlla('risalendo fino al beat: è tutta in vista', su.tutta, JSON.stringify(su));
+    controlla('risalendo fino al beat: la lista torna in cima', su.scroll === 0, JSON.stringify(su));
+  } catch (e) {
+    controlla('prova della navigazione', false, String(e.message ?? e));
+  } finally {
+    await js(`cutxProva.fermaTutto()`).catch(() => {});
   }
   return ok;
 }
