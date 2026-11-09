@@ -30,6 +30,7 @@ export const PREDEFINITE = {
   logoSopraHydra: true,
   aperturaFantasma: true, // il testo fantasma dell'apertura (il codice scritto a casa, in grigio sotto quello che scrivo)
   usaCopiaStash: true, // se l'SSD non c'è all'avvio, si usa la copia dello stash sul Mac (Impostazioni → stash)
+  cartellaSuoni: null, // dove stanno i suoni di Strudel scaricati (suoni-strudel.js); null = non ancora scelta
   cartelleAbleton: [], // dove tengo i progetti Ableton (solo letti)
   scorciatoie: {}, // solo quelle cambiate: id → combinazione (vedi scorciatoie.js)
   uscitaApriAvvio: false, // l'uscita si apre all'avvio solo se lo chiedo; il resto del tempo solo col tasto «uscita» o ⌃⌘F

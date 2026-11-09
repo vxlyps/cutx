@@ -24,6 +24,7 @@ import { Riproduttore, TICK_S } from './riproduttore.js';
 import { Sentinella, Anello } from './ascolto.js';
 import { avviaOnda } from './sfondo.js';
 import { suoniNuovi } from './suoni-nuovi.js';
+import { caricaSuoniStrudel } from './suoni-strudel.js';
 import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
 import { chiEsce } from './transizioni.js';
 
@@ -958,6 +959,8 @@ async function configura() {
       suoniCaricati = stato.suoni;
     }
     if (!LIVE) offsetMs = Number(config.offsetCuffiaMs) || 0;
+    const erroreStrudel = await caricaSuoniStrudel(); // i suoni di strudel.cc in locale; se mancano si dice, il resto suona lo stesso
+    if (erroreStrudel) console.warn(erroreStrudel);
   } catch (e) {
     errore = String(e.message ?? e);
   }

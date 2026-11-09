@@ -11,6 +11,7 @@ import * as preferenze from './preferenze.js';
 import { consentito, trovaProgetti } from '../ableton/scansione.js';
 import * as ableton from './ableton.js';
 import * as log from './log.js';
+import * as suoniStrudel from './suoni-strudel-ipc.js';
 import { Moviola } from './moviola.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
@@ -145,12 +146,17 @@ function dentro(radice, rel) {
   return p === radice || p.startsWith(radice + path.sep) ? p : null;
 }
 
+let suoniStrudelIpc = null; // creato più sotto, quando ci sono avvisaMotori e le finestre
 function serviFile(req) {
   const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '');
   let file;
   if (rel.startsWith('stash/')) {
     const radice = stash.radice();
     file = radice && dentro(radice, rel.slice('stash/'.length));
+  } else if (rel.startsWith('suoni-strudel/')) {
+    // i suoni di strudel.cc scaricati in locale: solo file dentro la cartella scelta
+    const radice = suoniStrudelIpc?.cartella();
+    file = radice && dentro(radice, rel.slice('suoni-strudel/'.length));
   } else if (rel.startsWith('anteprima/')) {
     // un file audio di un progetto Ableton, per sentirlo in cuffia prima di importarlo
     file = ableton.percorsoAnteprima(rel.slice('anteprima/'.length));
@@ -365,6 +371,7 @@ function avvisaMotori() {
 }
 
 ipcMain.handle('stash:stato', () => stash.stato());
+suoniStrudelIpc = suoniStrudel.registra({ preferenze, salvaPreferenze, padre, avvisaMotori, ev, perProve: PER_PROVE });
 // La durata di un suono dello stash, se si può leggere dall'intestazione (WAV): per far tornare ▶ da solo a fine ascolto.
 ipcMain.handle('suoni:durata', async (_e, rel) => {
   const radice = stash.radice();

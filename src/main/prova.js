@@ -204,6 +204,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('guardiano')) ok = (await sicura('guardiano', provaGuardiano)) && ok;
   if (parti.includes('passaggio')) ok = (await sicura('passaggio', provaPassaggio)) && ok;
   if (parti.includes('moviola')) ok = (await sicura('moviola', provaMoviola)) && ok;
+  if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
@@ -5660,6 +5661,68 @@ async function provaMoviola({ finestre, scrivi }) {
   } finally {
     await js(`window.cutx.salvaPreferenze({ moviola: false, moviolaTastoController: null, scorciatoie: {} }); cutxProva.fermaTutto()`).catch(() => null);
     if (finestre.uscita && !finestre.uscita.isDestroyed()) await js(`window.cutx.uscitaOnOff()`).catch(() => null); // il proiettore torna chiuso, com'era
+  }
+  return ok;
+}
+
+// I suoni di strudel.cc in locale (suoni-strudel.js). La cartella dei suoni la dà CUTX_SUONI_PROVA (scaricata prima, a parte).
+// Con CUTX_PROVA_OFFLINE=1 (lo mette scripts/prova-offline.mjs dopo aver spento il wifi) la rete deve davvero mancare.
+// Suona a gain basso: il volume del Mac lo abbassa lo script che la lancia.
+async function provaStrudel({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = (codice) => chiedi(finestre.live, codice);
+  const cartella = process.env.CUTX_SUONI_PROVA;
+  if (!cartella) {
+    controlla('cartella dei suoni data (CUTX_SUONI_PROVA)', false);
+    return false;
+  }
+  try {
+    if (process.env.CUTX_PROVA_OFFLINE === '1') {
+      const rete = await live(`fetch('https://strudel.b-cdn.net/piano.json', { cache: 'no-store' }).then(() => 'ONLINE', () => 'offline')`);
+      controlla('wifi spento: la rete non risponde', rete === 'offline', `risposta: ${rete}`);
+    }
+    await js(`window.cutx.salvaPreferenze({ cartellaSuoni: ${JSON.stringify(cartella)} })`);
+    await js(`window.cutx.rileggiStash()`);
+    await aspetta(4); // i motori leggono le mappe
+
+    const picco = async (codice, secondi) => {
+      await js(`cutxProva.valuta('live', ${JSON.stringify(codice)})`);
+      let massimo = 0;
+      for (const fine = Date.now() + secondi * 1000; Date.now() < fine; await aspetta(0.04)) {
+        massimo = Math.max(massimo, (await chiedi(finestre.live, 'globalThis.cutxStato?.()'))?.limiter?.picco ?? 0);
+      }
+      return massimo;
+    };
+    const SOGLIA = 0.0005;
+    const prove = [
+      ['s("bd sd hh sd")', 'setcpm(120)\ns("bd sd hh sd").gain(.05)'],
+      ['.bank("RolandTR909")', 'setcpm(120)\ns("bd sd hh sd").bank("RolandTR909").gain(.05)'],
+      ['amen (Dirt-Samples)', 'setcpm(120)\ns("amen").gain(.05)'],
+      ['note(...).piano()', 'setcpm(120)\nnote("c3 e3 g3 c4").piano().gain(.05)'],
+      ['wavetable (uzu)', 'setcpm(120)\nnote("c3 e3").s("wt_digital").gain(.05)'],
+    ];
+    for (const [nome, codice] of prove) {
+      const p = await picco(codice, 4.5);
+      controlla(`suona: ${nome}`, p > SOGLIA, `picco ${p.toFixed(5)}`);
+    }
+    await js(`cutxProva.fermaTutto()`);
+    // nessun file è arrivato da internet: ogni risorsa caricata dai motori è cutx://
+    for (const ruolo of ['live', 'cuffia']) {
+      const fuori = await chiedi(
+        finestre[ruolo],
+        `performance.getEntriesByType('resource').map((r) => r.name).filter((n) => /^https?:/.test(n))`,
+      );
+      controlla(`${ruolo}: nessuna richiesta a internet`, Array.isArray(fuori) && fuori.length === 0, `richieste: ${JSON.stringify(fuori)?.slice(0, 200)}`);
+    }
+  } catch (e) {
+    controlla('prova dei suoni di Strudel', false, String(e.message ?? e));
+  } finally {
+    await js(`window.cutx.salvaPreferenze({ cartellaSuoni: null }); cutxProva.fermaTutto()`).catch(() => {});
   }
   return ok;
 }
