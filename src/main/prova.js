@@ -207,6 +207,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('card-togli')) ok = (await sicura('card-togli', provaCardTogli)) && ok;
   if (parti.includes('cue-vista')) ok = (await sicura('cue-vista', provaCueVista)) && ok;
   if (parti.includes('fader')) ok = (await sicura('fader', provaFader)) && ok;
+  if (parti.includes('suoni-ui')) ok = (await sicura('suoni-ui', provaSuoniUi)) && ok;
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
@@ -5875,6 +5876,62 @@ async function provaCueVista({ finestre, scrivi }) {
     controlla('prova della navigazione', false, String(e.message ?? e));
   } finally {
     await js(`cutxProva.fermaTutto()`).catch(() => {});
+  }
+  return ok;
+}
+
+// Suoni di Strudel nell'interfaccia: avviso all'avvio (cartella assente / incompleta) e la sezione Impostazioni → Suoni.
+async function provaSuoniUi({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const buona = process.env.CUTX_SUONI_PROVA;
+  const incompleta = path.join(app.getPath('userData'), 'suoni-incompleta');
+  const imposta = async (cartella) => {
+    await js(`window.cutx.salvaPreferenze({ cartellaSuoni: ${JSON.stringify(cartella)} })`);
+    await aspetta(0.8);
+  };
+  const avviso = () => js(`({ visibile: !document.getElementById('avviso-suoni').hidden, testo: document.getElementById('avviso-suoni-testo').textContent, azione: document.getElementById('avviso-suoni-azione').textContent })`);
+  const sezione = () => js(`document.getElementById('imp-suoni').textContent`);
+  try {
+    await rm(incompleta, { recursive: true, force: true });
+    await mkdir(incompleta, { recursive: true });
+    await writeFile(path.join(incompleta, 'elenco.json'), JSON.stringify({ versione: 1, file: { 'piano/non-c-e.mp3': 10 } }));
+
+    await imposta(null);
+    controlla('nessuna cartella (prova): niente avviso che sposta la pagina', !(await avviso()).visibile);
+    await imposta(path.join(app.getPath('userData'), 'non-esiste'));
+    let a = await avviso();
+    controlla('cartella che non c\'è: avviso chiaro con il percorso', a.visibile && /non c'è/.test(a.testo) && a.testo.includes('non-esiste'), JSON.stringify(a));
+    await imposta(incompleta);
+    a = await avviso();
+    controlla('cartella incompleta: avviso con quanti file mancano e tasto «ripara»', a.visibile && /mancano 1 file/.test(a.testo) && a.azione === 'ripara', JSON.stringify(a));
+    if (buona) {
+      await imposta(buona);
+      a = await avviso();
+      controlla('cartella a posto: nessun avviso', !a.visibile, JSON.stringify(a));
+      const s = await sezione();
+      controlla('Impostazioni → Suoni mostra la cartella e «a posto»', s.includes(buona) && /a posto/.test(s), s.slice(0, 200));
+      controlla('ci sono i tasti sposta e riscarica', /sposta in un'altra cartella/.test(s) && /riscarica \/ ripara/.test(s), s.slice(0, 200));
+    }
+    // la finestra del primo avvio (nelle prove non si apre da sola)
+    await js(`cutxProva.suoniVista().primoAvvio()`);
+    await aspetta(0.3);
+    const dlg = await js(`document.querySelector('.dialogo-suoni')?.textContent ?? null`);
+    controlla('primo avvio: «Dove metto i suoni di Strudel?» con «scegli la cartella» e «più tardi»', !!dlg && dlg.includes('Dove metto i suoni di Strudel?') && dlg.includes('scegli la cartella') && dlg.includes('più tardi'), String(dlg).slice(0, 160));
+    await js(`[...document.querySelectorAll('.dialogo-suoni button')].find((b) => b.textContent === 'più tardi').click()`);
+    await aspetta(0.3);
+    controlla('«più tardi» chiude la finestra', !(await js(`!!document.querySelector('.dialogo-suoni')`)));
+    const nav = await js(`!!document.querySelector('#imp-nav [data-sez="suoni"]')`);
+    controlla('la voce «suoni» c\'è nelle impostazioni', nav);
+  } catch (e) {
+    controlla('prova dei suoni nell\'interfaccia', false, String(e.message ?? e));
+  } finally {
+    await js(`window.cutx.salvaPreferenze({ cartellaSuoni: null })`).catch(() => {});
+    await rm(incompleta, { recursive: true, force: true });
   }
   return ok;
 }

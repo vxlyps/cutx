@@ -1,6 +1,7 @@
 // La postazione: browser a sinistra, CUE al centro (cuffia), LIVE a destra (casse).
 // Qui non suona niente: il codice va ai motori live e cuffia, ognuno nel suo processo.
 // Se questa finestra si blocca o crasha, le casse non se ne accorgono.
+import { SuoniVista } from './suoni-vista.js';
 import { Cue } from './cue.js';
 import { VistaSynth } from './synth-vista.js';
 import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
@@ -865,6 +866,7 @@ async function apriStash(stato) {
 
 // --- impostazioni e help ---
 
+let suoniVista = null; // creato dopo l'avvio dello stash
 const imp = new Impostazioni({
   preferenze: () => preferenze,
   salvaPreferenze: (m) => window.cutx.salvaPreferenze(m),
@@ -1567,6 +1569,7 @@ globalThis.cutxProva = {
   },
   cue,
   posaGatto: (nome) => posaGatto(nome),
+  suoniVista: () => suoniVista,
   accendiInsegna: () => insegna.sfarfalla(),
   spegniLettera: () => insegna.spegniLettera(),
   fermaInsegna: () => insegna.ferma(),
@@ -1792,8 +1795,24 @@ function applicaPreferenze(p) {
   imp.disegna();
   if (browser?.scheda === 'ableton') browser.cercaProgetti();
 }
-window.cutx.suPreferenze(applicaPreferenze);
+window.cutx.suPreferenze((p) => {
+  applicaPreferenze(p);
+  suoniVista?.aggiorna();
+});
 applicaPreferenze(await window.cutx.preferenze());
 $('moviola-spia').textContent = it.moviola.spia;
 $('percorso-log').textContent = `log: ${await window.cutx.percorsoLog()}`;
 await apriStash(await window.cutx.stash());
+// I suoni di Strudel in locale: avviso subito se mancano, e la domanda «dove li metto?» la prima volta
+suoniVista = new SuoniVista({
+  avvisoEl: $('avviso-suoni'),
+  avvisoTesto: $('avviso-suoni-testo'),
+  avvisoBottone: $('avviso-suoni-azione'),
+  impEl: $('imp-suoni'),
+  apriImpostazioni: () => {
+    impostazioni(true);
+    imp.vai('suoni');
+  },
+  logEvento: (livello, testo) => window.cutx.logEvento(livello, 'suoni', testo),
+});
+await suoniVista.inizia();

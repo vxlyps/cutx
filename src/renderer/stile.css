@@ -3296,3 +3296,34 @@ input[type='checkbox'] {
 .segnaposto {
   flex-shrink: 0;
 }
+
+/* suoni di Strudel: finestra e barra di avanzamento */
+.dialogo-suoni {
+  width: 460px;
+}
+
+.dialogo-bottoni,
+.imp-bottoni {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.barra-suoni-blocco {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.barra-suoni {
+  height: 6px;
+  border: 1px solid var(--bordo);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barra-suoni-pieno {
+  height: 100%;
+  width: 0;
+  background: var(--testo);
+}
