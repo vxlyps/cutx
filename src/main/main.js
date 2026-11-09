@@ -31,6 +31,8 @@ const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('-
 // OGNI flag di prova, foto o misura gira con dati a parte (CUTX-prova, CUTX-chiusura), accanto a una CUTX eventualmente aperta e senza
 // toccarne le preferenze vere. Un flag nuovo si aggiunge QUI: se la cartella dati non è quella separata l'app non parte (guardia sotto).
 const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
+// Prova «senza rete» (scripts/prova-suoni-strudel.mjs --senza-rete): l'app di prova non risolve nessun indirizzo (solo localhost), il resto del Mac resta in rete.
+if (PER_PROVE && process.env.CUTX_PROVA_SENZA_RETE === '1') app.commandLine.appendSwitch('host-resolver-rules', 'MAP * ~NOTFOUND, EXCLUDE localhost');
 if (PER_PROVE) {
   const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : 'CUTX-prova');
   app.setPath('userData', dati);

@@ -5,7 +5,8 @@ import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 const electron = createRequire(import.meta.url)('electron');
 const cartella = process.argv[2];
-const reteOff = process.argv.includes('--rete-off') || process.argv.includes('--wifi-off');
+const reteOff = process.argv.includes('--rete-off') || process.argv.includes('--wifi-off'); // spegne la rete del Mac: serve la password di amministratore
+const senzaRete = process.argv.includes('--senza-rete'); // l'app di prova non vede internet (Chromium non risolve indirizzi), il Mac resta in rete
 if (!cartella) {
   console.error('manca la cartella dei suoni');
   process.exit(2);
@@ -74,7 +75,7 @@ try {
   codice = await new Promise((fine) => {
     const cp = spawn(electron, ['.', '--prova=strudel', '--silenzioso'], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, CUTX_SUONI_PROVA: cartella, CUTX_PROVA_OFFLINE: reteOff ? '1' : '0' },
+      env: { ...process.env, CUTX_SUONI_PROVA: cartella, CUTX_PROVA_OFFLINE: reteOff || senzaRete ? '1' : '0', CUTX_PROVA_SENZA_RETE: senzaRete ? '1' : '0' },
     });
     let resto = '';
     cp.stdout.on('data', (d) => {
