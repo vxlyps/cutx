@@ -430,6 +430,7 @@ function cambiaCoda(m) {
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
 async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
+  if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   // il guardiano: un codice che si rompe in uno dei primi cicli (un errore pigro) non entra, e quello che suona continua
@@ -912,6 +913,11 @@ let uscitaVoluta = ''; // il nome scelto nello stash ('' = predefinita di macOS)
 let uscitaStato = { ok: true, dettaglio: '' };
 let controllandoUscita = false;
 
+// Un'operazione che può restare appesa (cambiare uscita audio, leggere lo stash) ha un tempo massimo: meglio un errore detto che un motore fermo.
+const entro = (promessa, ms, cosa) =>
+  Promise.race([promessa, new Promise((_, rifiuta) => setTimeout(() => rifiuta(new Error(`${cosa}: nessuna risposta dopo ${ms / 1000} s`)), ms))]);
+const ATTESA_USCITA_MS = 4000;
+
 async function controllaUscita() {
   if (controllandoUscita) return;
   controllandoUscita = true;
@@ -921,10 +927,10 @@ async function controllaUscita() {
     try {
       const elenco = await elencoUscite();
       if (uscitaVoluta && !elenco.some((u) => u.label === uscitaVoluta)) {
-        if (ac.sinkId) await ac.setSinkId('');
+        if (ac.sinkId) await entro(ac.setSinkId(''), ATTESA_USCITA_MS, 'uscita predefinita');
         nuovo = { ok: false, dettaglio: `uscita «${uscitaVoluta}» non collegata: suono sull'uscita predefinita` };
       } else {
-        await impostaUscita(ac, uscitaVoluta);
+        await entro(impostaUscita(ac, uscitaVoluta), ATTESA_USCITA_MS, 'cambio di uscita');
         nuovo = { ok: true, dettaglio: uscitaVoluta ? `uscita «${uscitaVoluta}»` : 'uscita predefinita' };
       }
       if (!inPausa && (ac.state === 'suspended' || ac.state === 'interrupted')) await ac.resume();
@@ -949,7 +955,16 @@ setInterval(controllaUscita, 3000);
 let suoniCaricati = null;
 async function configura() {
   await pronto;
-  const stato = await window.cutx.stash();
+  let stato;
+  try {
+    stato = await entro(window.cutx.stash(), 8000, 'stash');
+  } catch (e) {
+    // lo stash non si legge (disco staccato, sola lettura…): il motore resta com'era, o parte senza suoni dello stash, e lo dice
+    errore = `stash non leggibile: ${e.message ?? e}`;
+    console.warn(`${RUOLO}: ${errore}`);
+    await controllaUscita();
+    return;
+  }
   const config = stato.config ?? {};
   uscitaVoluta = config.uscite?.[RUOLO] ?? '';
   await controllaUscita(); // non lancia mai: se l'uscita non c'è si suona sulla predefinita e si dice
@@ -1294,7 +1309,15 @@ globalThis.cutxRegistro = (on) => {
 };
 globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 
-await configura();
+// Il motore parte comunque: se la configurazione lancia o non finisce in tempo (stash o uscita che non rispondono) si comincia
+// lo stesso a girare, e quello che manca arriva quando arriva. Un motore che non parte e sembra vivo è il guasto peggiore.
+await Promise.race([
+  configura().catch((e) => {
+    errore = `configurazione: ${e?.message ?? e}`;
+    guasto(`${RUOLO} · configurazione`, e);
+  }),
+  new Promise((ok) => setTimeout(ok, 15000)),
+]);
 if (LIVE) {
   rip.mappa = { ciclo0: 0, t0: ac.currentTime, cps: CPS_INIZIALE };
   setInterval(pubblicaMappa, MAPPA_OGNI_MS);
