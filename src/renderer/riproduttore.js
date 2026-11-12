@@ -132,21 +132,31 @@ export class Riproduttore {
         continue;
       }
       for (const hap of haps) {
-        if (!hap.hasOnset()) continue;
-        const t = this.tempo(hap.whole.begin.valueOf());
-        if (!(t > ora + MARGINE_MIN_S)) {
-          this.tardi++;
-          continue;
+        try {
+          this.programmaEvento(hap, s, cps, ora);
+        } catch (e) {
+          // una nota che si rompe non ferma le altre: se il giro si interrompesse qui, le stesse note ripartirebbero al giro dopo
+          this.errore = typeof e?.message === 'string' ? e.message : String(e);
+          this.suGuasto?.(e);
         }
-        // Volume e muto stanno nel guadagno del livello (motore.js): qui suona tutto, anche da muto,
-        // così le note lunghe restano a tempo e al ritorno del volume si risente il punto giusto.
-        // Il livello ha una sua orbita, così il suo guadagno agisce anche sui suoni già partiti.
-        const h = s.orbita === undefined ? hap : hap.withValue((v) => ({ ...v, orbit: s.orbita }));
-        this.eventi++;
-        this.uscita(h, t - ora, hap.duration / cps, cps, t);
-        this.suEvento?.(h, t, s);
-        if (hap.value?.cps !== undefined && hap.value.cps !== cps) this.suCps?.(hap.value.cps);
       }
     }
+  }
+
+  programmaEvento(hap, s, cps, ora) {
+    if (!hap.hasOnset()) return;
+    const t = this.tempo(hap.whole.begin.valueOf());
+    if (!(t > ora + MARGINE_MIN_S)) {
+      this.tardi++;
+      return;
+    }
+    // Volume e muto stanno nel guadagno del livello (motore.js): qui suona tutto, anche da muto,
+    // così le note lunghe restano a tempo e al ritorno del volume si risente il punto giusto.
+    // Il livello ha una sua orbita, così il suo guadagno agisce anche sui suoni già partiti.
+    const h = s.orbita === undefined ? hap : hap.withValue((v) => ({ ...v, orbit: s.orbita }));
+    this.eventi++;
+    this.uscita(h, t - ora, hap.duration / cps, cps, t);
+    this.suEvento?.(h, t, s);
+    if (hap.value?.cps !== undefined && hap.value.cps !== cps) this.suCps?.(hap.value.cps);
   }
 }

@@ -18,6 +18,7 @@ import seduto from '../../design/risorse/gatti/gatto_seduto_marcio.svg';
 import lecca from '../../design/risorse/gatti/gatto_lecca_marcio.svg';
 import dorme from '../../design/risorse/gatti/gatto_dorme_marcio.svg';
 import inPiedi from '../../design/risorse/gatti/gatto_in_piedi_marcio.svg';
+import { sicuro } from './guasto.js';
 
 const $ = (id) => document.getElementById(id);
 // Nelle impostazioni la stessa pagina gira dentro un riquadro (anteprima): dati e preferenze le arrivano dalla porta, dalla finestra madre
@@ -485,7 +486,7 @@ document.fonts?.ready.then(() => (firmaPrecedente = ''));
 
 function giro() {
   requestAnimationFrame(giro);
-  disegna();
+  sicuro('proiettore · disegno', disegna);
 }
 
 // La scorciatoia dello schermo intero (⌃⌘F, o quella scelta nelle impostazioni) vale anche da qui.
@@ -538,7 +539,7 @@ function applica(p) {
 }
 if (!ANTEPRIMA) cutx.suPreferenze(applica);
 applica(ANTEPRIMA ? {} : await cutx.preferenze());
-setInterval(disegna, 100);
+setInterval(() => sicuro('proiettore · disegno', disegna), 100);
 giro();
 globalThis.cutxSfondo = sfondo;
 // Per le prove: cosa si vede di ogni livello (senza il testo ancora invisibile) e quando entrano quelli in arrivo.

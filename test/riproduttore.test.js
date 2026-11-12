@@ -65,3 +65,22 @@ test('un cambio a mano annulla quelli che sarebbero entrati dopo (un livello con
   rip.annullaCambiDopo(3);
   assert.deepEqual(rip.cambiTempo.map((c) => c.ciclo), [2, 3]);
 });
+
+test('una nota che si rompe non ferma le altre e il giro va avanti (niente note ripetute al giro dopo)', () => {
+  const ac = { currentTime: 0 };
+  const suonate = [];
+  const rip = new Riproduttore(ac, (hap) => {
+    if (hap.nome === 'rotta') throw new Error('nota rotta');
+    suonate.push(hap.nome);
+  });
+  rip.mappa = { ciclo0: 0, t0: 0, cps: 0.5 };
+  const nota = (nome, inizio) => ({ nome, hasOnset: () => true, whole: { begin: { valueOf: () => inizio } }, duration: 0.01, value: {} });
+  rip.interroga = () => [nota('prima', 0.06), nota('rotta', 0.065), nota('dopo', 0.07)];
+  rip.sorgenti = [{ pattern: {}, da: -Infinity, a: Infinity }];
+  const guasti = [];
+  rip.suGuasto = (e) => guasti.push(e.message);
+  assert.doesNotThrow(() => rip.tick());
+  assert.deepEqual(suonate, ['prima', 'dopo']);
+  assert.deepEqual(guasti, ['nota rotta']);
+  assert.ok(rip.fine > 0, 'il giro ha segnato fin dove ha programmato');
+});

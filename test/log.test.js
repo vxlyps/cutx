@@ -39,3 +39,19 @@ test('senza cartella (o con una cartella impossibile) il registro non fa cadere 
   log.inizia('/proc/non-si-puo/scrivere');
   assert.doesNotThrow(() => log.scrivi('errore', 'main', 'niente'));
 });
+
+test('lo stesso messaggio a raffica si scrive una volta, poi si dice quante volte si è ripetuto', async () => {
+  const d = await mkdtemp(path.join(tmpdir(), 'cutx-log-'));
+  try {
+    log.inizia(d);
+    for (let i = 0; i < 50; i++) log.scrivi('errore', 'uscita', 'proiettore · disegno: boom');
+    log.scrivi('info', 'main', 'altro');
+    const righe = (await readFile(log.fileDelLog(), 'utf8')).trimEnd().split('\n');
+    assert.equal(righe.length, 3);
+    assert.match(righe[0], /boom$/);
+    assert.match(righe[1], /ripetuto altre 49 volte$/);
+    assert.match(righe[2], /altro$/);
+  } finally {
+    await rm(d, { recursive: true, force: true });
+  }
+});

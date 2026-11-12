@@ -39,6 +39,7 @@ import { Misuratore } from './sfasamento.js';
 import { avviaGatto } from './gatto.js';
 import { avviaInsegna } from './insegna.js';
 import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
+import { sicuro } from './guasto.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1335,18 +1336,29 @@ function mostraStriscia(voce) {
   contenitore.replaceChildren(riga);
 }
 
+// Ogni passo per conto suo: se uno si rompe gli altri continuano ad aggiornarsi (e il guasto finisce nel registro).
 function mostra() {
-  riprendi();
-  controllaUsciteAudio();
-  aggiornaIstantanea();
-  browser.aggiornaAscolto();
-  importa.aggiornaAscolto();
-  mostraLive();
-  disegnaTempo();
-  mostraCue();
-  if (vista === 'synth') synth.aggiorna();
-  if (!$('impostazioni').hidden) mostraImpostazioni();
+  sicuro('schermo · riprendi', riprendi);
+  sicuro('schermo · uscite audio', controllaUsciteAudio);
+  sicuro('schermo · istantanea', aggiornaIstantanea);
+  sicuro('schermo · ascolto', () => browser.aggiornaAscolto());
+  sicuro('schermo · ascolto importa', () => importa.aggiornaAscolto());
+  sicuro('schermo · live', mostraLive);
+  sicuro('schermo · tempo', disegnaTempo);
+  sicuro('schermo · cue', mostraCue);
+  if (vista === 'synth') sicuro('schermo · synth', () => synth.aggiorna());
+  if (!$('impostazioni').hidden) sicuro('schermo · impostazioni', mostraImpostazioni);
 }
+
+// Un errore che nessuno ha previsto (un gesto che si rompe a metà): nel registro ci va da solo, qui lo si dice anche a chi suona.
+let ultimoImprevisto = -Infinity;
+function imprevisto(e) {
+  if (performance.now() - ultimoImprevisto < 10000) return;
+  ultimoImprevisto = performance.now();
+  sicuro('avviso imprevisto', () => cue.avviso(`errore interno: ${typeof e?.message === 'string' ? e.message : e} · il live continua`));
+}
+window.addEventListener('error', (e) => imprevisto(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => imprevisto(e.reason));
 
 // Tempo: BPM, battute e frase seguono il live, nell'istante in cui si sente.
 // La frase è solo da vedere: il ciclo di Strudel non si tocca.

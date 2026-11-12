@@ -27,6 +27,7 @@ import { suoniNuovi } from './suoni-nuovi.js';
 import { caricaSuoniStrudel } from './suoni-strudel.js';
 import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
 import { chiEsce } from './transizioni.js';
+import { guasto, sicuro } from './guasto.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
 const LIVE = RUOLO === 'live';
@@ -805,6 +806,7 @@ function cambiaTempo(cps, quando) {
   pubblicaMappa();
 }
 rip.suMappa = pubblicaMappa;
+rip.suGuasto = (e) => guasto(`${RUOLO} · nota`, e);
 
 // Il tempo del set com'è adesso e i cambi in arrivo: per leggerlo da fuori (fase 4: sync PO-33).
 const tempoSet = () => ({ cps: rip.cpsAl(ac.currentTime), cambi: rip.cambiProssimi(ac.currentTime) });
@@ -893,11 +895,12 @@ function giro() {
   const ora = performance.now();
   if (ultimoGiro) giroMax = Math.max(giroMax, ora - ultimoGiro);
   ultimoGiro = ora;
-  if (!LIVE) seguiLive();
-  rip.tick();
-  pulisci();
-  ripulisciCode();
-  aggiornaStrisce();
+  // ogni passo per conto suo: un guasto in uno non ferma gli altri (e soprattutto non ferma il suono)
+  if (!LIVE) sicuro(`${RUOLO} · segui il live`, seguiLive);
+  sicuro(`${RUOLO} · giro`, () => rip.tick());
+  sicuro(`${RUOLO} · pulizia`, pulisci);
+  sicuro(`${RUOLO} · code`, ripulisciCode);
+  sicuro(`${RUOLO} · strisce`, aggiornaStrisce);
 }
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
@@ -1255,7 +1258,13 @@ window.addEventListener('message', (e) => {
   if (!con || !e.ports[0]) return;
   if (con === 'uscita') onda(false); // un'uscita nuova (o riaperta) riparte da capo: l'onda la richiede lei
   porte[con] = e.ports[0];
-  porte[con].onmessage = ({ data }) => ricevi(con, data);
+  porte[con].onmessage = ({ data }) =>
+    ricevi(con, data).catch((e) => {
+      // un comando che si rompe: lo si scrive, e chi aspetta una risposta la riceve subito (non dopo 5 secondi di silenzio)
+      guasto(`${RUOLO} · comando «${data?.tipo}»`, e);
+      const errore = `${RUOLO}: errore interno (${typeof e?.message === 'string' ? e.message : e})`;
+      if (data?.id !== undefined) manda(con, { tipo: data.tipo === 'valuta' ? 'valutato' : 'risposta', id: data.id, errore });
+    });
   // Chi arriva riceve subito il tempo e i livelli live.
   if (LIVE) {
     pubblicaMappa();
