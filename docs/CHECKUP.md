@@ -239,3 +239,116 @@ In quest'ordine, un commit ciascuno:
 4. Primo GO LIVE di un beat mai sentito dopo l'avvio: manca il primo colpo?
 5. Girare la manopola 1 piano: quante voci salta per ogni «tacca» sentita con le dita?
 6. Staccare l'SSD dello stash a metà.
+
+---
+
+## 9. FASE 2: cosa è stato corretto (12/11/2026)
+
+Un commit per gruppo di correzioni, tutti sul ramo `checkup-beta5`.
+
+| Commit | Cosa | Voci del check-up |
+|---|---|---|
+| Rete di sicurezza | Un errore imprevisto nel giro del motore, in un comando, nello schermo o nel proiettore non ferma il resto; un comando rotto risponde subito; gli errori imprevisti si leggono nel CUE; lo stesso errore a raffica entra nel registro una volta | R2, R3, R8, M8, M11 (in parte) |
+| Salvataggi sicuri | Preferenze, `stash.json`, set, kit e brani scritti su file provvisorio e poi rinominati; un file rovinato si mette da parte (`.illeggibile`) prima di ripartire | G6 |
+| Motore che parte comunque | Tempo massimo su stash e cambio di uscita; il motore gira lo stesso e dice cosa manca; GO LIVE troppo presto risponde col motivo | G4 |
+| Controller | Modalità MC richiesta a ogni ricollegamento; tasti e colpi tenuti rilasciati quando sparisce; volume generale dal valore vero; luci riallineate; tasto cuffia non resta «tenuto» | G3, G5, M7, P5, P6 |
+| Live | Togliere un sostituto in arrivo non lascia il silenzio; niente tempo fantasma; il beat modificato tiene le scene; memoria dei livelli sostituiti | G2, M9, M1, R5 |
+| CUE e LIVE | Scene vuote rifiutate; passaggio per sbaglio dallo scratch; striscia; riser dopo ferma tutto; **avviso «va live senza il BEAT»** con la card BEAT che lampeggia; **«entra tra» in ambra e lampeggiante quando cambia, e i tasti 1 2 4 8 spenti nel SYNTH** | M4, M6, P1, P4, R10 (in parte) + le due richieste nuove |
+| Proiettore | Staccato: la finestra si chiude e torna da sola; bloccato: riparte dopo 10 s; la posizione non si salva mentre gli schermi cambiano | M10, M11 |
+| Proiettore, memoria | Ricordi dei livelli usciti e dei cicli passati buttati | R5 |
+
+**Test puri nuovi:** `stato-live` (cosa suona, cosa arriva, cosa esce, il beat, la clip senza beat, il pezzo vuoto), `scrivi-sicuro`, `guasto`, più casi nuovi in `controller`, `riproduttore`, `log`. Totale `npm test`: 349 su 349.
+
+**Prove con l'app vera** (volume 20%, dati separati): robustezza, entrata, livelli, guardiano, tempo, beat, controller, cue-controller, cue-vista, uscita, colpi, passaggio, linguette, dissolvenze, coda, fader → passano. Due note oneste:
+- alcune prove sono fallite la prima volta e sono passate rilanciate da sole (livelli, beat). Ho confrontato col codice di partenza: non è un guasto delle correzioni. La finestra di prova prende il fuoco, e se nel frattempo si usano tastiera e mouse la prova si rompe;
+- `card-togli` fallisce una volta su due **anche sul codice di partenza** (dipende da dove sta il mouse). Guasto vecchio della prova, da sistemare a parte.
+
+**Non provato, perché serve l'hardware:** controller staccato e riattaccato, proiettore staccato, uscita audio che sparisce, stash illeggibile su SSD vero. Sono nelle prove a mano del capitolo 8.
+
+**Rimasto fuori dalla fase 2** (come da capitolo 7): togliere dal live (proposta 5), precaricamento dei campioni ed eredità del muto (proposta 7), conferma su ⌘Q, comando «riavvia il live», margine d'anticipo del motore, Tab ed Esc nel SYNTH, errori nota per nota a schermo.
+
+---
+
+## 10. Appunti per la FASE 3, punto 1 (proiettore) — richieste del 12/11
+
+Da fare insieme a «mostrare tutto il codice»:
+1. **Batteria con la forma d'onda** (tipo `_scope`) al posto del pianoroll; le melodie restano col pianoroll. Si può: il motore live misura già il suono di ogni livello. Vale per il proiettore e per le card del LIVE.
+2. **Angolo «tecnologia canaglia» e gatto più piccolo**, per dare spazio al codice. È anche la mossa più efficace per far stare tutto il codice (capitolo 6, punto 1).
+3. **Pianoroll del pubblico più spesso** (note più alte).
+4. **Numeri dei cicli**: si spengono già da Impostazioni → proiezione → testi per il pubblico; da valutare se spegnerli di fabbrica.
+
+Tutto impaginato con le regole di `design/DESIGN.md`. Prima di scrivere: due o tre foto di prova da farti scegliere.
+
+---
+
+## 11. Serate come progetti (SOLO PROGETTO, nessun codice toccato)
+
+### Com'è oggi
+
+Uno stash solo con tutto dentro: `suoni/`, `libreria/` (tutti i brani), un solo `set.cutx` (l'ordine della serata), un solo `kit.cutx`, `colpi.cutx`, `stash.json`. Tra sei mesi la libreria è un mucchio e il set è uno solo.
+
+### Come lo farei
+
+**L'idea:** lo stash resta la valigia dei suoni; dentro ci sono le **serate**, una cartella ciascuna, con i suoi brani, il suo ordine e il suo kit. I suoni sono di tutte.
+
+```
+STASH/
+  stash.json        uscite audio, offset cuffia, ultima serata aperta
+  suoni/            comuni a tutte le serate
+  video/            comuni
+  estensioni/       comuni
+  colpi.cutx        comune (i colpi sono abitudini delle mani, non di una serata)
+  serate/
+    Serata 1/
+      serata.json   nome, data di creazione, ultima apertura, note
+      set.cutx      l'ordine dei brani (come oggi)
+      kit.cutx      le clip sempre pronte (come oggi)
+      brani/        i .cutx di questa serata
+    Compleanno di Tizia/
+      …
+  libreria/         quella di oggi: resta dov'è, intatta (vedi sotto)
+```
+
+**All'avvio:** una finestra sola, come Ableton. Elenco delle serate, la più recente in cima, con data e numero di brani. Invio apre l'ultima (un tasto e sei dentro, come oggi). «Nuova serata»: scrivi il nome, parte vuota e già collegata ai suoni dello stash. La stessa finestra si richiama dal menu per cambiare serata; mai mentre il live suona senza una conferma.
+
+**Riprendere da un'altra serata:** nel browser, scheda libreria, in alto un menu «questa serata / altre serate».
+- Un brano intero: lo scegli e fai «porta qui». Viene **copiato** nella serata aperta (se il nome c'è già diventa «nome 2»). Copia e non collegamento: se lo cambi qui, là resta com'era. È la scelta sicura per chi suona.
+- Un pezzo di codice: apri il brano dell'altra serata in sola lettura, scegli una clip o una scena, «porta questa clip» → finisce in un brano della serata aperta o nel kit.
+- Sentire prima in cuffia funziona come oggi con la libreria.
+
+### Cosa cambia nei file `.cutx`
+
+**Niente.** Un brano resta un file di testo che sta in piedi da solo: i suoni li chiama per nome e i suoni sono comuni. Cambia solo la cartella in cui vive. Anche `set.cutx` e `kit.cutx` restano uguali.
+
+Unica aggiunta possibile, **solo se la vuoi**: una riga di commento in testa ai brani copiati, `// @da Serata 1 · brano.cutx`, per ricordare da dove viene. È un commento: le versioni vecchie di CUTX lo ignorano. Da decidere tu.
+
+### Come porto dentro i brani che hai già, senza perdere niente
+
+Al primo avvio della versione nuova, una volta sola:
+1. crea `serate/Serata 1/`;
+2. **copia** dentro tutti i `.cutx` di `libreria/`, più `set.cutx` e `kit.cutx`;
+3. controlla che ogni copia sia uguale all'originale (stessa dimensione e stesso contenuto);
+4. solo allora segna in `stash.json` che lo stash è al formato nuovo.
+
+`libreria/`, `set.cutx` e `kit.cutx` di oggi **non vengono toccati né cancellati**. Restano lì come copia di prima: se qualcosa va storto, o se riapri lo stash con una CUTX vecchia, trovi tutto com'era. Li togli tu a mano quando sei sicuro, o mai.
+Se la copia si interrompe a metà (disco staccato), al prossimo avvio riparte da capo: lo stash non risulta mai «convertito a metà».
+
+### Quanto è grosso
+
+Medio-grosso: circa 4-6 giorni, in quattro passi, ognuno suonabile.
+
+| Passo | Cosa | Quanto | Rischio |
+|---|---|---|---|
+| 1 | Cartelle nuove, migrazione, «serata aperta». Da fuori non cambia niente: si apre l'ultima serata e tutto funziona come oggi | ~250 righe + test puri sulla migrazione | Tocca tutti i percorsi dello stash (libreria, set, kit, copia di sicurezza, importazione Ableton). È il passo delicato: migrazione provata su una copia dello stash, mai sul tuo vero |
+| 2 | Finestra d'avvio: elenco, apri, nuova serata | ~250 righe | Basso. Va disegnata con le tavole di `design/` |
+| 3 | «Altre serate» nel browser: porta qui un brano, porta una clip | ~200 righe | Medio: nomi doppi, brano aperto in sola lettura |
+| 4 | Rinominare, duplicare, archiviare una serata (mai cancellare: si sposta in `serate/_archivio/`) | ~120 righe | Basso |
+
+Non tocca: motori, tempo, controller, proiettore. I suoni restano serviti come oggi.
+
+### Da decidere tu
+
+1. **Il nome.** «Set» oggi è già l'ordine dei brani. Proposte: **SERATA** (la più chiara in italiano), **LIVE SET** (come Ableton, ma si confonde con SET), **SHOW** (ma SHOW è già un lavoro in lista).
+2. **Il kit:** uno per serata (proposta) o uno solo comune a tutte?
+3. **La riga `// @da …`** nei brani copiati: sì o no?
+4. **Quando:** dopo la beta 5, come lavoro a sé. Dentro la beta 5 allargherebbe troppo le prove.
