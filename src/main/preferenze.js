@@ -2,8 +2,8 @@
 // Stanno nei dati dell'app; quelle del set stanno in stash.json.
 import { app } from 'electron';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { copyFileSync, readFileSync } from 'node:fs';
+import { interpretaJson, scriviSicuro } from './scrivi-sicuro.js';
 
 export const PREDEFINITE = {
   lunghezzaFrase: 16,
@@ -43,17 +43,22 @@ let preferenze = null;
 
 export function leggi() {
   if (!preferenze) {
-    try {
-      preferenze = { ...PREDEFINITE, ...JSON.parse(readFileSync(file(), 'utf8')) };
-    } catch {
-      preferenze = { ...PREDEFINITE };
+    const letto = interpretaJson(() => readFileSync(file(), 'utf8'));
+    // preferenze rovinate: si riparte da quelle di fabbrica, ma il file di prima resta accanto (preferenze.json.illeggibile)
+    if (letto.illeggibile) {
+      try {
+        copyFileSync(file(), `${file()}.illeggibile`);
+      } catch {
+        // senza copia si va avanti lo stesso
+      }
     }
+    preferenze = { ...PREDEFINITE, ...(letto.dati ?? {}) };
   }
   return preferenze;
 }
 
 export async function salva(modifiche) {
   preferenze = { ...leggi(), ...modifiche };
-  await writeFile(file(), JSON.stringify(preferenze, null, 2));
+  await scriviSicuro(file(), JSON.stringify(preferenze, null, 2));
   return preferenze;
 }

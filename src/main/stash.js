@@ -6,6 +6,8 @@ import { copyFile, mkdir, readdir, readFile, stat, statfs, utimes, writeFile } f
 import * as preferenze from './preferenze.js';
 import * as brano from '../renderer/brano.js';
 import { COLPI_PREDEFINITI } from '../renderer/colpi.js';
+import * as log from './log.js';
+import { leggiJson, mettiDaParte, scriviSicuro } from './scrivi-sicuro.js';
 
 export const FORMATO = 1;
 const CARTELLE = ['suoni', 'libreria', 'video', 'estensioni'];
@@ -44,7 +46,7 @@ export function carica() {
 export async function imposta(nuovo) {
   percorso = nuovo;
   await prepara();
-  await writeFile(fileImpostazioni(), JSON.stringify({ stash: nuovo }, null, 2));
+  await scriviSicuro(fileImpostazioni(), JSON.stringify({ stash: nuovo }, null, 2));
 }
 
 // Una cartella qualsiasi diventa uno stash: crea quello che manca, non tocca il resto.
@@ -58,19 +60,23 @@ async function prepara() {
   }
 }
 
+const configVuota = () => ({ nome: path.basename(percorso), formato: FORMATO, uscite: {}, offsetCuffiaMs: 0 });
+
 async function leggiConfig() {
-  try {
-    return JSON.parse(await readFile(fileConfig(), 'utf8'));
-  } catch {
-    return { nome: path.basename(percorso), formato: FORMATO, uscite: {}, offsetCuffiaMs: 0 };
-  }
+  return (await leggiJson(fileConfig())).dati ?? configVuota();
 }
 
-const scriviConfig = (config) => writeFile(fileConfig(), JSON.stringify(config, null, 2) + '\n');
+const scriviConfig = (config) => scriviSicuro(fileConfig(), JSON.stringify(config, null, 2) + '\n');
 
 export async function salvaConfig(modifiche) {
   if (!radice()) return null;
-  const config = { ...(await leggiConfig()), ...modifiche };
+  const letto = await leggiJson(fileConfig());
+  // stash.json c'è ma non si legge: prima di scriverci sopra se ne tiene una copia (uscite e offset di prima si recuperano da lì)
+  if (letto.illeggibile) {
+    const copiato = await mettiDaParte(fileConfig());
+    log.scrivi('avviso', 'stash', `stash.json non si legge: riparto dai valori di base${copiato ? ' (quello di prima è in stash.json.illeggibile)' : ''}`);
+  }
+  const config = { ...(letto.dati ?? configVuota()), ...modifiche };
   await scriviConfig(config);
   return config;
 }
@@ -172,7 +178,7 @@ export const leggiKit = () => leggiFileStash('kit.cutx');
 
 async function scriviFileStash(nome, testo) {
   if (!radice()) throw new Error('nessuno stash');
-  await writeFile(path.join(attivo(), nome), String(testo));
+  await scriviSicuro(path.join(attivo(), nome), String(testo));
   return true;
 }
 
@@ -192,7 +198,7 @@ export async function scriviBrano(nome, testo, { sovrascrivi = false } = {}) {
   if (!file) throw new Error('nome non valido');
   if (!sovrascrivi && existsSync(file)) return { esiste: true, file: path.basename(file) };
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, testo);
+  await scriviSicuro(file, testo);
   return { file: path.basename(file) };
 }
 
