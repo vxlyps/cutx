@@ -994,18 +994,21 @@ async function configura() {
     await controllaUscita();
     return;
   }
-  const config = stato.config ?? {};
-  uscitaVoluta = config.uscite?.[RUOLO] ?? '';
+  // Lo stash c'era e adesso non c'è (disco staccato a metà serata): uscita, offset e suoni restano quelli di prima.
+  // Senza questo il live passava all'uscita predefinita del Mac (via dalle casse) alla prima rilettura.
+  const config = stato.config ?? null;
+  if (config) uscitaVoluta = config.uscite?.[RUOLO] ?? '';
+  else if (stato.percorso) console.warn(`${RUOLO}: lo stash non è collegato: tengo uscita e suoni di prima`);
   await controllaUscita(); // non lancia mai: se l'uscita non c'è si suona sulla predefinita e si dice
   errore = uscitaStato.ok ? null : uscitaStato.dettaglio;
   try {
     // solo i suoni nuovi o cambiati: mentre suona non si rifà tutta la mappa
-    const nuovi = suoniNuovi(suoniCaricati, stato.suoni);
+    const nuovi = stato.suoni ? suoniNuovi(suoniCaricati, stato.suoni) : null;
     if (nuovi) {
       await samples(nuovi);
       suoniCaricati = stato.suoni;
     }
-    if (!LIVE) offsetMs = Number(config.offsetCuffiaMs) || 0;
+    if (!LIVE && config) offsetMs = Number(config.offsetCuffiaMs) || 0;
     const erroreStrudel = await caricaSuoniStrudel(); // i suoni di strudel.cc in locale; se mancano si dice, il resto suona lo stesso
     if (erroreStrudel) console.warn(erroreStrudel);
   } catch (e) {
