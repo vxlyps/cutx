@@ -86,6 +86,11 @@ export class Riproduttore {
     this.cambiTempo = this.cambiTempo.filter((c) => c.ciclo <= ciclo);
   }
 
+  // Un cambio in coda che non serve più: il livello che lo portava è stato tolto o sostituito prima di entrare.
+  annullaCambio(ciclo, cps) {
+    this.cambiTempo = this.cambiTempo.filter((c) => !(c.ciclo === ciclo && c.cps === cps));
+  }
+
   // Il tempo cambierà esattamente al ciclo dato (quando entra un livello con setcpm).
   cambiaCpsA(ciclo, cps) {
     if (!(cps > 0)) return;

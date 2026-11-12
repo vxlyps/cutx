@@ -84,3 +84,14 @@ test('una nota che si rompe non ferma le altre e il giro va avanti (niente note 
   assert.deepEqual(guasti, ['nota rotta']);
   assert.ok(rip.fine > 0, 'il giro ha segnato fin dove ha programmato');
 });
+
+test('il cambio di tempo di un livello tolto prima di entrare si annulla, gli altri restano', () => {
+  const { rip } = nuovo();
+  rip.tick();
+  rip.cambiaCpsA(8, 140 / 240);
+  rip.cambiaCpsA(4, 120 / 240);
+  rip.annullaCambio(8, 140 / 240);
+  assert.deepEqual(rip.cambiProssimi(0), [{ ciclo: 4, cps: 0.5 }]);
+  rip.annullaCambio(4, 0.9); // un altro tempo allo stesso ciclo non è il suo: resta
+  assert.equal(rip.cambiProssimi(0).length, 1);
+});

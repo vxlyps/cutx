@@ -428,6 +428,21 @@ function cambiaCoda(m) {
   pianificaCoda();
 }
 
+// Un livello annullato prima di entrare (tolto, o sostituito da un altro prima del suo ciclo): il cambio di tempo che portava non
+// resta in coda. Con `tieni`, chi stava uscendo per fargli posto resta a suonare (altrimenti resterebbe il silenzio).
+function annullaIngresso(l, tieni) {
+  if (l.tempo) rip.annullaCambio(l.tempo.ciclo, l.tempo.cps);
+  l.tempo = null;
+  if (tieni) {
+    for (const v of l.scambiati ?? []) {
+      if (!livelli.includes(v) || v.a === Infinity || v.a <= (rip.fine ?? -Infinity)) continue; // già uscito: non si può più tenere
+      v.a = Infinity;
+      annullaDissolvi(v);
+    }
+  }
+  l.scambiati = null;
+}
+
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
 async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
@@ -451,6 +466,8 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     // un cambio già in attesa (non è ancora entrato) viene sostituito dal nuovo: non suona mai, e il nuovo prende il suo posto
     if (vecchio.da >= da) {
       vecchio.a = vecchio.da;
+      annullaIngresso(vecchio, false); // chi usciva per lui esce per il nuovo (lo trova questo stesso giro)
+      l.beat ??= vecchio.beat;
       l.volume = vecchio.volume;
       l.muto = vecchio.muto;
       l.coda = vecchio.coda;
@@ -460,6 +477,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     // con una dissolvenza i due livelli si scambiano: il vecchio continua e sfuma mentre il nuovo entra
     vecchio.a = Math.max(vecchio.da, da) + d.cicli;
     scambi.push(vecchio);
+    l.beat ??= vecchio.beat; // un beat modificato dalla sua card resta un beat: tiene le sue scene (◀ ▶ e il passaggio di brano lo riconoscono)
     l.volume = vecchio.volume;
     l.muto = vecchio.muto;
     l.coda = vecchio.coda; // una modifica al codice non butta via la coda
@@ -476,7 +494,9 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   if (l.coda.length || globali.size) metteCoda(l);
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
   l.sostituisce = scambi[0] ?? null; // se il guardiano deve rimettere la versione di prima
+  l.scambiati = [...scambi, ...altri]; // chi esce per fargli posto: se lo tolgo prima che entri, restano
   livelli.push(l);
+  l.tempo = c.cps ? { ciclo: da, cps: c.cps } : null;
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
   if (rampa && rip.mappa) rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
   iniziaSet(da);
@@ -553,8 +573,10 @@ function togli(id, dissolvenza, subito = false, griglia = 0) {
   if (l.a !== Infinity) return;
   const d = dissolvenzaDi(dissolvenza);
   const fine = Math.max(l.da, rip.prossimoConfine());
-  const parte = l.da > rip.ciclo(ac.currentTime) ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
+  const inAttesa = l.da > rip.ciclo(ac.currentTime);
+  const parte = inAttesa ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
   l.a = fine + parte;
+  if (inAttesa) annullaIngresso(l, true); // e quello che doveva sostituire continua a suonare
   aggiornaLivelli();
   dissolvi(l, 'esce', fine, parte, d.esce);
 }
@@ -763,6 +785,12 @@ function aggiornaLivelli() {
 // I livelli usciti del tutto (già programmati fino alla loro fine) se ne vanno.
 function pulisci() {
   if (!LIVE || rip.fine === null) return;
+  // memoria: un livello entrato non ha più bisogno di ricordare chi ha sostituito (dopo 64 cicli nemmeno il guardiano lo rimette);
+  // senza questo ogni cambio di scena terrebbe vivo quello di prima, a catena, per tutta la serata
+  for (const l of livelli) {
+    if (l.scambiati && l.da <= rip.fine) l.scambiati = null;
+    if (l.sostituisce && rip.fine - l.da >= 64) l.sostituisce = null;
+  }
   const restano = livelli.filter((l) => l.a > rip.fine);
   if (restano.length !== livelli.length) {
     for (const l of livelli) if (!restano.includes(l)) liberaGuadagno(l.id);
