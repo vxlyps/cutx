@@ -64,13 +64,19 @@ window.addEventListener('message', (e) => {
   e.ports[0].onmessage = ({ data }) => {
     if (data.tipo === 'onda') sfondo.suOnda(data.dati);
     else if (data.tipo === 'mappa') mappa = data;
-    else if (data.tipo === 'livelli') livelli = data.livelli;
+    else if (data.tipo === 'livelli') {
+      livelli = data.livelli;
+      // memoria: quello che ricordavo dei livelli usciti si butta (in una serata lunga ne passano centinaia)
+      const vivi = new Set(livelli.map((l) => l.id));
+      for (const ricordi of [strisceU, misureU, statiU, inizioUscita]) for (const id of ricordi.keys()) if (!vivi.has(id)) ricordi.delete(id);
+    }
     else if (data.tipo === 'bozze') bozze = data;
     else if (data.tipo === 'globali') righeGlobali = data.righe;
     else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
     else if (data.tipo === 'brano') branoEntra = { nome: data.nome, quando: performance.now() };
     else if (data.tipo === 'strisce') {
-      for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { ...(strisceU.get(Number(id)) ?? {}), [data.ciclo]: ev, [data.ciclo - 2]: undefined });
+      // si tengono solo il ciclo di adesso e quello prima (prima restava una chiave per ogni ciclo suonato)
+      for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { [data.ciclo - 1]: strisceU.get(Number(id))?.[data.ciclo - 1], [data.ciclo]: ev });
     } else if (data.tipo === 'misure') {
       for (const [id, pk] of Object.entries(data.livelli)) misureU.set(Number(id), { pk, quando: performance.now() });
     }
