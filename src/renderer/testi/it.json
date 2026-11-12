@@ -674,5 +674,11 @@
     "spia": "● MOVIOLA",
     "spenta": "MOVIOLA spenta: accendila nelle impostazioni",
     "segno": "SEGNO"
+  },
+  "cue": {
+    "entraTra1": "entra tra 1 ciclo",
+    "entraTra": "entra tra {n} cicli",
+    "senzaBeat": "«{nome}» va live senza il BEAT · per la base: go live sulla card BEAT",
+    "vuota": "«{nome}» è vuota: niente da mandare live"
   }
 }

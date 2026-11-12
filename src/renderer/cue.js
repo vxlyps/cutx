@@ -351,6 +351,17 @@ export class Cue {
     if (testo && !persistente) this.timerAvviso = setTimeout(() => (a.textContent = ''), 4000);
   }
 
+  // Ho mandato live una clip e il BEAT non suona: la sua card lampeggia in ambra per qualche secondo.
+  segnalaBeat() {
+    const carta = document.querySelector('.beat-card');
+    if (!carta) return;
+    carta.classList.remove('manca-beat');
+    void carta.offsetWidth; // l'animazione riparte
+    carta.classList.add('manca-beat');
+    clearTimeout(this.timerBeat);
+    this.timerBeat = setTimeout(() => carta.classList.remove('manca-beat'), 5000);
+  }
+
   // --- brano: mappa e card ---
 
   // Un brano della libreria si apre nella linguetta «▸ prossimo» (se non dico altro); quello che c'era si chiude con ⌘Z per riaverlo.

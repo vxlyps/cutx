@@ -3327,3 +3327,36 @@ input[type='checkbox'] {
   width: 0;
   background: var(--testo);
 }
+
+/* «entra tra» diverso da 1: una scelta a mano che ritarda il prossimo go live, quindi ambra finché c'è */
+.piede.entra-dopo [data-entra].on {
+  background: var(--avviso, #e0a03a);
+  border-color: var(--avviso, #e0a03a);
+  color: var(--su-marcio);
+}
+/* e quando cambia (anche per un tasto premuto per sbaglio) si vede */
+.piede.entra-cambiato [data-entra].on {
+  animation: entra-cambiato 0.9s ease-out;
+}
+@keyframes entra-cambiato {
+  0% {
+    transform: scale(1.7);
+    box-shadow: 0 0 0 8px var(--avviso, #e0a03a);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* ho mandato live una clip e il BEAT non suona: la sua card lampeggia in ambra */
+.beat-card.manca-beat {
+  outline: 2px solid var(--avviso, #e0a03a);
+  outline-offset: 2px;
+  animation: manca-beat 0.8s ease-in-out 5;
+}
+@keyframes manca-beat {
+  50% {
+    outline-color: transparent;
+  }
+}

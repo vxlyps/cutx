@@ -40,6 +40,7 @@ import { avviaGatto } from './gatto.js';
 import { avviaInsegna } from './insegna.js';
 import wordmark from '../../design/risorse/logo/cutx_bianco.svg';
 import { sicuro } from './guasto.js';
+import * as SL from './stato-live.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -230,8 +231,11 @@ async function goLive(pezzo = null) {
   const daCue = !(pezzo && typeof pezzo === 'object' && 'codice' in pezzo);
   const p = daCue ? cue.pezzo() : pezzo; // un pezzo dato (le clip del kit) o quello del CUE
   if (p.errore) return cue.avviso(p.errore);
+  // una scena o una clip vuota (solo commenti): entrerebbe come silenzio al posto di quello che suona
+  if (SL.codiceVuoto(p.codice.slice(p.inizio ?? 0))) return cue.avviso(it.cue.vuota.replace('{nome}', p.beat ? p.beat.scene[p.beat.indice]?.nome ?? p.nome : p.nome));
   // una scena del beat del PROSSIMO brano, mentre un altro brano suona: è il passaggio (col tempo che ci arriva)
-  if (daCue && p.beat && cue.linguetta === 'prossimo' && cue.slot.attivo && cue.slot.prossimo) return passaBrano(p.beat.indice);
+  // (solo dalle card di un brano: una scena @beat scritta nello scratch entra come scratch)
+  if (daCue && cue.modo === 'brano' && p.beat && cue.linguetta === 'prossimo' && cue.slot.attivo && cue.slot.prossimo) return passaBrano(p.beat.indice);
   // solo righe di coda (.lpf(600)…): non è un livello, si aggiunge alla coda di quello scelto con un clic sulla sua card
   const voci = soloCoda(p.codice.slice(p.inizio ?? 0));
   if (voci) return aggiungiCoda(voci);
@@ -257,6 +261,11 @@ async function goLive(pezzo = null) {
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
+  // una clip di un brano che ha un beat, e nessun beat suona né sta arrivando: la base non parte da sola, lo dico (e la card BEAT lampeggia)
+  if (!r.errore && daCue && cue.modo === 'brano' && SL.mancaIlBeat({ pezzo: p, sceneDelBrano: cue.brano?.modello.beat?.scene.length ?? 0, livelli: livelliLive, ciclo: cicloAdesso() })) {
+    messaggi.push(it.cue.senzaBeat.replace('{nome}', p.nome));
+    cue.segnalaBeat();
+  }
   if (!r.errore && messaggi.length) cue.avviso(messaggi.join(' · '));
   if (!r.errore && daCue) cue.dopoGoLive(); // il primo brano mandato live diventa il brano attivo
   return r;
@@ -266,12 +275,9 @@ async function goLive(pezzo = null) {
 
 // Il beat live: il livello «beat» che suona (e quello che sta per entrare, se un cambio aspetta la fine della frase).
 function statoBeat() {
-  const ciclo = mappa ? cicloDi(mappa, performance.timeOrigin + performance.now()) : 0;
-  const tutte = livelliLive.filter((l) => eNomeBeat(l.nome) && l.beat);
-  const suona = tutte.filter((l) => (l.a === null || l.a > ciclo) && (l.da === null || l.da <= ciclo)).at(-1) ?? null;
-  const pendente = tutte.filter((l) => l.a === null && l.da !== null && l.da > ciclo).at(-1) ?? null;
-  return { suona, pendente };
+  return SL.statoBeat(livelliLive, cicloAdesso());
 }
+const cicloAdesso = () => (mappa ? cicloDi(mappa, performance.timeOrigin + performance.now()) : 0);
 
 // ◀ ▶: una scena indietro o avanti, a fine frase (come il go live). Parte dalla scena che sta per entrare, se un cambio aspetta.
 async function muoviScena(delta) {
@@ -283,6 +289,7 @@ async function muoviScena(delta) {
   const k = indice + delta;
   if (k < 0 || k >= scene.length) return cue.avviso(delta > 0 ? `«${scene[indice].nome}» è l'ultima scena` : `«${scene[indice].nome}» è la prima scena`);
   const m = scene[k];
+  if (SL.codiceVuoto(m.codice.slice(m.inizio))) return cue.avviso(it.cue.vuota.replace('{nome}', m.nome)); // una scena vuota toglierebbe la base
   // il tempo del set è quello che suona adesso: il setcpm del brano non lo riporta indietro
   const pre = B.senzaTempo(m.codice.slice(0, m.inizio));
   const { codice: senzaCoda, coda } = separaCoda(pre + m.codice.slice(m.inizio));
@@ -397,8 +404,7 @@ const dissolvenzaParacadute = () => ({ cicli: preferenze.paracaduteCicli ?? 2, t
 // Toglie a fine ciclo l'ultimo livello entrato (al passo 6: quello scelto nel LIVE).
 function togliLivello(id) {
   if (inTest) return;
-  const attivi = livelliLive.filter((l) => l.a === null);
-  const l = id !== undefined ? livelliLive.find((x) => x.id === id) : attivi.at(-1);
+  const l = id !== undefined ? livelliLive.find((x) => x.id === id) : SL.ultimoEntrato(livelliLive);
   if (!l) return;
   // un livello che sta già sfumando: il secondo togli lo salva, e non c'è niente da annullare
   if (l.a === null) {
@@ -530,8 +536,17 @@ function scegliDiss(n) {
 }
 
 function scegliEntraTra(n) {
+  const cambia = n !== entraTra;
   entraTra = n;
   for (const b of document.querySelectorAll('[data-entra]')) b.classList.toggle('on', Number(b.dataset.entra) === n);
+  // un valore diverso da 1 ritarda il prossimo go live: resta in ambra finché c'è, e quando cambia si vede (anche se l'ho toccato per sbaglio)
+  const piede = document.querySelector('[data-entra]')?.closest('.piede');
+  piede?.classList.toggle('entra-dopo', n !== 1);
+  if (!cambia || !piede) return;
+  piede.classList.remove('entra-cambiato');
+  void piede.offsetWidth; // l'animazione riparte
+  piede.classList.add('entra-cambiato');
+  cue.avviso(n === 1 ? it.cue.entraTra1 : it.cue.entraTra.replace('{n}', n));
 }
 
 function fermaTutto() {
@@ -539,6 +554,9 @@ function fermaTutto() {
   pezzoCuffia = null;
   live.manda({ tipo: 'ferma' });
   cuffia.manda({ tipo: 'ferma' });
+  // i riser e i «sale» del controller sono andati via con tutto il resto: senza questo il prossimo punterebbe a un livello che non c'è più
+  temporanei.clear();
+  passaggio = null;
 }
 
 // Pausa dell'ascolto in cuffia: il contesto si ferma, e alla ripresa la cuffia si riallinea al tempo del live.
@@ -721,10 +739,11 @@ const FA = {
   provaCuffia: invio,
   goLive: () => (vista === 'synth' ? null : goLive()),
   togli: () => togliLivello(),
-  entra1: () => scegliEntraTra(1),
-  entra2: () => scegliEntraTra(2),
-  entra4: () => scegliEntraTra(4),
-  entra8: () => scegliEntraTra(8),
+  // nel SYNTH (pianoroll) le cifre non toccano il live: lì «entra tra» non si vede, e cambiarlo per sbaglio ritarderebbe il prossimo go live
+  entra1: () => vista !== 'synth' && scegliEntraTra(1),
+  entra2: () => vista !== 'synth' && scegliEntraTra(2),
+  entra4: () => vista !== 'synth' && scegliEntraTra(4),
+  entra8: () => vista !== 'synth' && scegliEntraTra(8),
   // muto del livello n: la cifra arriva dal tasto premuto
   muto: (n) => {
     const l = pila.attivi()[n - 1];
@@ -1794,13 +1813,14 @@ mostraTempo();
 let synthCaricato = false;
 function applicaPreferenze(p) {
   const dissPrima = preferenze.dissolvenzaEntrata;
+  const strisciaPrima = preferenze.striscia;
   preferenze = p;
   if (!synthCaricato) {
     synthCaricato = true;
     synth.carica(p.synthUltimo); // il SYNTH riparte dall'ultimo suono
   }
   controllerMidi.ricaricaTabella();
-  if (p.striscia !== (preferenze.striscia)) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });
+  if (p.striscia !== strisciaPrima) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   $('paracadute').hidden = p.paracadute === false;
