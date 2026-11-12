@@ -353,13 +353,15 @@ export class Cue {
 
   // Ho mandato live una clip e il BEAT non suona: la sua card lampeggia in ambra per qualche secondo.
   segnalaBeat() {
+    this.beatFino = Date.now() + 5000; // la card viene ridisegnata quando la clip entra: il segno si rimette (vedi dove nasce la card)
     const carta = document.querySelector('.beat-card');
-    if (!carta) return;
-    carta.classList.remove('manca-beat');
-    void carta.offsetWidth; // l'animazione riparte
-    carta.classList.add('manca-beat');
+    if (carta) {
+      carta.classList.remove('manca-beat');
+      void carta.offsetWidth; // l'animazione riparte
+      carta.classList.add('manca-beat');
+    }
     clearTimeout(this.timerBeat);
-    this.timerBeat = setTimeout(() => carta.classList.remove('manca-beat'), 5000);
+    this.timerBeat = setTimeout(() => document.querySelector('.beat-card')?.classList.remove('manca-beat'), 5000);
   }
 
   // --- brano: mappa e card ---
@@ -830,7 +832,7 @@ export class Cue {
   cartaBeat() {
     const m = this.brano.modello;
     const scene = m.beat?.scene ?? [];
-    const art = el('article', `card beat-card${scene.length ? '' : ' senza-beat'}`);
+    const art = el('article', `card beat-card${scene.length ? '' : ' senza-beat'}${Date.now() < (this.beatFino ?? 0) ? ' manca-beat' : ''}`);
     art.dataset.aiuto = 'beat';
     const testa = el('div', 'card-testa');
     const titolo = el('span', 'nome nome-beat', 'BEAT');
