@@ -723,3 +723,71 @@ test('tasto 3: un tocco cambia linguetta, tenuto un secondo passa al prossimo br
   azioni.passaInAttesa = () => true;
   assert.equal(c.desiderate().get(`t${t3}`)[2], 1);
 });
+
+test('controller staccato e riattaccato: richiede di nuovo la modalità MC e le luci ripartono senza toccare niente', () => {
+  const { c, log } = prova([]);
+  const mandati = [];
+  c.manda = (bytes) => mandati.push(bytes.join(','));
+  c.portaCambiata(true);
+  assert.deepEqual(mandati, ['186,127,1'], 'appena collegato gli chiede MC');
+  assert.equal(c.modo, 'MC');
+  // resta in standard: lo dice e lo richiede
+  c.riceve([0xba, 1, 20]);
+  assert.equal(c.modo, 'standard');
+  assert.equal(log.filter((x) => x[0] === 'avviso').length, 1);
+  // cavo staccato e riattaccato: si ricomincia, e se è ancora in standard lo si richiede (prima succedeva una volta sola per sessione)
+  c.portaCambiata(false);
+  assert.equal(c.modo, 'sconosciuto');
+  c.portaCambiata(true);
+  c.riceve([0xba, 1, 20]);
+  assert.equal(log.filter((x) => x[0] === 'avviso').length, 2);
+  assert.equal(mandati.filter((m) => m === '186,127,1').length, 4);
+  // lo stesso stato due volte non rifà niente
+  c.portaCambiata(true);
+  assert.equal(mandati.filter((m) => m === '186,127,1').length, 4);
+});
+
+test('controller staccato con qualcosa tenuto premuto: tutto si rilascia (niente stop o paracadute bloccati)', () => {
+  const { c, log, avanza } = prova([L(1, 'drum'), L(2, 'basso')]);
+  c.portaCambiata(true);
+  const rilasciati = [];
+  c.colpi.attivi.set(1, { colpo: { nome: 'stop' } });
+  c.colpi.premi = (i, giu) => rilasciati.push([i, giu]);
+  c.riceve(push(3, true)); // manopola tenuta
+  c.riceve(tasto(c.tab.tasti[3], true)); // tasto cuffia tenuto
+  c.riceve(tasto(c.tab.tasti[7], true)); // paracadute tenuto
+  assert.ok(c.cuffiaTenuta && c.paracaduteTenuto);
+  c.portaCambiata(false);
+  assert.deepEqual(rilasciati, [[1, false]]);
+  assert.equal(c.push.size, 0);
+  assert.equal(c.cuffiaTenuta, null);
+  assert.equal(c.paracaduteTenuto, false);
+  avanza(5000);
+  assert.ok(!log.some((x) => x[0] === 'paracadute'), 'il paracadute tenuto non parte dopo che il controller è sparito');
+  assert.ok(!log.some((x) => x[0] === 'muto'), 'la manopola tenuta non diventa un muto');
+});
+
+test('tasto cuffia tenuto mentre cambio pagina: non resta «tenuto»', () => {
+  const { c, log } = prova([L(1, 'drum')]);
+  c.riceve(tasto(c.tab.tasti[3], true));
+  c.vaiA('B');
+  c.riceve(tasto(c.tab.tasti[3], false));
+  c.vaiA('A');
+  assert.equal(c.cuffiaTenuta, null);
+  assert.ok(!log.some((x) => x[0] === 'cuffia'));
+});
+
+test('volume generale: il primo scatto parte dal volume vero del live, non da quello di fabbrica', () => {
+  const { c, log, azioni, avanza } = prova([]);
+  azioni.masterVero = () => 0.5;
+  c.riceve(giro(8, 1));
+  assert.deepEqual(log.find((x) => x[0] === 'master'), ['master', 0.52]);
+  // mentre giro vale il mio valore (quello del live arriva in ritardo)
+  azioni.masterVero = () => 0.1;
+  c.riceve(giro(8, 1));
+  assert.deepEqual(log.filter((x) => x[0] === 'master').at(-1), ['master', 0.54]);
+  // fermo da un po': si riparte dal vero
+  avanza(2000);
+  c.riceve(giro(8, 1));
+  assert.deepEqual(log.filter((x) => x[0] === 'master').at(-1), ['master', 0.12]);
+});

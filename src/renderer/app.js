@@ -1139,6 +1139,7 @@ function controllaUsciteAudio() {
 // L'interfaccia sa sempre cosa c'era live (livelli, volumi, muti, tempo): se il motore rinasce vuoto, lo rimette al ciclo dopo.
 // Il CUE non si tocca: sta qui, non nel motore.
 
+let masterLive = null; // l'ultimo volume generale chiesto al live (manopola 8): un live rinato lo riprende
 let istantaneaLive = null; // { bpm, livelli: [{ codice, nome, provenienza, volume, muto }] }
 let ripristinando = false;
 
@@ -1477,6 +1478,7 @@ function registraMessaggio(motore, msg) {
 live.suCollegato = () => {
   live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
+  if (masterLive !== null) live.manda({ tipo: 'master', volume: masterLive }); // e con il volume generale di prima (altrimenti tornerebbe al massimo)
   if (ripreso) ripristinaLive();
 };
 // Una cuffia rinata riparte da vuota: le ridò il suo codice.
@@ -1718,7 +1720,11 @@ const controllerMidi = new Controller({
   breakTutti: (fattore) => live.manda({ tipo: 'break', fattore }),
   riser: (r) => gestisciRiser(r),
   coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
-  master: (volume) => live.manda({ tipo: 'master', volume }),
+  master: (volume) => {
+    masterLive = volume;
+    live.manda({ tipo: 'master', volume });
+  },
+  masterVero: () => live.stato?.master,
   tempo: (bpm) => live.manda({ tipo: 'tempo', bpm }),
   bpm: () => bpmSet() ?? 120,
   goLive: () => goLive(),

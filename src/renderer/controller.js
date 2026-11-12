@@ -1,6 +1,7 @@
 // Il controller (X-Touch Mini in MC) dentro CUTX: legge i messaggi MIDI, li traduce in comandi (gli stessi della tastiera e del mouse)
 // e accende anelli e tasti con i valori veri. Ogni cosa che tocco diventa codice: le manopole scrivono nella coda del livello.
 // Non suona niente da solo e non decide niente: gira quello che giro io. Se il controller sparisce, CUTX va avanti uguale.
+import { sicuro } from './guasto.js';
 import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioAnello, messaggioTasto, noteTasti, parole, tabella } from './controller-mc.js';
 import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, calcolaFader, EFFETTI_FADER, FADER_PREDEFINITO, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
@@ -81,16 +82,50 @@ export class Controller {
       if (ingresso !== this.porta.ingresso) {
         if (this.porta.ingresso) this.porta.ingresso.onmidimessage = null;
         this.porta.ingresso = ingresso ?? null;
-        if (ingresso) ingresso.onmidimessage = (e) => this.riceve([...e.data]);
+        if (ingresso) ingresso.onmidimessage = (e) => sicuro('controller · messaggio', () => this.riceve([...e.data]));
       }
       this.porta.uscita = uscita ?? null;
-      if (!ingresso) this.modo = 'sconosciuto';
+      this.portaCambiata(!!ingresso && ingresso.state !== 'disconnected');
       this.ultime.clear();
       this.cambiato();
     };
-    this.access.onstatechange = cerca;
+    this.access.onstatechange = () => sicuro('controller · porte', cerca);
     cerca();
-    this.timerLuci = setInterval(() => this.luci(), LUCI_MS);
+    this.timerLuci = setInterval(() => sicuro('controller · luci', () => this.luci()), LUCI_MS);
+  }
+
+  // Il controller è arrivato o è sparito (cavo staccato e riattaccato a metà serata).
+  // Sparito: tutto quello che era tenuto premuto si rilascia, come se avessi alzato le dita (uno stop tenuto non resta bloccato nel live).
+  // Arrivato: gli si chiede subito la modalità MC (dopo un ricollegamento torna spesso in standard) e le luci si riallineano da sole.
+  portaCambiata(collegato) {
+    if (collegato === this.eraCollegato) return;
+    this.eraCollegato = collegato;
+    this.provatoMC = false; // a ogni collegamento si può richiedere di nuovo la modalità MC
+    if (!collegato) {
+      this.rilasciaTutto();
+      this.modo = 'sconosciuto';
+      return;
+    }
+    this.passaAMC();
+    this.modo = 'MC'; // se invece è rimasto in standard, il suo primo messaggio lo dice e glielo richiedo
+  }
+
+  rilasciaTutto() {
+    for (const i of [...this.colpi.attivi.keys()]) sicuro('controller · rilascio colpo', () => this.colpi.premi(i, false));
+    for (const s of this.push.values()) this.ferma(s.timer);
+    this.push.clear();
+    this.pushSynth?.clear();
+    this.cuffiaTenuta = null;
+    this.ferma(this.paracaduteTimer);
+    if (this.paracaduteTenuto) {
+      this.paracaduteTenuto = false;
+      this.azioni.paracaduteCarica?.(false);
+    }
+    this.ferma(this.passaTimer);
+    if (this.passaTenuto) {
+      if (!this.passaTenuto.passato) this.azioni.passoCarica?.(false);
+      this.passaTenuto = null;
+    }
   }
 
   get collegato() {
@@ -229,6 +264,7 @@ export class Controller {
       return;
     }
     this.pagina = pagina;
+    this.cuffiaTenuta = null; // il tasto cuffia tenuto durante il cambio pagina: il suo rilascio arriverebbe nell'altra pagina e resterebbe «tenuto»
     this.toccata = null;
     this.ultime.clear();
     if (pagina === 'B') this.selezionaBersaglio();
@@ -324,6 +360,11 @@ export class Controller {
   }
 
   giraMaster(passi) {
+    // si parte dal volume vero del live (dopo una ricarica dell'interfaccia il mio valore è quello di fabbrica: il primo scatto farebbe un salto);
+    // mentre giro mi fido del mio, che è più fresco
+    const vero = this.azioni.masterVero?.();
+    if (Number.isFinite(vero) && this.ora() - (this.masterQuando ?? -Infinity) > 1000) this.master = clamp01(vero);
+    this.masterQuando = this.ora();
     this.master = clamp01(this.master + passi * PASSO_VOLUME);
     this.azioni.master?.(Math.round(this.master * 100) / 100);
     this.toccata = { n: 8, quando: this.ora(), testo: `GENERALE · VOLUME ${this.master.toFixed(2)}` };

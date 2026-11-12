@@ -626,6 +626,7 @@ const descrivi = (l) => ({
 // agiscono subito anche sui suoni già partiti, con una sfumata breve (niente click).
 const SFUMATA_S = 0.02; // costante di tempo: a regime in circa 80 ms
 const guadagni = new Map(); // id → { orbita, gain }
+let masterVoluto = 1; // il volume generale del live, come l'ha chiesto l'ultima volta il controller
 let tagliato = false; // lo stop dei colpi è premuto: tutto è tagliato finché non torna l'1
 function guadagnoDi(l) {
   if (!guadagni.has(l.id)) {
@@ -999,6 +1000,7 @@ function stato() {
     globali: [...globali.values()],
     breakFattore,
     tagliato,
+    master: LIVE ? masterVoluto : undefined,
     volumeCuffia: volumeCuffia ? volumeCuffiaVoluto : undefined,
     limiter: limiter ? { riduzioneDb: limiter.compressore.reduction, picco: piccoUscita(), ceiling: CEILING } : null,
     paracadute: LIVE ? !!paracadute : undefined,
@@ -1174,7 +1176,7 @@ async function ricevi(da, m) {
       // volume e muto di un livello, subito
       const l = livelli.find((x) => x.id === m.livello);
       if (!l) return;
-      if (m.volume !== undefined) l.volume = Math.max(0, Math.min(1.5, Number(m.volume)));
+      if (m.volume !== undefined && Number.isFinite(Number(m.volume))) l.volume = Math.max(0, Math.min(1.5, Number(m.volume))); // un volume che non è un numero romperebbe la catena audio
       if (m.muto !== undefined) l.muto = m.muto === 'inverti' ? !l.muto : !!m.muto; // inverti: lo stato vero è qui
       return aggiornaLivelli();
     }
@@ -1188,7 +1190,10 @@ async function ricevi(da, m) {
       if (da === 'uscita') misureUscita = !!m.on;
       return;
     case 'master': // il volume generale del live (la manopola 8 del controller): lineare, con una sfumata breve
-      if (LIVE) getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(Math.max(0, Math.min(1.5, Number(m.volume))), ac.currentTime, SFUMATA_S);
+      if (LIVE && Number.isFinite(Number(m.volume))) {
+        masterVoluto = Math.max(0, Math.min(1.5, Number(m.volume)));
+        getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(masterVoluto, ac.currentTime, SFUMATA_S);
+      }
       return;
     case 'suoni-extra': // suoni solo da ascoltare (anteprima dei progetti Ableton): nome → [indirizzi]
       await pronto;
