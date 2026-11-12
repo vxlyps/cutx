@@ -1343,6 +1343,8 @@ globalThis.cutxRegistro = (on) => {
   registro = on ? [] : null;
   return r;
 };
+// Per le prove: la presa da cui registrare quello che esce dal motore, e l'orario di un ciclo (prova-mano.js).
+globalThis.cutxPresa = () => ({ ac, uscita: getSuperdoughAudioController().output.destinationGain, tempo: (c) => rip.tempo(c), offsetMs });
 globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 
 // Il motore parte comunque: se la configurazione lancia o non finisce in tempo (stash o uscita che non rispondono) si comincia

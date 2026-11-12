@@ -227,6 +227,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('finestra')) ok = (await sicura('finestra', provaFinestra)) && ok;
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
+  // le «prove a mano» del check-up beta 5 fatte dal Mac (prova-mano.js)
+  if (parti.some((p) => p.startsWith('mano-'))) ok = (await sicura('mano', (a) => import('./prova-mano.js').then((m) => m.provaMano({ ...a, parti })))) && ok;
 
   if (silenzioso) {
     const buone = righe.filter((r) => r.startsWith('OK')).length;
