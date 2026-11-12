@@ -304,12 +304,41 @@ function avvisaUscita() {
   wcDi('controllo')?.send('uscita-stato', viva(finestre.uscita));
 }
 
+// Il proiettore staccato e riattaccato a metà serata. Staccato: la finestra del pubblico si chiude (macOS la porterebbe sul monitor
+// di controllo, a tutto schermo sopra la postazione) e NON si salva la sua nuova posizione: lo schermo ricordato resta il proiettore.
+// Riattaccato: si riapre da sola dov'era. Il live non c'entra: non dipende mai da questa finestra.
+let cambioSchermi = -Infinity; // quando è cambiato l'elenco degli schermi (per un attimo le posizioni non si salvano)
+let schermoUscita = null; // l'id dello schermo su cui sta la finestra del pubblico
+let riapriUscita = false; // chiusa perché il suo schermo è sparito: torna quando torna uno schermo
+let schermiSeguiti = false;
+function seguiSchermi() {
+  if (schermiSeguiti) return;
+  schermiSeguiti = true;
+  screen.on('display-removed', (_e, d) => {
+    cambioSchermi = Date.now();
+    if (!viva(finestre.uscita) || schermoUscita !== d.id) return;
+    ev('avviso', 'uscita', 'lo schermo del pubblico è stato scollegato: chiudo la finestra, torna quando lo ricolleghi');
+    riapriUscita = true;
+    finestre.uscita.close();
+  });
+  screen.on('display-added', () => {
+    cambioSchermi = Date.now();
+    if (!riapriUscita || viva(finestre.uscita)) return;
+    riapriUscita = false;
+    ev('info', 'uscita', 'schermo ricollegato: riapro la finestra del pubblico');
+    setTimeout(() => !chiudendo && !viva(finestre.uscita) && creaUscita(), 1000); // un attimo perché macOS sistemi gli schermi
+  });
+}
+
 function creaUscita() {
   if (chiudendo) return;
   if (viva(finestre.uscita)) return finestre.uscita.focus();
+  seguiSchermi();
+  riapriUscita = false;
   const ricordo = preferenze.leggi().uscita ?? {};
   const { schermo, intero: apriIntera, bordi } = doveApre({ schermi: screen.getAllDisplays(), primarioId: screen.getPrimaryDisplay().id, ricordo, bordiValidi });
   const b = schermo.bounds;
+  schermoUscita = schermo.id;
   const finestra = new BrowserWindow({
     ...(bordi ?? { width: 1280, height: 720, x: b.x + Math.round((b.width - 1280) / 2), y: b.y + Math.round((b.height - 720) / 2) }),
     backgroundColor: '#050604',
@@ -329,9 +358,11 @@ function creaUscita() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       if (finestra.isDestroyed()) return;
+      if (Date.now() - cambioSchermi < 3000) return; // uno schermo è appena sparito o tornato: questo spostamento l'ha fatto macOS, non io
       const intero = finestra.isFullScreen();
       if (!intero) bordiNormali = finestra.getBounds();
-      preferenze.salva({ uscita: { bordi: bordiNormali, schermoIntero: intero, schermo: screen.getDisplayMatching(finestra.getBounds()).id } });
+      schermoUscita = screen.getDisplayMatching(finestra.getBounds()).id;
+      preferenze.salva({ uscita: { bordi: bordiNormali, schermoIntero: intero, schermo: schermoUscita } }).catch((e) => ev('avviso', 'uscita', `posizione non salvata: ${e.message}`));
     }, 400);
   };
   for (const evento of ['move', 'resize', 'enter-full-screen', 'leave-full-screen']) finestra.on(evento, ricorda);
@@ -340,10 +371,19 @@ function creaUscita() {
     ev('errore', 'uscita', `processo terminato (${dettagli.reason}), ricarico`);
     setTimeout(() => !chiudendo && viva(finestra) && finestra.webContents.reload(), 300);
   });
+  // bloccata (non crashata): il pubblico vedrebbe un'immagine ferma senza che nessuno se ne accorga. Dopo 10 secondi la si fa ripartire.
+  let bloccata = null;
+  finestra.on('unresponsive', () => {
+    ev('avviso', 'uscita', 'bloccata: se non si riprende in 10 secondi la ricarico');
+    clearTimeout(bloccata);
+    bloccata = setTimeout(() => !chiudendo && viva(finestra) && finestra.webContents.forcefullyCrashRenderer(), 10000); // poi la ricarica il gestore qui sopra
+  });
+  finestra.on('responsive', () => clearTimeout(bloccata));
   finestra.on('closed', () => {
     if (finestre.uscita === finestra) finestre.uscita = null;
     pronte.uscita = false;
     clearTimeout(timer);
+    clearTimeout(bloccata);
     avvisaUscita();
   });
   if (apriIntera) finestra.once('ready-to-show', () => finestra.setFullScreen(true));
@@ -352,6 +392,7 @@ function creaUscita() {
 }
 
 ipcMain.handle('uscita:onoff', () => {
+  riapriUscita = false; // l'ho aperta o chiusa io: decido io
   if (viva(finestre.uscita)) finestre.uscita.close();
   else creaUscita();
   return viva(finestre.uscita);
