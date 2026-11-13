@@ -31,6 +31,8 @@ export function attivo() {
   return null;
 }
 export const inCopia = () => !!percorso && !existsSync(percorso) && attivo() !== null;
+// Il disco c'è? Un controllo leggero (non legge suoni né config), da fare spesso: l'interfaccia si accorge se l'SSD sparisce mentre si suona.
+export const presenza = () => ({ mancante: !!percorso && !attivo(), inCopia: inCopia() });
 
 export const radice = () => attivo();
 

@@ -852,7 +852,15 @@ function mostraAvvisoStash(stato) {
     window.cutx.rileggiStash(); // i motori ricaricano i suoni
   }
 }
-setInterval(async () => (stashMancante || stashInCopia) && apriStash(await window.cutx.stash()), 3000);
+// Ogni 3 secondi: se lo stash manca si guarda se è tornato; se c'è, si guarda (con un controllo leggero) se è sparito mentre si suona.
+setInterval(async () => {
+  if (!percorsoStash) return;
+  if (!stashMancante && !stashInCopia) {
+    const p = await window.cutx.presenzaStash();
+    if (!p.mancante && !p.inCopia) return;
+  }
+  apriStash(await window.cutx.stash());
+}, 3000);
 
 let percorsoStash = null;
 let controllerPronto = false; // il controller si costruisce più in basso: finché non c'è, i colpi non si caricano

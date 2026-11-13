@@ -520,6 +520,9 @@ async function disco({ finestre, controlla, nota, js, live, cuffia, avviso }) {
   await aspetta(8);
   const s1 = await live();
   controlla('senza disco: il click continua senza perdere colpi (8 secondi)', s1?.sentinella?.sentiti >= 12 && s1.sentinella.mancati === 0, JSON.stringify(s1?.sentinella));
+  const fascia = () => js(`(() => { const f = document.getElementById('avviso-stash'); return f.hidden ? '' : f.textContent.trim().replace(/\\s+/g, ' '); })()`);
+  const f1 = await fascia();
+  controlla('senza disco: entro 8 secondi compare la fascia «stash non collegato» (o «uso la copia»)', /non è collegato|COPIA/.test(f1), f1 || 'nessuna fascia');
   const pidDopo = ['controllo', 'live', 'cuffia'].map((r) => finestre[r].webContents.getOSProcessId()).join(',');
   controlla('senza disco: nessun processo è ripartito', pidPrima === pidDopo, `${pidPrima} → ${pidDopo}`);
   const uscite1 = await motori();
@@ -552,6 +555,8 @@ async function disco({ finestre, controlla, nota, js, live, cuffia, avviso }) {
   controlla('disco tornato: l\'app rivede lo stash con tutti i suoni', !!tornato, JSON.stringify(await js(`window.cutx.stash().then((s) => ({ mancante: !!s.mancante, copiaAttiva: !!s.copiaAttiva, suoni: Object.keys(s.suoni ?? {}).length }))`, 10)));
   await aspetta(6);
   controlla('disco tornato: stash.json è identico a prima', existsSync(fileConfig) && readFileSync(fileConfig, 'utf8') === configPrima);
+  const f2 = await fascia();
+  controlla('disco tornato: la fascia se ne va', f2 === '', f2);
   const uscite2 = await motori();
   controlla('disco tornato: uscite audio e offset della cuffia sono quelli di prima', JSON.stringify(uscite2) === JSON.stringify(uscitePrima), JSON.stringify(uscite2));
   const s4 = await live();

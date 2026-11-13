@@ -414,6 +414,7 @@ function avvisaMotori() {
 }
 
 ipcMain.handle('stash:stato', () => stash.stato());
+ipcMain.handle('stash:presenza', () => stash.presenza());
 suoniStrudelIpc = suoniStrudel.registra({ preferenze, salvaPreferenze, padre, avvisaMotori, ev, perProve: PER_PROVE });
 // La durata di un suono dello stash, se si può leggere dall'intestazione (WAV): per far tornare ▶ da solo a fine ascolto.
 ipcMain.handle('suoni:durata', async (_e, rel) => {
