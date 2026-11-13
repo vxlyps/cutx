@@ -358,7 +358,9 @@ async function passaBrano(k = 0) {
     rampa = { bpm: nuovo, cicli: preferenze.rampaCicli ?? (transizione.tipo === 'sweep' ? transizione.cicli : P.CICLI_RAMPA) }; // il tempo ci arriva dentro la transizione
   }
   const { codice: senzaCoda, coda } = separaCoda(codice);
-  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: { cicli: transizione.cicli, tipo: 'filtro', filtroUscita: 'hp' }, transizione: T.perIlLive(transizione, tieni) });
+  // col live vuoto (dopo «ferma tutto», o al primo brano) non c'è niente da cui passare: il beat entra subito, pieno, senza transizione
+  const sfuma = occupato ? { dissolvenza: { cicli: transizione.cicli, tipo: 'filtro', filtroUscita: 'hp' }, transizione: T.perIlLive(transizione, tieni) } : {};
+  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, ...sfuma });
   mostraErrore(r.errore, 'live');
   if (r.errore) return r;
   passaggio = { nome, da: r.da };
@@ -369,7 +371,7 @@ async function passaBrano(k = 0) {
     const ritmiche = ritmicheRimaste();
     cue.avviso(`il tempo salta da ${n(attuale)} a ${n(nuovo)} bpm quando entra «${nome}»${ritmiche.length ? ` · clip ritmiche rimaste che cambiano velocità: ${ritmiche.join(', ')}` : ''}`, { persistente: ritmiche.length > 0 });
   } else if (t.tipo === 'rampa') cue.avviso(`«${nome}»: il tempo va da ${n(attuale)} a ${n(nuovo)} bpm con una rampa`);
-  else cue.avviso(`passo a «${nome}» · ${T.scriviTransizione(transizione)}`);
+  else cue.avviso(occupato ? `passo a «${nome}» · ${T.scriviTransizione(transizione)}` : `passo a «${nome}»`);
   portaUscita?.postMessage({ tipo: 'brano', nome });
   if (!cue.slot.attivo) cue.promuovi(); // il primo brano della serata
   return { brano: nome, da: r.da };

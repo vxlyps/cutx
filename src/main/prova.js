@@ -2943,6 +2943,15 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(1);
     controlla('brano 3 è l\'attivo; in fondo al set non c\'è un prossimo', (await ling('attivo')).includes('● brano 3') && (await ling('prossimo')) === '▸ –', `${await ling('attivo')} | ${await ling('prossimo')}`);
     controlla('senza un prossimo, passare non fa niente e lo dice', (await js(`cutxProva.passaBrano()`)) === undefined && /non c'è un prossimo brano/.test(await js(`document.getElementById('cue-avviso').textContent`)));
+    // dopo «ferma tutto» il live è vuoto: il beat del prossimo brano entra subito e pieno, senza la transizione di 8 cicli
+    await js(`cutxProva.fermaTutto()`);
+    await aspetta(1.5);
+    await js(`cutxProva.cue.slot.prossimo = cutxProva.cue.slot.attivo`);
+    await js(`cutxProva.passaBrano()`);
+    await aspetta(0.5);
+    const dopoFerma = (await live()).livelli.filter((l) => l.a === null && l.nome === 'beat');
+    controlla('dopo «ferma tutto» il beat del prossimo brano entra subito, senza dissolvenza', dopoFerma.length === 1 && dopoFerma[0].sfuma === null, JSON.stringify(dopoFerma.map((l) => l.sfuma)));
+    controlla('e l\'avviso non parla di una transizione', /^passo a «[^»]+»$/.test(await js(`document.getElementById('cue-avviso').textContent`)), await js(`document.getElementById('cue-avviso').textContent`));
   } finally {
     await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ rampaCicli: 8 })`);
     await js(`cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
