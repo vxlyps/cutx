@@ -30,3 +30,11 @@ Valerio suona per un paio di settimane.
 - **WARP**: porta a tempo le clip audio, con preview (dicendo che cambia l'altezza).
 - **BASS CLASH**: due bassi insieme (dalla striscia viva): «abbasso il vecchio?».
 - **AUTO GAIN**: una clip molto più forte delle altre entra al livello giusto (volume d'ingresso).
+
+## Annotato il 14/11/2026 (fuori dalla beta 5, niente codice ancora)
+
+- **DRUM a fette per i break**: nella scheda DRUM una versione che taglia un break in fette (`chop`/`slice`) e le mette sulla griglia. La versione base della griglia (un suono per riga) viene prima.
+- **Tasto synth su ogni scena**: riaprire nel SYNTH qualsiasi clip o scena, modificando solo il pezzetto di note e lasciando intatto il resto. È il punto 4 di `docs/CHECKUP.md`: grosso, da fare a pezzi.
+- **Serate come progetti** (decisioni di Valerio): il nome a schermo è **SERATA**; ogni serata ha il suo **kit**, che nasce come **copia del kit dell'ultima serata**; la riga **«viene da…»** (da quale serata è stata copiata) c'è. Il progetto è in `docs/CHECKUP.md` («serate come progetti»).
+- **Volume dell'apertura**: il cursore c'è ma non si salva nel brano (deciso: niente cambio di formato).
+
