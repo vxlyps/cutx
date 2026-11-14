@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('cutx', {
   stash: () => ipcRenderer.invoke('stash:stato'),
+  presenzaStash: () => ipcRenderer.invoke('stash:presenza'),
   scegliStash: () => ipcRenderer.invoke('stash:scegli'),
   infoCopiaStash: () => ipcRenderer.invoke('stash:copia-info'),
   copiaStash: () => ipcRenderer.invoke('stash:copia'),

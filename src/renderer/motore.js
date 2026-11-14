@@ -11,6 +11,9 @@ import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, Stat
 import { transpiler } from '@strudel/transpiler';
 import {
   getAudioContext,
+  getLoadedBuffer,
+  getSampleBuffer,
+  getSampleInfo,
   getSound,
   getSuperdoughAudioController,
   initAudio,
@@ -27,6 +30,7 @@ import { suoniNuovi } from './suoni-nuovi.js';
 import { caricaSuoniStrudel } from './suoni-strudel.js';
 import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
 import { chiEsce } from './transizioni.js';
+import { guasto, sicuro } from './guasto.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
 const LIVE = RUOLO === 'live';
@@ -52,6 +56,7 @@ const pronto = (async () => {
 // IL GUARDIANO — il limiter sull'uscita (limiter.js): sta fra il volume generale e le casse (o le cuffie: ce l'ha anche la cuffia,
 // perché il SYNTH può fare risonanze e distorsioni che farebbero male). La cuffia ha in più un volume proprio, prudente nel SYNTH.
 let limiter = null; // { compressore, analisi, ingresso }
+let porta = null; // GainNode dopo il limiter: chiuso per un attimo durante il cambio di uscita
 let volumeCuffia = null; // cuffia: GainNode prima del limiter
 let volumeCuffiaVoluto = 1; // e dove deve arrivare (leggere .value di un parametro che sfuma non dà il valore finale)
 function installaLimiter() {
@@ -62,7 +67,9 @@ function installaLimiter() {
       volumeCuffia = new GainNode(ac, { gain: volumeCuffiaVoluto });
       volumeCuffia.connect(l.ingresso);
     }
-    l.uscita.connect(ac.destination);
+    // la porta: l'ultimo nodo prima delle casse. Si chiude un attimo quando l'uscita audio cambia (scheda riattaccata), così il cambio non schiocca.
+    porta = new GainNode(ac, { gain: 1 });
+    l.uscita.connect(porta).connect(ac.destination);
     l.uscita.connect(analisi);
     analisi.connect(new GainNode(ac, { gain: 0 })).connect(ac.destination); // senza arrivare all'uscita l'analizzatore non lavora
     limiter = { compressore: l.compressore, analisi, ingresso: volumeCuffia ?? l.ingresso };
@@ -182,6 +189,45 @@ function compila(codice) {
   });
   coda = lavoro.catch(() => {});
   return lavoro;
+}
+
+// Il precarico (solo il live): i campioni di un pezzo che sta per essere mandato (provato in cuffia, scelto nel CUE, il beat del brano aperto
+// e del prossimo) si caricano prima, così al GO LIVE il primo colpo c'è. Si carica un file alla volta, e solo fino a un tetto di memoria:
+// un campione in memoria pesa circa il doppio del suo WAV a 16 bit.
+const TETTO_PRECARICO = 1024 ** 3; // 1 GB di audio decodificato
+let precaricati = 0;
+let tettoDetto = false;
+async function precarica(codice) {
+  if (!LIVE || !codice?.trim()) return;
+  const c = await compila(codice);
+  if (c.errore) return;
+  let colpi;
+  try {
+    colpi = c.pattern.queryArc(0, 16);
+  } catch {
+    return;
+  }
+  const visti = new Set();
+  for (const hap of colpi) {
+    const v = hap.value;
+    if (!v || typeof v.s !== 'string') continue;
+    const suono = getSound(v.bank ? `${v.bank}_${v.s}` : v.s);
+    if (suono?.data?.type !== 'sample') continue;
+    try {
+      const { url } = getSampleInfo(v, suono.data.samples);
+      if (!url || visti.has(url) || getLoadedBuffer(url.replace('#', '%23'))) continue;
+      visti.add(url);
+      if (precaricati > TETTO_PRECARICO) {
+        if (!tettoDetto) console.warn(`live: precarico fermo a ${Math.round(precaricati / 1024 ** 2)} MB: il resto si carica al primo uso`);
+        tettoDetto = true;
+        return;
+      }
+      const { buffer } = await getSampleBuffer(v, suono.data.samples);
+      precaricati += buffer.length * buffer.numberOfChannels * 4;
+    } catch {
+      // un file che non si legge lo dirà il go live
+    }
+  }
 }
 
 // I suoni che il codice chiede (nei primi cicli) e che nessuno ha caricato (bd, sd… se non sono nello stash): superdough li salta
@@ -427,8 +473,28 @@ function cambiaCoda(m) {
   pianificaCoda();
 }
 
+// Un livello annullato prima di entrare (tolto, o sostituito da un altro prima del suo ciclo): il cambio di tempo che portava non
+// resta in coda. Con `tieni`, chi stava uscendo per fargli posto resta a suonare (altrimenti resterebbe il silenzio).
+function annullaIngresso(l, tieni) {
+  if (l.tempo) rip.annullaCambio(l.tempo.ciclo, l.tempo.cps);
+  l.tempo = null;
+  if (tieni) {
+    for (const v of l.scambiati ?? []) {
+      if (!livelli.includes(v) || v.a === Infinity || v.a <= (rip.fine ?? -Infinity)) continue; // già uscito: non si può più tenere
+      v.a = Infinity;
+      annullaDissolvi(v);
+    }
+  }
+  l.scambiati = null;
+}
+
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
+// Un livello che ne sostituisce uno con lo stesso nome ne eredita il muto (ho solo cambiato il codice). Non il beat che cambia scena:
+// la scena nuova entra sempre sentita, anche se quella di prima era in muto.
+const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
+
 async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
+  if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
   // il guardiano: un codice che si rompe in uno dei primi cicli (un errore pigro) non entra, e quello che suona continua
@@ -449,8 +515,10 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     // un cambio già in attesa (non è ancora entrato) viene sostituito dal nuovo: non suona mai, e il nuovo prende il suo posto
     if (vecchio.da >= da) {
       vecchio.a = vecchio.da;
+      annullaIngresso(vecchio, false); // chi usciva per lui esce per il nuovo (lo trova questo stesso giro)
+      l.beat ??= vecchio.beat;
       l.volume = vecchio.volume;
-      l.muto = vecchio.muto;
+      l.muto = mutoEreditato(l, vecchio);
       l.coda = vecchio.coda;
       if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
       continue;
@@ -458,8 +526,9 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     // con una dissolvenza i due livelli si scambiano: il vecchio continua e sfuma mentre il nuovo entra
     vecchio.a = Math.max(vecchio.da, da) + d.cicli;
     scambi.push(vecchio);
+    l.beat ??= vecchio.beat; // un beat modificato dalla sua card resta un beat: tiene le sue scene (◀ ▶ e il passaggio di brano lo riconoscono)
     l.volume = vecchio.volume;
-    l.muto = vecchio.muto;
+    l.muto = mutoEreditato(l, vecchio);
     l.coda = vecchio.coda; // una modifica al codice non butta via la coda
     // il preambolo (che il proiettore può nascondere) resta quello di prima finché il codice comincia uguale
     if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
@@ -474,7 +543,9 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   if (l.coda.length || globali.size) metteCoda(l);
   if (Number.isFinite(volume)) l.volume = Math.max(0, Math.min(1.5, volume)); // il volume scritto nella sezione vince
   l.sostituisce = scambi[0] ?? null; // se il guardiano deve rimettere la versione di prima
+  l.scambiati = [...scambi, ...altri]; // chi esce per fargli posto: se lo tolgo prima che entri, restano
   livelli.push(l);
+  l.tempo = c.cps ? { ciclo: da, cps: c.cps } : null;
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
   if (rampa && rip.mappa) rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
   iniziaSet(da);
@@ -551,8 +622,10 @@ function togli(id, dissolvenza, subito = false, griglia = 0) {
   if (l.a !== Infinity) return;
   const d = dissolvenzaDi(dissolvenza);
   const fine = Math.max(l.da, rip.prossimoConfine());
-  const parte = l.da > rip.ciclo(ac.currentTime) ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
+  const inAttesa = l.da > rip.ciclo(ac.currentTime);
+  const parte = inAttesa ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
   l.a = fine + parte;
+  if (inAttesa) annullaIngresso(l, true); // e quello che doveva sostituire continua a suonare
   aggiornaLivelli();
   dissolvi(l, 'esce', fine, parte, d.esce);
 }
@@ -624,6 +697,7 @@ const descrivi = (l) => ({
 // agiscono subito anche sui suoni già partiti, con una sfumata breve (niente click).
 const SFUMATA_S = 0.02; // costante di tempo: a regime in circa 80 ms
 const guadagni = new Map(); // id → { orbita, gain }
+let masterVoluto = 1; // il volume generale del live, come l'ha chiesto l'ultima volta il controller
 let tagliato = false; // lo stop dei colpi è premuto: tutto è tagliato finché non torna l'1
 function guadagnoDi(l) {
   if (!guadagni.has(l.id)) {
@@ -760,6 +834,12 @@ function aggiornaLivelli() {
 // I livelli usciti del tutto (già programmati fino alla loro fine) se ne vanno.
 function pulisci() {
   if (!LIVE || rip.fine === null) return;
+  // memoria: un livello entrato non ha più bisogno di ricordare chi ha sostituito (dopo 64 cicli nemmeno il guardiano lo rimette);
+  // senza questo ogni cambio di scena terrebbe vivo quello di prima, a catena, per tutta la serata
+  for (const l of livelli) {
+    if (l.scambiati && l.da <= rip.fine) l.scambiati = null;
+    if (l.sostituisce && rip.fine - l.da >= 64) l.sostituisce = null;
+  }
   const restano = livelli.filter((l) => l.a > rip.fine);
   if (restano.length !== livelli.length) {
     for (const l of livelli) if (!restano.includes(l)) liberaGuadagno(l.id);
@@ -805,6 +885,7 @@ function cambiaTempo(cps, quando) {
   pubblicaMappa();
 }
 rip.suMappa = pubblicaMappa;
+rip.suGuasto = (e) => guasto(`${RUOLO} · nota`, e);
 
 // Il tempo del set com'è adesso e i cambi in arrivo: per leggerlo da fuori (fase 4: sync PO-33).
 const tempoSet = () => ({ cps: rip.cpsAl(ac.currentTime), cambi: rip.cambiProssimi(ac.currentTime) });
@@ -893,11 +974,12 @@ function giro() {
   const ora = performance.now();
   if (ultimoGiro) giroMax = Math.max(giroMax, ora - ultimoGiro);
   ultimoGiro = ora;
-  if (!LIVE) seguiLive();
-  rip.tick();
-  pulisci();
-  ripulisciCode();
-  aggiornaStrisce();
+  // ogni passo per conto suo: un guasto in uno non ferma gli altri (e soprattutto non ferma il suono)
+  if (!LIVE) sicuro(`${RUOLO} · segui il live`, seguiLive);
+  sicuro(`${RUOLO} · giro`, () => rip.tick());
+  sicuro(`${RUOLO} · pulizia`, pulisci);
+  sicuro(`${RUOLO} · code`, ripulisciCode);
+  sicuro(`${RUOLO} · strisce`, aggiornaStrisce);
 }
 
 // --- configurazione dallo stash: la leggo io, non dipendo dall'interfaccia ---
@@ -909,6 +991,30 @@ let uscitaVoluta = ''; // il nome scelto nello stash ('' = predefinita di macOS)
 let uscitaStato = { ok: true, dettaglio: '' };
 let controllandoUscita = false;
 
+// Un'operazione che può restare appesa (cambiare uscita audio, leggere lo stash) ha un tempo massimo: meglio un errore detto che un motore fermo.
+const entro = (promessa, ms, cosa) =>
+  Promise.race([promessa, new Promise((_, rifiuta) => setTimeout(() => rifiuta(new Error(`${cosa}: nessuna risposta dopo ${ms / 1000} s`)), ms))]);
+const ATTESA_USCITA_MS = 4000;
+
+// Il cambio di uscita senza schiocco: il volume scende a zero in 30 ms, l'uscita cambia, il volume risale in 80 ms.
+const CHIUDE_S = 0.03;
+const APRE_S = 0.08;
+async function chiudiPorta() {
+  if (!porta) return;
+  const t = ac.currentTime;
+  porta.gain.cancelScheduledValues(t);
+  porta.gain.setValueAtTime(porta.gain.value, t);
+  porta.gain.linearRampToValueAtTime(0, t + CHIUDE_S);
+  await new Promise((fatto) => setTimeout(fatto, CHIUDE_S * 1000 + 15));
+}
+function apriPorta() {
+  if (!porta || porta.gain.value === 1) return;
+  const t = ac.currentTime;
+  porta.gain.cancelScheduledValues(t);
+  porta.gain.setValueAtTime(0, t);
+  porta.gain.linearRampToValueAtTime(1, t + APRE_S);
+}
+
 async function controllaUscita() {
   if (controllandoUscita) return;
   controllandoUscita = true;
@@ -918,10 +1024,10 @@ async function controllaUscita() {
     try {
       const elenco = await elencoUscite();
       if (uscitaVoluta && !elenco.some((u) => u.label === uscitaVoluta)) {
-        if (ac.sinkId) await ac.setSinkId('');
+        if (ac.sinkId) await entro(ac.setSinkId(''), ATTESA_USCITA_MS, 'uscita predefinita');
         nuovo = { ok: false, dettaglio: `uscita «${uscitaVoluta}» non collegata: suono sull'uscita predefinita` };
       } else {
-        await impostaUscita(ac, uscitaVoluta);
+        await entro(impostaUscita(ac, uscitaVoluta, chiudiPorta), ATTESA_USCITA_MS, 'cambio di uscita');
         nuovo = { ok: true, dettaglio: uscitaVoluta ? `uscita «${uscitaVoluta}»` : 'uscita predefinita' };
       }
       if (!inPausa && (ac.state === 'suspended' || ac.state === 'interrupted')) await ac.resume();
@@ -934,6 +1040,7 @@ async function controllaUscita() {
     }
     errore = uscitaStato.ok ? (errore?.startsWith('uscita') ? null : errore) : uscitaStato.dettaglio;
   } finally {
+    apriPorta(); // comunque sia andata, il volume torna su
     controllandoUscita = false;
   }
 }
@@ -946,19 +1053,31 @@ setInterval(controllaUscita, 3000);
 let suoniCaricati = null;
 async function configura() {
   await pronto;
-  const stato = await window.cutx.stash();
-  const config = stato.config ?? {};
-  uscitaVoluta = config.uscite?.[RUOLO] ?? '';
+  let stato;
+  try {
+    stato = await entro(window.cutx.stash(), 8000, 'stash');
+  } catch (e) {
+    // lo stash non si legge (disco staccato, sola lettura…): il motore resta com'era, o parte senza suoni dello stash, e lo dice
+    errore = `stash non leggibile: ${e.message ?? e}`;
+    console.warn(`${RUOLO}: ${errore}`);
+    await controllaUscita();
+    return;
+  }
+  // Lo stash c'era e adesso non c'è (disco staccato a metà serata): uscita, offset e suoni restano quelli di prima.
+  // Senza questo il live passava all'uscita predefinita del Mac (via dalle casse) alla prima rilettura.
+  const config = stato.config ?? null;
+  if (config) uscitaVoluta = config.uscite?.[RUOLO] ?? '';
+  else if (stato.percorso) console.warn(`${RUOLO}: lo stash non è collegato: tengo uscita e suoni di prima`);
   await controllaUscita(); // non lancia mai: se l'uscita non c'è si suona sulla predefinita e si dice
   errore = uscitaStato.ok ? null : uscitaStato.dettaglio;
   try {
     // solo i suoni nuovi o cambiati: mentre suona non si rifà tutta la mappa
-    const nuovi = suoniNuovi(suoniCaricati, stato.suoni);
+    const nuovi = stato.suoni ? suoniNuovi(suoniCaricati, stato.suoni) : null;
     if (nuovi) {
       await samples(nuovi);
       suoniCaricati = stato.suoni;
     }
-    if (!LIVE) offsetMs = Number(config.offsetCuffiaMs) || 0;
+    if (!LIVE && config) offsetMs = Number(config.offsetCuffiaMs) || 0;
     const erroreStrudel = await caricaSuoniStrudel(); // i suoni di strudel.cc in locale; se mancano si dice, il resto suona lo stesso
     if (erroreStrudel) console.warn(erroreStrudel);
   } catch (e) {
@@ -981,6 +1100,7 @@ function stato() {
     globali: [...globali.values()],
     breakFattore,
     tagliato,
+    master: LIVE ? masterVoluto : undefined,
     volumeCuffia: volumeCuffia ? volumeCuffiaVoluto : undefined,
     limiter: limiter ? { riduzioneDb: limiter.compressore.reduction, picco: piccoUscita(), ceiling: CEILING } : null,
     paracadute: LIVE ? !!paracadute : undefined,
@@ -1121,6 +1241,8 @@ async function ricevi(da, m) {
       const errore = await valuta(m.codice, m);
       return manda(da, { tipo: 'valutato', id: m.id, errore });
     }
+    case 'precarica':
+      return void precarica(m.codice);
     case 'entra': {
       const r = LIVE ? await entra(m) : { errore: 'solo il live fa entrare i livelli' };
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
@@ -1156,7 +1278,7 @@ async function ricevi(da, m) {
       // volume e muto di un livello, subito
       const l = livelli.find((x) => x.id === m.livello);
       if (!l) return;
-      if (m.volume !== undefined) l.volume = Math.max(0, Math.min(1.5, Number(m.volume)));
+      if (m.volume !== undefined && Number.isFinite(Number(m.volume))) l.volume = Math.max(0, Math.min(1.5, Number(m.volume))); // un volume che non è un numero romperebbe la catena audio
       if (m.muto !== undefined) l.muto = m.muto === 'inverti' ? !l.muto : !!m.muto; // inverti: lo stato vero è qui
       return aggiornaLivelli();
     }
@@ -1170,7 +1292,10 @@ async function ricevi(da, m) {
       if (da === 'uscita') misureUscita = !!m.on;
       return;
     case 'master': // il volume generale del live (la manopola 8 del controller): lineare, con una sfumata breve
-      if (LIVE) getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(Math.max(0, Math.min(1.5, Number(m.volume))), ac.currentTime, SFUMATA_S);
+      if (LIVE && Number.isFinite(Number(m.volume))) {
+        masterVoluto = Math.max(0, Math.min(1.5, Number(m.volume)));
+        getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(masterVoluto, ac.currentTime, SFUMATA_S);
+      }
       return;
     case 'suoni-extra': // suoni solo da ascoltare (anteprima dei progetti Ableton): nome → [indirizzi]
       await pronto;
@@ -1255,7 +1380,13 @@ window.addEventListener('message', (e) => {
   if (!con || !e.ports[0]) return;
   if (con === 'uscita') onda(false); // un'uscita nuova (o riaperta) riparte da capo: l'onda la richiede lei
   porte[con] = e.ports[0];
-  porte[con].onmessage = ({ data }) => ricevi(con, data);
+  porte[con].onmessage = ({ data }) =>
+    ricevi(con, data).catch((e) => {
+      // un comando che si rompe: lo si scrive, e chi aspetta una risposta la riceve subito (non dopo 5 secondi di silenzio)
+      guasto(`${RUOLO} · comando «${data?.tipo}»`, e);
+      const errore = `${RUOLO}: errore interno (${typeof e?.message === 'string' ? e.message : e})`;
+      if (data?.id !== undefined) manda(con, { tipo: data.tipo === 'valuta' ? 'valutato' : 'risposta', id: data.id, errore });
+    });
   // Chi arriva riceve subito il tempo e i livelli live.
   if (LIVE) {
     pubblicaMappa();
@@ -1283,9 +1414,19 @@ globalThis.cutxRegistro = (on) => {
   registro = on ? [] : null;
   return r;
 };
+// Per le prove: la presa da cui registrare quello che esce dal motore, e l'orario di un ciclo (prova-mano.js).
+globalThis.cutxPresa = () => ({ precaricati, ac, uscita: getSuperdoughAudioController().output.destinationGain, tempo: (c) => rip.tempo(c), offsetMs });
 globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 
-await configura();
+// Il motore parte comunque: se la configurazione lancia o non finisce in tempo (stash o uscita che non rispondono) si comincia
+// lo stesso a girare, e quello che manca arriva quando arriva. Un motore che non parte e sembra vivo è il guasto peggiore.
+await Promise.race([
+  configura().catch((e) => {
+    errore = `configurazione: ${e?.message ?? e}`;
+    guasto(`${RUOLO} · configurazione`, e);
+  }),
+  new Promise((ok) => setTimeout(ok, 15000)),
+]);
 if (LIVE) {
   rip.mappa = { ciclo0: 0, t0: ac.currentTime, cps: CPS_INIZIALE };
   setInterval(pubblicaMappa, MAPPA_OGNI_MS);

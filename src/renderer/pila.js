@@ -38,27 +38,32 @@ export class Pila {
     this.strisce = new Map(); // id del livello → { ciclo: eventi } (le note vere, dal motore live)
     this.selezionato = null; // id del livello scelto con un clic sulla card: a lui vanno le code da sole (e, col controller, i colpi)
     this.modifiche = new Map(); // nome del livello → { editor, carta } mentre lo modifico
-    // Come le schede di Chrome: mentre il puntatore sta sulle card, il posto di una card tolta resta vuoto e le altre non si muovono,
-    // così si possono cliccare più × di fila senza inseguirle. Appena il puntatore esce i buchi si chiudono.
-    this.sopra = false;
-    this.segnaposti = new Set();
-    const zona = contenitore.parentElement ?? contenitore;
-    zona.addEventListener('mouseenter', () => (this.sopra = true));
-    zona.addEventListener('mouseleave', () => this.chiudiBuchi());
+    // Come su un mixer: ogni livello (per nome) tiene la sua manopola 3–7 finché non è sparito del tutto, anche mentre esce.
+    // Chi entra prende il primo numero libero; quando uno sparisce gli altri non scalano.
+    this.postoDi = new Map(); // nome del livello → 1…5 (la manopola 3…7)
     this.creaJam(jam);
   }
 
-  chiudiBuchi() {
-    this.sopra = false;
-    if (!this.segnaposti.size) return;
-    for (const s of this.segnaposti) s.remove();
-    this.segnaposti.clear();
-    this.adatta(true);
+  // I posti si aggiornano a ogni stato del live: chi non c'è più libera il suo, chi è nuovo prende il primo libero (in ordine di arrivo).
+  assegnaPosti() {
+    const nomi = new Set(this.livelli.filter((l) => !eNomeBeat(l.nome)).map((l) => l.nome));
+    for (const nome of [...this.postoDi.keys()]) if (!nomi.has(nome)) this.postoDi.delete(nome);
+    for (const nome of nomi) {
+      if (this.postoDi.has(nome)) continue;
+      const occupati = new Set(this.postoDi.values());
+      const libero = [1, 2, 3, 4, 5].find((k) => !occupati.has(k));
+      if (libero) this.postoDi.set(nome, libero);
+    }
+  }
+
+  // Il posto di un livello fra i sei delle manopole 2–7 (0 = il beat), o -1 se non ha una manopola.
+  postoLivello(l) {
+    return eNomeBeat(l.nome) ? 0 : this.postoDi.get(l.nome) ?? -1;
   }
 
   // le card vere nell'ordine in cui stanno (senza i buchi lasciati dalle card tolte)
   elementiCarte() {
-    return [...this.contenitore.children].filter((e) => !this.segnaposti.has(e));
+    return [...this.contenitore.children].filter((e) => e.classList.contains('livello'));
   }
 
   // --- il jam: si scrive direttamente live ---
@@ -83,26 +88,23 @@ export class Pila {
     const ids = new Set(this.livelli.map((l) => l.id));
     for (const [id, c] of this.carte) {
       if (!ids.has(id)) {
-        if (this.sopra && c.el.isConnected) {
-          const buco = el('div', 'segnaposto');
-          buco.style.height = `${c.el.getBoundingClientRect().height}px`;
-          this.segnaposti.add(buco);
-          c.el.replaceWith(buco);
-        } else c.el.remove();
+        c.el.remove(); // le altre card si stringono e tengono il loro numero
         this.carte.delete(id);
         this.inizioUscita.delete(id);
       }
     }
     this.contenitore.querySelector('.vuoto')?.remove();
-    // il beat sta sempre in cima (anche mentre esce), poi i livelli come sono arrivati
-    const ordine = [...this.livelli].sort((a, b) => eNomeBeat(b.nome) - eNomeBeat(a.nome));
+    this.assegnaPosti();
+    // il beat sta sempre in cima (anche mentre esce), poi i livelli in ordine di manopola (chi non ne ha una in fondo, come è arrivato)
+    const rango = (l) => (this.postoLivello(l) < 0 ? 99 : this.postoLivello(l));
+    const ordine = [...this.livelli].sort((a, b) => rango(a) - rango(b));
     for (const l of ordine) {
       if (!this.carte.has(l.id)) this.carte.set(l.id, this.carta(l));
       const c = this.carte.get(l.id);
       c.livello = l;
       c.nome.textContent = l.nome;
       // il numero della manopola che la comanda (②–⑦: il beat sulla 2, le clip sulla 3–7)
-      const posto = this.posti().indexOf(l);
+      const posto = this.postoLivello(l); // anche mentre esce: il numero resta il suo
       c.manopola.textContent = posto >= 0 ? '②③④⑤⑥⑦'[posto] : '';
       c.provenienza.textContent = l.provenienza;
       c.pienoVolume.style.width = `${Math.min(1, l.volume) * 100}%`;
@@ -156,11 +158,11 @@ export class Pila {
 
   // I sei posti delle manopole 2–7: il primo (manopola 2) è il beat (null se non c'è: la manopola resta libera), poi le clip nell'ordine di entrata
   // sulle manopole 3–7 (cinque). La manopola 1 è la navigazione del CUE e la 8 il volume generale.
+  // Ogni clip tiene la sua manopola (postoDi): un posto il cui livello sta uscendo resta suo, e la manopola non comanda niente finché non è libero.
   posti() {
     const vivi = this.attivi();
     const beat = eNomeBeat(vivi[0]?.nome) ? vivi[0] : null;
-    const altri = beat ? vivi.slice(1) : vivi;
-    return Array.from({ length: 6 }, (_, i) => (i === 0 ? beat : altri[i - 1] ?? null));
+    return Array.from({ length: 6 }, (_, i) => (i === 0 ? beat : vivi.findLast((l) => !eNomeBeat(l.nome) && this.postoDi.get(l.nome) === i) ?? null));
   }
 
   carta(l) {
@@ -425,7 +427,7 @@ export class Pila {
         suonano++;
         c.pieno.style.width = `${(resta(sfuma, a.ciclo) * 100).toFixed(1)}%`;
         c.conto.textContent = `-${Math.max(0, sfuma.a - a.ciclo).toFixed(1)}`;
-        c.stato.textContent = a.ciclo < sfuma.da ? 'sfuma a fine ciclo · clic per tenerlo' : 'sfuma · clic per tenerlo';
+        c.stato.textContent = 'ESCE · clic per tenerlo';
         c.el.classList.remove('in-arrivo');
         c.el.classList.add('in-uscita');
         c.barra.hidden = false;
@@ -441,8 +443,8 @@ export class Pila {
         c.stato.textContent = `entra tra ${Math.max(1, Math.ceil(a.mancano))}${a.cursore ? ' · in scrittura' : ''}`;
       } else {
         suonano++;
-        c.conto.textContent = '';
-        c.stato.textContent = a.esce ? 'esce a fine ciclo' : l.muto ? 'muto' : '';
+        c.conto.textContent = a.esce && l.a !== null ? `-${Math.max(0, l.a - a.ciclo).toFixed(1)}` : ''; // il conto alla rovescia dell'uscita
+        c.stato.textContent = a.esce ? 'ESCE' : l.muto ? 'muto' : '';
       }
       c.el.classList.toggle('in-arrivo', a.arriva);
       c.el.classList.toggle('in-uscita', a.esce);

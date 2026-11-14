@@ -10,12 +10,16 @@ export const elencoUscite = () => dispositivi('audiooutput');
 export const elencoIngressi = () => dispositivi('audioinput');
 
 // nome vuoto = uscita predefinita di macOS
-export async function impostaUscita(ac, nome) {
+// `prima()` (se c'è) viene chiamata solo se l'uscita cambia davvero, subito prima del cambio (il motore ci chiude il volume: niente schiocco).
+export async function impostaUscita(ac, nome, prima = null) {
   let id = '';
   if (nome) {
     const d = (await elencoUscite()).find((u) => u.label === nome);
     if (!d) throw new Error(`uscita non trovata: ${nome}`);
     id = d.deviceId;
   }
-  if (ac.sinkId !== id) await ac.setSinkId(id);
+  if (ac.sinkId === id) return false;
+  await prima?.();
+  await ac.setSinkId(id);
+  return true;
 }

@@ -30,3 +30,31 @@ Valerio suona per un paio di settimane.
 - **WARP**: porta a tempo le clip audio, con preview (dicendo che cambia l'altezza).
 - **BASS CLASH**: due bassi insieme (dalla striscia viva): «abbasso il vecchio?».
 - **AUTO GAIN**: una clip molto più forte delle altre entra al livello giusto (volume d'ingresso).
+
+## Annotato il 14/11/2026 (fuori dalla beta 5, niente codice ancora)
+
+- **DRUM a fette per i break**: nella scheda DRUM una versione che taglia un break in fette (`chop`/`slice`) e le mette sulla griglia. La versione base della griglia (un suono per riga) viene prima.
+- **Tasto synth su ogni scena**: riaprire nel SYNTH qualsiasi clip o scena, modificando solo il pezzetto di note e lasciando intatto il resto. È il punto 4 di `docs/CHECKUP.md`: grosso, da fare a pezzi.
+- **Serate come progetti** (decisioni di Valerio): il nome a schermo è **SERATA**; ogni serata ha il suo **kit**, che nasce come **copia del kit dell'ultima serata**; la riga **«viene da…»** (da quale serata è stata copiata) c'è. Il progetto è in `docs/CHECKUP.md` («serate come progetti»).
+- **Volume dell'apertura**: il cursore c'è ma non si salva nel brano (deciso: niente cambio di formato).
+
+## 5.1: scheda DRUM (piano approvato il 14/11/2026, non ancora scritto)
+
+Una griglia a passi per la batteria, stile FL Studio, come scheda a sé «DRUM» nella vista ⌘2 (accanto a «suono» e «note»), senza le manopole del synth.
+
+- **Righe** = suoni scelti da un menu: campioni dello stash e suoni di Strudel (bd, sd, hh…). **16 passi** (anche 32), 1, 2 o 4 cicli.
+- **Clic** accende e spegne il passo; **velocity** trascinando in verticale sul passo.
+- **Scrive codice vero e leggibile**: una riga per suono dentro uno `stack(...)`, tipo `s("bd ~ ~ ~ bd ~ ~ ~ …").gain("1 …")`, e lo rilegge nei due versi come fa il pianoroll.
+- Quello che non sa leggere (ritmi euclidei, `?`, break tagliati) **resta nel testo** con un avviso, mai cancellato; quella riga non si modifica dalla griglia.
+- Riusa **prova in cuffia** (a tempo col live), **REC** e **→ CUE** (come clip o come scena del beat). Non tocca i motori del live.
+- Se costa poco: i tasti del Mac suonano le righe e REC li registra a tempo.
+- **Come si scrive**: la parte «griglia ↔ codice» è un modulo isolato con i suoi test puri (adatta a Codex); la vista e gli agganci a cuffia/REC/→ CUE a parte.
+- Dopo: la versione **a fette** per i break (vedi sopra).
+
+## 5.1: rossi noti delle prove automatiche (dalla beta 5)
+
+1. `solidita`: dopo un crash dell'interfaccia il testo del CUE viene ripreso ma la scritta «ho ripreso il testo del CUE» non si vede (c'era già a fine fase 2 del check-up).
+2. `strudel`: vuole una cartella di suoni (`CUTX_SUONI_PROVA`) che nel giro completo non viene data.
+3. `linguette`: fallisce in coda al giro lungo, passa lanciata da sola (stato lasciato da una prova precedente).
+4. `finestra`: come sopra (la finestra del pubblico risulta già aperta).
+

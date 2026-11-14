@@ -174,6 +174,10 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
     await premi('K', 'meta');
     controlla('⌘K spegne e riaccende la cuffia', spenta && (await stato('cuffia')).udibile === true);
     await premi('Backspace', 'meta', 'shift');
+    const senzaScelta = !!(await stato('live')).codice;
+    await chiedi(finestre.controllo, 'cutxProva.pila.seleziona(cutxProva.pila.attivi().at(-1)?.id ?? null)'); // il togli vale solo per il livello scelto
+    await premi('Backspace', 'meta', 'shift');
+    controlla('⇧⌘⌫ senza un livello scelto non toglie niente', senzaScelta);
     controlla('⇧⌘⌫ toglie il live', !(await stato('live')).codice && (await stato('cuffia')).codice === pezzo);
     await premi('.', 'meta');
     controlla('⌘. ferma tutto', !(await stato('cuffia')).codice);
@@ -227,6 +231,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('finestra')) ok = (await sicura('finestra', provaFinestra)) && ok;
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
+  // le «prove a mano» del check-up beta 5 fatte dal Mac (prova-mano.js)
+  if (parti.some((p) => p.startsWith('mano-'))) ok = (await sicura('mano', (a) => import('./prova-mano.js').then((m) => m.provaMano({ ...a, parti })))) && ok;
 
   if (silenzioso) {
     const buone = righe.filter((r) => r.startsWith('OK')).length;
@@ -515,6 +521,7 @@ async function provaEntrata({ finestre, scrivi }) {
   const prima4 = await ciclo();
   const r4 = await goLive('// @sezione hat\ns("sine*8").freq(4000).gain(.0001)', 4);
   controlla('il tasto 4 sceglie "entra tra 4 cicli"', tasto4);
+  controlla('dopo il go live «entra tra» torna a 1 da solo', await js(`document.querySelector('[data-entra="1"]').classList.contains('on') && !document.querySelector('[data-entra="4"]').classList.contains('on') && !document.querySelector('[data-entra]').closest('.piede').classList.contains('entra-dopo')`));
   controlla('entra tra 4 cicli: tre confini dopo il prossimo', r4?.da === Math.ceil(prima4 + 0.06) + 3 || r4?.da === Math.ceil(prima4) + 3, JSON.stringify([prima4, r4?.da]));
   await aspetta(2);
   const scritto = await js(`document.querySelector('#livelli .livello.in-arrivo .codice')?.textContent ?? null`);
@@ -2941,6 +2948,15 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(1);
     controlla('brano 3 è l\'attivo; in fondo al set non c\'è un prossimo', (await ling('attivo')).includes('● brano 3') && (await ling('prossimo')) === '▸ –', `${await ling('attivo')} | ${await ling('prossimo')}`);
     controlla('senza un prossimo, passare non fa niente e lo dice', (await js(`cutxProva.passaBrano()`)) === undefined && /non c'è un prossimo brano/.test(await js(`document.getElementById('cue-avviso').textContent`)));
+    // dopo «ferma tutto» il live è vuoto: il beat del prossimo brano entra subito e pieno, senza la transizione di 8 cicli
+    await js(`cutxProva.fermaTutto()`);
+    await aspetta(1.5);
+    await js(`cutxProva.cue.slot.prossimo = cutxProva.cue.slot.attivo`);
+    await js(`cutxProva.passaBrano()`);
+    await aspetta(0.5);
+    const dopoFerma = (await live()).livelli.filter((l) => l.a === null && l.nome === 'beat');
+    controlla('dopo «ferma tutto» il beat del prossimo brano entra subito, senza dissolvenza', dopoFerma.length === 1 && dopoFerma[0].sfuma === null, JSON.stringify(dopoFerma.map((l) => l.sfuma)));
+    controlla('e l\'avviso non parla di una transizione', /^passo a «[^»]+»$/.test(await js(`document.getElementById('cue-avviso').textContent`)), await js(`document.getElementById('cue-avviso').textContent`));
   } finally {
     await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 1 }); cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ rampaCicli: 8 })`);
     await js(`cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
@@ -4346,7 +4362,7 @@ async function provaBeat({ finestre, scrivi }) {
   await aspetta(0.4);
   const prima = await js(`JSON.stringify(cutxProva.statoBeat() && { suona: cutxProva.statoBeat().suona?.beat.indice, pendente: cutxProva.statoBeat().pendente?.beat.indice })`);
   controlla('▶: il cambio aspetta la fine della frase (sviluppo in arrivo, intro ancora in corso)', prima === '{"suona":0,"pendente":1}', prima);
-  controlla('la card dello sviluppo dice che entra a fine frase', await js(`(document.querySelector('#carte .beat-card .pillola.in-arrivo')?.textContent.includes('sviluppo') && document.querySelector('#carte .beat-card')?.textContent.includes('entra a fine frase')) ?? false`));
+  controlla('la card dello sviluppo dice che entra a fine ciclo', await js(`(document.querySelector('#carte .beat-card .pillola.in-arrivo')?.textContent.includes('sviluppo') && document.querySelector('#carte .beat-card')?.textContent.includes('entra a fine ciclo')) ?? false`));
   await js(`document.querySelector('[data-entra="1"]').click()`);
   await tocca(2); // ▶ ancora, prima che entri: sostituisce il cambio in attesa (drop)
   await aspetta(3.5);
@@ -4387,6 +4403,58 @@ async function provaBeat({ finestre, scrivi }) {
   const nuovoPezzo = tutti.find((l) => l.nome === 'basso');
   controlla('armare il drop: il pezzo entra insieme al cambio di scena', !!nuovaBeat && !!nuovoPezzo && Math.abs(nuovaBeat.da - nuovoPezzo.da) < 1e-6, JSON.stringify([nuovaBeat?.da, nuovoPezzo?.da]));
   await js('cutxProva.fermaTutto()');
+  // il volume d'ingresso: il cursore c'è anche sulla card del beat (scena scelta), sull'apertura e sullo scratch
+  await aspetta(1);
+  const trascina = (sel, quanto) => js(`(() => { const v = document.querySelector(${JSON.stringify(sel)}); if (!v) return false; const r = v.getBoundingClientRect(); const o = { bubbles: true, pointerId: 1, clientX: r.left + r.width * ${quanto}, clientY: r.top + r.height / 2 }; v.setPointerCapture = () => {}; v.dispatchEvent(new PointerEvent('pointerdown', o)); v.dispatchEvent(new PointerEvent('pointerup', o)); return true; })()`);
+  await js(`cutxProva.cue.scegliScena(0)`);
+  controlla('la card del beat ha il cursore del volume d\'ingresso', await trascina('#carte .beat-card .card-testa .volume', 0.5));
+  const scena0 = await js(`JSON.stringify({ riga: cutxProva.cue.brano.modello.beat.scene[0].riga, volume: cutxProva.cue.pezzo().volume, altra: cutxProva.cue.brano.modello.beat.scene[1]?.riga })`);
+  controlla('il volume si scrive nell\'intestazione della scena scelta (· volume 0.5), le altre scene non cambiano, e il pezzo lo porta', /^\{"riga":"\/\/ @scena [^"]* · volume 0\.5","volume":0\.5/.test(scena0) && !/volume/.test(JSON.parse(scena0).altra ?? ''), scena0);
+  await js(`document.getElementById('go-live').click()`);
+  await aspetta(3.5);
+  const beatPiano = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  controlla('il beat entra a quel volume', beatPiano?.volume === 0.5, JSON.stringify(beatPiano?.volume));
+  await js(`cutxProva.muoviScena(1)`);
+  await aspetta(3.5);
+  const beatDopo = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  controlla('con ▶ il volume del beat resta quello che ha', beatDopo?.beat?.indice === 1 && beatDopo.volume === 0.5, JSON.stringify([beatDopo?.beat?.indice, beatDopo?.volume]));
+  await trascina('#carte .beat-card .card-testa .volume', 1.2);
+  controlla('riportato a pieno, dall\'intestazione il volume sparisce', !/volume/.test(await js(`cutxProva.cue.brano.modello.beat.scene[cutxProva.cue.scenaScelta()].riga`)));
+  await js('cutxProva.fermaTutto()');
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue('// @sezione piano\\ns("sine*2").gain(.0001)')`);
+  controlla('la card dello scratch ha il cursore, e il pezzo entra a quel volume', (await trascina('#card-libero .card-testa .volume', 0.25)) && (await js(`cutxProva.cue.pezzo().volume`)) === 0.25, String(await js(`cutxProva.cue.pezzo().volume`)));
+  await js(`cutxProva.scriviCue('// @sezione piano · volume 0.8\\ns("sine*2").gain(.0001)')`);
+  controlla('ma un volume scritto nell\'intestazione dello scratch vince sul cursore', (await js(`cutxProva.cue.pezzo().volume`)) === 0.8);
+  await trascina('#card-libero .card-testa .volume', 1.2);
+  await js(`cutxProva.cue.cambiaModo('brano')`);
+  // l'avvio della base: accanto a GO LIVE si legge cosa parte e quando; la scena nuova non eredita il muto; il live precarica i campioni
+  await js(`cutxProva.cue.scegliScena(0); cutxProva.scegliEntraTra(1)`);
+  await aspetta(0.8);
+  const parte1 = await js(`document.getElementById('cosa-parte').textContent`);
+  controlla('accanto a GO LIVE: cosa parte e quando (il beat, la scena, a fine ciclo)', /^parte: BEAT · \S.* · a fine ciclo$/.test(parte1), parte1);
+  await js(`cutxProva.scegliEntraTra(4)`);
+  await aspetta(0.8);
+  controlla('e con «entra tra» 4 dice tra 4 cicli', / · tra 4 cicli$/.test(await js(`document.getElementById('cosa-parte').textContent`)), await js(`document.getElementById('cosa-parte').textContent`));
+  await js(`cutxProva.scegliEntraTra(1); document.getElementById('go-live').click()`);
+  await aspetta(3.5);
+  const beatSuona = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${beatSuona?.id}, muto: true })`);
+  await aspetta(0.4);
+  controlla('il beat è in muto', (await live()).livelli.find((l) => l.id === beatSuona?.id)?.muto === true);
+  await js(`cutxProva.muoviScena(1)`);
+  await aspetta(3.5);
+  const scenaNuova = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  controlla('la scena nuova non eredita il muto', scenaNuova?.beat?.indice === 1 && scenaNuova.muto === false, JSON.stringify([scenaNuova?.beat?.indice, scenaNuova?.muto]));
+  await js('cutxProva.fermaTutto()');
+  const suonoMai = (await js(`Object.keys(cutxProva.suoniStash() ?? {}).findLast((n) => /audio/.test(n)) ?? null`));
+  if (suonoMai) {
+    const primaPre = await chiedi(finestre.live, 'cutxPresa().precaricati');
+    await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue(${JSON.stringify(`s("${suonoMai}").gain(.0001)`)}); cutxProva.provaInCuffia()`);
+    await aspetta(4);
+    const dopoPre = await chiedi(finestre.live, 'cutxPresa().precaricati');
+    controlla(`provato in cuffia, il live ha già caricato il campione (${suonoMai})`, dopoPre > primaPre, `${primaPre} → ${dopoPre} byte`);
+    await js(`cutxProva.fermaCuffia(); cutxProva.cue.cambiaModo('brano')`);
+  } else scrivi('INFO  nello stash di prova non c\'è un campione per provare il precarico');
   return ok;
 }
 
@@ -5802,21 +5870,43 @@ async function provaCardTogli({ finestre, scrivi }) {
     await aspetta(1);
     const prima = await schede();
     controlla('card presenti (scratch + quattro)', prima.length === 5, JSON.stringify(prima));
-    // il mouse resta nella zona: due × di fila (la prima e la seconda), senza uscire
-    await clic(prima[0].togliX, prima[0].togliY);
-    await clic(prima[1].togliX, prima[1].togliY);
+    // come su un mixer: ogni livello tiene il suo numero di manopola, anche mentre esce e dopo che un altro è sparito
+    const numeri = () => js(`Object.fromEntries([...document.querySelectorAll('#livelli .card.livello')].map((c) => [c.querySelector('.nome').textContent, c.querySelector('.manopola-n').textContent]))`);
+    const n0 = await numeri();
+    controlla('a, b, c, d hanno quattro manopole diverse, in ordine', ['a', 'b', 'c', 'd'].map((n) => '③④⑤⑥⑦'.indexOf(n0[n])).every((k, i, t) => k >= 0 && (i === 0 || k === t[i - 1] + 1)), JSON.stringify(n0));
+    // il togli senza un livello scelto non toglie niente, e lo dice
+    await js(`cutxProva.pila.seleziona(null); cutxProva.controllerMidi.azioni.togli()`);
+    await aspetta(0.3);
+    controlla('togli senza un livello scelto: non esce niente e lo dice', (await live()).livelli.filter((l) => l.a === null).length >= 4 && /nessun livello scelto/.test(await js(`document.getElementById('cue-avviso').textContent`)), await js(`document.getElementById('cue-avviso').textContent`));
+    // tolgo b (la sua ×) col mouse sopra le card: mentre esce la card resta lì con ESCE, il conto alla rovescia e il suo numero
+    const iB = prima.findIndex((c) => c.nome === 'b');
+    const idB = (await live()).livelli.find((l) => l.nome === 'b' && l.a === null).id;
+    for (const e = Date.now() + 5000; Date.now() < e && (await ciclo()) % 1 > 0.3; ) await aspetta(0.05); // a inizio ciclo: resta un po' di tempo per guardarla uscire
+    await clic(prima[iB].togliX, prima[iB].togliY);
+    const esce = await js(`(() => { const c = [...document.querySelectorAll('#livelli .card.livello')].find((x) => x.querySelector('.nome').textContent === 'b'); return c && { stato: c.querySelector('.stato-livello').textContent, conto: c.querySelector('.conto').textContent, numero: c.querySelector('.manopola-n').textContent }; })()`);
+    controlla('la card che esce resta al suo posto con ESCE, il conto alla rovescia e il suo numero', esce?.stato === 'ESCE' && /^-\d/.test(esce.conto) && esce.numero === n0.b, JSON.stringify(esce));
+    // una seconda pressione sullo stesso livello non annulla l'uscita
+    await js(`cutxProva.pila.seleziona(${idB}); cutxProva.controllerMidi.azioni.togli()`);
+    await aspetta(0.2);
+    controlla('una seconda pressione del togli non annulla l\'uscita', (await live()).livelli.find((l) => l.id === idB)?.a !== null);
     const fine = (await ciclo()) + 2.5;
     for (const e = Date.now() + 9000; Date.now() < e && (await ciclo()) < fine; ) await aspetta(0.2);
     await aspetta(0.6);
     const dopo = await schede();
-    controlla('le due tolte sono sparite', dopo.length === 3, JSON.stringify(dopo));
-    controlla('col mouse ancora sopra le altre NON si sono mosse', dopo.length === 3 && dopo.every((c, i) => Math.abs(c.top - prima[i + 2].top) <= 1), `prima ${prima.map((c) => c.top)}, dopo ${dopo.map((c) => c.top)}`);
-    // il mouse esce dalla zona: i buchi si chiudono
-    const fuori = await js(`(() => { const r = document.querySelector('header, .barra')?.getBoundingClientRect(); return { x: 5, y: Math.round(r ? r.top + 4 : 4) }; })()`);
-    mouse('mouseMove', fuori.x, fuori.y);
-    await aspetta(0.6);
-    const chiuso = await schede();
-    controlla('uscito il mouse, le card salgono a chiudere i buchi', chiuso.length === 3 && chiuso[0].top <= prima[0].top + 1, `dopo l'uscita ${chiuso.map((c) => c.top)}`);
+    const n1 = await numeri();
+    controlla('b è sparita', dopo.length === prima.length - 1 && !('b' in n1), JSON.stringify(n1));
+    controlla('le altre tengono il loro numero di manopola (non scalano)', ['a', 'c', 'd'].every((n) => n1[n] === n0[n]), JSON.stringify([n0, n1]));
+    controlla('le card si stringono anche col mouse sopra (niente buco)', dopo.every((c, i) => Math.abs(c.top - prima[i].top) <= 1 || i >= iB), `prima ${prima.map((c) => c.top)}, dopo ${dopo.map((c) => c.top)}`);
+    const postiDopo = JSON.parse(await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`));
+    controlla('la manopola liberata non comanda niente, le altre comandano lo stesso livello di prima', postiDopo['②③④⑤⑥⑦'.indexOf(n0.b)] === null && ['a', 'c', 'd'].every((n) => postiDopo['②③④⑤⑥⑦'.indexOf(n0[n])] === n), JSON.stringify(postiDopo));
+    // chi entra prende il primo numero libero e la card compare in ordine di numero
+    const rE = await goLive('// @sezione e\ns("sine*4").freq(60).gain(.0001)');
+    for (const e = Date.now() + 9000; Date.now() < e && (await ciclo()) < rE.da + 0.3; ) await aspetta(0.2);
+    await aspetta(0.5);
+    const n2 = await numeri();
+    const ordineCard = (await schede()).map((c) => c.nome).filter((n) => ['a', 'c', 'd', 'e'].includes(n));
+    controlla('chi entra prende il primo numero libero (quello di b)', n2.e === n0.b && ['a', 'c', 'd'].every((n) => n2[n] === n0[n]), JSON.stringify(n2));
+    controlla('e la sua card compare in ordine di numero (fra a e c)', ordineCard.join() === 'a,e,c,d', ordineCard.join());
   } catch (e) {
     controlla('prova delle card', false, String(e.message ?? e));
   } finally {

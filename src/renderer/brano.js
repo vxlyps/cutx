@@ -221,6 +221,8 @@ export const conCorpoScena = (brano, k, corpo) => conScene(brano, brano.beat.sce
 export const rinominaScena = (brano, k, nome) =>
   conScene(brano, brano.beat.scene.map((m, j) => (j === k ? { ...m, nome, riga: rigaScena(nome, m.info) } : m)));
 
+// il volume d'ingresso di una scena: nell'intestazione, come per le clip (// @scena drop · volume 0.8)
+export const conInfoScena = (brano, k, info) => conScene(brano, brano.beat.scene.map((m, j) => (j === k ? { ...m, info, riga: rigaScena(m.nome, info) } : m)));
 export const rigaScena = (nome, info = {}) => rigaSezione(nome, info).replace('// @clip', '// @scena');
 
 // Un momento nuovo in fondo alla spina (e la spina, se non c'era).

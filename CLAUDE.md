@@ -101,7 +101,7 @@ Io (Claude) sono il capo progetto: decido architettura, approccio, priorità. Co
 - Lo storico fase per fase sta in `docs/STATO.md`: non si carica, si cerca con grep.
 
 ## Stato (riassunto; il dettaglio è in `docs/STATO.md`)
-- Versione **0.4.0-beta.4** (5/11/2026), release «CUTX_04» su GitHub, `.dmg` arm64 senza firma, icona gatto. Pacchetto: `npm run pacchetto`; `build.files` deve elencare ogni file importato da main.js e dal worker (`test/pacchetto.test.js` lo controlla; la beta 4 era partita senza `categorie.js`).
+- Versione **0.5.0-beta.5** (14/11/2026), release «CUTX_05» su GitHub (novità in `CHANGELOG.md`, prove e cose da guardare coi cavi in `docs/PROVE-BETA5.md`), `.dmg` arm64 senza firma, icona gatto. Pacchetto: `npm run pacchetto`; `build.files` deve elencare ogni file importato da main.js e dal worker (`test/pacchetto.test.js` lo controlla; la beta 4 era partita senza `categorie.js`).
 - MOVIOLA (scatola nera delle prove, SEGNA, `analizza-prova`): come si usa in `docs/MOVIOLA.md`.
 - Fatti: postazione a tre colonne, CUE e LIVE a livelli, brani `.cutx`, stash, Ableton, proiettore, controller X-Touch (LIVE e SYNTH), SYNTH con pianoroll (selezione, matita, passi, velocity, griglie, scale, codice incollato). Specifica del SYNTH: `docs/SYNTH.md`.
 - Da fare, in ordine: MOD trascinabili, ARPEGGIO e CAOS, tastiera MIDI (MiniLab 3) e suoni salvati; poi SHOW (col controller sempre sul LIVE), RECOVER, SIDECHAIN/DUCK, transizioni; poi ASSIST; spostare le parole in `testi/it.json`. Elenco: `docs/PROSSIMI.md`.

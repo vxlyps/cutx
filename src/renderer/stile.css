@@ -2206,6 +2206,16 @@ input[type='checkbox'] {
   gap: 10px;
 }
 
+/* accanto a GO LIVE: cosa parte e quando, sempre */
+.cosa-parte {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--testo);
+}
+
 /* i due piedi (CUE e LIVE) alla stessa altezza, così la linea sopra di loro è una sola */
 .live .piede {
   min-height: 108px;
@@ -3326,4 +3336,78 @@ input[type='checkbox'] {
   height: 100%;
   width: 0;
   background: var(--testo);
+}
+
+/* «entra tra» diverso da 1: una scelta a mano che ritarda il prossimo go live, quindi ambra finché c'è */
+.piede.entra-dopo [data-entra].on {
+  background: var(--avviso, #e0a03a);
+  border-color: var(--avviso, #e0a03a);
+  color: var(--su-marcio);
+}
+/* e quando cambia (anche per un tasto premuto per sbaglio) si vede */
+.piede.entra-cambiato [data-entra].on {
+  animation: entra-cambiato 0.9s ease-out;
+}
+@keyframes entra-cambiato {
+  0% {
+    transform: scale(1.7);
+    box-shadow: 0 0 0 8px var(--avviso, #e0a03a);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* ho mandato live una clip e il BEAT non suona: la sua card lampeggia in ambra */
+.beat-card.manca-beat {
+  outline: 2px solid var(--avviso, #e0a03a);
+  outline-offset: 2px;
+  animation: manca-beat 0.8s ease-in-out 5;
+}
+@keyframes manca-beat {
+  50% {
+    outline-color: transparent;
+  }
+}
+
+/* --- la manopola 1 a schermo: il BEAT resta in vista in cima alla lista, e la voce scelta si legge da lontano --- */
+/* (col codice del beat espanso la card è alta e scorre con le altre, come prima) */
+#carte .beat-card:not(.senza-beat):not(:has(.beat-corpo.espanso)) {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--fondo);
+  box-shadow: 0 10px 12px -6px var(--fondo); /* le clip che scorrono sotto sfumano, non si tagliano */
+}
+.card.sezione.attiva:not(.in-cuffia):not(.e-live) {
+  border-color: var(--testo);
+  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo);
+}
+.card.sezione.attiva:not(.e-live) .nome-sezione {
+  background: var(--testo);
+  color: var(--fondo);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+/* la scena del beat scelta (manopola 1 o clic): si legge da lontano come le clip — card incorniciata e pillola in negativo, più grande */
+#carte .beat-card:has(.beat-codice.attiva) {
+  border-color: var(--testo);
+  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo), 0 10px 12px -6px var(--fondo);
+}
+.beat-card:has(.beat-codice.attiva) .pillola.scelta:not(.live):not(.in-arrivo) {
+  background: var(--testo);
+  color: var(--fondo);
+  border-color: var(--testo);
+}
+.beat-card:has(.beat-codice.attiva) .pillola.scelta {
+  height: 30px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 15px;
+  outline: 2px solid var(--testo);
+  outline-offset: 2px;
 }

@@ -6,9 +6,11 @@ import path from 'node:path';
 
 const MASSIMO = 2 * 1024 * 1024;
 let cartella = null;
+let ultima = { chiave: '', quando: 0, saltate: 0 }; // l'ultima riga scritta, per non ripeterla a raffica
 
 export function inizia(dove) {
   cartella = dove;
+  ultima = { chiave: '', quando: 0, saltate: 0 };
   try {
     mkdirSync(cartella, { recursive: true });
   } catch {
@@ -30,8 +32,18 @@ export function scrivi(livello, fonte, messaggio) {
   } catch {
     // mai far cadere l'app per chi ascolta
   }
-  const riga = `${new Date().toISOString()} [${livello}] [${fonte}] ${String(messaggio).replace(/\s+$/, '').replace(/\n/g, '\n    ')}\n`;
   if (!cartella) return;
+  // lo stesso messaggio di fila entro un secondo (un guasto che si ripete a ogni fotogramma) si conta e basta:
+  // il registro non si riempie e il processo principale non passa il tempo a scrivere
+  const chiave = `${livello}|${fonte}|${messaggio}`;
+  const adesso = Date.now();
+  if (chiave === ultima.chiave && adesso - ultima.quando < 1000) {
+    ultima.saltate++;
+    return;
+  }
+  const saltate = ultima.saltate ? `${new Date().toISOString()} [info] [registro] il messaggio qui sopra si è ripetuto altre ${ultima.saltate} volte\n` : '';
+  ultima = { chiave, quando: adesso, saltate: 0 };
+  const riga = `${saltate}${new Date().toISOString()} [${livello}] [${fonte}] ${String(messaggio).replace(/\s+$/, '').replace(/\n/g, '\n    ')}\n`;
   try {
     const file = fileDelLog();
     try {
