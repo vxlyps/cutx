@@ -963,6 +963,13 @@ export class Cue {
     return carta;
   }
 
+  // La voce scelta col controller (manopola 1): se il cursore di testo era nell'editor di un'altra card, lo lascia. Altrimenti quell'editor
+  // si riprenderebbe la scelta appena la finestra torna in primo piano (il suo «focus» riparte), e si scriverebbe in una clip che non è quella scelta.
+  lasciaFuoco(carta) {
+    const f = document.activeElement;
+    if (f && f !== document.body && f.closest?.('#carte') && !carta.el.contains(f) && !(carta.scena !== undefined && f.closest('.beat-card'))) f.blur();
+  }
+
   attiva(carta) {
     this.cartaAttiva = carta;
     for (const c of this.carte) c.el.classList.toggle('attiva', c === carta);
@@ -1009,6 +1016,7 @@ export class Cue {
       const carta = this.carte.find((c) => (voce.scena !== undefined ? c.scena === voce.scena : c.scena === undefined && c.i === voce.sezione));
       if (!carta) return null;
       if (voce.scena !== undefined) this.brano.scenaScelta = voce.scena;
+      this.lasciaFuoco(carta);
       this.attiva(carta);
       if (voce.scena !== undefined) this.mostraBrano(false);
       carta.el.hidden = false;
@@ -1070,6 +1078,7 @@ export class Cue {
   scegliApertura() {
     const carta = this.carte.find((c) => c.apertura);
     if (!carta) return null;
+    this.lasciaFuoco(carta);
     this.attiva(carta);
     carta.el.hidden = false;
     this.mostraInVista(carta.el);

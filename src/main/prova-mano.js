@@ -95,7 +95,9 @@ async function manopola({ finestre, controlla, nota, js, OUT }) {
     return { nome: cutxProva.cue.nomeSezioneScelta(), eBeat, sopra: Math.round(r.top - (eBeat ? c.top : Math.max(c.top, b.bottom))), sotto: Math.round(c.bottom - r.bottom), beatVisibile: b.top >= c.top - 1 && b.bottom <= c.bottom + 1, coperta: !eBeat && r.top < b.bottom - 1 && b.bottom > c.top };
   })()`);
   const totale = await js(`cutxProva.cue.vociControllo().length`);
-  await js(`document.activeElement?.blur()`); // un editor col fuoco si riprende la selezione quando la finestra torna in primo piano: falserebbe il giro
+  // il cursore di testo in una clip: la manopola lo deve lasciare, altrimenti quell'editor si riprende la scelta quando la finestra torna in primo piano
+  await js(`cutxProva.cue.carte.find((c) => c.i === 4)?.editor.focus()`);
+  await aspetta(0.3);
   const giri = [];
   for (let i = 0; i < totale; i++) {
     await js(`cutxProva.controllerMidi.giraManopola(1, 1)`);
@@ -109,6 +111,7 @@ async function manopola({ finestre, controlla, nota, js, OUT }) {
     giri.push(await misura());
     if (i === Math.floor(totale / 2)) await scatta(`manopola-su-meta`);
   }
+  controlla('girando la manopola il cursore di testo lascia la clip di prima (non si riprende la scelta)', await js(`!document.activeElement?.closest?.('#carte .card.sezione')`));
   nota(`voci: ${totale} · misure: ${JSON.stringify(giri)}`);
   const clip = giri.filter((g) => g && !g.eBeat);
   controlla('ogni scatto sceglie una voce', giri.every(Boolean) && clip.length > 0, JSON.stringify(giri.map((g) => g?.nome)));
