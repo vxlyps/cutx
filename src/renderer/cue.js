@@ -24,6 +24,28 @@ function el(tag, classe, testo) {
   return e;
 }
 
+// Il cursore del volume d'ingresso (lo stesso disegno delle card del LIVE): clic o trascina. `leggi()` dà il valore 0–1, `scrivi(v)` lo cambia.
+function cursoreVolume(leggi, scrivi, aiuto) {
+  const volume = el('div', 'volume');
+  volume.dataset.aiuto = aiuto;
+  const pieno = el('div');
+  volume.append(pieno);
+  const mostra = () => (pieno.style.width = `${Math.min(1, leggi() ?? 1) * 100}%`);
+  const imposta = (e) => {
+    const r = volume.getBoundingClientRect();
+    scrivi(Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 100) / 100);
+    mostra();
+  };
+  volume.onpointerdown = (e) => {
+    volume.setPointerCapture(e.pointerId);
+    imposta(e);
+    volume.onpointermove = imposta;
+  };
+  volume.onpointerup = () => (volume.onpointermove = null);
+  mostra();
+  return { el: volume, mostra };
+}
+
 function tasto(etichetta, scorciatoia, titolo) {
   const b = el('button', 'key piccolo');
   b.textContent = etichetta;
@@ -39,6 +61,9 @@ export class Cue {
     this.modo = 'libero';
     this.stati = { live: [], cuffia: null }; // cosa suona: [{ nome, provenienza }]
     this.fileLibero = null; // il brano in cui è stato salvato il testo libero
+    this.volumeScratch = 1; // il volume d'ingresso dello scratch (non si salva: lo scratch è testo libero)
+    const vs = cursoreVolume(() => this.volumeScratch, (v) => (this.volumeScratch = v), 'ingresso-volume');
+    $('manda-cuffia').before(vs.el);
     this.slot = { attivo: null, prossimo: null }; // i due brani del CUE: { file, modello, sporco, scenaScelta }
     this.linguetta = 'prossimo'; // quale dei due si vede: «● attivo» (quello che suona) o «▸ prossimo»
     this.beatEspanso = false; // il codice della scena del beat: compatto o per intero
@@ -211,7 +236,11 @@ export class Cue {
 
   // { nome, provenienza, codice, inizio } oppure { errore }
   pezzo() {
-    return this.modo === 'libero' ? this.pezzoLibero() : this.pezzoBrano();
+    if (this.modo !== 'libero') return this.pezzoBrano();
+    const p = this.pezzoLibero();
+    // il cursore della card scratch: vale se il pezzo non ha già il suo volume scritto nell'intestazione
+    if (!p.errore && p.volume === undefined && this.volumeScratch < 1) p.volume = this.volumeScratch;
+    return p;
   }
 
   pezzoLibero() {
@@ -253,6 +282,7 @@ export class Cue {
         scene: scene.map((m, j) => ({ nome: m.nome, codice: B.codiceScena(modello, j).codice, inizio: B.codiceScena(modello, j).inizio })),
       },
       scena: { nome: scene[k].nome, i: k, n: scene.length },
+      volume: scene[k].info?.volume,
       ...B.codiceScena(modello, k, righe),
     };
   }
@@ -268,6 +298,7 @@ export class Cue {
       nome: 'apertura',
       provenienza: `${this.nomeBrano} ◇`,
       scritto: true, // è già scrittura vera: il proiettore non la rifà a macchina
+      volume: this.brano.volumeApertura < 1 ? this.brano.volumeApertura : undefined, // il cursore della card (non si salva nel brano)
       ...B.codiceApertura(m, righe),
       bpmBrano: B.bpmDelBrano(m),
       dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },
@@ -526,6 +557,7 @@ export class Cue {
       c.el.classList.toggle('in-arrivo', stato === 'in-arrivo');
       if (scelte && this.beatInfo) {
         this.beatInfo.cuffia.classList.toggle('on', stato === 'cuffia');
+        this.beatInfo.volume?.mostra(); // il cursore segue la scena scelta
         const altro = stato !== 'live' && inLive.find((x) => eNomeBeat(x.nome) && !x.provenienza.startsWith(`${this.nomeBrano} ◆`));
         const inArrivo = m.beat.scene.findIndex((_, j) => this.statoScena(this.nomeBrano, j) === 'in-arrivo');
         this.beatInfo.stato.textContent =
@@ -822,7 +854,7 @@ export class Cue {
     };
     testa.append(bFantasma, bScript);
     if (!script) testa.append(bDaCapo);
-    testa.append(cuffia, live);
+    testa.append(cursoreVolume(() => this.brano.volumeApertura ?? 1, (v) => (this.brano.volumeApertura = v), 'ingresso-volume').el, cuffia, live);
     this.carte.push(carta);
     return art;
   }
@@ -842,7 +874,17 @@ export class Cue {
     const toglie = tasto('×', '', 'Togli la scena scelta');
     const espandi = tasto(this.beatEspanso ? 'riduci' : 'espandi', '', 'Il codice della scena: compatto o per intero');
     testa.append(titolo, stato, el('div', 'spazio'));
-    if (scene.length) testa.append(espandi, toglie, cuffia, live);
+    // il volume con cui il beat entra partendo dalla scena scelta: scritto nell'intestazione @scena, come per le clip
+    const volume = cursoreVolume(
+      () => this.brano.modello.beat?.scene[this.scenaScelta()]?.info?.volume,
+      (v) => {
+        const k = this.scenaScelta();
+        const { volume: _vecchio, ...resto } = this.brano.modello.beat.scene[k].info ?? {};
+        this.modifica(B.conInfoScena(this.brano.modello, k, v === 1 ? resto : { ...resto, volume: v }), false);
+      },
+      'scena-volume',
+    );
+    if (scene.length) testa.append(espandi, toglie, volume.el, cuffia, live);
     const pillole = el('div', 'pillole');
     const aggiungi = el('button', 'pillola nuova', '+ scena');
     aggiungi.title = 'Aggiungi una scena al beat (la base ritmica del brano)';
@@ -855,7 +897,7 @@ export class Cue {
     };
     const corpo = el('div', `beat-corpo${this.beatEspanso ? ' espanso' : ''}`);
     art.append(testa, pillole, corpo);
-    this.beatInfo = { stato, cuffia };
+    this.beatInfo = { stato, cuffia, volume };
     scene.forEach((sc, k) => {
       const pillola = el('button', 'pillola', sc.nome);
       pillola.dataset.aiuto = 'scena';

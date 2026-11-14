@@ -142,6 +142,14 @@
       "nome": "volume d'ingresso",
       "testo": "Il volume con cui la clip entra nel live: clic o trascina. Si scrive nell'intestazione @clip, quindi resta nel brano."
     },
+    "scena-volume": {
+      "nome": "volume d'ingresso",
+      "testo": "Il volume con cui il beat entra partendo da questa scena: clic o trascina. Si scrive nell'intestazione @scena, quindi resta nel brano. Con ◀ ▶ il volume del beat resta quello che ha."
+    },
+    "ingresso-volume": {
+      "nome": "volume d'ingresso",
+      "testo": "Il volume con cui quello che mandi entra nel live: clic o trascina. Non si salva: vale finché non lo cambi."
+    },
     "entra-1": {
       "nome": "entra tra 1 ciclo",
       "testo": "Il prossimo GO LIVE entra al prossimo ciclo.",

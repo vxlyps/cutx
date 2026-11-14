@@ -4399,6 +4399,30 @@ async function provaBeat({ finestre, scrivi }) {
   const nuovoPezzo = tutti.find((l) => l.nome === 'basso');
   controlla('armare il drop: il pezzo entra insieme al cambio di scena', !!nuovaBeat && !!nuovoPezzo && Math.abs(nuovaBeat.da - nuovoPezzo.da) < 1e-6, JSON.stringify([nuovaBeat?.da, nuovoPezzo?.da]));
   await js('cutxProva.fermaTutto()');
+  // il volume d'ingresso: il cursore c'è anche sulla card del beat (scena scelta), sull'apertura e sullo scratch
+  await aspetta(1);
+  const trascina = (sel, quanto) => js(`(() => { const v = document.querySelector(${JSON.stringify(sel)}); if (!v) return false; const r = v.getBoundingClientRect(); const o = { bubbles: true, pointerId: 1, clientX: r.left + r.width * ${quanto}, clientY: r.top + r.height / 2 }; v.setPointerCapture = () => {}; v.dispatchEvent(new PointerEvent('pointerdown', o)); v.dispatchEvent(new PointerEvent('pointerup', o)); return true; })()`);
+  await js(`cutxProva.cue.scegliScena(0)`);
+  controlla('la card del beat ha il cursore del volume d\'ingresso', await trascina('#carte .beat-card .card-testa .volume', 0.5));
+  const scena0 = await js(`JSON.stringify({ riga: cutxProva.cue.brano.modello.beat.scene[0].riga, volume: cutxProva.cue.pezzo().volume, altra: cutxProva.cue.brano.modello.beat.scene[1]?.riga })`);
+  controlla('il volume si scrive nell\'intestazione della scena scelta (· volume 0.5), le altre scene non cambiano, e il pezzo lo porta', /^\{"riga":"\/\/ @scena [^"]* · volume 0\.5","volume":0\.5/.test(scena0) && !/volume/.test(JSON.parse(scena0).altra ?? ''), scena0);
+  await js(`document.getElementById('go-live').click()`);
+  await aspetta(3.5);
+  const beatPiano = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  controlla('il beat entra a quel volume', beatPiano?.volume === 0.5, JSON.stringify(beatPiano?.volume));
+  await js(`cutxProva.muoviScena(1)`);
+  await aspetta(3.5);
+  const beatDopo = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  controlla('con ▶ il volume del beat resta quello che ha', beatDopo?.beat?.indice === 1 && beatDopo.volume === 0.5, JSON.stringify([beatDopo?.beat?.indice, beatDopo?.volume]));
+  await trascina('#carte .beat-card .card-testa .volume', 1.2);
+  controlla('riportato a pieno, dall\'intestazione il volume sparisce', !/volume/.test(await js(`cutxProva.cue.brano.modello.beat.scene[cutxProva.cue.scenaScelta()].riga`)));
+  await js('cutxProva.fermaTutto()');
+  await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue('// @sezione piano\\ns("sine*2").gain(.0001)')`);
+  controlla('la card dello scratch ha il cursore, e il pezzo entra a quel volume', (await trascina('#card-libero .card-testa .volume', 0.25)) && (await js(`cutxProva.cue.pezzo().volume`)) === 0.25, String(await js(`cutxProva.cue.pezzo().volume`)));
+  await js(`cutxProva.scriviCue('// @sezione piano · volume 0.8\\ns("sine*2").gain(.0001)')`);
+  controlla('ma un volume scritto nell\'intestazione dello scratch vince sul cursore', (await js(`cutxProva.cue.pezzo().volume`)) === 0.8);
+  await trascina('#card-libero .card-testa .volume', 1.2);
+  await js(`cutxProva.cue.cambiaModo('brano')`);
   return ok;
 }
 
