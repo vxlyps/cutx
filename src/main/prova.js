@@ -517,6 +517,7 @@ async function provaEntrata({ finestre, scrivi }) {
   const prima4 = await ciclo();
   const r4 = await goLive('// @sezione hat\ns("sine*8").freq(4000).gain(.0001)', 4);
   controlla('il tasto 4 sceglie "entra tra 4 cicli"', tasto4);
+  controlla('dopo il go live «entra tra» torna a 1 da solo', await js(`document.querySelector('[data-entra="1"]').classList.contains('on') && !document.querySelector('[data-entra="4"]').classList.contains('on') && !document.querySelector('[data-entra]').closest('.piede').classList.contains('entra-dopo')`));
   controlla('entra tra 4 cicli: tre confini dopo il prossimo', r4?.da === Math.ceil(prima4 + 0.06) + 3 || r4?.da === Math.ceil(prima4) + 3, JSON.stringify([prima4, r4?.da]));
   await aspetta(2);
   const scritto = await js(`document.querySelector('#livelli .livello.in-arrivo .codice')?.textContent ?? null`);

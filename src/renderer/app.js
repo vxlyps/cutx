@@ -261,6 +261,7 @@ async function goLive(pezzo = null) {
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   mostraErrore(r.errore, 'live');
+  if (!r.errore) entraTraUsato();
   // una clip di un brano che ha un beat, e nessun beat suona né sta arrivando: la base non parte da sola, lo dico (e la card BEAT lampeggia)
   if (!r.errore && daCue && cue.modo === 'brano' && SL.mancaIlBeat({ pezzo: p, sceneDelBrano: cue.brano?.modello.beat?.scene.length ?? 0, livelli: livelliLive, ciclo: cicloAdesso() })) {
     messaggi.push(it.cue.senzaBeat.replace('{nome}', p.nome));
@@ -305,6 +306,7 @@ async function muoviScena(delta) {
     dissolvenza: dissolvenza(dissEntra),
   });
   mostraErrore(r.errore, 'live');
+  if (!r.errore) entraTraUsato();
   return r.errore ? r : { scena: m.nome, indice: k };
 }
 
@@ -363,6 +365,7 @@ async function passaBrano(k = 0) {
   const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, ...sfuma });
   mostraErrore(r.errore, 'live');
   if (r.errore) return r;
+  entraTraUsato();
   passaggio = { nome, da: r.da };
   moviola.scrivi('live', 'transizione', { brano: nome, tipo: transizione.tipo, cicli: transizione.cicli, tieni, da: r.da, tempo: t.tipo, bpmDa: attuale, bpmA: nuovo });
   if (scartata) cue.avviso(`transizione «${scartata}» non valida: uso ${T.scriviTransizione(transizione)}`);
@@ -537,14 +540,20 @@ function scegliDiss(n) {
   for (const b of document.querySelectorAll('[data-diss]')) b.classList.toggle('on', Number(b.dataset.diss) === n);
 }
 
-function scegliEntraTra(n) {
+// «Entra tra» vale per un solo GO LIVE: appena un pezzo è partito (go live, ◀ ▶, passaggio di brano) torna a 1, in silenzio.
+// Così un 8 dimenticato non ritarda il go live dopo.
+function entraTraUsato() {
+  if (entraTra !== 1) scegliEntraTra(1, true);
+}
+
+function scegliEntraTra(n, zitto = false) {
   const cambia = n !== entraTra;
   entraTra = n;
   for (const b of document.querySelectorAll('[data-entra]')) b.classList.toggle('on', Number(b.dataset.entra) === n);
   // un valore diverso da 1 ritarda il prossimo go live: resta in ambra finché c'è, e quando cambia si vede (anche se l'ho toccato per sbaglio)
   const piede = document.querySelector('[data-entra]')?.closest('.piede');
   piede?.classList.toggle('entra-dopo', n !== 1);
-  if (!cambia || !piede) return;
+  if (!cambia || !piede || zitto) return;
   piede.classList.remove('entra-cambiato');
   void piede.offsetWidth; // l'animazione riparte
   piede.classList.add('entra-cambiato');
