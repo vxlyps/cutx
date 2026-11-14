@@ -561,7 +561,7 @@ export class Cue {
         const altro = stato !== 'live' && inLive.find((x) => eNomeBeat(x.nome) && !x.provenienza.startsWith(`${this.nomeBrano} ◆`));
         const inArrivo = m.beat.scene.findIndex((_, j) => this.statoScena(this.nomeBrano, j) === 'in-arrivo');
         this.beatInfo.stato.textContent =
-          inArrivo >= 0 ? `→ «${m.beat.scene[inArrivo].nome}» entra a fine frase` : stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● il beat suona qui' : stato === 'in-arrivo' ? '→ entra a fine frase' : altro ? `sostituisce il beat (${altro.provenienza.replace(/ ◆\d+$/, '')})` : 'pronta';
+          inArrivo >= 0 ? `→ «${m.beat.scene[inArrivo].nome}» entra a fine ciclo` : stato === 'cuffia' ? '◖◗ in cuffia' : stato === 'live' ? '● il beat suona qui' : stato === 'in-arrivo' ? '→ entra a fine ciclo' : altro ? `sostituisce il beat (${altro.provenienza.replace(/ ◆\d+$/, '')})` : 'pronta';
       }
     }
     for (const c of this.carte) {
@@ -870,7 +870,7 @@ export class Cue {
     const titolo = el('span', 'nome nome-beat', 'BEAT');
     const stato = el('span', 'lbl', scene.length ? 'pronta' : 'niente beat in questo brano');
     const cuffia = tasto('cuffia', '⌘↵', 'Ascolta in cuffia la scena scelta');
-    const live = tasto('go live', '⇧⌘↵', 'Fa partire il beat da questa scena (a fine frase, se il beat suona già)');
+    const live = tasto('go live', '⇧⌘↵', 'Fa partire il beat da questa scena (a fine ciclo, o dopo i cicli di «entra tra»)');
     const toglie = tasto('×', '', 'Togli la scena scelta');
     const espandi = tasto(this.beatEspanso ? 'riduci' : 'espandi', '', 'Il codice della scena: compatto o per intero');
     testa.append(titolo, stato, el('div', 'spazio'));

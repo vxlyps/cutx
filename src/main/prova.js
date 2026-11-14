@@ -4358,7 +4358,7 @@ async function provaBeat({ finestre, scrivi }) {
   await aspetta(0.4);
   const prima = await js(`JSON.stringify(cutxProva.statoBeat() && { suona: cutxProva.statoBeat().suona?.beat.indice, pendente: cutxProva.statoBeat().pendente?.beat.indice })`);
   controlla('▶: il cambio aspetta la fine della frase (sviluppo in arrivo, intro ancora in corso)', prima === '{"suona":0,"pendente":1}', prima);
-  controlla('la card dello sviluppo dice che entra a fine frase', await js(`(document.querySelector('#carte .beat-card .pillola.in-arrivo')?.textContent.includes('sviluppo') && document.querySelector('#carte .beat-card')?.textContent.includes('entra a fine frase')) ?? false`));
+  controlla('la card dello sviluppo dice che entra a fine ciclo', await js(`(document.querySelector('#carte .beat-card .pillola.in-arrivo')?.textContent.includes('sviluppo') && document.querySelector('#carte .beat-card')?.textContent.includes('entra a fine ciclo')) ?? false`));
   await js(`document.querySelector('[data-entra="1"]').click()`);
   await tocca(2); // ▶ ancora, prima che entri: sostituisce il cambio in attesa (drop)
   await aspetta(3.5);
@@ -4423,6 +4423,34 @@ async function provaBeat({ finestre, scrivi }) {
   controlla('ma un volume scritto nell\'intestazione dello scratch vince sul cursore', (await js(`cutxProva.cue.pezzo().volume`)) === 0.8);
   await trascina('#card-libero .card-testa .volume', 1.2);
   await js(`cutxProva.cue.cambiaModo('brano')`);
+  // l'avvio della base: accanto a GO LIVE si legge cosa parte e quando; la scena nuova non eredita il muto; il live precarica i campioni
+  await js(`cutxProva.cue.scegliScena(0); cutxProva.scegliEntraTra(1)`);
+  await aspetta(0.8);
+  const parte1 = await js(`document.getElementById('cosa-parte').textContent`);
+  controlla('accanto a GO LIVE: cosa parte e quando (il beat, la scena, a fine ciclo)', /^parte: BEAT · \S.* · a fine ciclo$/.test(parte1), parte1);
+  await js(`cutxProva.scegliEntraTra(4)`);
+  await aspetta(0.8);
+  controlla('e con «entra tra» 4 dice tra 4 cicli', / · tra 4 cicli$/.test(await js(`document.getElementById('cosa-parte').textContent`)), await js(`document.getElementById('cosa-parte').textContent`));
+  await js(`cutxProva.scegliEntraTra(1); document.getElementById('go-live').click()`);
+  await aspetta(3.5);
+  const beatSuona = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  await js(`cutxProva.motori.live.manda({ tipo: 'livello', livello: ${beatSuona?.id}, muto: true })`);
+  await aspetta(0.4);
+  controlla('il beat è in muto', (await live()).livelli.find((l) => l.id === beatSuona?.id)?.muto === true);
+  await js(`cutxProva.muoviScena(1)`);
+  await aspetta(3.5);
+  const scenaNuova = (await live()).livelli.find((l) => l.a === null && l.nome === 'beat');
+  controlla('la scena nuova non eredita il muto', scenaNuova?.beat?.indice === 1 && scenaNuova.muto === false, JSON.stringify([scenaNuova?.beat?.indice, scenaNuova?.muto]));
+  await js('cutxProva.fermaTutto()');
+  const suonoMai = (await js(`Object.keys(cutxProva.suoniStash() ?? {}).findLast((n) => /audio/.test(n)) ?? null`));
+  if (suonoMai) {
+    const primaPre = await chiedi(finestre.live, 'cutxPresa().precaricati');
+    await js(`cutxProva.cue.cambiaModo('libero'); cutxProva.scriviCue(${JSON.stringify(`s("${suonoMai}").gain(.0001)`)}); cutxProva.provaInCuffia()`);
+    await aspetta(4);
+    const dopoPre = await chiedi(finestre.live, 'cutxPresa().precaricati');
+    controlla(`provato in cuffia, il live ha già caricato il campione (${suonoMai})`, dopoPre > primaPre, `${primaPre} → ${dopoPre} byte`);
+    await js(`cutxProva.fermaCuffia(); cutxProva.cue.cambiaModo('brano')`);
+  } else scrivi('INFO  nello stash di prova non c\'è un campione per provare il precarico');
   return ok;
 }
 

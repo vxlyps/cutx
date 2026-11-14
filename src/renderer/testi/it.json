@@ -92,7 +92,7 @@
     },
     "passa-brano": {
       "nome": "prossimo brano",
-      "testo": "Tieni premuto un secondo: a fine frase entra il beat del prossimo brano dalla sua prima scena. Le clip del brano vecchio restano finché le togli tu. Se i tempi sono vicini (entro l'8%) il tempo ci arriva con una rampa, altrimenti salta quando entra il beat nuovo."
+      "testo": "Tieni premuto un secondo: a fine ciclo (o dopo i cicli di «entra tra») entra il beat del prossimo brano dalla sua prima scena. Le clip del brano vecchio restano finché le togli tu. Se i tempi sono vicini (entro l'8%) il tempo ci arriva con una rampa, altrimenti salta quando entra il beat nuovo."
     },
     "aggiungi-sezione": {
       "nome": "+ clip",
@@ -149,6 +149,10 @@
     "ingresso-volume": {
       "nome": "volume d'ingresso",
       "testo": "Il volume con cui quello che mandi entra nel live: clic o trascina. Non si salva: vale finché non lo cambi."
+    },
+    "cosa-parte": {
+      "nome": "cosa parte",
+      "testo": "Quello che il prossimo GO LIVE manda live, e quando entra: a fine ciclo, tra i cicli di «entra tra», o insieme al cambio di scena che sta aspettando."
     },
     "entra-1": {
       "nome": "entra tra 1 ciclo",
