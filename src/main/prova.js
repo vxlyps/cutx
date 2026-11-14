@@ -5838,21 +5838,43 @@ async function provaCardTogli({ finestre, scrivi }) {
     await aspetta(1);
     const prima = await schede();
     controlla('card presenti (scratch + quattro)', prima.length === 5, JSON.stringify(prima));
-    // il mouse resta nella zona: due × di fila (la prima e la seconda), senza uscire
-    await clic(prima[0].togliX, prima[0].togliY);
-    await clic(prima[1].togliX, prima[1].togliY);
+    // come su un mixer: ogni livello tiene il suo numero di manopola, anche mentre esce e dopo che un altro è sparito
+    const numeri = () => js(`Object.fromEntries([...document.querySelectorAll('#livelli .card.livello')].map((c) => [c.querySelector('.nome').textContent, c.querySelector('.manopola-n').textContent]))`);
+    const n0 = await numeri();
+    controlla('a, b, c, d hanno quattro manopole diverse, in ordine', ['a', 'b', 'c', 'd'].map((n) => '③④⑤⑥⑦'.indexOf(n0[n])).every((k, i, t) => k >= 0 && (i === 0 || k === t[i - 1] + 1)), JSON.stringify(n0));
+    // il togli senza un livello scelto non toglie niente, e lo dice
+    await js(`cutxProva.pila.seleziona(null); cutxProva.controllerMidi.azioni.togli()`);
+    await aspetta(0.3);
+    controlla('togli senza un livello scelto: non esce niente e lo dice', (await live()).livelli.filter((l) => l.a === null).length >= 4 && /nessun livello scelto/.test(await js(`document.getElementById('cue-avviso').textContent`)), await js(`document.getElementById('cue-avviso').textContent`));
+    // tolgo b (la sua ×) col mouse sopra le card: mentre esce la card resta lì con ESCE, il conto alla rovescia e il suo numero
+    const iB = prima.findIndex((c) => c.nome === 'b');
+    const idB = (await live()).livelli.find((l) => l.nome === 'b' && l.a === null).id;
+    for (const e = Date.now() + 5000; Date.now() < e && (await ciclo()) % 1 > 0.3; ) await aspetta(0.05); // a inizio ciclo: resta un po' di tempo per guardarla uscire
+    await clic(prima[iB].togliX, prima[iB].togliY);
+    const esce = await js(`(() => { const c = [...document.querySelectorAll('#livelli .card.livello')].find((x) => x.querySelector('.nome').textContent === 'b'); return c && { stato: c.querySelector('.stato-livello').textContent, conto: c.querySelector('.conto').textContent, numero: c.querySelector('.manopola-n').textContent }; })()`);
+    controlla('la card che esce resta al suo posto con ESCE, il conto alla rovescia e il suo numero', esce?.stato === 'ESCE' && /^-\d/.test(esce.conto) && esce.numero === n0.b, JSON.stringify(esce));
+    // una seconda pressione sullo stesso livello non annulla l'uscita
+    await js(`cutxProva.pila.seleziona(${idB}); cutxProva.controllerMidi.azioni.togli()`);
+    await aspetta(0.2);
+    controlla('una seconda pressione del togli non annulla l\'uscita', (await live()).livelli.find((l) => l.id === idB)?.a !== null);
     const fine = (await ciclo()) + 2.5;
     for (const e = Date.now() + 9000; Date.now() < e && (await ciclo()) < fine; ) await aspetta(0.2);
     await aspetta(0.6);
     const dopo = await schede();
-    controlla('le due tolte sono sparite', dopo.length === 3, JSON.stringify(dopo));
-    controlla('col mouse ancora sopra le altre NON si sono mosse', dopo.length === 3 && dopo.every((c, i) => Math.abs(c.top - prima[i + 2].top) <= 1), `prima ${prima.map((c) => c.top)}, dopo ${dopo.map((c) => c.top)}`);
-    // il mouse esce dalla zona: i buchi si chiudono
-    const fuori = await js(`(() => { const r = document.querySelector('header, .barra')?.getBoundingClientRect(); return { x: 5, y: Math.round(r ? r.top + 4 : 4) }; })()`);
-    mouse('mouseMove', fuori.x, fuori.y);
-    await aspetta(0.6);
-    const chiuso = await schede();
-    controlla('uscito il mouse, le card salgono a chiudere i buchi', chiuso.length === 3 && chiuso[0].top <= prima[0].top + 1, `dopo l'uscita ${chiuso.map((c) => c.top)}`);
+    const n1 = await numeri();
+    controlla('b è sparita', dopo.length === prima.length - 1 && !('b' in n1), JSON.stringify(n1));
+    controlla('le altre tengono il loro numero di manopola (non scalano)', ['a', 'c', 'd'].every((n) => n1[n] === n0[n]), JSON.stringify([n0, n1]));
+    controlla('le card si stringono anche col mouse sopra (niente buco)', dopo.every((c, i) => Math.abs(c.top - prima[i].top) <= 1 || i >= iB), `prima ${prima.map((c) => c.top)}, dopo ${dopo.map((c) => c.top)}`);
+    const postiDopo = JSON.parse(await js(`JSON.stringify(cutxProva.pila.posti().map((l) => l && l.nome))`));
+    controlla('la manopola liberata non comanda niente, le altre comandano lo stesso livello di prima', postiDopo['②③④⑤⑥⑦'.indexOf(n0.b)] === null && ['a', 'c', 'd'].every((n) => postiDopo['②③④⑤⑥⑦'.indexOf(n0[n])] === n), JSON.stringify(postiDopo));
+    // chi entra prende il primo numero libero e la card compare in ordine di numero
+    const rE = await goLive('// @sezione e\ns("sine*4").freq(60).gain(.0001)');
+    for (const e = Date.now() + 9000; Date.now() < e && (await ciclo()) < rE.da + 0.3; ) await aspetta(0.2);
+    await aspetta(0.5);
+    const n2 = await numeri();
+    const ordineCard = (await schede()).map((c) => c.nome).filter((n) => ['a', 'c', 'd', 'e'].includes(n));
+    controlla('chi entra prende il primo numero libero (quello di b)', n2.e === n0.b && ['a', 'c', 'd'].every((n) => n2[n] === n0[n]), JSON.stringify(n2));
+    controlla('e la sua card compare in ordine di numero (fra a e c)', ordineCard.join() === 'a,e,c,d', ordineCard.join());
   } catch (e) {
     controlla('prova delle card', false, String(e.message ?? e));
   } finally {

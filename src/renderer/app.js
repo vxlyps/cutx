@@ -406,17 +406,16 @@ const dissolvenza = (cicli) => ({ cicli, tipo: preferenze.dissolvenzaTipo ?? 'vo
 // il paracadute è sempre una transizione vera: quello che suona sale col passa-alto, lui entra aprendo il passa-basso
 const dissolvenzaParacadute = () => ({ cicli: preferenze.paracaduteCicli ?? 2, tipo: 'filtro', filtroUscita: 'hp' });
 
-// Toglie a fine ciclo l'ultimo livello entrato (al passo 6: quello scelto nel LIVE).
-function togliLivello(id) {
+// Toglie a fine ciclo il livello dato (la × della sua card) o, dal tasto del controller e da ⇧⌘⌫, quello scelto nel LIVE: mai «l'ultimo entrato».
+// Un livello che sta già uscendo non si tocca: una seconda pressione non annulla (per tenerlo c'è il clic sulla sua card).
+function togliLivello(id = pila.selezionato ?? undefined) {
   if (inTest) return;
-  const l = id !== undefined ? livelliLive.find((x) => x.id === id) : SL.ultimoEntrato(livelliLive);
-  if (!l) return;
-  // un livello che sta già sfumando: il secondo togli lo salva, e non c'è niente da annullare
-  if (l.a === null) {
-    const copia = { nome: l.nome, codice: unisciCoda(l.codice, l.coda), volume: l.volume, muto: l.muto };
-    // ⌘Z lo riporta nel CUE, pronto: lo rimanda chi suona col go live (il live non si tocca)
-    cronologia.registra({ etichetta: `livello «${l.nome}» tolto`, annulla: () => cue.reinserisci(copia) });
-  }
+  const l = id !== undefined ? livelliLive.find((x) => x.id === id) : null;
+  if (!l) return void cue.avviso('nessun livello scelto: clic sulla sua card (o premi la sua manopola), poi togli');
+  if (l.a !== null) return;
+  const copia = { nome: l.nome, codice: unisciCoda(l.codice, l.coda), volume: l.volume, muto: l.muto };
+  // ⌘Z lo riporta nel CUE, pronto: lo rimanda chi suona col go live (il live non si tocca)
+  cronologia.registra({ etichetta: `livello «${l.nome}» tolto`, annulla: () => cue.reinserisci(copia) });
   live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(preferenze.dissolvenzaUscita ?? 0) });
 }
 
