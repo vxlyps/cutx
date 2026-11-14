@@ -11,6 +11,9 @@ import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, Stat
 import { transpiler } from '@strudel/transpiler';
 import {
   getAudioContext,
+  getLoadedBuffer,
+  getSampleBuffer,
+  getSampleInfo,
   getSound,
   getSuperdoughAudioController,
   initAudio,
@@ -186,6 +189,45 @@ function compila(codice) {
   });
   coda = lavoro.catch(() => {});
   return lavoro;
+}
+
+// Il precarico (solo il live): i campioni di un pezzo che sta per essere mandato (provato in cuffia, scelto nel CUE, il beat del brano aperto
+// e del prossimo) si caricano prima, così al GO LIVE il primo colpo c'è. Si carica un file alla volta, e solo fino a un tetto di memoria:
+// un campione in memoria pesa circa il doppio del suo WAV a 16 bit.
+const TETTO_PRECARICO = 1024 ** 3; // 1 GB di audio decodificato
+let precaricati = 0;
+let tettoDetto = false;
+async function precarica(codice) {
+  if (!LIVE || !codice?.trim()) return;
+  const c = await compila(codice);
+  if (c.errore) return;
+  let colpi;
+  try {
+    colpi = c.pattern.queryArc(0, 16);
+  } catch {
+    return;
+  }
+  const visti = new Set();
+  for (const hap of colpi) {
+    const v = hap.value;
+    if (!v || typeof v.s !== 'string') continue;
+    const suono = getSound(v.bank ? `${v.bank}_${v.s}` : v.s);
+    if (suono?.data?.type !== 'sample') continue;
+    try {
+      const { url } = getSampleInfo(v, suono.data.samples);
+      if (!url || visti.has(url) || getLoadedBuffer(url.replace('#', '%23'))) continue;
+      visti.add(url);
+      if (precaricati > TETTO_PRECARICO) {
+        if (!tettoDetto) console.warn(`live: precarico fermo a ${Math.round(precaricati / 1024 ** 2)} MB: il resto si carica al primo uso`);
+        tettoDetto = true;
+        return;
+      }
+      const { buffer } = await getSampleBuffer(v, suono.data.samples);
+      precaricati += buffer.length * buffer.numberOfChannels * 4;
+    } catch {
+      // un file che non si legge lo dirà il go live
+    }
+  }
 }
 
 // I suoni che il codice chiede (nei primi cicli) e che nessuno ha caricato (bd, sd… se non sono nello stash): superdough li salta
@@ -447,6 +489,10 @@ function annullaIngresso(l, tieni) {
 }
 
 // GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
+// Un livello che ne sostituisce uno con lo stesso nome ne eredita il muto (ho solo cambiato il codice). Non il beat che cambia scena:
+// la scena nuova entra sempre sentita, anche se quella di prima era in muto.
+const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
+
 async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
@@ -472,7 +518,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
       annullaIngresso(vecchio, false); // chi usciva per lui esce per il nuovo (lo trova questo stesso giro)
       l.beat ??= vecchio.beat;
       l.volume = vecchio.volume;
-      l.muto = vecchio.muto;
+      l.muto = mutoEreditato(l, vecchio);
       l.coda = vecchio.coda;
       if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
       continue;
@@ -482,7 +528,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     scambi.push(vecchio);
     l.beat ??= vecchio.beat; // un beat modificato dalla sua card resta un beat: tiene le sue scene (◀ ▶ e il passaggio di brano lo riconoscono)
     l.volume = vecchio.volume;
-    l.muto = vecchio.muto;
+    l.muto = mutoEreditato(l, vecchio);
     l.coda = vecchio.coda; // una modifica al codice non butta via la coda
     // il preambolo (che il proiettore può nascondere) resta quello di prima finché il codice comincia uguale
     if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
@@ -1195,6 +1241,8 @@ async function ricevi(da, m) {
       const errore = await valuta(m.codice, m);
       return manda(da, { tipo: 'valutato', id: m.id, errore });
     }
+    case 'precarica':
+      return void precarica(m.codice);
     case 'entra': {
       const r = LIVE ? await entra(m) : { errore: 'solo il live fa entrare i livelli' };
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
@@ -1367,7 +1415,7 @@ globalThis.cutxRegistro = (on) => {
   return r;
 };
 // Per le prove: la presa da cui registrare quello che esce dal motore, e l'orario di un ciclo (prova-mano.js).
-globalThis.cutxPresa = () => ({ ac, uscita: getSuperdoughAudioController().output.destinationGain, tempo: (c) => rip.tempo(c), offsetMs });
+globalThis.cutxPresa = () => ({ precaricati, ac, uscita: getSuperdoughAudioController().output.destinationGain, tempo: (c) => rip.tempo(c), offsetMs });
 globalThis.cutxTempoSet = tempoSet; // fase 4: il sync del PO-33 legge il tempo da qui
 
 // Il motore parte comunque: se la configurazione lancia o non finisce in tempo (stash o uscita che non rispondono) si comincia

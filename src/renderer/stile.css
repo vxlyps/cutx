@@ -2206,6 +2206,16 @@ input[type='checkbox'] {
   gap: 10px;
 }
 
+/* accanto a GO LIVE: cosa parte e quando, sempre */
+.cosa-parte {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--testo);
+}
+
 /* i due piedi (CUE e LIVE) alla stessa altezza, così la linea sopra di loro è una sola */
 .live .piede {
   min-height: 108px;

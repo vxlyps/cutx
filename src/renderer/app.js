@@ -173,6 +173,7 @@ function provaInCuffia(pezzo = null) {
 }
 function provaPezzo(p) {
   if (p.errore) return cue.avviso(p.errore);
+  precarica(p.codice); // quello che provo in cuffia sto per mandarlo: il live carica già i suoi campioni
   dovaCuffia = p.dove ? { ...p.dove, inizio: p.inizio } : null;
   return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza });
 }
@@ -538,6 +539,44 @@ function scegliDiss(n) {
   dissEntra = n;
   for (const b of document.querySelectorAll('[data-diss]')) b.classList.toggle('on', Number(b.dataset.diss) === n);
 }
+
+// --- il precarico e la riga «cosa parte» accanto a GO LIVE ---
+
+// Il live carica in anticipo i campioni di quello che sto per mandare (motore.js, precarica): ogni codice si manda una volta sola.
+const giaPrecaricati = new Set();
+function precarica(codice) {
+  if (inTest || !codice?.trim() || giaPrecaricati.has(codice)) return;
+  if (giaPrecaricati.size > 400) giaPrecaricati.clear();
+  giaPrecaricati.add(codice);
+  live.manda({ tipo: 'precarica', codice });
+}
+
+// Due volte al secondo: scrive accanto a GO LIVE cosa parte e quando, e precarica la voce scelta nel brano e il beat dei due brani del CUE
+// (quello che suona e il prossimo del set). Lo scratch si precarica solo quando lo provo in cuffia: mentre scrivo il codice è a metà.
+function cosaParte() {
+  const scelta = serata.pezzoScelto();
+  const p = scelta && typeof scelta === 'object' && 'codice' in scelta ? scelta : cue.pezzo();
+  let testo = '';
+  if (!p.errore && vista !== 'synth') {
+    const cosa = p.beat ? `BEAT · ${p.beat.scene[p.beat.indice]?.nome ?? ''}` : p.nome;
+    const insieme = !p.beat && statoBeat().pendente;
+    const quando = insieme ? 'insieme al cambio di scena' : entraTra === 1 ? 'a fine ciclo' : `tra ${entraTra} cicli`;
+    testo = `parte: ${cosa} · ${quando}`;
+    if (cue.modo === 'brano') precarica(p.codice);
+  }
+  if ($('cosa-parte').textContent !== testo) $('cosa-parte').textContent = testo;
+  for (const b of [cue.slot.attivo, cue.slot.prossimo]) {
+    const scene = b?.modello?.beat?.scene ?? [];
+    for (let k = 0; k < scene.length; k++) precarica(cue.pezzoScena(b.modello, k, 'brano', null, nomeDelBrano(b)).codice);
+  }
+}
+setInterval(() => {
+  try {
+    cosaParte();
+  } catch (e) {
+    console.warn(`cosa parte: ${e.message ?? e}`);
+  }
+}, 500);
 
 // «Entra tra» vale per un solo GO LIVE: appena un pezzo è partito (go live, ◀ ▶, passaggio di brano) torna a 1, in silenzio.
 // Così un 8 dimenticato non ritarda il go live dopo.
@@ -1625,6 +1664,7 @@ globalThis.cutxProva = {
   spegniLettera: () => insegna.spegniLettera(),
   fermaInsegna: () => insegna.ferma(),
   libreria: () => libreria,
+  provaInCuffia,
   suoniStash: () => suoni,
   browser,
   ricaricaStash: async () => apriStash(await window.cutx.stash()),
