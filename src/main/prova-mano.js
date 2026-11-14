@@ -110,6 +110,7 @@ async function manopola({ finestre, controlla, nota, js, OUT }) {
     await aspetta(0.25);
     giri.push(await misura());
     if (i === Math.floor(totale / 2)) await scatta(`manopola-su-meta`);
+    if (i === totale - 2) await scatta(`manopola-scena`);
   }
   controlla('girando la manopola il cursore di testo lascia la clip di prima (non si riprende la scelta)', await js(`!document.activeElement?.closest?.('#carte .card.sezione')`));
   nota(`voci: ${totale} · misure: ${JSON.stringify(giri)}`);

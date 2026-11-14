@@ -3391,3 +3391,23 @@ input[type='checkbox'] {
   border-radius: 4px;
   font-weight: 700;
 }
+
+/* la scena del beat scelta (manopola 1 o clic): si legge da lontano come le clip — card incorniciata e pillola in negativo, più grande */
+#carte .beat-card:has(.beat-codice.attiva) {
+  border-color: var(--testo);
+  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo), 0 10px 12px -6px var(--fondo);
+}
+.beat-card:has(.beat-codice.attiva) .pillola.scelta:not(.live):not(.in-arrivo) {
+  background: var(--testo);
+  color: var(--fondo);
+  border-color: var(--testo);
+}
+.beat-card:has(.beat-codice.attiva) .pillola.scelta {
+  height: 30px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 15px;
+  outline: 2px solid var(--testo);
+  outline-offset: 2px;
+}
