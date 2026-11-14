@@ -57,7 +57,7 @@ export async function provaMano({ finestre, scrivi, parti }) {
   const avviso = () => js(`document.getElementById('cue-avviso')?.textContent ?? ''`);
   const a = { finestre, scrivi, controlla, nota, js, live, cuffia, avviso, OUT };
   await js(`cutxProva.motori.live.manda({ tipo: 'master', volume: 0.05 })`); // mai a volume pieno
-  for (const [nome, fn] of [['mano-foto', foto], ['mano-primo', primoColpo], ['mano-midi', midiFinto], ['mano-schermo', schermo], ['mano-audio', audio], ['mano-disco', disco]]) {
+  for (const [nome, fn] of [['mano-foto', foto], ['mano-primo', primoColpo], ['mano-midi', midiFinto], ['mano-schermo', schermo], ['mano-audio', audio], ['mano-disco', disco], ['mano-manopola', manopola]]) {
     if (!parti.includes(nome)) continue;
     scrivi(`--- ${nome} ---`);
     try {
@@ -73,6 +73,49 @@ export async function provaMano({ finestre, scrivi, parti }) {
 // ------------------------------------------------------------------ foto
 
 const BRANO_FOTO = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @scena sviluppo\ns("sine*4").gain(.0001)\n// @pezzo basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
+
+// La manopola 1 fra le voci di un brano lungo (3 scene del beat e 12 clip): a ogni scatto la voce scelta deve stare tutta in vista con margine
+// sopra e sotto, e la card del BEAT deve restare in vista in alto. Foto a tre scatti (inizio, metà, fondo).
+const BRANO_LUNGO = ['// @brano lungo', '// @bpm 120', 'setcpm(120/4)', '// @beat', '// @scena intro', 's("sine*2").gain(.0001)', '// @scena sviluppo', 's("sine*4").gain(.0001)', '// @scena drop', 's("sine*8").gain(.0001)',
+  ...['basso', 'melodia', 'pad', 'arpeggio', 'voce', 'rumore', 'archi', 'piano', 'campana', 'sub', 'lead', 'coda finale'].flatMap((n, i) => [`// @clip ${n}`, `note("c${1 + (i % 4)} e${1 + (i % 4)} g${1 + (i % 4)}").s("triangle")`, '  .lpf(800).gain(.0001)'])].join('\n');
+async function manopola({ finestre, controlla, nota, js, OUT }) {
+  const scatta = async (nome) => writeFile(path.join(OUT, `${nome}.png`), (await finestre.controllo.webContents.capturePage()).toPNG());
+  await js(`cutxProva.fermaTutto(); cutxProva.mostraVista?.('live')`);
+  await js(`cutxProva.cue.apriModello('lungo.cutx', ${JSON.stringify(BRANO_LUNGO)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1.5);
+  const misura = () => js(`(() => {
+    const scelta = document.querySelector('#carte .card.attiva') ?? (cutxProva.cue.cartaAttiva?.scena !== undefined ? document.querySelector('#carte .beat-card') : null);
+    const corpo = scelta?.closest('.corpo');
+    const beat = document.querySelector('#carte .beat-card');
+    if (!scelta || !corpo || !beat) return null;
+    const c = corpo.getBoundingClientRect(), b = beat.getBoundingClientRect();
+    // la voce scelta: la card della clip, o (per una scena) la card del beat
+    const r = scelta.getBoundingClientRect();
+    const eBeat = scelta.closest('.beat-card') !== null || scelta === beat;
+    return { nome: cutxProva.cue.nomeSezioneScelta(), eBeat, sopra: Math.round(r.top - (eBeat ? c.top : Math.max(c.top, b.bottom))), sotto: Math.round(c.bottom - r.bottom), beatVisibile: b.top >= c.top - 1 && b.bottom <= c.bottom + 1, coperta: !eBeat && r.top < b.bottom - 1 && b.bottom > c.top };
+  })()`);
+  const totale = await js(`cutxProva.cue.vociControllo().length`);
+  await js(`document.activeElement?.blur()`); // un editor col fuoco si riprende la selezione quando la finestra torna in primo piano: falserebbe il giro
+  const giri = [];
+  for (let i = 0; i < totale; i++) {
+    await js(`cutxProva.controllerMidi.giraManopola(1, 1)`);
+    await aspetta(0.25);
+    giri.push(await misura());
+    if (i === 0 || i === Math.floor(totale / 2) || i === totale - 1) await scatta(`manopola-${String(i + 1).padStart(2, '0')}-giu`);
+  }
+  for (let i = 0; i < totale; i++) {
+    await js(`cutxProva.controllerMidi.giraManopola(1, -1)`);
+    await aspetta(0.25);
+    giri.push(await misura());
+    if (i === Math.floor(totale / 2)) await scatta(`manopola-su-meta`);
+  }
+  nota(`voci: ${totale} · misure: ${JSON.stringify(giri)}`);
+  const clip = giri.filter((g) => g && !g.eBeat);
+  controlla('ogni scatto sceglie una voce', giri.every(Boolean) && clip.length > 0, JSON.stringify(giri.map((g) => g?.nome)));
+  controlla('la voce scelta è sempre tutta in vista, con almeno 12 px di margine sopra e sotto', clip.every((g) => g.sopra >= 12 && g.sotto >= 12), JSON.stringify(clip.filter((g) => g.sopra < 12 || g.sotto < 12)));
+  controlla('la card del BEAT resta sempre in vista in alto', giri.every((g) => g?.beatVisibile), JSON.stringify(giri.filter((g) => !g?.beatVisibile).map((g) => g?.nome)));
+  controlla('la voce scelta non finisce mai sotto il BEAT', clip.every((g) => !g.coperta), JSON.stringify(clip.filter((g) => g.coperta).map((g) => g.nome)));
+}
 
 async function foto({ finestre, controlla, nota, js, avviso, live, OUT }) {
   const scatta = async (nome) => {

@@ -1055,11 +1055,15 @@ export class Cue {
     const corpo = el.closest('.corpo');
     if (!corpo) return;
     const visibili = [...el.parentElement.children].filter((x) => !x.hidden && !x.classList.contains('preambolo') && !x.classList.contains('senza-apertura') && !x.classList.contains('senza-beat')); // preambolo e posti vuoti non sono voci
-    const respiro = 6;
+    const respiro = 28; // il margine sopra e sotto la voce scelta: si vede un pezzo di quella prima e di quella dopo
     if (visibili[0] === el) corpo.scrollTop = 0; // la prima voce: in cima, si vede anche quello che sta sopra
     const c = corpo.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    if (r.top < c.top + respiro || r.height > c.height) corpo.scrollTop += r.top - c.top - respiro;
+    // la card del BEAT resta attaccata in cima (stile.css): la voce scelta sta sotto di lei, mai coperta
+    const beat = el.parentElement.querySelector('.beat-card');
+    const fisso = beat && beat !== el && getComputedStyle(beat).position === 'sticky' ? beat.getBoundingClientRect().height : 0;
+    const alto = c.top + fisso + respiro;
+    if (r.top < alto || r.height > c.bottom - respiro - alto) corpo.scrollTop += r.top - alto;
     else if (r.bottom > c.bottom - respiro) corpo.scrollTop += r.bottom - c.bottom + respiro; // la voce intera viene prima del resto
   }
 

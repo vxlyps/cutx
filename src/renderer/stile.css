@@ -3360,3 +3360,24 @@ input[type='checkbox'] {
     outline-color: transparent;
   }
 }
+
+/* --- la manopola 1 a schermo: il BEAT resta in vista in cima alla lista, e la voce scelta si legge da lontano --- */
+/* (col codice del beat espanso la card è alta e scorre con le altre, come prima) */
+#carte .beat-card:not(.senza-beat):not(:has(.beat-corpo.espanso)) {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--fondo);
+  box-shadow: 0 10px 12px -6px var(--fondo); /* le clip che scorrono sotto sfumano, non si tagliano */
+}
+.card.sezione.attiva:not(.in-cuffia):not(.e-live) {
+  border-color: var(--testo);
+  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo);
+}
+.card.sezione.attiva:not(.e-live) .nome-sezione {
+  background: var(--testo);
+  color: var(--fondo);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+}
