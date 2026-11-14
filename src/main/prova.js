@@ -174,6 +174,10 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
     await premi('K', 'meta');
     controlla('⌘K spegne e riaccende la cuffia', spenta && (await stato('cuffia')).udibile === true);
     await premi('Backspace', 'meta', 'shift');
+    const senzaScelta = !!(await stato('live')).codice;
+    await chiedi(finestre.controllo, 'cutxProva.pila.seleziona(cutxProva.pila.attivi().at(-1)?.id ?? null)'); // il togli vale solo per il livello scelto
+    await premi('Backspace', 'meta', 'shift');
+    controlla('⇧⌘⌫ senza un livello scelto non toglie niente', senzaScelta);
     controlla('⇧⌘⌫ toglie il live', !(await stato('live')).codice && (await stato('cuffia')).codice === pezzo);
     await premi('.', 'meta');
     controlla('⌘. ferma tutto', !(await stato('cuffia')).codice);
