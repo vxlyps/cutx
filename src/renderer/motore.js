@@ -53,6 +53,7 @@ const pronto = (async () => {
 // IL GUARDIANO — il limiter sull'uscita (limiter.js): sta fra il volume generale e le casse (o le cuffie: ce l'ha anche la cuffia,
 // perché il SYNTH può fare risonanze e distorsioni che farebbero male). La cuffia ha in più un volume proprio, prudente nel SYNTH.
 let limiter = null; // { compressore, analisi, ingresso }
+let porta = null; // GainNode dopo il limiter: chiuso per un attimo durante il cambio di uscita
 let volumeCuffia = null; // cuffia: GainNode prima del limiter
 let volumeCuffiaVoluto = 1; // e dove deve arrivare (leggere .value di un parametro che sfuma non dà il valore finale)
 function installaLimiter() {
@@ -63,7 +64,9 @@ function installaLimiter() {
       volumeCuffia = new GainNode(ac, { gain: volumeCuffiaVoluto });
       volumeCuffia.connect(l.ingresso);
     }
-    l.uscita.connect(ac.destination);
+    // la porta: l'ultimo nodo prima delle casse. Si chiude un attimo quando l'uscita audio cambia (scheda riattaccata), così il cambio non schiocca.
+    porta = new GainNode(ac, { gain: 1 });
+    l.uscita.connect(porta).connect(ac.destination);
     l.uscita.connect(analisi);
     analisi.connect(new GainNode(ac, { gain: 0 })).connect(ac.destination); // senza arrivare all'uscita l'analizzatore non lavora
     limiter = { compressore: l.compressore, analisi, ingresso: volumeCuffia ?? l.ingresso };
@@ -947,6 +950,25 @@ const entro = (promessa, ms, cosa) =>
   Promise.race([promessa, new Promise((_, rifiuta) => setTimeout(() => rifiuta(new Error(`${cosa}: nessuna risposta dopo ${ms / 1000} s`)), ms))]);
 const ATTESA_USCITA_MS = 4000;
 
+// Il cambio di uscita senza schiocco: il volume scende a zero in 30 ms, l'uscita cambia, il volume risale in 80 ms.
+const CHIUDE_S = 0.03;
+const APRE_S = 0.08;
+async function chiudiPorta() {
+  if (!porta) return;
+  const t = ac.currentTime;
+  porta.gain.cancelScheduledValues(t);
+  porta.gain.setValueAtTime(porta.gain.value, t);
+  porta.gain.linearRampToValueAtTime(0, t + CHIUDE_S);
+  await new Promise((fatto) => setTimeout(fatto, CHIUDE_S * 1000 + 15));
+}
+function apriPorta() {
+  if (!porta || porta.gain.value === 1) return;
+  const t = ac.currentTime;
+  porta.gain.cancelScheduledValues(t);
+  porta.gain.setValueAtTime(0, t);
+  porta.gain.linearRampToValueAtTime(1, t + APRE_S);
+}
+
 async function controllaUscita() {
   if (controllandoUscita) return;
   controllandoUscita = true;
@@ -959,7 +981,7 @@ async function controllaUscita() {
         if (ac.sinkId) await entro(ac.setSinkId(''), ATTESA_USCITA_MS, 'uscita predefinita');
         nuovo = { ok: false, dettaglio: `uscita «${uscitaVoluta}» non collegata: suono sull'uscita predefinita` };
       } else {
-        await entro(impostaUscita(ac, uscitaVoluta), ATTESA_USCITA_MS, 'cambio di uscita');
+        await entro(impostaUscita(ac, uscitaVoluta, chiudiPorta), ATTESA_USCITA_MS, 'cambio di uscita');
         nuovo = { ok: true, dettaglio: uscitaVoluta ? `uscita «${uscitaVoluta}»` : 'uscita predefinita' };
       }
       if (!inPausa && (ac.state === 'suspended' || ac.state === 'interrupted')) await ac.resume();
@@ -972,6 +994,7 @@ async function controllaUscita() {
     }
     errore = uscitaStato.ok ? (errore?.startsWith('uscita') ? null : errore) : uscitaStato.dettaglio;
   } finally {
+    apriPorta(); // comunque sia andata, il volume torna su
     controllandoUscita = false;
   }
 }
