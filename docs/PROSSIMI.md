@@ -95,3 +95,18 @@ Ordine proposto per la 5.2: 1) controller a ruoli (`docs/CONTROLLER-5.2.md`) **f
 
 ## «Synth al volo»: fatto (15/11/2026)
 Il pulsante «synth» (o «drum») c'è su ogni clip che il pannello riscrive UGUALE: con la sua riga `// @synth` / `// @drum` sempre; scritta a mano solo se il giro codice → pannello → codice non cambia il suono (`src/renderer/apri-tipo.js`, `test/apri-tipo.test.js`). Esempio escluso: `s("bd*4").gain(.5)` diventerebbe un triangle. «aggiorna «nome»» riscrive la clip dov'è (CUE: ⌘Z la rifà; kit: niente ⌘Z) e non tocca il live. Il livello live risale alla clip dalla `provenienza` (`brano §N`, `kit §N`) e dal nome; scratch/synth/browser/ableton non hanno origine, solo → CUE come clip nuova. Prova: `npm run prova:parte -- aggiorna`.
+
+## Valutazione dell'arpeggio (15/11/2026, solo testo)
+**Cosa c'è già in Strudel** (letto nel sorgente, `@strudel/core/pattern.mjs`; non provato nell'app): `arp` e `arpWith` prendono un accordo `note("[c3,eb3,g3]")` e scelgono le note per indice, quindi `arp("0 1 2")` è su, `arp("2 1 0")` giù, `arp("0 1 2 1")` su-giù, `arp("[0,1,2]")` accordo intero. Non esiste un `arpMode` con i nomi: i modi li scrive CUTX come sequenze di indici. Ritmo euclideo con `struct`, ottave con `.add`, il CAOS con `degradeBy`, `sometimesBy`, `ply`, `rev`, `perlin` e il seme: tutte funzioni vere di Strudel, nessuna estensione, nessun fork. Il pannello `SYNTH` fa già `.add` (`leggiAdd` in `synth-codice.js`).
+
+**Le note tenute si arpeggiano dal vivo?** Oggi no: i tasti suonano una nota sola in cuffia (`suonoTasti` → `synth-suono`). Due strade:
+- **A. Arpeggio nella clip** (consigliata): le note del pianoroll sono l'accordo, l'arpeggio è un effetto della clip, scritto in codice visibile. Niente motore da toccare.
+- **B. Arpeggio dal vivo da tasti tenuti** (MiniLab 3): a ogni tasto si riscrive il pattern e lo si rimanda alla cuffia; il cambio entra al passo dopo, non a metà. Serve la tastiera MIDI (non c'è ancora) e tocca il motore cuffia: da fare dopo, con calma.
+
+**Dove sta**: nel SYNTH il tasto 7 in alto (previsto in `docs/SYNTH.md`), con modo, passo, ottave, gate, euclideo. Sul controller: manopole del layer B del SYNTH (`controller-synth.js`), tasto per modo.
+
+**Rischio**: il pianoroll non legge ritmi euclidei e `?`. L'arpeggio e il CAOS li scrivono: la lettura codice → pannello va estesa, e quello che non capisce resta come «mano» (come oggi).
+
+**Giorni**: A arpeggio sulla clip ≈ 2 (pannello, codice, lettura inversa, test, foto); CAOS ≈ 1-1,5; B dal vivo ≈ 2-3 più la tastiera MIDI. Totale A + CAOS ≈ 3-3,5 giorni.
+
+**Proposta**: 5.2, in ordine A → CAOS; B nella 5.3 insieme alla tastiera MIDI. Decide Valerio.
