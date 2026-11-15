@@ -578,7 +578,8 @@
     },
     "schede": {
       "suono": "suono",
-      "note": "note"
+      "note": "note",
+      "drum": "drum"
     },
     "note": {
       "lunghezza": "lunghezza",
@@ -792,5 +793,37 @@
       "nome": "riconosci fino a 2 mani",
       "testo": "serve a ignorare le mani degli altri: conta la più grande dentro la zona. Spento riconosce una mano sola e pesa meno (~20 punti di un core in meno)."
     }
+  },
+  "drum": {
+    "nome": "Nome della clip",
+    "play": "▶ cuffia",
+    "cue": "→ CUE",
+    "destinazione": "Destinazione",
+    "passi": "passi",
+    "cicli": "cicli",
+    "nuovaRiga": "+ suono",
+    "sceltaSuono": "scegli un suono",
+    "gruppoStash": "stash",
+    "gruppoStrudel": "Strudel",
+    "gruppoAltro": "altro",
+    "togli": "togli la riga",
+    "codice": "codice",
+    "testoRiga": "non si legge: resta nel testo",
+    "titoloPasso": "clic = accende o spegne · trascina su e giù = velocity",
+    "msg": {
+      "riga": "riga {n}: non si legge, resta nel testo",
+      "errore": "codice: {errore}",
+      "codiceNonParte": "errore: {errore}",
+      "mandata": "clip «{nome}» → {dove} (· drum)",
+      "mandataNonSalvata": "clip «{nome}» → {dove} (· drum, da salvare con ⌘S)",
+      "formato": "{passi} passi × {cicli} cicli: {n} passi persi (⌘Z per tornare)",
+      "righeMax": "al massimo {n} righe",
+      "vuota": "nessuna riga: aggiungi un suono",
+      "aperta": "aperta «{nome}»",
+      "apriNonDrum": "questa clip non viene dalla scheda DRUM"
+    },
+    "apri": "drum",
+    "apriTitolo": "Apri questa clip nella scheda DRUM",
+    "ciclo": "ciclo"
   }
 }

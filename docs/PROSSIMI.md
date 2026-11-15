@@ -38,7 +38,7 @@ Valerio suona per un paio di settimane.
 - **Serate come progetti** (decisioni di Valerio): il nome a schermo è **SERATA**; ogni serata ha il suo **kit**, che nasce come **copia del kit dell'ultima serata**; la riga **«viene da…»** (da quale serata è stata copiata) c'è. Il progetto è in `docs/CHECKUP.md` («serate come progetti»).
 - **Volume dell'apertura**: il cursore c'è ma non si salva nel brano (deciso: niente cambio di formato).
 
-## 5.1: scheda DRUM (piano approvato il 14/11/2026, non ancora scritto)
+## 5.1: scheda DRUM (piano approvato il 14/11/2026; passi 1-2 fatti il 15/11, mancano REC/tasti/scena beat)
 
 Una griglia a passi per la batteria, stile FL Studio, come scheda a sé «DRUM» nella vista ⌘2 (accanto a «suono» e «note»), senza le manopole del synth.
 
@@ -66,3 +66,7 @@ Solidita: il controllo dei suoni cancellava ogni avviso, ora solo il suo. Strude
 - **Gesto del drop**: un gesto per far entrare il drop / la scena dopo.
 - **Due mani**: una per il valore, l'altra per il modo o per un secondo effetto.
 - **Braccialetto colorato**: riconoscere la mia mano dal colore di un braccialetto, per non confonderla con quelle degli altri.
+
+## DRUM: cosa resta (15/11/2026)
+Fatto: `drum-codice.js` (Codex, test puri), `drum-vista.js` + `drum.css` (terza scheda «drum» nella vista SYNTH: griglia, clic, velocity col trascinamento, menu suoni stash/Strudel, passi 16/32, cicli 1/2/4, codice nei due versi con righe illeggibili conservate, ▶ cuffia con testina, → CUE con `· drum`, annulla), `apri-clip.js` (il pulsante sulle card riapre le clip `// @drum`), prova `drum` (30 controlli) e foto in `~/Desktop/cutx-schermate/drum/`.
+Da fare, in quest'ordine: (1) **REC e tasti del Mac**: i tasti suonano le righe (una riga per tasto, `drum-vista.js` → `tastoGiu`, oggi nel DRUM i tasti non suonano niente) e REC li registra a tempo come passi (guarda `synth-rec.js`); (2) **→ CUE come scena del beat** oltre che come clip (guarda come si scrivono le scene `@beat` in `brano.js`); (3) foto finale e prova «drum» nel giro lungo (già inclusa: `parti.includes('drum')`); (4) poi **blocco C controller** (mappa tasto per tasto da far approvare PRIMA di scrivere) e **D arpeggio** (solo valutazione).

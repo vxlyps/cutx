@@ -4,6 +4,7 @@
 import { SuoniVista } from './suoni-vista.js';
 import { Cue } from './cue.js';
 import { VistaSynth } from './synth-vista.js';
+import { tipoApribile } from './apri-clip.js';
 import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
 import it from './testi/it.json';
 import { SchermataProj, etichettaProj } from './proj-vista.js';
@@ -748,10 +749,18 @@ const synth = new VistaSynth($('vista-synth'), {
   ],
   mandaCue: (dove, nome, testo, categoria) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo, categoria) : cue.aggiungiClip(dove, nome, testo, categoria)),
   salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
+  // la scheda DRUM: quali suoni ci sono nello stash, e dove salva la sua ultima griglia
+  suoniStash: () => suoni,
+  salvaDrum: (contenuto) => window.cutx.salvaPreferenze({ drumUltimo: contenuto }),
 });
 
 // «apri nel synth» sulla card di una clip fatta dal synth: il pannello riparte da quella clip.
 function apriNelSynth(codice, nome) {
+  if (tipoApribile(codice) === 'drum') {
+    const errore = synth.apriDrum(codice, nome);
+    if (errore) return cue.avviso(errore);
+    return mostraVista('synth');
+  }
   const stato = leggiRigaSynth(codice);
   if (!stato) return cue.avviso(it.synth.msg.apriNonSynth);
   synth.apri(stato, nome);
@@ -2162,6 +2171,7 @@ function applicaPreferenze(p) {
   if (!synthCaricato) {
     synthCaricato = true;
     synth.carica(p.synthUltimo); // il SYNTH riparte dall'ultimo suono
+    synth.drum.carica(p.drumUltimo); // e la scheda DRUM dall'ultima griglia
   }
   controllerMidi.ricaricaTabella();
   if (p.striscia !== strisciaPrima) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });

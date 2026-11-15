@@ -4,7 +4,7 @@
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
 import it from './testi/it.json';
-import { haRigaSynth } from './synth-codice.js';
+import { mostraApri } from './apri-clip.js';
 import { creaEditor } from './editor.js';
 import { chiediNome, conferma } from './dialogo.js';
 import { analizza } from './analisi.js';
@@ -696,7 +696,7 @@ export class Cue {
       suFuoco: () => this.attiva(carta),
       suCambio: () => {
         const nuove = carta.editor.codice.split('\n');
-        if (carta.apriSynth) carta.apriSynth.hidden = !haRigaSynth(nuove.join('\n'));
+        if (carta.apriSynth) mostraApri(carta.apriSynth, nuove.join('\n'));
         const mm = this.brano.modello;
         this.modifica(preambolo ? { ...mm, preambolo: nuove } : B.conCorpo(mm, i, nuove), false);
         this.mostraMappa(mm.sezioni.map((s) => this.statoSezione(this.nomeBrano, s.nome)));
@@ -772,9 +772,9 @@ export class Cue {
         });
       };
       mostraVolume();
-      // solo le clip fatte dal synth (con la riga // @synth) si riaprono nel synth
+      // solo le clip fatte dal synth (// @synth) o dalla scheda DRUM (// @drum) si riaprono lì
       const apriSynth = tasto(it.synth.msg.apri, '', it.synth.msg.apriTitolo);
-      apriSynth.hidden = !haRigaSynth(righe.join('\n'));
+      mostraApri(apriSynth, righe.join('\n'));
       apriSynth.onclick = () => this.azioni.apriNelSynth?.(carta.editor.codice, m.sezioni[i].nome);
       carta.apriSynth = apriSynth;
       const togliClip = tasto('×', '', 'Togli la clip dal brano');

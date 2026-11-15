@@ -6,7 +6,7 @@
 // Ogni livello si modifica sul posto: suona la versione di prima finché ⌘↵ non applica le
 // modifiche al ciclo successivo; esc annulla. In fondo c'è il jam, per improvvisare.
 import it from './testi/it.json';
-import { haRigaSynth } from './synth-codice.js';
+import { mostraApri } from './apri-clip.js';
 import { creaEditor } from './editor.js';
 import { eNomeBeat } from './nomi.js';
 import { attivi, riempi } from './evidenzia.js';
@@ -458,7 +458,7 @@ export class Pila {
       c.coda.hidden = a.arriva || !c.righeCoda.length;
       if (c.codiceSynth !== l.codice) {
         c.codiceSynth = l.codice;
-        c.apriSynth.hidden = !haRigaSynth(l.codice); // solo le clip fatte dal synth si riaprono nel synth
+        mostraApri(c.apriSynth, l.codice); // solo le clip fatte dal synth o dalla scheda DRUM si riaprono lì
       }
       // un numero che scivola: sulla card scorre anche lui
       if (l.scivola && Object.keys(l.scivola).length) this.disegnaRigheCoda(c, righeScorrevoli(c.righeCoda, l.scivola, a.ciclo), l.coda?.length ?? 0);

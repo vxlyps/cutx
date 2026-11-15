@@ -221,6 +221,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
   if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
   if (parti.includes('mani')) ok = (await sicura('mani', provaMani)) && ok;
+  if (parti.includes('drum')) ok = (await sicura('drum', provaDrum)) && ok;
   // strumento, non prova (non entra nel giro lungo): registra i punti delle mani che la camera vede, per ritarare i gesti sul video vero
   if (parti.indexOf('mani-dump') >= 0) ok = (await sicura('mani-dump', provaManiDump)) && ok;
   if (parti.includes('mani-proiettore')) ok = (await sicura('mani-proiettore', provaManoProiettore)) && ok;
@@ -4747,6 +4748,174 @@ async function provaManiDump({ finestre, scrivi }) {
   await writeFile(fuori, JSON.stringify(dump));
   scrivi(`OK    ${dump.length} fotogrammi in ${fuori}`);
   return dump.length > secondi * 10;
+}
+
+// --- la scheda DRUM del SYNTH: griglia a passi ↔ codice, cuffia, → CUE (npm run prova:parte -- drum) ---
+async function provaDrum({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const wc = finestre.controllo.webContents;
+  const codiceDrum = () => js(`document.querySelector('.drum-pre').value`);
+  const stato = () => js(`cutxProva.synth.drum.stato`);
+  const centro = (r, i) => js(`(() => { const c = document.querySelector('.drum-passo[data-r="${r}"][data-i="${i}"]').getBoundingClientRect(); return [Math.round(c.left + c.width / 2), Math.round(c.top + c.height / 2)]; })()`);
+  const mouse = (tipo, x, y, modificatori = []) => wc.sendInputEvent({ type: tipo, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers: modificatori });
+  const clic = async (r, i) => {
+    const [x, y] = await centro(r, i);
+    mouse('mouseMove', x, y);
+    mouse('mouseDown', x, y);
+    await aspetta(0.1);
+    mouse('mouseUp', x, y);
+    await aspetta(0.25);
+  };
+  await js(`cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ drumUltimo: null }); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  // parte sempre dalla batteria di partenza (la griglia salvata da una corsa precedente si ricarica all'avvio dell'app)
+  await js(`cutxProva.synth.drum.stato = cutxProva.synth.drum.stato; cutxProva.synth.drum.apri('stack(\\n  s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~"),\\n  s("~ ~ ~ ~ sd ~ ~ ~ ~ ~ ~ ~ sd ~ ~ ~").gain("~ ~ ~ ~ .8 ~ ~ ~ ~ ~ ~ ~ .8 ~ ~ ~"),\\n  s("~ ~ hh ~ ~ ~ hh ~ ~ ~ hh ~ ~ ~ hh ~").gain("~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~")\\n)', 'drum'); cutxProva.synth.drum.storia = []`);
+  await js(`document.getElementById('vista-synth-btn').click()`);
+  await aspetta(0.5);
+  await js(`[...document.querySelectorAll('.synth-sinistra .synth-schede button')].find((b) => b.textContent === 'drum').click()`);
+  await aspetta(0.4);
+
+  // --- la scheda ---
+  controlla('la scheda «drum» sta accanto a «suono» e «note» e apre la griglia al posto delle manopole', (await js(`document.querySelector('.synth').classList.contains('modo-drum') && !!document.querySelector('.drum-vista').offsetParent && !document.querySelector('.synth-pannello').offsetParent`)) === true);
+  controlla('si apre con una batteria di partenza: bd, sd, hh su 16 passi', (await js(`[...document.querySelectorAll('.drum-riga')].map((r) => r.querySelector('.drum-suono').value + ':' + r.querySelectorAll('.drum-passo').length).join()`)) === 'bd:16,sd:16,hh:16');
+  let codice = await codiceDrum();
+  controlla('e il codice è uno stack leggibile', codice.startsWith('stack(') && codice.includes('s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~")'), codice);
+  controlla('niente manopole del synth, ma i suoni dello stash e di Strudel nel menu', (await js(`!!document.querySelector('.drum-suono optgroup[label="Strudel"]') && [...document.querySelector('.drum-suono').options].some((o) => o.value === 'cp')`)) === true);
+
+  // le foto, per guardarla (Scrivania → cutx-schermate → drum): una batteria con velocity diverse e una riga che non si legge
+  {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'drum');
+    await mkdir(cartella, { recursive: true });
+    const partenzaCodice = await codiceDrum();
+    await js(`cutxProva.synth.drum.apri('// @drum\\nstack(\\n  s("bd ~ ~ ~ bd ~ ~ bd ~ ~ bd ~ ~ ~ ~ ~").gain(".9 ~ ~ ~ .8 ~ ~ .6 ~ ~ 1 ~ ~ ~ ~ ~"),\\n  s("~ ~ ~ ~ sd ~ ~ ~ ~ ~ ~ ~ sd ~ ~ sd").gain("~ ~ ~ ~ 1 ~ ~ ~ ~ ~ ~ ~ .9 ~ ~ .4"),\\n  s("hh ~ hh ~ hh ~ hh ~ hh ~ hh ~ hh ~ hh ~").gain(".9 ~ .5 ~ .8 ~ .5 ~ .9 ~ .5 ~ .8 ~ .5 ~"),\\n  s("~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ oh ~").gain("~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ .7 ~"),\\n  s("cp*2 ~ ~ ~").lpf(900)\\n)', 'batteria')`);
+    await aspetta(0.6);
+    await writeFile(path.join(cartella, 'drum-griglia.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await js(`cutxProva.synth.drum.apri(${JSON.stringify(partenzaCodice)}, 'drum')`);
+    await aspetta(0.3);
+    scrivi(`INFO  foto in ${cartella}`);
+  }
+
+  // --- il mouse ---
+  await clic(0, 1);
+  controlla('un clic su un passo spento lo accende (velocity di serie .8) e il codice lo scrive', (await stato()).righe[0].vel[1] === 0.8 && (await codiceDrum()).includes('s("bd bd ~ ~ bd'));
+  await clic(0, 1);
+  controlla('un secondo clic lo spegne', (await stato()).righe[0].vel[1] === 0 && (await codiceDrum()).includes('s("bd ~ ~ ~ bd'));
+  const [x2, y2] = await centro(0, 2);
+  mouse('mouseMove', x2, y2);
+  mouse('mouseDown', x2, y2);
+  await aspetta(0.1);
+  mouse('mouseMove', x2, y2 - 10, ['leftButtonDown']);
+  await aspetta(0.1);
+  mouse('mouseMove', x2, y2 - 20, ['leftButtonDown']);
+  await aspetta(0.1);
+  mouse('mouseUp', x2, y2 - 20);
+  await aspetta(0.3);
+  const v = (await stato()).righe[0].vel[2];
+  controlla('trascinando in su la velocity sale (e resta acceso, non si spegne a fine gesto)', v > 0.95 && v <= 1, String(v));
+  const [x3, y3] = await centro(0, 2);
+  mouse('mouseMove', x3, y3);
+  mouse('mouseDown', x3, y3);
+  await aspetta(0.1);
+  mouse('mouseMove', x3, y3 + 25, ['leftButtonDown']);
+  await aspetta(0.1);
+  mouse('mouseUp', x3, y3 + 25);
+  await aspetta(0.3);
+  const basso = (await stato()).righe[0].vel[2];
+  controlla('trascinando in giù scende', basso < v - 0.2 && basso >= 0.05, String(basso));
+  controlla('il codice porta la velocity in .gain(…)', /\.gain\("[^"]*~ ~ ~ ~ \.[0-9]+ ~/.test((await codiceDrum()).split('\n')[1] ?? '') || (await codiceDrum()).includes(`.${String(basso).split('.')[1]}`), await codiceDrum());
+  controlla('⌘Z annulla un gesto alla volta (il trascinamento intero)', (await js(`cutxProva.synth.annulla()`)) === true && (await stato()).righe[0].vel[2] === v);
+
+  // --- il codice, nei due versi ---
+  await js(`(() => { const t = document.querySelector('.drum-pre'); t.focus(); t.value = 'stack(\\n  s("cp ~ ~ ~ cp ~ ~ ~ cp ~ ~ ~ cp ~ ~ ~").gain(".5 ~ ~ ~ .5 ~ ~ ~ .5 ~ ~ ~ .5 ~ ~ ~"),\\n  s("hh*8")\\n)'; t.dispatchEvent(new Event('input')); })()`);
+  await aspetta(0.7);
+  controlla('il codice scritto a mano muove la griglia: la riga «cp» si legge', (await js(`[...document.querySelectorAll('.drum-riga')].map((r) => r.classList.contains('testo') ? 'testo' : r.querySelector('.drum-suono').value).join()`)) === 'cp,testo');
+  controlla('la riga che non si legge (hh*8) resta nel testo, con un avviso', (await js(`document.querySelector('.drum-avviso').textContent`)).includes('riga 2') && (await js(`document.querySelector('.drum-riga.testo .drum-testo').textContent`)) === 's("hh*8")');
+  await js(`document.querySelector('.drum-pre').dispatchEvent(new FocusEvent('blur'))`);
+  await aspetta(0.3);
+  controlla('rimessa in ordine dalla griglia, quella riga non si perde mai', (await codiceDrum()).includes('s("hh*8")') && (await codiceDrum()).startsWith('stack('), await codiceDrum());
+  await js(`(() => { const t = document.querySelector('.drum-pre'); t.focus(); t.value = 'note("c3")'; t.dispatchEvent(new Event('input')); })()`);
+  await aspetta(0.7);
+  controlla('un testo che non è una griglia non cambia niente e dice l\'errore', (await js(`document.querySelector('.drum-avviso').textContent`)).startsWith('codice:') && (await js(`document.querySelectorAll('.drum-riga').length`)) === 2);
+  await js(`document.querySelector('.drum-pre').dispatchEvent(new FocusEvent('blur'))`);
+
+  // --- righe, passi e cicli ---
+  await js(`cutxProva.synth.drum.apri('// @drum\\nstack(\\n  s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~")\\n)', 'prova')`);
+  await aspetta(0.3);
+  await js(`(() => { const s = document.querySelector('.drum-aggiungi'); s.value = 'sd'; s.dispatchEvent(new Event('change')); })()`);
+  await aspetta(0.2);
+  controlla('«+ suono» aggiunge una riga spenta', (await js(`document.querySelectorAll('.drum-riga').length`)) === 2 && (await stato()).righe[1].vel.every((x) => x === 0));
+  controlla('una riga tutta spenta non perde il suo suono nel codice', (await codiceDrum()).includes('// sd'), await codiceDrum());
+  await js(`(() => { const s = document.querySelectorAll('.drum-barra select')[1]; s.value = '2'; s.dispatchEvent(new Event('change')); })()`);
+  await aspetta(0.3);
+  controlla('2 cicli: 32 celle per riga e .slow(2) nel codice', (await js(`document.querySelectorAll('.drum-riga')[0].querySelectorAll('.drum-passo').length`)) === 32 && (await codiceDrum()).endsWith(').slow(2)'));
+  await js(`(() => { const s = document.querySelectorAll('.drum-barra select')[0]; s.value = '32'; s.dispatchEvent(new Event('change')); })()`);
+  await aspetta(0.3);
+  controlla('32 passi × 2 cicli: 64 celle', (await js(`document.querySelectorAll('.drum-riga')[0].querySelectorAll('.drum-passo').length`)) === 64);
+  await js(`cutxProva.synth.annulla(); cutxProva.synth.annulla()`);
+  await aspetta(0.2);
+  controlla('⌘Z rimette passi e cicli di prima', (await stato()).passi === 16 && (await stato()).cicli === 1);
+  await js(`document.querySelector('.drum-riga .drum-togli').click()`);
+  await aspetta(0.2);
+  controlla('il × toglie la riga', (await js(`document.querySelectorAll('.drum-riga').length`)) === 1);
+
+  // --- la cuffia: parte a velocity bassissima (quasi muta) e la testina corre ---
+  await js(`cutxProva.synth.drum.apri('// @drum\\nstack(\\n  s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".05 ~ ~ ~ .05 ~ ~ ~ .05 ~ ~ ~ .05 ~ ~ ~")\\n)', 'drum prova')`);
+  await aspetta(0.3);
+  await js(`document.querySelector('.drum-play').click()`);
+  await aspetta(1.5);
+  controlla('▶ cuffia suona la griglia (a tempo col live)', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await js(`document.querySelector('.drum-play').classList.contains('on')`)) === true);
+  const colonne = new Set();
+  for (let i = 0; i < 12; i++) {
+    const c = await js(`[...document.querySelectorAll('.drum-passo.ora')].map((e) => e.dataset.i).join()`);
+    if (c) colonne.add(c);
+    await aspetta(0.2);
+  }
+  controlla('la testina corre sulle colonne mentre suona', colonne.size >= 3, JSON.stringify([...colonne]));
+  await js(`cutxProva.synth.drum.stato.righe.length`); // il giro continua mentre si modifica
+  await clic(0, 2);
+  await aspetta(0.6);
+  controlla('toccando un passo mentre suona, la cuffia riparte col codice nuovo senza fermarsi', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await codiceDrum()).includes('s("bd ~ bd ~ bd'), await codiceDrum());
+  await js(`document.querySelector('.drum-play').click()`);
+  await aspetta(0.5);
+  controlla('un altro clic ferma la cuffia e la testina sparisce', (await js(`cutxProva.synth.opz.suonaOra()`)) === false && (await js(`document.querySelectorAll('.drum-passo.ora').length`)) === 0);
+
+  // --- → CUE: la clip finisce nel brano con «· drum» e la riga // @drum ---
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\ns("sine*2").gain(.0001)\n';
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}, 'attivo')`);
+  await aspetta(0.5);
+  await js(`document.querySelector('.drum-nome').value = 'colpi'; document.querySelector('.drum-nome').dispatchEvent(new Event('input'))`);
+  await js(`cutxProva.synth.drum.aggiornaDestinazioni(); document.querySelector('.drum-barra select:last-of-type').value = 'attivo'; document.querySelector('.drum-barra .acid').click()`);
+  await aspetta(0.4);
+  controlla('→ CUE: la clip è in fondo al brano attivo, segnata «· drum»', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).riga`)) === '// @clip colpi · drum', String(await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).riga`)));
+  controlla('e comincia con la riga // @drum, poi lo stack', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).corpo.slice(0, 2).join('|')`)) === '// @drum|stack(');
+  controlla('la clip si rilegge identica dalla griglia', (await js(`(() => { const c = cutxProva.cue.slot.attivo.modello.sezioni.at(-1).corpo.join('\\n'); return cutxProva.synth.drum.apri(c, 'colpi') === null; })()`)) === true);
+
+  // il pulsante sulla card della clip DRUM la riapre nella scheda DRUM (sulle altre clip non c'è)
+  await js(`document.getElementById('vista-live').click()`);
+  await aspetta(0.4);
+  await js(`cutxProva.cue.cambiaLinguetta('attivo'); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(0.6);
+  const apri = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [c.querySelector('.nome')?.textContent ?? c.textContent.slice(0, 12), [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'drum' && !b.hidden)]))`);
+  controlla('sulla card della clip DRUM c\'è «drum», su quella a mano no', /colpi[^\]]*true/.test(apri) && !/basso[^\]]*true/.test(apri), apri);
+  await js(`cutxProva.synth.drum.nomeEl.value = 'altro'; cutxProva.synth.drum.nome = 'altro'; [...document.querySelectorAll('#carte .card.sezione')].find((c) => c.textContent.includes('colpi')).querySelectorAll('.card-testa button').forEach((b) => { if (b.textContent.trim() === 'drum' && !b.hidden) b.click(); })`);
+  await aspetta(0.6);
+  controlla('«drum» sulla card riapre la clip nella scheda DRUM', (await js(`cutxProva.vista`)) === 'synth' && (await js(`document.querySelector('.synth').classList.contains('modo-drum')`)) === true && (await js(`cutxProva.synth.drum.nome`)) === 'colpi', `${await js(`cutxProva.vista`)} ${await js(`cutxProva.synth.drum.nome`)}`);
+  await js(`document.getElementById('vista-live').click()`);
+
+  // --- si ricorda l'ultima griglia ---
+  await aspetta(1.2);
+  controlla('l\'ultima griglia si salva nelle preferenze', (await js(`window.cutx.preferenze().then((p) => !!p.drumUltimo?.codice?.startsWith('stack('))`)) === true);
+  await js(`document.getElementById('vista-synth-btn').click()`);
+  await aspetta(0.3);
+  await js(`[...document.querySelectorAll('.drum-schede button')].find((b) => b.textContent === 'suono').click()`);
+  await aspetta(0.3);
+  controlla('tornando a «suono» ricompaiono le manopole', (await js(`!document.querySelector('.synth').classList.contains('modo-drum') && !!document.querySelector('.synth-pannello').offsetParent`)) === true);
+  await js(`cutxProva.fermaTutto(); cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraLinguette(); document.getElementById('vista-live').click(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+  return ok;
 }
 
 // --- la mano sul proiettore: lo scheletro in alto al centro (punti finti, niente camera) + le foto per guardare dimensione e posizione ---
