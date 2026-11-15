@@ -110,3 +110,13 @@ Il pulsante «synth» (o «drum») c'è su ogni clip che il pannello riscrive UG
 **Giorni**: A arpeggio sulla clip ≈ 2 (pannello, codice, lettura inversa, test, foto); CAOS ≈ 1-1,5; B dal vivo ≈ 2-3 più la tastiera MIDI. Totale A + CAOS ≈ 3-3,5 giorni.
 
 **Proposta**: 5.2, in ordine A → CAOS; B nella 5.3 insieme alla tastiera MIDI. Decide Valerio.
+
+## ARPEGGIO: lavoro a metà (15/11/2026, da finire)
+**Dov'è**: ramo `arpeggio-wip` (commit unico sopra `beta-5.2`, già su GitHub). **Non è in beta-5.2 né nella beta.3**: per ripartire `git merge arpeggio-wip` (o cherry-pick).
+**Fatto (strada A, arpeggio sulla clip)**: gruppo «arpeggio» nel SYNTH con modo (`''`, su, giù, su-giù, caso), passo (1/4, 1/8, 1/16) e gate (`.clip`). Il codice sta subito dopo le note, prima di `.trans` e `.add` (le voci sovrapposte altrimenti diventano un accordo): `.arpWith(h => run(16).late(h[0].whole.begin).fmap(i => h[i % h.length]))`. `run(n)` dà il passo fisso, `late(inizio dell'accordo)` lo fa ripartire a ogni accordo, `h` è l'accordo (il pianoroll lo scrive dal basso all'alto). Solo con lo schema «clip» o con «arpeggio corto» (che diventa l'accordo `[c3,eb3,g3,bb3]`); mai con la nota tenuta dei tasti, con un inizio scritto a mano o con un `.arp` già a mano. Lettura codice → pannello per tutti i modi/passi/gate. MUTATE non lo tocca. Funzioni in `synth-codice.js` (`conArp`, `chiamataArp`, `leggiArp`), parametri `arp`, `arppasso`, `arpgate` in `synth-modello.js`. Verificato su Strudel vero (fuori dall'app) che le note escono giuste in tutti i modi. Test puri: 482 ok.
+**Manca**:
+1. **La prova nell'app non è mai finita**: `npm run prova:parte -- synth` è rimasta ferma oltre 10 minuti (due volte), senza output. Causa non trovata: può essere il mio blocco nuovo (8 controlli con `cutxHaps`, `cutxProva.synth.imponi`) o un guasto sparso come quelli già noti. Da guardare: lanciare la prova con log, tagliare il blocco nuovo e rimetterlo a pezzi.
+2. Foto del pannello (`--foto`) e sistemare il posto del gruppo nella griglia (ora `grid-column: span 5` in `synth.css`, da vedere).
+3. **Controller**: niente. Il tasto 6 è libero; la mappa tasto per tasto va approvata da Valerio prima. Il test `controller-synth` esclude il gruppo `arp` finché non c'è.
+4. Poi, nell'ordine: CAOS (`degradeBy`, `sometimesBy`, seme), poi l'arpeggio dal vivo da tasti tenuti (con la tastiera MIDI).
+**Da sapere**: una nota singola con l'arpeggio acceso si ripete a ogni passo (comportamento voluto: passo fisso). Un `.arpWith` ritoccato a mano resta a mano. Le chiamate a mano su più righe oggi si perdono (`manoValida` vuole una riga sola): l'arpeggio è per questo scritto su una riga.
