@@ -3599,7 +3599,44 @@ input[type='checkbox'] {
 .mani-finestra[hidden] {
   display: none;
 }
+.mani-modo {
+  font-family: var(--stencil);
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--spento);
+}
+.mani-finestra.comanda .mani-modo {
+  color: var(--marcio);
+}
+.mani-finestra.rilascio .mani-modo {
+  color: #d9a23a;
+}
+.mani-quadro {
+  position: relative;
+}
+.mani-anello {
+  position: absolute;
+  left: calc(50% - 20px);
+  top: calc(50% - 20px);
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+.mani-anello circle {
+  fill: none;
+  stroke-width: 3;
+}
+.mani-anello circle:first-child {
+  stroke: var(--linea);
+  opacity: 0.6;
+}
+.mani-anello circle:last-child {
+  stroke: var(--marcio);
+}
 .mani-immagine {
+  display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 4 / 3;
@@ -3613,6 +3650,9 @@ input[type='checkbox'] {
   border-radius: 3px;
   overflow: hidden;
 }
+.mani-barra.piccola {
+  height: 3px;
+}
 .mani-barra i {
   display: block;
   height: 100%;
@@ -3625,8 +3665,13 @@ input[type='checkbox'] {
 .mani-finestra.rilascio .mani-barra i {
   background: #d9a23a; /* ambra: la mano è persa, il filtro sta tornando aperto */
 }
+.mani-finestra.bloccata .mani-barra i {
+  background: var(--spento); /* bloccata: il valore resta lì, ma la mano non comanda */
+}
 .mani-riga {
   display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   justify-content: space-between;
   font-size: 12px;
 }

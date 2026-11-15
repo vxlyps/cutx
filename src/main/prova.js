@@ -4539,7 +4539,7 @@ async function provaMani({ finestre, scrivi }) {
   // Il collegamento al live: tasto M, la riga «mano» sul filtro, il fader che cede il posto, la mano persa che torna aperta.
   async function collegamento() {
     const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
-    const mano = (g) => g.map((r) => /^all\(x => x\.lpf\((\d+)\)\) \/\/ mano$/.exec(r)?.[1]).find(Boolean);
+    const mano = (g) => g.map((r) => /^all\(x => x\.lpf\((\d+)\)(?:\.lpq\(\d+\))?\) \/\/ mano$/.exec(r)?.[1]).find(Boolean);
     const faderRiga = 'all(x => x.lpf(900))';
     await js(`cutxProva.globaleDelController('fader', ${JSON.stringify(faderRiga)})`);
     await aspetta(0.6);
@@ -4553,11 +4553,11 @@ async function provaMani({ finestre, scrivi }) {
     let manoPrima = null;
     while (Date.now() - t0 < 46000) {
       const g = (await live()).globali ?? [];
-      const f = await js(`(() => { const f = cutxProva.maniFiltro(); return [!!f.controlla, !!cutxProva.maniClient.ultimaMano?.visibile, f.a]; })()`);
+      const f = await js(`(() => { const f = cutxProva.maniControllo(); return [f.riga !== null, f.fase, f.valori[0], !!cutxProva.maniClient.ultimaMano?.visibile]; })()`);
       const hz = mano(g);
       if (hz && manoPrima === null) manoPrima = Date.now() - t0;
       if (hz && g.includes(faderRiga)) faderVisto = true;
-      serie.push({ t: Date.now() - t0, hz: hz ? Number(hz) : null, controlla: f[0], vista: f[1] });
+      serie.push({ t: Date.now() - t0, hz: hz ? Number(hz) : null, controlla: f[0], fase: f[1], vista: f[3] });
       await aspetta(0.25);
     }
     const hzs = serie.filter((x) => x.hz !== null).map((x) => x.hz);
@@ -4569,7 +4569,7 @@ async function provaMani({ finestre, scrivi }) {
     let cambi = 0;
     for (let i = 1; i < serie.length; i++) if (serie[i].hz !== serie[i - 1].hz) cambi++;
     controlla('la riga non cambia troppo spesso (letture a 4 al secondo: ci stanno tutte)', cambi <= serie.length, `${cambi}/${serie.length}`);
-    // mano persa: ogni tratto senza mano lungo almeno 1,5 s vede il filtro solo salire (verso aperto), mai fermo a metà
+    // mano persa: il valore resta fermo i primi 2 s, poi sale piano verso aperto senza tornare indietro; dopo ~7 s non comanda più
     let ok1 = true;
     let tratti = 0;
     let lunghi = 0;
@@ -4578,23 +4578,29 @@ async function provaMani({ finestre, scrivi }) {
       let j = i;
       while (j + 1 < serie.length && !serie[j + 1].vista) j++;
       const lunghezza = serie[j].t - serie[i].t;
-      if (lunghezza >= 1500) {
+      if (lunghezza >= 3000) {
         tratti++;
-        const vals = serie.slice(i, j + 1).map((x) => x.hz).filter((h) => h !== null);
+        const tratto = serie.slice(i, j + 1).filter((x) => x.hz !== null);
+        const fermo = tratto.filter((x) => x.t - serie[i].t > 600 && x.t - serie[i].t < 1700).map((x) => x.hz);
+        const tenuto = fermo.length > 1 && fermo.every((h) => h === fermo[0]);
+        const dopo = tratto.filter((x) => x.t - serie[i].t > 2400).map((x) => x.hz);
         let scende = false;
-        for (let k = 1; k < vals.length; k++) if (vals[k] < vals[k - 1]) scende = true;
-        const fine = serie.slice(i, j + 1).at(-1);
-        scrivi(`INFO  mani: tratto senza mano ${(lunghezza / 1000).toFixed(1)} s · filtro ${vals[0]} → ${vals.at(-1)} Hz · ${scende ? 'SCENDE' : 'sale'} · comanda ancora alla fine: ${fine.controlla}`);
-        if (scende) ok1 = false;
-        if (lunghezza >= 5200) {
+        for (let k = 1; k < dopo.length; k++) if (dopo[k] < dopo[k - 1]) scende = true;
+        const fine = serie[j];
+        scrivi(`INFO  mani: tratto senza mano ${(lunghezza / 1000).toFixed(1)} s · valore ${tratto[0].hz} → ${tratto.at(-1).hz} Hz · fermo i primi 2 s: ${tenuto} · ${scende ? 'SCENDE' : 'sale'} · comanda ancora alla fine: ${fine.controlla}`);
+        if (!tenuto || scende) ok1 = false;
+        if (lunghezza >= 7500) {
           lunghi++;
-          if (fine.controlla) ok1 = false; // dopo 5 secondi senza mano non deve più comandare niente
+          if (fine.controlla) ok1 = false; // dopo ~7 secondi senza mano (2 fermo + 2 cicli) non deve più comandare niente
         }
       }
       i = j;
     }
-    scrivi(`INFO  mani: ${tratti} tratti senza mano (${lunghi} lunghi): il filtro è sempre tornato aperto`);
-    controlla('mano persa: il filtro risale verso aperto senza fermarsi a metà', ok1 && tratti >= 1, `${tratti} tratti`);
+    scrivi(`INFO  mani: ${tratti} tratti senza mano (${lunghi} lunghi)`);
+    const cambiFase = [];
+    for (let i = 0; i < serie.length; i++) if (i === 0 || serie[i].fase !== serie[i - 1].fase) cambiFase.push(`${(serie[i].t / 1000).toFixed(1)}s ${serie[i].fase}${serie[i].vista ? '' : '(senza mano)'}`);
+    scrivi(`INFO  mani: fasi del controllo nel video: ${cambiFase.join(' → ')}`);
+    controlla('mano persa: il valore resta fermo 2 s, poi risale verso aperto senza tornare indietro', ok1 && tratti >= 1, `${tratti} tratti`);
     await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', bubbles: true }))`);
     await aspetta(1.5);
     const dopo = (await live()).globali ?? [];
@@ -4606,14 +4612,14 @@ async function provaMani({ finestre, scrivi }) {
     controlla('nelle impostazioni c\'è la sezione MANI: camera, sensibilità, accese di serie', await js(`!!document.getElementById('imp-mani-camera') && !!document.getElementById('imp-mani-sensibilita') && /MANI/.test(document.getElementById('imp-titolo-mani').textContent) && /accese all'avvio/.test(document.getElementById('imp-mani').textContent)`));
     await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.9 } })`);
     await aspetta(0.5);
-    controlla('la sensibilità cambiata nelle impostazioni arriva al filtro', (await js('cutxProva.maniFiltro().sensibilita')) === 0.9);
+    controlla('la sensibilità cambiata nelle impostazioni arriva al filtro', (await js('cutxProva.maniControllo().sensibilita')) === 0.9);
     await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5 } })`);
   }
 
   try {
     await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
     // la prova si affianca all'app (richiama le sue funzioni), non le sostituisce
-    await js(`window.__mani = []; (() => { const c = cutxProva.maniClient; window.__app = { m: c.suMano, i: c.suImmagine }; c.suMano = (m) => { window.__app.m(m); window.__mani.push(m.visibile ? Math.round(m.y * 1000) / 1000 : null); }; })(); cutxProva.accendiMani()`);
+    await js(`window.__mani = []; (() => { const c = cutxProva.maniClient; window.__app = { m: c.suMano, i: c.suImmagine }; c.suMano = (m) => { window.__app.m(m); const p = m.mani?.[0]; window.__mani.push(p ? Math.round([0, 5, 9, 13, 17].reduce((s, i) => s + p[i][1], 0) / 5 * 1000) / 1000 : null); }; })(); cutxProva.accendiMani()`);
     await aspetta(6); // la camera, il modello, il Wasm
     const st = await js('cutxProva.maniClient.stato');
     controlla('la finestra «mani» è un processo a parte, nascosto', !!finestre.mani && !finestre.mani.isVisible() && finestre.mani.webContents.getOSProcessId() !== finestre.live.webContents.getOSProcessId());

@@ -1,6 +1,6 @@
 // La finestrella delle mani (sperimentale), nella colonna a sinistra, solo mentre il riconoscimento è acceso: l'immagine piccola della
-// camera (a specchio) con lo scheletro della mano disegnato sopra, una barra col valore del filtro e la scritta MANO ON.
-// Solo disegno: i numeri arrivano da mani-client.js (la mano) e da mani-filtro.js (il filtro).
+// camera (a specchio) con lo scheletro della mano disegnato sopra, il nome del modo, l'anello dell'aggancio e le barre dei due valori.
+// Solo disegno: i numeri arrivano da mani-client.js (la mano) e da mani-controllo.js (il controllo).
 import it from './testi/it.json';
 
 const T = it.mani;
@@ -19,15 +19,36 @@ export class ManiVista {
     this.canvas = el('canvas', 'mani-immagine');
     this.canvas.width = 160;
     this.canvas.height = 120;
+    this.modo = el('div', 'mani-modo', '');
+    // l'anello dell'aggancio: si riempie mentre tieni la mano aperta e ferma, poi compare AGGANCIATA
+    const NS = 'http://www.w3.org/2000/svg';
+    this.anello = document.createElementNS(NS, 'svg');
+    this.anello.setAttribute('viewBox', '0 0 40 40');
+    this.anello.setAttribute('class', 'mani-anello');
+    this.anelloFondo = document.createElementNS(NS, 'circle');
+    this.anelloGiro = document.createElementNS(NS, 'circle');
+    for (const c of [this.anelloFondo, this.anelloGiro]) {
+      c.setAttribute('cx', '20');
+      c.setAttribute('cy', '20');
+      c.setAttribute('r', '16');
+    }
+    this.anelloGiro.setAttribute('pathLength', '100');
+    this.anelloGiro.setAttribute('stroke-dasharray', '0 100');
+    this.anello.append(this.anelloFondo, this.anelloGiro);
+    const quadro = el('div', 'mani-quadro');
+    quadro.append(this.canvas, this.anello);
     this.sigla = el('span', 'mani-sigla', T.acceso);
     this.valore = el('span', 'mani-valore', '');
     this.barra = el('i');
+    this.barra2 = el('i');
     const barraEl = el('div', 'mani-barra');
     barraEl.append(this.barra);
+    const barraEl2 = el('div', 'mani-barra piccola');
+    barraEl2.append(this.barra2);
     const riga = el('div', 'mani-riga');
     riga.append(this.sigla, this.valore);
     this.nota = el('div', 'mani-nota', '');
-    radice.append(this.canvas, barraEl, riga, this.nota);
+    radice.append(this.modo, quadro, barraEl, barraEl2, riga, this.nota);
     this.bitmap = null;
     this.mano = null;
     this.disegnata = false;
@@ -41,7 +62,9 @@ export class ManiVista {
       this.bitmap = null;
       this.mano = null;
       this.barra.style.width = '0%';
+      this.barra2.style.width = '0%';
       this.nota.textContent = '';
+      this.anelloGiro.setAttribute('stroke-dasharray', '0 100');
     }
   }
 
@@ -60,12 +83,20 @@ export class ManiVista {
     this.richiedi();
   }
 
-  // Il valore del filtro (da mani-filtro.js): la barra e i Hz. Verde solo mentre la mano comanda davvero il live.
-  filtro(r) {
-    this.barra.style.width = `${Math.round((r.controlla ? r.altezza : 0) * 100)}%`;
-    this.radice.classList.toggle('comanda', r.controlla);
-    this.radice.classList.toggle('rilascio', r.rilascio);
-    this.valore.textContent = r.controlla ? r.testo : T.nessunaMano;
+  // Lo stato del controllo (da mani-controllo.js): il modo, l'anello, le barre e il valore. Verde solo mentre la mano comanda davvero il live.
+  controllo(r, vedeMano) {
+    const fase = r.fase;
+    this.modo.textContent = r.nomeModo;
+    this.barra.style.width = `${Math.round((r.controlla ? r.valori[0] : 0) * 100)}%`;
+    this.barra2.style.width = `${Math.round((r.controlla ? r.valori[1] : 0) * 100)}%`;
+    this.radice.classList.toggle('comanda', fase === 'agganciata');
+    this.radice.classList.toggle('rilascio', fase === 'persa' || fase === 'rilascio');
+    this.radice.classList.toggle('bloccata', fase === 'bloccata');
+    const riempie = fase === 'libera' || fase === 'bloccata' || fase === 'persa' || fase === 'rilascio';
+    this.anelloGiro.setAttribute('stroke-dasharray', `${riempie && vedeMano ? Math.round(r.progresso * 100) : fase === 'agganciata' ? 100 : 0} 100`);
+    this.anello.classList.toggle('pieno', fase === 'agganciata');
+    this.sigla.textContent = T.fasi[fase === 'libera' && vedeMano ? 'libera' : fase === 'libera' ? 'nessuna' : fase] ?? '';
+    this.valore.textContent = r.controlla || fase === 'agganciata' || fase === 'bloccata' ? r.testo : '';
   }
 
   stato(s) {

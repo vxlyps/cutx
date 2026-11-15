@@ -2,9 +2,9 @@
 // Separata dai motori audio: se pesa o si blocca, il suono non lo sente. Esiste solo finché il riconoscimento è acceso
 // (da spento la camera è chiusa del tutto: la finestra viene distrutta dal processo principale).
 //
-// Al controllo manda (canale diretto, come i motori): { tipo: 'mano', visibile, y, punti } a ogni fotogramma riconosciuto,
+// Al controllo manda (canale diretto, come i motori): { tipo: 'mano', visibile, ar, mani: [punti × 21 …] } a ogni fotogramma riconosciuto,
 // { tipo: 'immagine', jpeg } (piccola, ~15 al secondo, solo se la finestrella è aperta) e { tipo: 'stato', … } una volta al secondo.
-// Il significato di y (altezza → filtro) lo decide il controllo (mani-filtro.js): qui solo la misura.
+// Cosa vuol dire (aggancio, altezza → effetto) lo decide il controllo (mani-controllo.js): qui solo la misura.
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
 const BASE = 'cutx://app/mani';
@@ -81,14 +81,10 @@ function giro() {
   }
   tempoRiconoscimento += performance.now() - t0;
   fotogrammi++;
-  const mano = r.landmarks?.[0];
-  if (!mano) manda({ tipo: 'mano', visibile: false });
-  else {
-    // il centro del palmo (polso e base delle dita): più stabile della punta di un dito. y = 0 in alto, 1 in basso.
-    const palmo = [0, 5, 9, 13, 17].map((i) => mano[i]);
-    const y = palmo.reduce((s, p) => s + p.y, 0) / palmo.length;
-    manda({ tipo: 'mano', visibile: true, y, punti: mano.map((p) => [p.x, p.y]) });
-  }
+  // tutte le mani viste (punti 0..1 della camera): quale è la mia, e se sta dentro la zona, lo decide il controllo (mani-gesto.js)
+  const mani = (r.landmarks ?? []).map((m) => m.map((p) => [p.x, p.y]));
+  const ar = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 4 / 3;
+  manda({ tipo: 'mano', visibile: mani.length > 0, ar, mani });
   if (anteprima && t0 - ultimaImmagine > 66) {
     ultimaImmagine = t0;
     g2d.drawImage(video, 0, 0, canvas.width, canvas.height);

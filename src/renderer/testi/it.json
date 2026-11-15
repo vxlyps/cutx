@@ -747,7 +747,7 @@
     "nessunaMano": "niente mano",
     "errore": "camera",
     "fotogrammi": "fps",
-    "avvisoAcceso": "mani accese: l'altezza della mano comanda il filtro · M per spegnere",
+    "avvisoAcceso": "mani accese: tieni la mano aperta e ferma verso la camera per agganciarla · pugno = blocca · ⇧M cambia modo · M per spegnere",
     "avvisoSpento": "mani spente: la camera è chiusa",
     "avvisoCaduta": "le mani si sono fermate ({motivo}): camera chiusa, il filtro è tornato com'era",
     "serie": {
@@ -763,6 +763,15 @@
       "nome": "sensibilità",
       "testo": "quanta strada deve fare la mano: bassa = serve tutta l'inquadratura, alta = basta meno della metà."
     },
-    "cosaFa": "Mano in alto = filtro aperto, in basso = chiuso (200–16000 Hz). Se la camera perde la mano il filtro torna aperto in 2 cicli."
+    "cosaFa": "Tieni la mano aperta e ferma verso la camera: un anello si riempie e compare AGGANCIATA. Da lì il valore resta dov'è e la mano lo sposta (altezza e destra-sinistra, o apertura delle dita). Pugno = blocca. Se la camera perde la mano il valore resta fermo 2 secondi, poi torna a neutro piano.",
+    "fasi": {
+      "nessuna": "niente mano",
+      "libera": "tieni la mano aperta e ferma",
+      "agganciata": "AGGANCIATA",
+      "persa": "mano persa · valore fermo",
+      "rilascio": "mano persa · torna a neutro",
+      "bloccata": "BLOCCATA · riaggancia aprendo la mano"
+    },
+    "avvisoModo": "mani · modo {modo}"
   }
 }
