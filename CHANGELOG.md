@@ -1,6 +1,6 @@
 # Novità di CUTX
 
-## 0.5.1-beta (da datare alla pubblicazione)
+## 0.5.1-beta «CUTX_05_1» (15/11/2026)
 
 Cinque cose nuove: i PROJ, la scheda DRUM, l'onda sotto la batteria, le mani (sperimentale) e qualche rifinitura. Dettaglio tasto per tasto in `docs/NOVITA-5.1.md`.
 

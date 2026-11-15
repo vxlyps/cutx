@@ -1,9 +1,8 @@
 # Prove della 5.1 (0.5.1-beta)
 
 ## Prove automatiche
-(da compilare dopo il giro lungo di Valerio, `npm run prova:tutto`, con niente altro che gira)
-- `npm test`: ___ su ___ (412 il 15/11/2026, compresi i test sui punti del video vero delle mani se il file c'è).
-- Giro lungo `npm run prova:tutto`: ___ ok, ___ falliti. Noto: `solidita` è rossa solo se la MiniFuse non è collegata.
+- `npm test`: 412 su 412 (15/11/2026, compresi i test sui punti del video vero delle mani se il file c'è).
+- Giro lungo `npm run prova:tutto`: lanciato da Valerio con niente altro in esecuzione, prima della pubblicazione; esito comunicato a voce (via libera alla release), i conteggi non sono stati riportati. Noto: `solidita` è rossa solo se la MiniFuse non è collegata.
 - Parti nuove: `proj`, `onda`, `mani` (video di una mano al posto della webcam), `mani-proiettore` (con foto in `~/Desktop/cutx-schermate/mano/`), `drum` (30 controlli, foto in `~/Desktop/cutx-schermate/drum/`).
 - `npm run pacchetto`: il `.dmg` arm64 si costruisce (`CUTX-0.5.1-beta-arm64.dmg`); `Info.plist` ha `NSCameraUsageDescription`, e dentro l'app ci sono modello e Wasm delle mani.
 
@@ -24,4 +23,4 @@
 6. Rimaste dalla beta 5 (`docs/PROVE-BETA5.md`): proiettore staccato e riattaccato, SSD vero con stem grossi.
 
 ## Rossi noti
-(da compilare)
+Nessuno comunicato da Valerio dopo il giro lungo e la sua prova a mano di dieci minuti. Restano le cose «da guardare» sopra, non ancora provate coi cavi e con la webcam su una serata vera.
