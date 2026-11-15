@@ -1,0 +1,4 @@
+Cimice (15/11/2026, ramo fase-cimice in ~/Progetti/cutx-cimice): FINALE HACK fatto. Bottone HACK (due clic) o ⌥⌘⇧H due volte; durata nelle impostazioni (1–3 min, di serie 2). Segue la curva di docs/CIMICE-HACK.md: dispetti fino a 3 insieme (fino a 4 s), volumi giù uno a uno (mai su), cimici fino a 8 sul proiettore, codice mangiato anche nel tuo editor (solo disegno), poi set chiuso e schermo nero con SOLO «TECNOLOGIA CANAGLIA».
+Funziona: npm test 449/449; prova «cimice» 35 controlli nell'app vera (master a zero, volume 20% e rimesso): HACK fermato a metà = tutto com'era; HACK completo = live vuoto, nero, editor com'era.
+Non verificato: con cassa e proiettore veri; la fine dell'HACK chiude il live come «ferma tutto» (non si rimette: il paracadute vale prima della fine).
+Prossimo: Valerio prova l'HACK (durata 1 min per provare); mappa X-Touch dopo.
