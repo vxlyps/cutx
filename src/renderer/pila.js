@@ -217,7 +217,7 @@ export class Pila {
     striscia.radice.onclick = () => this.cambiaOnda(c); // batteria: onda ↔ note
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
-    apriSynth.onclick = () => this.azioni.apriNelSynth?.(c.livello.codice, c.livello.nome);
+    apriSynth.onclick = () => this.azioni.apriNelSynth?.(c.livello);
     art.addEventListener('pointerdown', () => this.seleziona(c.livello.id));
     // un clic sulla card che sta sfumando la salva: l'uscita si annulla e il livello torna al suo volume
     art.addEventListener('click', (e) => {

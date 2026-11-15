@@ -109,6 +109,22 @@ export class Serata {
     return null;
   }
 
+  // La clip del kit di un livello live (provenienza «kit §N»), se c'è ancora e il nome torna. Altrimenti null.
+  origineDi(provenienza, nome) {
+    const m = /^kit §(\d+)$/.exec(provenienza ?? '');
+    return m && this.kit?.modello.sezioni[Number(m[1]) - 1]?.nome === nome ? { kit: true, nome } : null;
+  }
+
+  // «aggiorna» dal synth: la clip del kit si riscrive dov'è (cercata per nome). Il kit non ha ⌘Z. Ritorna l'errore, o null.
+  aggiornaClipKit(nome, codice) {
+    const i = this.kit?.modello.sezioni.findIndex((x) => x.nome === nome) ?? -1;
+    if (i < 0) return it.synth.msg.clipSparita.replace('{nome}', nome);
+    this.kit.modello = B.conCorpo(this.kit.modello, i, codice.replace(/\s+$/, '').split('\n'));
+    this.salvaKitSoon();
+    this.azioni.ridisegna();
+    return null;
+  }
+
   salvaKitSoon() {
     clearTimeout(this.timerKit);
     this.timerKit = setTimeout(() => {

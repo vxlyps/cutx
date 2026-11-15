@@ -106,7 +106,11 @@ export class VistaDrum {
     this.cueEl = crea('button', 'key acid', T.cue);
     this.cueEl.dataset.aiuto = 'drum-cue';
     this.cueEl.onclick = () => this.mandaCue();
-    barra.append(schede, crea('span', 'sep'), this.nomeEl, this.playEl, this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.destinazioneEl, this.cueEl);
+    this.aggiornaEl = crea('button', 'key');
+    this.aggiornaEl.dataset.aiuto = 'drum-aggiorna';
+    this.aggiornaEl.hidden = true;
+    this.aggiornaEl.onclick = () => this.aggiornaClip();
+    barra.append(schede, crea('span', 'sep'), this.nomeEl, this.playEl, this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.aggiornaEl, this.destinazioneEl, this.cueEl);
 
     this.grigliaEl = crea('div', 'drum-griglia');
     this.grigliaEl.dataset.aiuto = 'drum-griglia';
@@ -279,10 +283,17 @@ export class VistaDrum {
   }
 
   // Una clip DRUM aperta dal CUE o dal kit: la griglia riparte da lì. Ritorna l'errore, o null.
-  apri(testo, nome) {
+  // origine: da dove viene la clip (per «aggiorna»), o null.
+  apri(testo, nome, origine = null) {
     const letto = leggiCodice(testo);
     if (letto.errore) return T.msg.apriNonDrum;
     this.registra();
+    this.origine = origine;
+    this.aggiornaEl.hidden = !origine;
+    if (origine) {
+      this.aggiornaEl.textContent = formatta(T.aggiorna, { nome: origine.nome });
+      this.aggiornaEl.title = formatta(T.aggiornaTitolo, { nome: origine.nome });
+    }
     this.stato = letto.stato;
     if (nome) {
       this.nome = nome;
@@ -349,6 +360,13 @@ export class VistaDrum {
     const dest = this.destinazioneEl.value;
     const errore = this.opz.mandaCue(dest, this.nome, clip(this.stato), { drum: true });
     this.avviso(errore ?? formatta(it.drum.msg.mandata, { nome: this.nome, dove: it.synth.destinazioni[dest] }));
+  }
+
+  // Riscrive la clip da cui viene la griglia, dov'è (CUE o kit). Il live non cambia.
+  aggiornaClip() {
+    if (!this.origine) return;
+    const errore = this.opz.aggiorna(this.origine, clip(this.stato));
+    this.avviso(errore ?? formatta(this.origine.kit ? T.msg.aggiornataKit : T.msg.aggiornata, { nome: this.origine.nome }));
   }
 
   avviso(testo) {

@@ -1,10 +1,8 @@
-// Una clip di un brano o un livello live si riapre nel SYNTH (riga `// @synth`) o nella scheda DRUM (riga `// @drum`), altrimenti non si riapre.
-// Modulo puro: lo usano le card (CUE e LIVE) per sapere se mostrare il pulsante e con che scritta.
+// Le card (CUE e LIVE) mostrano il pulsante «synth» / «drum» sulle clip che si riaprono; quali, lo dice `apri-tipo.js`.
 import it from './testi/it.json';
-import { haRigaSynth } from './synth-codice.js';
-import { haMarca } from './drum-codice.js';
+import { tipoApribile } from './apri-tipo.js';
 
-export const tipoApribile = (codice) => (haMarca(codice) ? 'drum' : haRigaSynth(codice) ? 'synth' : null);
+export { tipoApribile };
 export const scrittaApri = (tipo) => (tipo === 'drum' ? it.drum.apri : it.synth.msg.apri);
 export const titoloApri = (tipo) => (tipo === 'drum' ? it.drum.apriTitolo : it.synth.msg.apriTitolo);
 

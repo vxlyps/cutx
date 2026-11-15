@@ -1,7 +1,7 @@
-# Ultimo stato - 15/11/2026 (sera, prima della nuova chat)
+# Ultimo stato - 15/11/2026 (sera, dopo «synth al volo»)
 
-1. Fatto oggi: X-Touch come strumento nel SYNTH + CASSE (release 0.5.1-beta.2 pubblicata); nella scheda DRUM tasti del Mac (A S D F G H J K, Q W E R T Y U I) e REC dei colpi come passi. La **0.5.1-beta.3 è preparata ma NON pubblicata**: versione e docs già committati su `beta-5.2` (commit 58979d0, non ancora pushato oltre al REC), niente tag, niente `.dmg`.
-2. Funziona: 472 test puri, prove nell'app vera `strumento,drum` (46 ok) e `synth,controller,cue-controller` (350 ok). La prova completa per la beta.3 l'ho fermata a metà (Valerio vuole fare altro prima): da rifare.
-3. Non provato a mano: luci vere dell'X-Touch, CASSE con le casse vere, REC con le orecchie (latenza cuffia non compensata).
-4. File principali: `controller.js`, `controller-ruoli.js`, `drum-vista.js`, `drum-rec.js`, `synth-vista.js`, `motore.js` (`casse`, `drum-colpo`), `src/main/prova.js` (parte `strumento`), `docs/CONTROLLER-5.2.md`, `docs/NOVITA-5.1.2.md`, `docs/NOVITA-5.1.3.md`.
-5. Prossimo, in questo ordine (decisione di Valerio, in `docs/PROSSIMI.md` in fondo): (1) **«synth al volo»** con un nome bello (proporre 2-3 nomi, decide lui; spiegare il piano e aspettare l'ok prima del codice); (2) **→ CUE come scena del beat**; (3) **valutazione arpeggio** (solo testo); (4) poi pubblicare la beta.3: aggiornare CHANGELOG e NOVITA-5.1.3, prova completa a volume basso, `npm run pacchetto`, merge in main, tag, release.
+1. Fatto: «synth al volo». Pulsante synth/drum su ogni clip (CUE e LIVE) che il pannello riscrive uguale, anche scritta a mano; «aggiorna «nome»» nella barra del SYNTH e del DRUM riscrive la clip dov'è (CUE con ⌘Z, kit senza), il live non cambia. Scritto da me perché c'erano decisioni di design.
+2. Funziona: 478 test puri; prova nell'app vera `aggiorna,drum,synth` (332 ok); foto guardata. Il pulsante non compare dove il giro cambierebbe il suono (es. `s("bd*4")`).
+3. Non provato a mano: «aggiorna» da un livello LIVE (provenienza `brano §N`) e dal kit; nella finestra stretta la barra del SYNTH va a capo (→ CUE sotto).
+4. File: `apri-tipo.js` (nuovo), `apri-clip.js`, `cue.js` (origineDi, aggiornaClip), `set-vista.js` (aggiornaClipKit), `app.js`, `pila.js`, `synth-vista.js`, `drum-vista.js`, `it.json`, `prova.js` (parte `aggiorna`), `test/apri-tipo.test.js`.
+5. Prossimo: (2) → CUE come scena del beat (guarda `@beat` in `brano.js`); (3) valutazione arpeggio (solo testo); (4) beta.3 (CHANGELOG, NOVITA-5.1.3, prova completa, pacchetto, merge, tag, release). Il pulsante dice «synth»: Valerio ha scelto così, niente nomi nuovi.

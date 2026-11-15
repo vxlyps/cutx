@@ -501,6 +501,33 @@ export class Cue {
     return null;
   }
 
+  // Da dove viene la clip di un livello live (provenienza «brano §N»): il brano e la clip nel CUE, se ci sono ancora e il nome torna. Altrimenti null.
+  origineDi(provenienza, nome) {
+    const m = /^(.*) §(\d+)$/.exec(provenienza ?? '');
+    if (!m) return null;
+    for (const dove of ['attivo', 'prossimo']) {
+      const brano = this.slot[dove];
+      if (!brano) continue;
+      const nomeBrano = B.testa(brano.modello).brano || brano.file.replace(/\.cutx$/, '');
+      if (nomeBrano === m[1] && brano.modello.sezioni[Number(m[2]) - 1]?.nome === nome) return { brano, nome };
+    }
+    return null;
+  }
+
+  // «aggiorna» dal synth: la clip si riscrive dov'è (⌘Z la rifà com'era). Si cerca per nome, perché dopo unisci/dividi/togli i numeri cambiano.
+  // Non tocca il live. Ritorna l'errore, o null.
+  aggiornaClip(origine, codice) {
+    const dove = ['attivo', 'prossimo'].find((d) => this.slot[d] === origine.brano);
+    const i = dove ? origine.brano.modello.sezioni.findIndex((x) => x.nome === origine.nome) : -1;
+    if (i < 0) return it.synth.msg.clipSparita.replace('{nome}', origine.nome);
+    const prima = this.linguetta;
+    this.linguetta = dove; // modifica() lavora sul brano della linguetta in vista: ci si sposta il tempo di scrivere
+    this.modifica(B.conCorpo(origine.brano.modello, i, codice.replace(/\s+$/, '').split('\n')), prima === dove, it.synth.msg.dalSynth.replace('{nome}', origine.nome));
+    this.linguetta = prima;
+    this.mostraModo();
+    return null;
+  }
+
   // Un livello tolto dal live torna nel CUE, pronto: in fondo al testo libero o al brano aperto. Non tocca il live.
   reinserisci({ nome, codice, volume, muto }) {
     const info = {};
@@ -775,7 +802,7 @@ export class Cue {
       // solo le clip fatte dal synth (// @synth) o dalla scheda DRUM (// @drum) si riaprono lì
       const apriSynth = tasto(it.synth.msg.apri, '', it.synth.msg.apriTitolo);
       mostraApri(apriSynth, righe.join('\n'));
-      apriSynth.onclick = () => this.azioni.apriNelSynth?.(carta.editor.codice, m.sezioni[i].nome);
+      apriSynth.onclick = () => this.azioni.apriNelSynth?.(carta.editor.codice, m.sezioni[i].nome, { brano: this.brano, nome: m.sezioni[i].nome });
       carta.apriSynth = apriSynth;
       const togliClip = tasto('×', '', 'Togli la clip dal brano');
       togliClip.dataset.aiuto = 'clip-togli';

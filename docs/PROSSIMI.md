@@ -92,3 +92,6 @@ Ordine proposto per la 5.2: 1) controller a ruoli (`docs/CONTROLLER-5.2.md`) **f
 2. **→ CUE come scena del beat** oltre che come clip (guarda come si scrivono le scene `@beat` in `brano.js`).
 3. **Valutazione dell'arpeggio**: solo testo, niente codice (cosa si può fare con codice Strudel vero, note tenute, pannello e controller, giorni di lavoro).
 4. Poi la **0.5.1-beta.3**: aggiornare CHANGELOG e `docs/NOVITA-5.1.3.md` con le tre cose, prova completa (build fresca, volume al 20%), `npm run pacchetto`, merge in `main`, tag `v0.5.1-beta.3`, `gh release create` pre-release con il `.dmg` (come la beta.2).
+
+## «Synth al volo»: fatto (15/11/2026)
+Il pulsante «synth» (o «drum») c'è su ogni clip che il pannello riscrive UGUALE: con la sua riga `// @synth` / `// @drum` sempre; scritta a mano solo se il giro codice → pannello → codice non cambia il suono (`src/renderer/apri-tipo.js`, `test/apri-tipo.test.js`). Esempio escluso: `s("bd*4").gain(.5)` diventerebbe un triangle. «aggiorna «nome»» riscrive la clip dov'è (CUE: ⌘Z la rifà; kit: niente ⌘Z) e non tocca il live. Il livello live risale alla clip dalla `provenienza` (`brano §N`, `kit §N`) e dal nome; scratch/synth/browser/ableton non hanno origine, solo → CUE come clip nuova. Prova: `npm run prova:parte -- aggiorna`.

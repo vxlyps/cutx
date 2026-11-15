@@ -136,13 +136,15 @@ export class VistaSynth {
     this.destinazioneEl.setAttribute('aria-label', T.barra.destinazione);
     this.destinazioneEl.dataset.aiuto = 'synth-destinazione';
     this.cueEl = this.tasto(T.barra.cue, '', () => this.mandaCue(), 'synth-cue acid');
+    this.aggiornaEl = this.tasto('', '', () => this.aggiornaClip(), 'synth-aggiorna');
+    this.aggiornaEl.hidden = true;
 
     this.pesoEl = crea('span', 'lbl synth-peso');
     this.pesoEl.dataset.aiuto = 'synth-peso';
     this.avvisoEl = crea('span', 'synth-avviso');
     this.avvisoEl.setAttribute('role', 'status');
 
-    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.casseEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
+    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.casseEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.aggiornaEl, this.destinazioneEl, this.cueEl);
     for (const [el, chiave] of [[this.playEl, 'synth-play'], [this.initEl, 'synth-init'], [this.cueEl, 'synth-cue']]) el.dataset.aiuto = chiave;
 
     const corpo = crea('div', 'synth-corpo');
@@ -697,8 +699,10 @@ export class VistaSynth {
   }
 
   // Un suono aperto da una clip: si riparte da lì, con lo schema «note della clip».
-  apri(stato, nome) {
+  // origine: da dove viene la clip (per «aggiorna»), o null. dalCodice: la clip era scritta a mano e il pannello l'ha letta.
+  apri(stato, nome, origine = null, dalCodice = false) {
     this.aperta = { nome };
+    this.mostraOrigine(origine);
     this.nome = nome || this.nome;
     this.nomeEl.value = this.nome;
     this.registra();
@@ -708,15 +712,30 @@ export class VistaSynth {
     this.scalaDelPianoroll = null;
     this.cicliScelti = 1;
     this.inGesto = false;
-    this.avviso('');
+    this.avviso(dalCodice ? T.msg.apertaDalCodice : '');
     this.cambiato();
   }
 
   // Una clip DRUM aperta: la scheda DRUM riparte da lì. Ritorna l'errore, o null.
-  apriDrum(testo, nome) {
-    const errore = this.drum.apri(testo, nome);
+  apriDrum(testo, nome, origine = null) {
+    const errore = this.drum.apri(testo, nome, origine);
     if (!errore) this.mostraScheda('drum');
     return errore;
+  }
+
+  // Il tasto «aggiorna «nome»» c'è solo se la clip viene da una clip vera (CUE o kit) che c'è ancora.
+  mostraOrigine(origine) {
+    this.origine = origine;
+    this.aggiornaEl.hidden = !origine;
+    if (!origine) return;
+    this.aggiornaEl.textContent = formatta(T.barra.aggiorna, { nome: origine.nome });
+    this.aggiornaEl.title = formatta(T.barra.aggiornaTitolo, { nome: origine.nome });
+  }
+
+  aggiornaClip() {
+    if (!this.origine) return;
+    const errore = this.opz.aggiorna(this.origine, clip(this.stato));
+    this.avviso(errore ?? formatta(this.origine.kit ? T.msg.aggiornataKit : T.msg.aggiornata, { nome: this.origine.nome }));
   }
 
   annulla() {

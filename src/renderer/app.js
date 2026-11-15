@@ -5,7 +5,7 @@ import { SuoniVista } from './suoni-vista.js';
 import { Cue } from './cue.js';
 import { VistaSynth } from './synth-vista.js';
 import { tipoApribile } from './apri-clip.js';
-import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
+import { codice as codiceSynth, leggiCodice as leggiCodiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
 import it from './testi/it.json';
 import { SchermataProj, etichettaProj } from './proj-vista.js';
 import { ManiClient } from './mani-client.js';
@@ -168,7 +168,7 @@ const cue = new Cue(CODICE_INIZIALE, {
     const l = livelliLive.find((x) => x.nome === nome && x.a === null && x.provenienza?.startsWith(`${brano} §`));
     if (l) togliLivello(l.id);
   },
-  apriNelSynth: (codice, nome) => apriNelSynth(codice, nome),
+  apriNelSynth: (codice, nome, origine) => apriNelSynth(codice, nome, origine),
   provaInCuffia: () => provaInCuffia(),
   fermaCuffia: () => fermaCuffia(),
   goLive: () => goLive(),
@@ -820,6 +820,7 @@ const synth = new VistaSynth($('vista-synth'), {
     { id: 'kit', nome: it.synth.destinazioni.kit, ok: !!serata.kit },
   ],
   mandaCue: (dove, nome, testo, categoria) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo, categoria) : cue.aggiungiClip(dove, nome, testo, categoria)),
+  aggiorna: (origine, testo) => (origine.kit ? serata.aggiornaClipKit(origine.nome, testo) : cue.aggiornaClip(origine, testo)),
   salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
   // la scheda DRUM: quali suoni ci sono nello stash, e dove salva la sua ultima griglia
   suoniStash: () => suoni,
@@ -827,15 +828,17 @@ const synth = new VistaSynth($('vista-synth'), {
 });
 
 // «apri nel synth» sulla card di una clip fatta dal synth: il pannello riparte da quella clip.
-function apriNelSynth(codice, nome) {
-  if (tipoApribile(codice) === 'drum') {
-    const errore = synth.apriDrum(codice, nome);
+// origine: da dove viene la clip ({ brano, nome } nel CUE, { kit: true, nome } nel kit), o null (un livello scratch): serve a «aggiorna».
+function apriNelSynth(codice, nome, origine = null) {
+  const tipo = tipoApribile(codice);
+  if (tipo === 'drum') {
+    const errore = synth.apriDrum(codice, nome, origine);
     if (errore) return cue.avviso(errore);
     return mostraVista('synth');
   }
-  const stato = leggiRigaSynth(codice);
-  if (!stato) return cue.avviso(it.synth.msg.apriNonSynth);
-  synth.apri(stato, nome);
+  const stato = tipo === 'mano' ? leggiCodiceSynth(codice).stato : leggiRigaSynth(codice);
+  if (!tipo || !stato) return cue.avviso(it.synth.msg.apriNonSynth);
+  synth.apri({ ...stato, anteprima: 'clip' }, nome, origine, tipo === 'mano');
   mostraVista('synth');
 }
 
@@ -1654,7 +1657,7 @@ let volumePrima = null; // { id, v }: il volume com'era all'inizio del trascinam
 const pila = new Pila($('livelli'), $('jam'), {
   ondaGenerale: () => risolviTestiPubblico(preferenze).onda.acceso,
   ondaCambiata: () => mandaOndaNote(),
-  apriNelSynth: (codice, nome) => apriNelSynth(codice, nome),
+  apriNelSynth: (livello) => apriNelSynth(livello.codice, livello.nome, serata.origineDi(livello.provenienza, livello.nome) ?? cue.origineDi(livello.provenienza, livello.nome)),
   togli: (id) => togliLivello(id),
   salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
   pulisciCoda: (id) => pulisciCoda(id),

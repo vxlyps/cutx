@@ -223,6 +223,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
   if (parti.includes('mani')) ok = (await sicura('mani', provaMani)) && ok;
   if (parti.includes('drum')) ok = (await sicura('drum', provaDrum)) && ok;
+  if (parti.includes('aggiorna')) ok = (await sicura('aggiorna', provaAggiorna)) && ok;
   // strumento, non prova (non entra nel giro lungo): registra i punti delle mani che la camera vede, per ritarare i gesti sul video vero
   if (parti.indexOf('mani-dump') >= 0) ok = (await sicura('mani-dump', provaManiDump)) && ok;
   if (parti.includes('cimice')) ok = (await sicura('cimice', (a) => provaCimice({ ...a, chiedi, aspetta }))) && ok;
@@ -4836,6 +4837,55 @@ async function provaManiDump({ finestre, scrivi }) {
   await writeFile(fuori, JSON.stringify(dump));
   scrivi(`OK    ${dump.length} fotogrammi in ${fuori}`);
   return dump.length > secondi * 10;
+}
+
+// --- synth al volo: il pulsante «synth» sulle clip scritte a mano (solo se il pannello le riscrive uguali) e «aggiorna» (npm run prova:parte -- aggiorna) ---
+async function provaAggiorna({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const cartella = path.join(stash.cartellaProj(), 'libreria');
+  const file = `prova_aggiorna_${Date.now().toString(36)}.cutx`;
+  const testo = `// @brano prova aggiorna
+// @bpm 120
+// @data 2020-01-01
+// @suoni
+// @clip basso
+note("c2 e2").s("sawtooth").lpf(400).gain(.05)
+// @clip batteria
+s("bd*4").gain(.0001)
+`;
+  await writeFile(path.join(cartella, file), testo);
+  try {
+    await js('cutxProva.cue.brano && (cutxProva.cue.brano.sporco = false)');
+    await js(`cutxProva.mostraVista('live'); cutxProva.cue.apri(${JSON.stringify(file)})`);
+    await aspetta(0.8);
+    const visibili = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [c.querySelector('.nome')?.textContent, [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)]))`);
+    controlla('«synth» c\'è sulla clip scritta a mano che il pannello riscrive uguale', visibili.includes('["1 basso",true]'), visibili);
+    controlla('«synth» non c\'è su s("bd*4"): il pannello la cambierebbe', visibili.includes('["2 batteria",false]'), visibili);
+    await js(`[...document.querySelectorAll('#carte .card.sezione')].find((c) => c.querySelector('.nome')?.textContent === '1 basso').querySelector('.card-testa').querySelectorAll('button').forEach((b) => b.textContent.trim() === 'synth' && b.click())`);
+    await aspetta(0.5);
+    controlla('si apre il SYNTH con la clip letta dal codice', (await js('cutxProva.vista')) === 'synth' && (await js('cutxProva.synth.stato.cutoff')) === 400);
+    controlla('compare «aggiorna «basso»»', (await js(`(() => { const b = document.querySelector('.synth-aggiorna'); return !b.hidden && b.textContent.trim(); })()`)) === 'aggiorna «basso»');
+    await js(`cutxProva.synth.cambia('cutoff', 900)`);
+    if (process.env.CUTX_FOTO_AGGIORNA) await writeFile(process.env.CUTX_FOTO_AGGIORNA, (await finestre.controllo.webContents.capturePage()).toPNG());
+    await js(`document.querySelector('.synth-aggiorna').click()`);
+    await aspetta(0.5);
+    const dopo = await js('cutxProva.cue.testoBrano()');
+    controlla('«aggiorna» riscrive la clip dov\'è (cutoff nuovo, riga @synth)', dopo.includes('.lpf(900)') && /\/\/ @synth /.test(dopo.split('// @clip batteria')[0]), dopo);
+    controlla('l\'altra clip non si tocca', dopo.includes('// @clip batteria\ns("bd*4").gain(.0001)'), dopo);
+    controlla('il brano resta da salvare (nessun salvataggio da solo)', (await readFile(path.join(cartella, file), 'utf8')) === testo);
+    await js(`cutxProva.cue.togliClip(0)`);
+    await js(`document.querySelector('.synth-aggiorna').click()`);
+    controlla('se la clip non c\'è più lo dice e non scrive niente', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('non c\'è più'));
+  } finally {
+    await js(`cutxProva.mostraVista('live'); cutxProva.cue.brano && (cutxProva.cue.brano.sporco = false); cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`).catch(() => {});
+    await rm(path.join(cartella, file), { force: true });
+  }
+  return ok;
 }
 
 // --- la scheda DRUM del SYNTH: griglia a passi ↔ codice, cuffia, → CUE (npm run prova:parte -- drum) ---
