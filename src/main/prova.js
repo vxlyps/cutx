@@ -221,6 +221,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
   if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
   if (parti.includes('mani')) ok = (await sicura('mani', provaMani)) && ok;
+  if (parti.includes('mani-proiettore')) ok = (await sicura('mani-proiettore', provaManoProiettore)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
@@ -4713,6 +4714,117 @@ async function provaMani({ finestre, scrivi }) {
   } finally {
     await js(`cutxProva.spegniMani(); cutxProva.globaleDelController('fader', null); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
   }
+  return ok;
+}
+
+// --- la mano sul proiettore: lo scheletro in alto al centro (punti finti, niente camera) + le foto per guardare dimensione e posizione ---
+async function provaManoProiettore({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const u = (codice) => chiedi(finestre.uscita, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  // tre livelli muti (gain bassissimo) per avere il codice dietro la mano
+  await js(`cutxProva.valuta('live', 'setcpm(120/4)\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const codici = [
+    ['colpi', 's("bd*4, ~ sd ~ sd, hh*8").bank("RolandTR909").gain(.0001)'],
+    ['basso', 'note("c2 [~ eb2] g1 bb1").s("sawtooth").lpf(380).gain(.0001)'],
+    ['arpa', 'note("<c4 eb4 g4 bb4>*8").s("triangle").delay(.3).gain(.0001)'],
+  ];
+  for (const [nome, codice] of codici) {
+    await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1 })})`);
+    await aspetta(1.5);
+  }
+  await aspetta(2);
+  // una mano finta di 21 punti, nell'inquadratura della camera (x grezza, non a specchio): aperta o a pugno
+  const manoFinta = `((cx, cy, s, forma) => {
+    // basi delle dita (indice, medio, anulare, mignolo), la direzione a ventaglio (gradi dalla verticale) e la lunghezza dei tre pezzi
+    const dita = { 5: [-0.45, -0.95, -12, [0.36, 0.24, 0.2]], 9: [0, -1, 0, [0.42, 0.27, 0.21]], 13: [0.4, -0.95, 10, [0.38, 0.25, 0.2]], 17: [0.75, -0.85, 22, [0.3, 0.19, 0.16]] };
+    const l = new Array(21);
+    l[0] = [0, 0];
+    for (const [i, [bx, by, gradi, seg]] of Object.entries(dita)) {
+      l[i] = [bx, by];
+      let [x, y] = [bx, by];
+      const a = (gradi * Math.PI) / 180;
+      seg.forEach((lung, k) => {
+        const piega = forma === 'aperta' ? 0 : (k + 1) * 55;
+        const ang = a + (piega * Math.PI) / 180 * (gradi >= 0 ? 1 : -1) * 0.2;
+        const dy = forma === 'aperta' ? -Math.cos(ang) : k === 0 ? -0.5 : 0.7; // il pugno: le dita si ripiegano sul palmo
+        x += Math.sin(ang) * lung * (forma === 'aperta' ? 1 : 0.3);
+        y += dy * lung;
+        l[Number(i) + k + 1] = [x, y];
+      });
+    }
+    l[1] = [-0.3, -0.18]; l[2] = [-0.58, -0.36]; l[3] = [-0.78, -0.5];
+    l[4] = forma === 'aperta' ? [-0.98, -0.66] : [-0.42, -0.62];
+    return l.map((p) => [cx + p[0] * s, cy + 0.5 * s + p[1] * s]);
+  })`;
+  const manda = (o) => {
+    if (o.punti === null) return js(`cutxProva.portaUscita().postMessage({ tipo: 'mano', punti: null })`);
+    const { cx = 0.5, cy = 0.5, s = 0.28, forma = 'aperta', ...resto } = o;
+    const msg = { tipo: 'mano', testo: '820 Hz · 6', valori: [0.62, 0.25], progresso: 1, ...resto };
+    return js(`cutxProva.portaUscita().postMessage(Object.assign(${JSON.stringify(msg)}, { punti: ${manoFinta}(${cx}, ${cy}, ${s}, ${JSON.stringify(forma)}) }))`);
+  };
+  const visibile = async () => u(`(() => { const m = document.getElementById('mano'); return m.classList.contains('dentro') && getComputedStyle(m).opacity > 0.5; })()`);
+  controlla('la mano non c\'è finché la camera non la vede', !(await visibile()));
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.7);
+  controlla('quando la mano entra compare sul proiettore', await visibile());
+  controlla('sotto la mano ci sono solo i valori, nessun nome di modo', (await u(`document.getElementById('mano').textContent.trim()`)) === '820 Hz · 6');
+  const pos = await u(`(() => { const r = document.getElementById('mano').getBoundingClientRect(); const c = document.getElementById('livelli').getBoundingClientRect(); return { sotto: r.bottom, codice: c.top, centro: (r.left + r.right) / 2 / innerWidth }; })()`);
+  controlla('sta in alto al centro e non copre il codice', pos.sotto <= pos.codice - 2 && Math.abs(pos.centro - 0.5) < 0.05, JSON.stringify(pos));
+  const pixel = await u(`(() => { const c = document.getElementById('mano-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let v = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 40) v++; return v; })()`);
+  controlla('lo scheletro è disegnato (punti e linee, non un\'immagine)', pixel > 200, String(pixel));
+  const dati = await js(`JSON.stringify({ punti: ${manoFinta}(.5,.5,.28,'aperta') }).length`);
+  controlla('al proiettore arrivano solo i punti (pochi byte, mai l\'immagine)', dati > 100 && dati < 1500, String(dati));
+  // le foto: tre grandezze/posizioni, poi gli stati
+  const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'mano');
+  await mkdir(cartella, { recursive: true });
+  const foto = async (nome) => writeFile(path.join(cartella, `${nome}.png`), (await finestre.uscita.webContents.capturePage()).toPNG());
+  const stile = (css) => u(`document.getElementById('mano').style.cssText = ${JSON.stringify(css)}; document.getElementById('mano-canvas').style.cssText = ''`);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('A-centro');
+  await stile('');
+  await u(`document.getElementById('mano-canvas').style.cssText = 'width: calc(88 * var(--u)); height: calc(52 * var(--u))'`);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('B-centro-piccola');
+  await u(`document.getElementById('mano-canvas').style.cssText = ''; document.getElementById('mano').style.cssText = 'left: auto; right: calc(260 * var(--u)); transform: none'`);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('C-destra-vicino-al-bpm');
+  await stile('');
+  await manda({ fase: 'libera', progresso: 0.55, testo: '16000 Hz', valori: [1, 0], cx: 0.55, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('D-prima-dell-aggancio');
+  await manda({ fase: 'bloccata', cx: 0.5, cy: 0.6, s: 0.3, forma: 'pugno', testo: '2900 Hz', valori: [0.35, 0.1] });
+  await aspetta(0.6);
+  await foto('E-bloccata-pugno');
+  scrivi(`INFO  foto in ${cartella}`);
+  // esce: si dissolve
+  await manda({ punti: null });
+  await aspetta(1.2);
+  controlla('quando la mano esce sparisce dissolvendo', !(await visibile()) && Number(await u(`getComputedStyle(document.getElementById('mano')).opacity`)) < 0.2);
+  // l'interruttore nei testi per il pubblico: spento, la mano non si vede mai
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { mano: { acceso: false } } })`);
+  await aspetta(1);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.7);
+  controlla('con l\'interruttore «la mano sul proiettore» spento non si vede', !(await visibile()));
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { mano: { acceso: true } } })`);
+  await aspetta(0.5);
+  await manda({ punti: null });
+  controlla('l\'interruttore è tra i testi per il pubblico, acceso di serie', await js(`(async () => { await cutxProva.imp.disegna(); return /la mano sul proiettore/.test(document.body.textContent); })()`));
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
   return ok;
 }
 

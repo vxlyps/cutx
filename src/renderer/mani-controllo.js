@@ -91,6 +91,7 @@ export class ControlloMano {
       modo: this.modoId,
       nomeModo: this.modo.nome,
       testo: this.modo.testo(this.valori),
+      breve: this.modo.breve(this.valori), // solo i numeri (per il proiettore)
       rilascio: this.fase === 'rilascio' || this.fase === 'persa',
       agganciata: this.fase === 'agganciata',
       bloccata: this.fase === 'bloccata',

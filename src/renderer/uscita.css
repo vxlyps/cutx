@@ -267,6 +267,44 @@ body {
 }
 
 /* la scritta grande di quello che tocco sul controller (se l'ho acceso nei testi per il pubblico) */
+/* la mano (mani-uscita.js): solo lo scheletro in alto al centro, nella fascia libera sopra il codice (il codice parte a 110 unità dall'alto),
+   con i valori sotto. Niente nomi: il pubblico vede la mano e i numeri che muove. */
+.mano-pubblico {
+  position: absolute;
+  left: 50%;
+  top: calc(12 * var(--u));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(3 * var(--u));
+  opacity: 0;
+  transition: opacity 0.7s ease-out;
+  pointer-events: none;
+}
+.mano-pubblico.dentro {
+  opacity: 1;
+  transition-duration: 0.25s;
+}
+.mano-canvas {
+  width: calc(116 * var(--u));
+  height: calc(70 * var(--u));
+}
+.mano-valore {
+  height: calc(14 * var(--u));
+  font-size: calc(13 * var(--u));
+  line-height: calc(14 * var(--u));
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  color: var(--marcio);
+  text-shadow: var(--bagliore);
+}
+.mano-pubblico.bloccata .mano-valore,
+.mano-pubblico.libera .mano-valore {
+  color: var(--spento);
+  text-shadow: none;
+}
+
 .scritta {
   position: absolute;
   left: 50%;

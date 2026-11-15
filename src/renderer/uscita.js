@@ -9,6 +9,7 @@ import { righeScorrevoli, righeVisibili } from './coda.js';
 import { StatoMisura, testoMisura } from './striscia.js';
 import { creaStriscia, disegnaNote, muoviTestina } from './striscia-vista.js';
 import { MemoriaOnda, disegnaLed } from './onda-led.js';
+import { ManoUscita } from './mani-uscita.js';
 import { convertiIntervalli, filtraCodice, riempi as riempiTesto, risolvi as risolviTesti, testoEtichetta } from './testi-pubblico.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
@@ -59,6 +60,8 @@ const chiediMisure = () => {
   if (!ANTEPRIMA && onde !== ondeChieste) portaLive?.postMessage({ tipo: 'onde-uscita', on: onde });
   ondeChieste = onde;
 };
+// la mano (sperimentale): arriva solo lo scheletro dall'interfaccia; se l'interruttore dei testi è spento non si vede mai
+const manoUscita = new ManoUscita({ radice: $('mano'), canvas: $('mano-canvas'), valore: $('mano-valore'), u: () => innerWidth / 1440 });
 const ondeU = new Map(); // id del livello batteria → MemoriaOnda
 let ondaInNote = new Set(); // i livelli batteria che dalla postazione ho rimesso a note (clic sulla striscia della card)
 let caricoOnde = 0;
@@ -84,6 +87,7 @@ window.addEventListener('message', (e) => {
     }
     else if (data.tipo === 'bozze') bozze = data;
     else if (data.tipo === 'globali') righeGlobali = data.righe;
+    else if (data.tipo === 'mano') manoUscita.aggiorna(testi.mano?.acceso === false ? null : data)
     else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
     else if (data.tipo === 'brano') branoEntra = { nome: data.nome, quando: performance.now() };
     else if (data.tipo === 'strisce') {
@@ -261,6 +265,7 @@ function mostraTag(b, testo) {
 }
 
 function disegna() {
+  if (testi.mano?.acceso === false && manoUscita.radice.classList.contains('dentro')) manoUscita.aggiorna(null); // interruttore spento mentre la mano si vede
   if (!mappa) return;
   const epoca = performance.timeOrigin + performance.now();
   const ciclo = cicloDi(mappa, epoca);

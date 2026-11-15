@@ -259,6 +259,7 @@ export class Impostazioni {
       voce('globale', 'righe globali', 'le righe all(x => …) scritte dal fader e dai colpi «su tutto», in fondo ai livelli', { testo: false }),
       voce('striscia', 'striscia delle note', 'sotto ogni livello: le note vere del ciclo e la testina che scorre', { testo: false }),
       voce('onda', 'onda sotto la batteria', 'sotto il beat e le clip · drum: i puntini LED del suono vero, grandi, al posto delle note', { testo: false }),
+      voce('mano', 'la mano sul proiettore', 'quando le mani sono accese: lo scheletro della mia mano (mai l\'immagine della camera), il modo e il valore, in alto al centro', { testo: false }),
       voce('misuratore', 'misuratore del suono', 'a destra della striscia: il suono vero del livello in dB (spento di default)', { testo: false }),
       voce('commenti', 'commenti // nel codice', 'acceso: il pubblico legge anche le righe di commento', { testo: false }),
       voce('preambolo', 'preambolo del brano', 'acceso: si vedono le righe sopra la sezione (setcpm del brano…). Spento: solo sul mio schermo. Un setcpm scritto dal vivo si vede sempre', { testo: false }),

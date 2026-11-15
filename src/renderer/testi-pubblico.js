@@ -17,6 +17,7 @@ export const PREDEFINITI = {
   globale: { acceso: true }, // le righe globali (fader, colpi «su tutto»): all(x => x.lpf(1920))
   striscia: { acceso: true }, // le note vere del ciclo sotto ogni livello, con la testina che scorre
   onda: { acceso: true }, // sotto la batteria (beat, clip «· drum») l'onda LED del suono vero al posto delle note
+  mano: { acceso: true }, // le mani (sperimentale): lo scheletro della mia mano in alto al centro, con il modo e il valore; mai l'immagine della camera
   misuratore: { acceso: false }, // il suono vero del livello (a destra della striscia): spento di default
   commenti: { acceso: false }, // le righe // del codice
   preambolo: { acceso: false }, // il preambolo del brano (setcpm…): un setcpm scritto io dal vivo è un gesto e si vede

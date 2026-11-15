@@ -1463,7 +1463,36 @@ function scriviMano(r) {
     maniCedeFader = false;
   }
 }
-const mostraControlloMani = (r) => maniVista.controllo(r, ultimaMano.visibile && performance.now() - ultimaManoOra < 400);
+// La mano sul proiettore: solo i punti (leggeri, ~20 volte al secondo), mai l'immagine. Se l'interruttore nei testi per il pubblico è
+// spento, o la mano è uscita, non va niente (al proiettore arriva un «null» una volta sola, così si dissolve).
+let manoMandata = false;
+let manoUltimoInvio = 0;
+function mandaManoUscita(r, visibile) {
+  if (!portaUscita) return;
+  const on = visibile && maniClient.acceso && !!ultimaMano.punti && risolviTestiPubblico(preferenze).mano.acceso;
+  if (on) {
+    const ora = performance.now();
+    if (ora - manoUltimoInvio < 50) return;
+    manoUltimoInvio = ora;
+    manoMandata = true;
+    portaUscita.postMessage({
+      tipo: 'mano',
+      punti: ultimaMano.punti.map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]),
+      fase: r.fase,
+      progresso: Math.round(r.progresso * 100) / 100,
+      testo: r.breve, // solo i numeri: sul proiettore non c'è il nome del modo
+      valori: r.valori.map((v) => Math.round(v * 100) / 100),
+    });
+  } else if (manoMandata) {
+    manoMandata = false;
+    portaUscita.postMessage({ tipo: 'mano', punti: null });
+  }
+}
+const mostraControlloMani = (r) => {
+  const vede = ultimaMano.visibile && performance.now() - ultimaManoOra < 400;
+  maniVista.controllo(r, vede);
+  mandaManoUscita(r, vede);
+};
 function fermaControlloMani() {
   const r = maniControllo.ferma();
   scriviMano(r);
@@ -1496,6 +1525,7 @@ async function spegniMani() {
   fermaControlloMani();
   maniVista.mostra(false);
   await maniClient.spegni();
+  mandaManoUscita(null, false); // il proiettore dissolve la mano
   cue.avviso(it.mani.avvisoSpento);
 }
 const alternaMani = () => (maniClient.acceso ? spegniMani() : accendiMani());
@@ -1906,6 +1936,7 @@ globalThis.cutxProva = {
   maniVista,
   maniControllo: () => maniControllo,
   scriviMano,
+  portaUscita: () => portaUscita,
   cambiaModoMani,
   alternaMani,
   accendiMani,

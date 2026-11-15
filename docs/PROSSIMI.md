@@ -60,3 +60,9 @@ Solidita: il controllo dei suoni cancellava ogni avviso, ora solo il suo. Strude
 3. `linguette`: fallisce in coda al giro lungo, passa lanciata da sola (stato lasciato da una prova precedente).
 4. `finestra`: come sopra (la finestra del pubblico risulta già aperta).
 
+
+## Mani, dopo la 5.1 (annotato il 15/11/2026)
+- **Pinza = colpo tenuto (roll)**: pollice e indice che si chiudono tengono un colpo ripetuto finché restano chiusi.
+- **Gesto del drop**: un gesto per far entrare il drop / la scena dopo.
+- **Due mani**: una per il valore, l'altra per il modo o per un secondo effetto.
+- **Braccialetto colorato**: riconoscere la mia mano dal colore di un braccialetto, per non confonderla con quelle degli altri.

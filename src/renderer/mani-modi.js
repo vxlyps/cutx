@@ -35,18 +35,21 @@ export const MODI = {
     params: [{ fonte: 'y', neutro: 1 }, { fonte: 'x', neutro: 0 }],
     voci: ([a, b]) => [`.lpf(${hzDaAltezza(a)})`, qDa(b) > 0 && `.lpq(${qDa(b)})`].filter(Boolean),
     testo: ([a, b]) => `${hzDaAltezza(a)} Hz${qDa(b) > 0 ? ` · Q ${qDa(b)}` : ''}`,
+    breve: ([a, b]) => `${hzDaAltezza(a)} Hz${qDa(b) > 0 ? ` · ${qDa(b)}` : ''}`,
   },
   spazio: {
     nome: 'SPAZIO',
     params: [{ fonte: 'y', neutro: 0 }, { fonte: 'dita', neutro: 0 }],
     voci: ([a, b]) => [arrotonda(a) > 0 && `.room(${arrotonda(a)})`, arrotonda(b * 0.9) > 0 && `.delay(${arrotonda(b * 0.9)})`].filter(Boolean),
     testo: ([a, b]) => `riverbero ${Math.round(a * 100)}% · eco ${Math.round(b * 100)}%`,
+    breve: ([a, b]) => `${Math.round(a * 100)}% · ${Math.round(b * 100)}%`,
   },
   ctx: {
     nome: 'CTX',
     params: [{ fonte: 'y', neutro: 0 }, { fonte: 'x', neutro: 0 }],
     voci: ([a, b]) => [arrotonda(a) > 0 && `.crush(${bitDa(a)})`, distorsioneDa(b) > 0 && `.distort(${distorsioneDa(b)})`].filter(Boolean),
     testo: ([a, b]) => `crush ${bitDa(a)} bit · distorsione ${distorsioneDa(b)}`,
+    breve: ([a, b]) => `${bitDa(a)} bit · ${distorsioneDa(b)}`,
   },
 };
 for (const m of Object.values(MODI)) m.riga = (valori) => rigaDa(m.voci(valori));
