@@ -5,11 +5,20 @@
 // parola = { x, y, w, h, cx, cy, vis, salta, hl, held, ... }  (salta = punteggiatura: i piedi non ci stanno)
 
 export const SEGS = 6;
-const PAIRS = [
-  { seg: 0, ang: 48, fwd: 1 },
-  { seg: 1, ang: 90, fwd: -1 },
-  { seg: 2, ang: 132, fwd: -1 },
-];
+// 7 zampe, non equilibrato apposta: 3 a sinistra, 4 a destra (la quarta, più indietro, ci mette un po' a stare al passo).
+const ZAMPE = {
+  '-1': [
+    { seg: 0, ang: 48, fwd: 1 },
+    { seg: 1, ang: 90, fwd: -1 },
+    { seg: 2, ang: 132, fwd: -1 },
+  ],
+  '1': [
+    { seg: 0, ang: 44, fwd: 1 },
+    { seg: 1, ang: 80, fwd: -1 },
+    { seg: 2, ang: 114, fwd: -1 },
+    { seg: 3, ang: 146, fwd: -1 },
+  ],
+};
 
 // Tutte le misure insieme: la grandezza (scala) le moltiplica, le proporzioni restano.
 export function geom(k = 1) {
@@ -88,7 +97,7 @@ export function creaCorpo(m, x, y, h, appoggia, now = performance.now()) {
   };
   for (let i = 0; i < SEGS; i++) b.segs.push({ x: x - Math.cos(h) * m.g.gap * i, y: y - Math.sin(h) * m.g.gap * i });
   for (const side of [-1, 1]) {
-    PAIRS.forEach((p, i) => {
+    ZAMPE[side].forEach((p, i) => {
       b.legs.push({
         side, seg: p.seg, ang: (p.ang * Math.PI) / 180, fwd: p.fwd, group: (i + (side > 0 ? 1 : 0)) % 2,
         foot: { x: 0, y: 0 }, from: null, to: null, t: 1, dur: 0.09, tok: null,

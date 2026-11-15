@@ -34,7 +34,7 @@ test('la cimice cammina 20 secondi senza numeri sballati e con le zampe della st
     for (const leg of b.legs) assert.ok(Number.isFinite(leg.foot.x) && Number.isFinite(leg.foot.y));
   }
   assert.equal(b.segs.length, SEGS);
-  assert.equal(b.legs.length, 6);
+  assert.equal(b.legs.length, 7);
   for (const t of m.parole) assert.ok(t.held >= 0, 'una parola non può essere tenuta da meno di zero zampe');
 });
 
