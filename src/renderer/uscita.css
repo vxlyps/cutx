@@ -268,7 +268,7 @@ body {
 
 /* la scritta grande di quello che tocco sul controller (se l'ho acceso nei testi per il pubblico) */
 /* la mano (mani-uscita.js): lo scheletro a destra, nell'angolo dove stanno l'insegna e il gatto (che si spengono finché la mano si vede),
-   senza riquadro e con sotto solo il valore. L'angolo non è mai coperto dal codice: la mano non lo copre. */
+   senza riquadro, con i valori piccoli attaccati sotto la mano (disegnati nel canvas). L'angolo non è mai coperto dal codice: la mano non lo copre. */
 .mano-pubblico {
   grid-column: 1;
   grid-row: 1 / span 2;
@@ -289,26 +289,7 @@ body {
   left: 0;
   top: 0;
   width: 100%;
-  height: calc(100% - 24 * var(--u));
-}
-.mano-valore {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: calc(20 * var(--u));
-  font-size: calc(17 * var(--u));
-  line-height: calc(20 * var(--u));
-  letter-spacing: 0.12em;
-  text-align: center;
-  white-space: nowrap;
-  color: var(--marcio);
-  text-shadow: var(--bagliore);
-}
-.mano-pubblico.bloccata .mano-valore,
-.mano-pubblico.libera .mano-valore {
-  color: var(--spento);
-  text-shadow: none;
+  height: 100%;
 }
 .insegna {
   position: relative;

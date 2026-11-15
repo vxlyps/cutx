@@ -4419,7 +4419,18 @@ async function provaProj({ finestre, scrivi }) {
     await js(`cutxProva.fermaTutto()`);
     await aspetta(1.5);
     await js(`cutxProva.schermataProj.mostra({ aperto: 2, ultimo: 2 })`);
-    await js(`document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').click()`);
+    // un clic vero col mouse (premi, tieni, rilascia): il pulsante non deve saltare in alto mentre è premuto (con l'effetto «tasto premuto» saltava e il clic andava a vuoto)
+    const centro = () => js(`(() => { const r = document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2), r.top]; })()`);
+    const [bx, by, alto0] = await centro();
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'mouseMove', x: bx, y: by });
+    wc.sendInputEvent({ type: 'mouseDown', x: bx, y: by, button: 'left', clickCount: 1 });
+    await aspetta(0.4);
+    const [, , alto1] = await centro();
+    wc.sendInputEvent({ type: 'mouseUp', x: bx, y: by, button: 'left', clickCount: 1 });
+    await aspetta(1);
+    controlla('tenendo premuto «apri» il pulsante non salta', Math.abs(alto1 - alto0) < 0.5, `${alto0} → ${alto1}`);
+    if (!(await js(`document.getElementById('proj-schermata').hidden`))) await js(`document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').click()`);
     await aspetta(1);
     controlla('a live fermo «apri» cambia PROJ subito', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01 · serata di prova' && (await js(`document.getElementById('proj-schermata').hidden`)));
     controlla('stash.json ricorda l\'ultimo PROJ', JSON.parse((await leggi(path.join(tmp, 'stash.json'))) ?? '{}').proj?.ultimo === 1);
@@ -4800,7 +4811,7 @@ async function provaManoProiettore({ finestre, scrivi }) {
   await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
   await aspetta(0.7);
   controlla('quando la mano entra compare sul proiettore', await visibile());
-  controlla('sotto la mano ci sono solo i valori, nessun nome di modo', (await u(`document.getElementById('mano').textContent.trim()`)) === '820 Hz · 6');
+  controlla('i valori sono attaccati alla mano (disegnati sotto di lei), senza nome di modo', (await u(`document.getElementById('mano').dataset.valore`)) === '820 Hz · 6' && (await u(`document.getElementById('mano').textContent.trim()`)) === '');
   const pos = await u(`(() => { const r = document.getElementById('mano').getBoundingClientRect(); const a = document.querySelector('.angolo').getBoundingClientRect(); const c = document.getElementById('livelli').getBoundingClientRect(); const sovrappone = !(r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom); return { dentroAngolo: r.left >= a.left - 2 && r.right <= a.right + 2 && r.top >= a.top - 2 && r.bottom <= a.bottom + 2, aDestra: (r.left + r.right) / 2 / innerWidth, sovrappone, riquadro: getComputedStyle(document.getElementById('mano-canvas')).borderTopWidth }; })()`);
   controlla('sta a destra, nell\'angolo dell\'insegna, e non copre il codice', pos.dentroAngolo && pos.aDestra > 0.55 && !pos.sovrappone, JSON.stringify(pos));
   controlla('senza riquadro', pos.riquadro === '0px', JSON.stringify(pos));

@@ -3559,6 +3559,15 @@ input[type='checkbox'] {
   margin-top: auto;
   align-self: flex-start;
 }
+/* niente effetto «tasto premuto» qui: .key:active cambia il margine e il pulsante, che sta in fondo alla scheda, saltava in alto (il clic andava a vuoto) */
+.proj-apri:active:not(:disabled) {
+  margin-top: auto;
+  border-bottom-width: 3px;
+}
+.proj-apri:hover:not(:disabled) {
+  border-color: var(--marcio);
+  color: var(--marcio);
+}
 .proj-nuovo {
   background: none;
   border-style: dashed;

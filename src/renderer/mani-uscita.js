@@ -3,18 +3,18 @@
 // niente specchio (la postazione, invece, è a specchio).
 //   prima dell'aggancio: grigia e tenue (con l'anello che si riempie) · agganciata: verde piena con un piccolo anello
 //   mano persa: verde un po' più spenta, il valore fermo · bloccata (pugno): ferma e spenta.
-// Sotto la mano solo i numeri (niente nomi di modi). Ci arrivano solo i punti (leggeri), ~20 volte al secondo. Compare quando la mano entra, sparisce dissolvendo quando esce.
+// Sotto la mano, attaccati a lei, solo i numeri piccoli (niente nomi di modi, niente cerchietti). Ci arrivano solo i punti (leggeri), ~20 volte al secondo. Compare quando la mano entra, sparisce dissolvendo quando esce.
 const OSSA = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
 const MARCIO = '159, 194, 58';
 const GRIGIO = '170, 174, 160';
 
-// Come si vede la mano in ogni fase: colore, trasparenza, bagliore, anello.
+// Come si vede la mano in ogni fase: colore, trasparenza, bagliore.
 export const STILE = {
-  libera: { colore: GRIGIO, alfa: 0.42, bagliore: 0, anello: 'riempie' },
-  agganciata: { colore: MARCIO, alfa: 1, bagliore: 1, anello: 'pieno' },
-  persa: { colore: MARCIO, alfa: 0.7, bagliore: 0.5, anello: null },
-  rilascio: { colore: MARCIO, alfa: 0.7, bagliore: 0.5, anello: null },
-  bloccata: { colore: MARCIO, alfa: 0.5, bagliore: 0, anello: null },
+  libera: { colore: GRIGIO, alfa: 0.42, bagliore: 0 },
+  agganciata: { colore: MARCIO, alfa: 1, bagliore: 1 },
+  persa: { colore: MARCIO, alfa: 0.7, bagliore: 0.5 },
+  rilascio: { colore: MARCIO, alfa: 0.7, bagliore: 0.5 },
+  bloccata: { colore: MARCIO, alfa: 0.5, bagliore: 0 },
 };
 
 // Da un punto della camera (x, y in 0..1) a un punto del disegno (px): scala UGUALE sui due assi (x conta ar volte l'altezza), l'area
@@ -47,11 +47,10 @@ export function contieni(pts, w, h, m = 0) {
 }
 
 export class ManoUscita {
-  // radice: l'elemento (con dentro un canvas e la riga dei valori); u: () => pixel di un'unità della tavola (larghezza/1440)
-  constructor({ radice, canvas, valore, u }) {
+  // radice: l'elemento (con dentro il canvas); u: () => pixel di un'unità della tavola (larghezza/1440)
+  constructor({ radice, canvas, u }) {
     this.radice = radice;
     this.canvas = canvas;
-    this.valore = valore;
     this.u = u;
     this.dati = null;
     this.fermi = null; // i punti congelati col pugno
@@ -66,7 +65,7 @@ export class ManoUscita {
       if (dati.fase === 'bloccata') this.fermi ??= dati.punti;
       else this.fermi = null;
       this.dati = dati;
-      this.valore.textContent = ['agganciata', 'persa', 'rilascio', 'bloccata'].includes(dati.fase) ? dati.testo ?? '' : '';
+      this.radice.dataset.valore = ['agganciata', 'persa', 'rilascio', 'bloccata'].includes(dati.fase) ? dati.testo ?? '' : '';
     } else this.fermi = null;
     this.radice.classList.toggle('dentro', dentro); // il resto lo fa il CSS: compare e si dissolve
     this.radice.classList.toggle('bloccata', dentro && dati.fase === 'bloccata');
@@ -105,7 +104,17 @@ export class ManoUscita {
     // si portano alla stessa unità (x × ar) e si disegnano con UNA scala sola, così la forma non si stira mai. L'area che si vede è la zona
     // (o tutta l'inquadratura), centrata nello spazio libero e senza nessun riquadro: se la mano si muove su e giù si vede muoversi.
     const { punto } = geometria(d.ar, d.zona, w, h);
-    const pp = contieni(p.map(punto), w, h, 16 * unita).pts; // mai tagliata dal bordo
+    // sotto la mano si riserva lo spazio del valore (anche in larghezza): due punti in più, appena sotto le dita più basse, che si muovono con lei
+    const testo = ['agganciata', 'persa', 'rilascio', 'bloccata'].includes(d.fase) ? d.testo : '';
+    g.font = `${11 * unita}px 'Fragment Mono', monospace`;
+    g.letterSpacing = `${1 * unita}px`;
+    const mezzo = testo ? g.measureText(testo).width / 2 : 0;
+    const px = p.map(punto);
+    const cx = (Math.min(...px.map((q) => q[0])) + Math.max(...px.map((q) => q[0]))) / 2;
+    const sy = Math.max(...px.map((q) => q[1])) + 11 * unita;
+    const tutti = contieni([...px, [cx - mezzo, sy], [cx + mezzo, sy]], w, h, 16 * unita).pts; // mai tagliata dal bordo, valore compreso
+    const pp = tutti.slice(0, 21);
+    const base = [(tutti[21][0] + tutti[22][0]) / 2, tutti[21][1]];
     g.lineCap = 'round';
     g.lineJoin = 'round';
     g.strokeStyle = `rgba(${s.colore}, ${s.alfa})`;
@@ -126,18 +135,12 @@ export class ManoUscita {
       g.arc(x, y, 2.6 * unita, 0, Math.PI * 2);
       g.fill();
     }
-    // l'anello sul palmo: si riempie prima dell'aggancio, poi resta pieno e piccolo
-    if (s.anello) {
-      const cx = [0, 5, 9, 13, 17].reduce((a, i) => a + pp[i][0], 0) / 5;
-      const cy = [0, 5, 9, 13, 17].reduce((a, i) => a + pp[i][1], 0) / 5;
-      const frazione = s.anello === 'pieno' ? 1 : Math.max(0, Math.min(1, d.progresso ?? 0));
-      if (frazione > 0.02) {
-        g.shadowBlur = 6 * unita * s.bagliore;
-        g.lineWidth = 2 * unita;
-        g.beginPath();
-        g.arc(cx, cy, 11 * unita, -Math.PI / 2, -Math.PI / 2 + frazione * Math.PI * 2);
-        g.stroke();
-      }
+    // i valori che la mano sta muovendo: piccoli, subito sotto la mano, come attaccati a lei (la seguono)
+    if (testo) {
+      g.shadowBlur = 5 * unita * s.bagliore;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(testo, base[0], base[1]);
     }
     g.shadowBlur = 0;
   }

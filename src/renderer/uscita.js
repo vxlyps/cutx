@@ -61,7 +61,7 @@ const chiediMisure = () => {
   ondeChieste = onde;
 };
 // la mano (sperimentale): arriva solo lo scheletro dall'interfaccia; se l'interruttore dei testi è spento non si vede mai
-const manoUscita = new ManoUscita({ radice: $('mano'), canvas: $('mano-canvas'), valore: $('mano-valore'), u: () => innerWidth / 1440 });
+const manoUscita = new ManoUscita({ radice: $('mano'), canvas: $('mano-canvas'), u: () => innerWidth / 1440 });
 const ondeU = new Map(); // id del livello batteria → MemoriaOnda
 let ondaInNote = new Set(); // i livelli batteria che dalla postazione ho rimesso a note (clic sulla striscia della card)
 let caricoOnde = 0;
