@@ -22,7 +22,7 @@ L'X-Touch Mini ha 8 manopole (si girano e si premono), 16 tasti (8 in alto, 8 in
 - **REC** (nel Mac e sul controller): registra i colpi a tempo nei passi della riga, quantizzati (è il REC del DRUM, già nella 5.2).
 
 ## PIANO (SYNTH, layer B)
-- **16 tasti = 16 semitoni** (in basso la fila bianca-nera a partire dalla nota base, in alto … vedi domande). **Manopola 1 = ottava.** Suona il suono del synth in cuffia a velocity fissa; con REC le note vanno nel pianoroll.
+- Come un piccolo pianoforte: **fila in basso = 8 tasti bianchi** (do re mi fa sol la si do), **fila in alto = i neri** sopra i buchi giusti (1 do#, 2 re#, 4 fa#, 5 sol#, 6 la#; il 3, il 7 e l'8 non fanno niente). **Manopola 1 = ottava.** Suona il suono del synth in cuffia a velocity fissa; con REC le note vanno nel pianoroll. Luce accesa finché il tasto è premuto.
 
 ## Domande (le scelte vere)
 1. **Il paracadute sotto le dita.** Con 16 passi i due ordini di tasti sono tutti occupati. Dove va? **(a)** **spinta della manopola 8 tenuta 1 s**, in tutte le viste (uguale ovunque, destra in alto; la manopola 8 gira già per il volume generale) — la mia preferita; **(b)** solo nel DRUM e nel PIANO, e nel LIVE resta il tasto in alto 8 (due posti da ricordare); **(c)** sequencer a 15 passi.
