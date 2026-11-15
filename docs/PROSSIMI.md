@@ -84,7 +84,7 @@ Oggi il pulsante «synth» c'è solo sulle clip fatte dal synth (`// @synth`) e 
 - Cose da decidere/guardare: riscrivere una clip a mano la porta alla forma canonica del synth (righe sconosciute conservate in fondo) e mette la riga `// @synth`; ⌘Z nel CUE deve poterla riavere; un livello live senza clip di origine (scratch) può solo andare in → CUE come nuova.
 - Il DRUM funziona già così per «aprire»; «aggiorna» va fatto uguale anche lì.
 
-Ordine proposto per la 5.2: 1) controller a ruoli (`docs/CONTROLLER-5.2.md`) **fatto (0.5.1-beta.2)**, 2) REC e tasti del Mac nel DRUM **fatto (15/11/2026, dopo la beta.2)**, 3) synth al volo + aggiorna **fatto**, 4) → CUE come scena del beat **fatto (15/11/2026)**, 5) valutazione arpeggio (solo testo).
+Ordine proposto per la 5.2: 1) controller a ruoli (`docs/CONTROLLER-5.2.md`) **fatto (0.5.1-beta.2)**, 2) REC e tasti del Mac nel DRUM **fatto (15/11/2026, dopo la beta.2)**, 3) synth al volo + aggiorna **fatto**, 4) → CUE come scena del beat **fatto (15/11/2026)**, 5) valutazione arpeggio **fatta (15/11/2026, in fondo a questo file)**.
 
 
 ## Ordine deciso da Valerio (15/11/2026, sera): prima di pubblicare la beta.3
