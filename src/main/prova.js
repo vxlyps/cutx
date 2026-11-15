@@ -4470,11 +4470,18 @@ async function provaOnda({ finestre, scrivi }) {
     await js(`${carta('colpi')}.striscia.radice.click()`);
     await aspetta(0.3);
     controlla('un clic sulla striscia torna alle note', !(await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`)));
+    // il proiettore segue il clic di ogni card
+    if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+    await aspetta(2.5);
+    const ondeProiettore = () => chiedi(finestre.uscita, `document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`);
+    controlla('il proiettore segue il clic: card rimessa a note, sul proiettore niente onda', (await ondeProiettore()) === 0);
     await aspetta(1);
     controlla('nessuna card mostra l\'onda: la postazione non la richiede più al motore', (await js('cutxProva.pila.vuoleOnde()')) === false);
     await js(`${carta('colpi')}.striscia.radice.click()`);
     await aspetta(0.3);
     controlla('un altro clic rimette l\'onda', await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`));
+    await aspetta(1);
+    controlla('e il proiettore la rimette', (await ondeProiettore()) === 1);
     await js(`${carta('basso')}.striscia.radice.click()`);
     await aspetta(0.3);
     controlla('sulla clip melodica il clic non cambia niente (restano le note)', !(await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)));
@@ -4496,6 +4503,7 @@ async function provaOnda({ finestre, scrivi }) {
     await js(`window.cutx.salvaPreferenze({ testiPubblico: { ...${JSON.stringify(prima)}, onda: { acceso: false } } })`);
     await aspetta(1);
     controlla('«onda sotto la batteria» spenta: sul proiettore tornano le note', (await u(`document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`)) === 0);
+    controlla('e anche sulla postazione niente onda (l\'interruttore generale comanda tutto)', !(await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`)) && (await js('cutxProva.pila.vuoleOnde()')) === false);
     await js(`window.cutx.salvaPreferenze({ testiPubblico: ${JSON.stringify(prima)} })`);
     await aspetta(0.5);
     await js(`cutxProva.imp.disegna()`);

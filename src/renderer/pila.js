@@ -529,8 +529,9 @@ export class Pila {
     return false;
   }
 
+  // L'interruttore generale «onda sotto la batteria» (Impostazioni → proiezione) comanda tutto: spento, niente onda da nessuna parte.
   inOnda(c) {
-    return !!c.livello.batteria && !this.inNote.has(c.livello.nome);
+    return !!c.livello.batteria && this.azioni.ondaGenerale?.() !== false && !this.inNote.has(c.livello.nome);
   }
 
   cambiaOnda(c) {
@@ -538,6 +539,7 @@ export class Pila {
     if (this.inNote.has(c.livello.nome)) this.inNote.delete(c.livello.nome);
     else this.inNote.add(c.livello.nome);
     c.striscia.firma = ''; // le note si ridisegnano da capo
+    this.azioni.ondaCambiata?.([...this.inNote]); // il proiettore segue il clic di ogni card
   }
 
   disegnaStriscia(c, a) {

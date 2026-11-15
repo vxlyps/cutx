@@ -60,6 +60,7 @@ const chiediMisure = () => {
   ondeChieste = onde;
 };
 const ondeU = new Map(); // id del livello batteria → MemoriaOnda
+let ondaInNote = new Set(); // i livelli batteria che dalla postazione ho rimesso a note (clic sulla striscia della card)
 let caricoOnde = 0;
 
 window.addEventListener('message', (e) => {
@@ -88,6 +89,8 @@ window.addEventListener('message', (e) => {
     else if (data.tipo === 'strisce') {
       // si tengono solo il ciclo di adesso e quello prima (prima restava una chiave per ogni ciclo suonato)
       for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { [data.ciclo - 1]: strisceU.get(Number(id))?.[data.ciclo - 1], [data.ciclo]: ev });
+    } else if (data.tipo === 'onda-note') {
+      ondaInNote = new Set(data.nomi ?? []);
     } else if (data.tipo === 'onde') {
       caricoOnde = data.carico ?? 0;
       for (const [id, picchi] of Object.entries(data.livelli)) {
@@ -197,7 +200,7 @@ function vistaCodice(codice, inizio = 0) {
 // La striscia sotto il codice: le note vere del ciclo (sempre, se accesa nei testi per il pubblico) e, solo se acceso, il misuratore.
 function mostraStriscia(b, l, a, ciclo, firma, chiave, epoca) {
   const s = b.striscia;
-  const onda = !!l.batteria && !!testi.onda?.acceso; // sotto la batteria l'onda LED al posto delle note
+  const onda = !!l.batteria && !!testi.onda?.acceso && !ondaInNote.has(l.nome); // sotto la batteria l'onda LED al posto delle note (se non l'ho rimessa a note)
   const visibile = (testi.striscia.acceso || onda) && !a.arriva;
   s.radice.hidden = !visibile;
   s.radice.classList.toggle('onda', onda);
