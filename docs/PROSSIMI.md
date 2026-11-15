@@ -85,3 +85,10 @@ Oggi il pulsante «synth» c'è solo sulle clip fatte dal synth (`// @synth`) e 
 - Il DRUM funziona già così per «aprire»; «aggiorna» va fatto uguale anche lì.
 
 Ordine proposto per la 5.2: 1) controller a ruoli (`docs/CONTROLLER-5.2.md`) **fatto (0.5.1-beta.2)**, 2) REC e tasti del Mac nel DRUM **fatto (15/11/2026, dopo la beta.2)**, 3) synth al volo + aggiorna, 4) → CUE come scena del beat, 5) valutazione arpeggio (solo testo).
+
+
+## Ordine deciso da Valerio (15/11/2026, sera): prima di pubblicare la beta.3
+1. **«Synth al volo»** (descrizione sopra) con un **nome bello**, non da sfigato: proporre 2-3 nomi a Valerio, decide lui. Poi «aggiorna» e → CUE come clip nuova.
+2. **→ CUE come scena del beat** oltre che come clip (guarda come si scrivono le scene `@beat` in `brano.js`).
+3. **Valutazione dell'arpeggio**: solo testo, niente codice (cosa si può fare con codice Strudel vero, note tenute, pannello e controller, giorni di lavoro).
+4. Poi la **0.5.1-beta.3**: aggiornare CHANGELOG e `docs/NOVITA-5.1.3.md` con le tre cose, prova completa (build fresca, volume al 20%), `npm run pacchetto`, merge in `main`, tag `v0.5.1-beta.3`, `gh release create` pre-release con il `.dmg` (come la beta.2).

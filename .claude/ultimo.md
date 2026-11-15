@@ -1,7 +1,7 @@
-# Ultimo stato - 15/11/2026 (sera, dopo il blocco 2)
+# Ultimo stato - 15/11/2026 (sera, prima della nuova chat)
 
-1. Fatto: blocco 2 = nella scheda DRUM i tasti del Mac suonano le righe (A S D F G H J K, poi Q W E R T Y U I) e il pulsante REC registra i colpi (tasti del Mac e pad X-Touch) come passi, a tempo col live (conteggio, giro, quantizzato al passo, ⌘Z annulla). Release 0.5.1-beta.2 «CUTX_05_1_2» già pubblicata prima di questo blocco.
-2. Funziona: 472 test puri (6 nuovi in `test/drum-rec.test.js`); prove nell'app vera `strumento,drum` (46 ok, con tasto del Mac e REC) e `synth,controller,cue-controller` (350 ok).
-3. Non provato a mano: REC con le orecchie (sfasamento dei colpi rispetto al click: la latenza della cuffia non è compensata, come nel REC del SYNTH).
-4. File: `drum-rec.js` (nuovo), `drum-vista.js`, `synth-vista.js`, `drum.css`, `testi/it.json`, `src/main/prova.js`, `CHANGELOG.md`, `docs/PROSSIMI.md`. Non è in nessuna release (serve una 5.1.3 se Valerio vuole il .dmg).
-5. Prossimo: Valerio prova tutto col programma vero. Poi, in ordine: synth al volo + aggiorna, → CUE come scena del beat, arpeggio (solo testo) (`docs/PROSSIMI.md`).
+1. Fatto oggi: X-Touch come strumento nel SYNTH + CASSE (release 0.5.1-beta.2 pubblicata); nella scheda DRUM tasti del Mac (A S D F G H J K, Q W E R T Y U I) e REC dei colpi come passi. La **0.5.1-beta.3 è preparata ma NON pubblicata**: versione e docs già committati su `beta-5.2` (commit 58979d0, non ancora pushato oltre al REC), niente tag, niente `.dmg`.
+2. Funziona: 472 test puri, prove nell'app vera `strumento,drum` (46 ok) e `synth,controller,cue-controller` (350 ok). La prova completa per la beta.3 l'ho fermata a metà (Valerio vuole fare altro prima): da rifare.
+3. Non provato a mano: luci vere dell'X-Touch, CASSE con le casse vere, REC con le orecchie (latenza cuffia non compensata).
+4. File principali: `controller.js`, `controller-ruoli.js`, `drum-vista.js`, `drum-rec.js`, `synth-vista.js`, `motore.js` (`casse`, `drum-colpo`), `src/main/prova.js` (parte `strumento`), `docs/CONTROLLER-5.2.md`, `docs/NOVITA-5.1.2.md`, `docs/NOVITA-5.1.3.md`.
+5. Prossimo, in questo ordine (decisione di Valerio, in `docs/PROSSIMI.md` in fondo): (1) **«synth al volo»** con un nome bello (proporre 2-3 nomi, decide lui; spiegare il piano e aspettare l'ok prima del codice); (2) **→ CUE come scena del beat**; (3) **valutazione arpeggio** (solo testo); (4) poi pubblicare la beta.3: aggiornare CHANGELOG e NOVITA-5.1.3, prova completa a volume basso, `npm run pacchetto`, merge in main, tag, release.
