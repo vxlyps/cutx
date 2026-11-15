@@ -6,6 +6,7 @@ import { AZIONI, caps, comboCifra, comboDa, conflitto, effettive, eRiservata } f
 import { creaEditor } from './editor.js';
 import { MODI, modoValido } from './sfondo.js';
 import { MODI as MANI_MODI } from './mani-modi.js';
+import { FREQUENZE, frequenzaDi } from '../cimice/sensore.js';
 import { PREDEFINITI, SEGNAPOSTO, risolvi as risolviTesti } from './testi-pubblico.js';
 import { Anteprima } from './anteprima.js';
 import { OPZIONI, norma } from './scrittura.js';
@@ -333,6 +334,7 @@ export class Impostazioni {
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
     $('imp-proj-riapri').replaceChildren(rigaInterruttore(it.proj.riapri, !!this.dati.preferenze().riapriUltimoProj, (x) => this.dati.salvaPreferenze({ riapriUltimoProj: x })));
     this.disegnaMani();
+    this.disegnaCimice();
     this.disegnaMoviola();
     this.disegnaScorciatoie();
     this.disegnaAbleton();
@@ -496,6 +498,68 @@ export class Impostazioni {
       camera,
       sens,
       crea('p', 'secondario a-capo', m.cosaFa),
+    );
+  }
+
+  // La cimice (solo disegno): accesa o no, quanto spesso entra, drop, grandezza, velocità, lampi.
+  disegnaCimice() {
+    const c = it.cimice;
+    $('imp-titolo-cimice').textContent = c.titolo;
+    const p = { acceso: true, cooldown: 8, probabilita: 0.5, durataMin: 4, durataMax: 8, folle: true, battuteFolle: 4, sensibilitaDrop: 0.5, scala: 1, velocita: 1, lampi: true, corrompe: true, trema: true, ...this.dati.preferenze().cimice };
+    const salva = (parziale) => this.dati.salvaPreferenze({ cimice: { ...p, ...this.dati.preferenze().cimice, ...parziale } });
+    const riga = (testi, controllo) => {
+      const r = crea('div', 'imp-riga');
+      const t = crea('div', 'imp-testo');
+      t.append(crea('span', '', testi.nome), crea('span', 'imp-nota', testi.testo ?? ''));
+      r.append(t, controllo);
+      return r;
+    };
+    // un cursore che salva dopo un attimo (come quelli delle mani)
+    const cursore = (id, min, max, step, valore, testo, cambia) => {
+      const box = crea('div', 'imp-controlli');
+      const i = crea('input');
+      i.id = id;
+      i.type = 'range';
+      i.min = min;
+      i.max = max;
+      i.step = step;
+      i.value = valore;
+      const v = crea('span', 'lbl', testo(valore));
+      let timer = null;
+      i.oninput = () => {
+        v.textContent = testo(Number(i.value));
+        clearTimeout(timer);
+        timer = setTimeout(() => cambia(Number(i.value)), 150);
+      };
+      box.append(i, v);
+      return box;
+    };
+    const frequenza = frequenzaDi(p);
+    const sel = crea('select');
+    sel.id = 'imp-cimice-frequenza';
+    for (const nome of Object.keys(FREQUENZE)) sel.append(new Option(c.frequenza.valori[nome], nome));
+    if (frequenza === 'personalizzata') sel.append(new Option(c.frequenza.valori.personalizzata, 'personalizzata'));
+    sel.value = frequenza;
+    sel.onchange = () => { if (FREQUENZE[sel.value]) salva(FREQUENZE[sel.value]); };
+    const durata = crea('div', 'imp-controlli');
+    const dMin = cursore('imp-cimice-durata-min', 2, 16, 1, p.durataMin, (n) => `${n}`, (n) => salva({ durataMin: n, durataMax: Math.max(n, p.durataMax) }));
+    const dMax = cursore('imp-cimice-durata-max', 2, 32, 1, p.durataMax, (n) => `${n} battute`, (n) => salva({ durataMax: n, durataMin: Math.min(n, p.durataMin) }));
+    durata.append(...dMin.children, ...dMax.children);
+    $('imp-cimice').replaceChildren(
+      rigaInterruttore(c.acceso, !!p.acceso, (x) => salva({ acceso: x })),
+      riga(c.frequenza, sel),
+      riga(c.cooldown, cursore('imp-cimice-cooldown', 0, 32, 1, p.cooldown, (n) => `${n} battute`, (n) => salva({ cooldown: n }))),
+      riga(c.probabilita, cursore('imp-cimice-probabilita', 0, 1, 0.05, p.probabilita, (n) => `${Math.round(n * 100)}%`, (n) => salva({ probabilita: n }))),
+      riga(c.durata, durata),
+      rigaInterruttore(c.folle, p.folle !== false, (x) => salva({ folle: x })),
+      riga(c.battuteFolle, cursore('imp-cimice-battute-folle', 1, 16, 1, p.battuteFolle, (n) => `${n} battute`, (n) => salva({ battuteFolle: n }))),
+      riga(c.sensibilitaDrop, cursore('imp-cimice-sensibilita', 0, 1, 0.05, p.sensibilitaDrop, (n) => `${Math.round(n * 100)}%`, (n) => salva({ sensibilitaDrop: n }))),
+      riga(c.scala, cursore('imp-cimice-scala', 0.6, 1.5, 0.05, p.scala, (n) => `×${n.toFixed(2)}`, (n) => salva({ scala: n }))),
+      riga(c.velocita, cursore('imp-cimice-velocita', 0.5, 2, 0.1, p.velocita, (n) => `×${n.toFixed(1)}`, (n) => salva({ velocita: n }))),
+      rigaInterruttore(c.lampi, p.lampi !== false, (x) => salva({ lampi: x })),
+      rigaInterruttore(c.corrompe, p.corrompe !== false, (x) => salva({ corrompe: x })),
+      rigaInterruttore(c.trema, p.trema !== false, (x) => salva({ trema: x })),
+      crea('p', 'secondario a-capo', c.firma),
     );
   }
 

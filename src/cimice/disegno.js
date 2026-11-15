@@ -51,33 +51,6 @@ export function disegnaCorrotte(g, m, now) {
   g.globalAlpha = 1;
 }
 
-// Le scritte glitch: parole del codice ingrandite, in altri font, su blocchi di colore, strisce oblique. Solo disegno.
-export function disegnaScritte(g, m, fx) {
-  g.textBaseline = 'middle';
-  for (const t of fx.scritte) {
-    g.save();
-    g.globalAlpha = Math.min(1, (1 - t.life / t.max) * 1.6);
-    if (t.tipo === 'grande') {
-      g.font = `${t.size}px ${t.fam}`;
-      const w = g.measureText(t.testo).width;
-      if (t.blocco) { g.fillStyle = t.blocco; g.fillRect(t.x - 6, t.y - t.size * 0.62, w + 12, t.size * 1.24); }
-      g.fillStyle = t.col; g.fillText(t.testo, t.x, t.y);
-    } else if (t.tipo === 'striscia') {
-      g.translate(t.x, t.y); g.rotate(t.ang);
-      g.fillStyle = t.col; g.fillRect(0, 0, t.w, t.h);
-      g.fillStyle = m.col.BG; g.font = `${Math.round(t.h * 0.7)}px ${t.fam}`;
-      let riga = '';
-      while (g.measureText(riga).width < t.w - 8) riga += `${t.testo} `;
-      g.fillText(riga, 4, t.h / 2 + 0.5);
-    } else {
-      g.translate(t.x, t.y); g.rotate(t.ang);
-      g.font = `${t.size}px ${t.fam}`; g.fillStyle = t.col; g.fillText(t.testo, 0, 0);
-    }
-    g.restore();
-  }
-  g.globalAlpha = 1;
-}
-
 export function disegnaCimice(g, m, b, now) {
   const { ACID, ROT, INK, RUST, BG } = m.col;
   const G = m.g;

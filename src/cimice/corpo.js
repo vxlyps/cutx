@@ -287,9 +287,8 @@ export function suSedicesimo(m, b, k, now) {
     const t1 = m.pick(pl.length ? pl : vis), t2 = m.pick(vis);
     if (t1 && t2) m.filo(t1.cx, t1.cy, t2.cx, t2.cy, c ? RUST : ROT, 0.45);
   }
-  // il virus: rovina per un attimo le parole sotto la testa, ingrandisce parole in altri font, strisce oblique (solo disegno)
+  // il virus: rovina per un attimo le parole sotto la testa, sul posto e della stessa grandezza (solo disegno)
   if (m.opz.corrompe) {
-    m.glitch?.(b, c, s);
     for (const t of m.parole) if (t.vis && Math.abs(t.cx - b.x) < 26 * G.k && Math.abs(t.cy - b.y) < 16 * G.k) m.corrompi(t, 160);
   }
 }

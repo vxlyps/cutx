@@ -825,5 +825,67 @@
     "apri": "drum",
     "apriTitolo": "Apri questa clip nella scheda DRUM",
     "ciclo": "ciclo"
+  },
+  "cimice": {
+    "titolo": "CIMICE · sul proiettore",
+    "acceso": {
+      "nome": "la cimice",
+      "testo": "Una creatura di linee che ogni tanto entra nel codice sul proiettore, cammina sulle parole, tocca le note che suonano e impazzisce sul drop. È solo per il pubblico: nella schermata dove lavori non c'è mai. È solo disegno: non tocca mai il codice, l'audio o il set. Se la spegni sparisce subito."
+    },
+    "frequenza": {
+      "nome": "quanto spesso",
+      "testo": "ogni quanto entra, in generale. I valori avanzati sotto la rifiniscono.",
+      "valori": {
+        "raro": "di rado",
+        "ogni_tanto": "ogni tanto",
+        "spesso": "spesso",
+        "personalizzata": "personalizzato"
+      }
+    },
+    "cooldown": {
+      "nome": "pausa minima",
+      "testo": "battute che devono passare da quando se ne va a quando può rientrare"
+    },
+    "probabilita": {
+      "nome": "probabilità di entrare",
+      "testo": "a ogni variazione (un livello entra o esce, cambia il momento)"
+    },
+    "durata": {
+      "nome": "quante battute resta",
+      "testo": "minimo e massimo; poi se ne va da sola"
+    },
+    "folle": {
+      "nome": "impazzisce sul drop",
+      "testo": "quando torna la cassa, si apre il fader o parte la scena drop: entra sempre e corre"
+    },
+    "battuteFolle": {
+      "nome": "per quante battute impazzisce",
+      "testo": ""
+    },
+    "sensibilitaDrop": {
+      "nome": "sensibilità del drop",
+      "testo": "quanto deve essere forte il ritorno della cassa per contare come drop"
+    },
+    "scala": {
+      "nome": "grandezza",
+      "testo": "da piccola a grande"
+    },
+    "velocita": {
+      "nome": "velocità degli scatti",
+      "testo": ""
+    },
+    "lampi": {
+      "nome": "lampi rossi",
+      "testo": "ogni tanto diventa rossa; sul drop lampeggia rosso e verde"
+    },
+    "corrompe": {
+      "nome": "corrompe le parole",
+      "testo": "le parole sotto la testa si rovinano per un attimo, come un virus (solo disegno: il testo non cambia)"
+    },
+    "trema": {
+      "nome": "schermo che trema",
+      "testo": "un tremito leggero sul drop (solo il disegno della cimice, mai le finestre)"
+    },
+    "firma": "La firma «idea by @rybinfx» compare sempre accanto alla cimice: è un credito all'autore dell'idea e non si spegne."
   }
 }

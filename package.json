@@ -47,6 +47,7 @@
       "src/main/**",
       "!src/main/prova.js",
       "!src/main/prova-mano.js",
+      "!src/main/prova-cimice.js",
       "src/ableton/**",
       "src/renderer/brano.js",
       "src/renderer/categorie.js",

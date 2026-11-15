@@ -11,7 +11,7 @@
 // leggiParole({ larghezza, altezza }) ritorna le parole in coordinate del contenitore:
 //   [{ x, y, w, h, testo?, font?, salta? }]   (salta = punteggiatura, i piedi non ci stanno)
 import { aggiorna, congedo, creaCorpo, geom, scegliBersaglio, suSedicesimo } from './corpo.js';
-import { disegnaCimice, disegnaCorrotte, disegnaScritte, disegnaSotto, glifo } from './disegno.js';
+import { disegnaCimice, disegnaCorrotte, disegnaSotto, glifo } from './disegno.js';
 
 export const OPZIONI = {
   acceso: true,
@@ -26,6 +26,7 @@ export const OPZIONI = {
   lampi: true, // lampi rosso/verde
   corrompe: true, // le parole sotto la testa si corrompono (solo disegno)
   trema: true, // lo schermo trema un poco (solo il disegno)
+  sensibilitaDrop: 0.5, // quanto deve essere forte il ritorno della cassa (0 poco … 1 molto)
   disegnaNote: false, // il canvas incornicia da sé le note che suonano (di serie lo fa già l'editor)
 };
 
@@ -49,15 +50,15 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
   let osservatore = null;
   let bug = null;
   let rientro = null;
+  let autoK = 1; // la cimice si adatta alla grandezza del testo (sul proiettore il codice è enorme)
   let folleBattute = 0;
   let battuteDaUscita = 99;
-  const fx = { fili: [], barre: [], scritte: [], scossa: 0, ultimoBattito: 0 };
+  const fx = { fili: [], barre: [], scossa: 0, ultimoBattito: 0 };
 
   const m = {
     parole: [], W: 0, H: 0, g: geom(opz.scala), opz, ridotto, rnd, pick,
     col: { ACID: '#b6f000', ROT: '#6d8a14', INK: '#d6ecae', RUST: '#ff5b1f', BG: '#0a0c07' },
     fontFirma: 'ui-monospace, Menlo, monospace',
-    fontTitoli: 'Impact, sans-serif',
     folle: () => !!bug && folleBattute > 0 && opz.folle,
     filo(x1, y1, x2, y2, color, max = 0.35) {
       fx.fili.push({ x1, y1, x2, y2, color, life: 0, max });
@@ -71,30 +72,6 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
         x: rnd(-40, m.W * 0.7), y: rnd(0, m.H), w: rnd(90, c ? 620 : 300), h: rnd(4, c ? 24 : 12),
         color: opz.lampi && c && caso() < 0.6 ? RUST : caso() < 0.25 ? INK : ACID, life: 0, max: rnd(0.06, 0.18),
       });
-    },
-    // Glitch tipografico (solo disegno, con parole del codice stesso): una parola ingrandita in un altro font su un blocco di colore,
-    // una striscia obliqua che la ripete, una parola in verticale. Dura un attimo.
-    glitch(b, c, s) {
-      if (ridotto || !opz.corrompe) return;
-      const vicine = m.parole.filter((p) => p.vis && !p.salta && p.testo && p.testo.length > 1 && Math.hypot(p.cx - b.x, p.cy - b.y) < (c ? 320 : 200) * m.g.k);
-      if (!vicine.length) return;
-      const prob = c ? 0.9 : s % 4 === 0 ? 0.3 : 0;
-      if (caso() > prob) return;
-      const { ACID, INK, RUST, BG } = m.col;
-      const p = pick(vicine);
-      const fam = pick([m.fontFirma, m.fontTitoli, 'Georgia, "Times New Roman", serif']);
-      const tipo = caso();
-      const colori = [ACID, RUST, INK];
-      if (tipo < 0.5) {
-        const blocco = caso() < 0.55;
-        const col = pick(colori);
-        fx.scritte.push({ tipo: 'grande', testo: p.testo, x: p.x, y: p.cy, size: Math.min(110, p.h * rnd(2, 4.2)), fam, col: blocco ? BG : col, blocco: blocco ? col : null, life: 0, max: rnd(0.12, c ? 0.3 : 0.5) });
-      } else if (tipo < 0.82) {
-        fx.scritte.push({ tipo: 'striscia', testo: p.testo, x: b.x + rnd(-120, 120), y: b.y + rnd(-90, 90), w: rnd(160, c ? 520 : 340), h: rnd(12, 22), ang: rnd(-1.2, 1.2), fam: m.fontFirma, col: pick([RUST, ACID]), life: 0, max: rnd(0.08, 0.26) });
-      } else {
-        fx.scritte.push({ tipo: 'verticale', testo: p.testo, x: p.cx, y: p.cy, size: Math.min(80, p.h * rnd(1.8, 3.4)), fam, col: pick([ACID, INK]), ang: caso() < 0.5 ? -Math.PI / 2 : Math.PI / 2, life: 0, max: rnd(0.12, 0.35) });
-      }
-      if (fx.scritte.length > 8) fx.scritte.shift();
     },
     trema(v) { if (opz.trema && !ridotto) fx.scossa = v; },
     lampeggia(p, v = 1) { if (p) p.hl = Math.max(p.hl, v); },
@@ -112,13 +89,12 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
     m.col.INK = colore('--testo', m.col.INK);
     m.col.BG = colore('--fondo', m.col.BG);
     m.fontFirma = colore('--mono', m.fontFirma);
-    m.fontTitoli = colore('--stencil', m.fontTitoli);
   }
 
   function misura() {
     const r = contenitore.getBoundingClientRect();
-    m.W = r.width;
-    m.H = r.height;
+    m.W = opzioni.fisso ? window.innerWidth : r.width;
+    m.H = opzioni.fisso ? window.innerHeight : r.height;
     dpr = Math.min(2, globalThis.devicePixelRatio || 1);
     canvas.width = Math.max(1, Math.round(m.W * dpr));
     canvas.height = Math.max(1, Math.round(m.H * dpr));
@@ -134,6 +110,11 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       ...p, cx: p.x + p.w / 2, cy: p.y + p.h / 2, hl: 0, held: 0, scrUntil: 0, scrNext: 0, scrTesto: '',
       vis: p.x + p.w > 0 && p.x < m.W && p.y + p.h > 0 && p.y < m.H,
     }));
+    if (m.parole.length) {
+      const alt = m.parole.map((p) => p.h).sort((a, b) => a - b);
+      autoK = Math.min(4, Math.max(0.8, alt[alt.length >> 1] / 16));
+      m.g = geom(opz.scala * autoK);
+    }
     if (bug) {
       for (const leg of bug.legs) { leg.tok = null; if (leg.to) leg.to.tok = null; }
       for (const an of bug.ants) an.tok = null;
@@ -143,6 +124,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
   function evoca() {
     if (bug) return;
     rientro = null;
+    if (sporco) rileggi();
     const { W, H } = m;
     const bordi = [[-60, rnd(H * 0.2, H * 0.8), 0], [W + 60, rnd(H * 0.2, H * 0.8), Math.PI], [rnd(W * 0.2, W * 0.8), -60, Math.PI / 2], [rnd(W * 0.2, W * 0.8), H + 60, -Math.PI / 2]];
     const [x, y, h] = pick(bordi);
@@ -177,6 +159,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       if (!bug && battuteDaUscita >= opz.cooldown && caso() < opz.probabilita) evoca();
       else if (bug && bug.age >= 3 && folleBattute <= 0 && caso() < 0.5) congeda();
     }
+    if (bug && !m.parole.some((p) => p.vis && !p.salta)) congeda(); // schermata senza codice
     if (bug) {
       bug.age++;
       // la firma: compare un paio di battute dopo l'entrata, poi ogni tanto, poi sparisce
@@ -204,7 +187,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
     try {
       const dt = Math.min(0.05, (now - ultimo) / 1000);
       ultimo = now;
-      if (sporco) rileggi();
+      if (sporco && bug) rileggi();
       if (!bug && rientro && now >= rientro.at) {
         const tieni = rientro.tieni;
         evoca();
@@ -228,17 +211,16 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
           }
         }
       }
-      for (const arr of [fx.fili, fx.barre, fx.scritte]) for (let i = arr.length - 1; i >= 0; i--) { arr[i].life += dt; if (arr[i].life > arr[i].max) arr.splice(i, 1); }
+      for (const arr of [fx.fili, fx.barre]) for (let i = arr.length - 1; i >= 0; i--) { arr[i].life += dt; if (arr[i].life > arr[i].max) arr.splice(i, 1); }
       if (fx.scossa > 0) fx.scossa -= dt;
 
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, m.W, m.H);
       g.lineCap = 'round'; g.lineJoin = 'round';
       if (fx.scossa > 0) g.translate(rnd(-3, 3), rnd(-2, 2));
-      if (bug || fx.fili.length || fx.barre.length || fx.scritte.length) {
+      if (bug || fx.fili.length || fx.barre.length) {
         disegnaSotto(g, m, fx, now);
         disegnaCorrotte(g, m, now);
-        disegnaScritte(g, m, fx);
         if (bug) disegnaCimice(g, m, bug, now);
       }
       g.globalAlpha = 1;
@@ -255,7 +237,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       leggiColori();
       canvas = document.createElement('canvas');
       canvas.setAttribute('aria-hidden', 'true');
-      canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:50;';
+      canvas.style.cssText = `position:${opzioni.fisso ? 'fixed' : 'absolute'};inset:0;width:100%;height:100%;pointer-events:none;z-index:50;`;
       contenitore.appendChild(canvas);
       g = canvas.getContext('2d');
       misura();
@@ -279,12 +261,12 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       canvas?.remove();
     } catch { /* si spegne in silenzio */ }
     canvas = null; g = null; bug = null; rientro = null; m.parole = [];
-    fx.fili.length = 0; fx.barre.length = 0; fx.scritte.length = 0;
+    fx.fili.length = 0; fx.barre.length = 0;
   }
 
   function imposta(nuove) {
     Object.assign(opz, nuove);
-    m.g = geom(opz.scala);
+    m.g = geom(opz.scala * autoK);
     if (!opz.acceso) congeda();
   }
 
@@ -292,6 +274,15 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
     avvia, spegni, ricalcola, passo, battuta, evoca, congeda, imposta,
     // accende una parola (da fuori: quella che suona adesso); cerca per posizione nel testo o per indice
     accendi(parola, v = 1) { m.lampeggia(parola, v); },
+    // le note che suonano adesso, come rettangoli della finestra: le parole dentro si accendono
+    segna(rettangoli) {
+      for (const p of m.parole) {
+        if (!p.vis) continue;
+        for (const r of rettangoli) {
+          if (p.cx >= r.left - 1 && p.cx <= r.right + 1 && p.cy >= r.top - 1 && p.cy <= r.bottom + 1) { p.hl = 1; break; }
+        }
+      }
+    },
     get parole() { return m.parole; },
     get presente() { return !!bug; },
     get folle() { return m.folle(); },
