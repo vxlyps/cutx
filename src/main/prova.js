@@ -217,6 +217,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('suoni-ui')) ok = (await sicura('suoni-ui', provaSuoniUi)) && ok;
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
+  if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
@@ -4286,6 +4287,139 @@ async function provaLinguette({ finestre, scrivi }) {
   await midi(0x90, tasto3, 0);
   controlla('tenuto un secondo non cambia linguetta (passare al prossimo brano arriva col passo 4)', (await js('cutxProva.cue.linguetta')) === 'prossimo');
   await js('cutxProva.fermaTutto()');
+  return ok;
+}
+
+// --- i PROJ (5.1): uno stash «di prima» migrato in PROJ 01, la schermata, il numero verde col live, nuovo PROJ col live che suona,
+// «altri PROJ» in libreria (copia di brani e clip), sottotitolo, interruttore «riapri». Tutto in uno stash temporaneo.
+async function provaProj({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-proj-'));
+  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
+  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\nnote("a1 c2").s("sine").gain(.0001)\n// @clip pad\nnote("e3").s("triangle").gain(.0001)\n';
+  const prima = {
+    'libreria/notte.cutx': notte,
+    'libreria/alba.cutx': alba,
+    'set.cutx': '// @set prova\n\nnotte.cutx · apre\nalba.cutx\n',
+    'kit.cutx': '// @clip colpo\ns("sine*4").gain(.0001)\n',
+    'colpi.cutx': '// i colpi di prova\n',
+  };
+  await mkdir(path.join(tmp, 'libreria'), { recursive: true });
+  for (const [f, t] of Object.entries(prima)) await writeFile(path.join(tmp, f), t);
+  const orari = {};
+  for (const f of Object.keys(prima)) orari[f] = (await stat(path.join(tmp, f))).mtimeMs;
+  const p1 = path.join(tmp, 'PROJ', 'PROJ 01');
+  const p2 = path.join(tmp, 'PROJ', 'PROJ 02');
+  const leggi = (f) => readFile(f, 'utf8').catch(() => null);
+  const vero = stash._percorsoPerProva(tmp);
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraLinguette(); window.cutx.salvaPreferenze({ riapriUltimoProj: false })`);
+    await aspetta(1.5); // il live si svuota
+    await js('cutxProva.ricaricaStash()');
+    await aspetta(1);
+    // --- la migrazione ---
+    controlla('migrazione: PROJ 01 ha libreria, set e kit', (await leggi(path.join(p1, 'libreria', 'notte.cutx'))) === notte && (await leggi(path.join(p1, 'set.cutx'))) === prima['set.cutx'] && (await leggi(path.join(p1, 'kit.cutx'))) === prima['kit.cutx']);
+    controlla('colpi.cutx resta solo nella radice (comune a tutti)', !existsSync(path.join(p1, 'colpi.cutx')) && existsSync(path.join(tmp, 'colpi.cutx')));
+    let intatti = true;
+    for (const [f, t] of Object.entries(prima)) intatti &&= (await leggi(path.join(tmp, f))) === t && (await stat(path.join(tmp, f))).mtimeMs === orari[f];
+    controlla('i file di prima sono intatti (contenuto e data)', intatti);
+    controlla('la barra dice «PROJ 01»', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01', await js(`document.getElementById('proj-nome').textContent`));
+    controlla('la libreria ha i brani di PROJ 01', (await js('window.cutx.libreria()')).length === 2);
+    await js('cutxProva.ricaricaStash()');
+    await aspetta(0.5);
+    controlla('una seconda apertura non migra di nuovo (c\'è solo PROJ 01)', (await readdir(path.join(tmp, 'PROJ'))).filter((x) => !x.startsWith('.')).join() === 'PROJ 01');
+
+    // --- la schermata ---
+    const schede = () => js(`[...document.querySelectorAll('#proj-griglia .proj-scheda')].map((s) => ({ n: s.dataset.numero, testo: s.textContent, live: s.classList.contains('in-live'), aperta: s.classList.contains('aperta') }))`);
+    await js(`document.getElementById('proj').click()`);
+    await aspetta(0.5);
+    let sc = await schede();
+    controlla('il tasto PROJ apre la schermata: PROJ 01 e «+ nuovo PROJ»', !(await js(`document.getElementById('proj-schermata').hidden`)) && sc.length === 2 && sc[1].n === 'nuovo', JSON.stringify(sc));
+    controlla('PROJ 01: «aperto», 2 brani, numero bianco (il live è fermo)', sc[0].aperta && /aperto/.test(sc[0].testo) && /2 brani/.test(sc[0].testo) && !sc[0].live, JSON.stringify(sc[0]));
+    await js(`document.getElementById('proj-schermata').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    controlla('esc torna alla postazione', await js(`document.getElementById('proj-schermata').hidden`));
+    // una clip di notte va live: il numero diventa verde
+    await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(notte)})`);
+    await aspetta(0.5);
+    await js(`cutxProva.cue.scegliSezione(0); document.getElementById('go-live').click()`);
+    await aspetta(3);
+    controlla('la clip è live', (await live()).livelli?.some((l) => l.nome === 'basso'), JSON.stringify((await live()).livelli?.map((l) => l.nome)));
+    await js(`document.getElementById('proj').click()`);
+    await aspetta(0.5);
+    sc = await schede();
+    controlla('col live che suona da PROJ 01 il suo numero è verde', sc[0].live, JSON.stringify(sc[0]));
+    controlla('e la schermata dice che il live suona', /il live suona/.test(await js(`document.getElementById('proj-avviso').textContent`)));
+    // nuovo PROJ col live che suona: il primo invio chiede conferma, il secondo crea
+    const invio = `(() => { const i = document.querySelector('.proj-nuovo .proj-sottotitolo'); i.value = 'compleanno di prova'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`;
+    await js(invio);
+    await aspetta(0.5);
+    controlla('nuovo PROJ col live che suona: prima chiede conferma', /premi di nuovo/.test(await js(`document.getElementById('proj-avviso').textContent`)) && !existsSync(p2));
+    await js(invio);
+    await aspetta(1.5);
+    controlla('al secondo invio nasce PROJ 02 e si apre', existsSync(p2) && (await js(`document.getElementById('proj-schermata').hidden`)) && (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 02 · compleanno di prova', await js(`document.getElementById('proj-nome').textContent`));
+    controlla('PROJ 02 nasce con il kit di PROJ 01 e la libreria vuota', (await leggi(path.join(p2, 'kit.cutx'))) === prima['kit.cutx'] && (await js('window.cutx.libreria()')).length === 0);
+    controlla('il live continua a suonare', (await live()).livelli?.some((l) => l.nome === 'basso'));
+    // --- altri PROJ ---
+    await js(`cutxProva.browser.vai('libreria')`);
+    await aspetta(0.3);
+    await js(`document.querySelector('.proj-altro')?.click()`);
+    await aspetta(0.8);
+    const brani = await js(`[...document.querySelectorAll('.proj-brano .nome')].map((n) => n.textContent)`);
+    controlla('in libreria «altri PROJ» mostra PROJ 01 e i suoi brani', (await js(`document.querySelector('.proj-altro .nome')?.textContent`))?.startsWith('PROJ 01') && brani.includes('notte') && brani.includes('alba'), JSON.stringify(brani));
+    await js(`[...document.querySelectorAll('.proj-brano')].find((r) => r.querySelector('.nome').textContent === 'notte').querySelector('button').click()`);
+    await aspetta(0.8);
+    const copiato = await leggi(path.join(p2, 'libreria', 'notte.cutx'));
+    controlla('«copia» porta notte in PROJ 02 con «// viene da PROJ 01 · notte»', copiato?.includes('// viene da PROJ 01 · notte') && copiato.includes('note("c2 c2 eb2 g2")'), copiato?.slice(0, 120));
+    controlla('e la libreria di PROJ 02 lo mostra', (await js('window.cutx.libreria()')).some((b) => b.file === 'notte.cutx'));
+    // le clip di alba: → kit
+    await js(`[...document.querySelectorAll('.proj-brano')].find((r) => r.querySelector('.nome').textContent === 'alba').click()`);
+    await aspetta(0.8);
+    const clip = () => js(`[...document.querySelectorAll('.proj-clip')].map((r) => ({ nome: r.querySelector('.nome').textContent, tasti: [...r.querySelectorAll('button')].map((b) => b.textContent) }))`);
+    controlla('aprendo alba si vedono le sue clip', (await clip()).map((c) => c.nome).join() === 'basso,pad', JSON.stringify(await clip()));
+    await js(`cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraBrano(true); cutxProva.browser.mostra()`);
+    controlla('senza brano aperto nel CUE c\'è solo «→ kit»', (await clip())[1]?.tasti.join() === '→ kit', JSON.stringify(await clip()));
+    await js(`[...document.querySelectorAll('.proj-clip')].find((r) => r.querySelector('.nome').textContent === 'pad').querySelector('button').click()`);
+    await aspetta(0.8);
+    const kit2 = await leggi(path.join(p2, 'kit.cutx'));
+    controlla('→ kit: la clip pad entra nel kit di PROJ 02, con «viene da PROJ 01 · alba»', kit2?.includes('// @clip pad\n// viene da PROJ 01 · alba\nnote("e3")') && kit2.startsWith(prima['kit.cutx'].trim()), kit2);
+    // → brano: nel brano aperto nel CUE
+    await js(`cutxProva.cue.apri('notte.cutx')`);
+    await aspetta(0.8);
+    await js(`cutxProva.browser.mostra()`);
+    await js(`[...document.querySelectorAll('.proj-clip')].find((r) => r.querySelector('.nome').textContent === 'basso').querySelectorAll('button')[0].click()`);
+    await aspetta(0.5);
+    const sezioni = await js('cutxProva.cue.brano?.modello.sezioni.map((s) => s.nome)');
+    controlla('→ brano: la clip basso va in fondo al brano aperto (nome libero «basso 2»)', JSON.stringify(sezioni) === JSON.stringify(['basso', 'pad', 'basso 2']), JSON.stringify(sezioni));
+    controlla('e porta la riga «viene da»', (await js('cutxProva.cue.brano.modello.sezioni[2].corpo[0]')) === '// viene da PROJ 01 · alba');
+    // --- sottotitolo e cambio PROJ ---
+    await js(`document.getElementById('proj').click()`);
+    await aspetta(0.5);
+    await js(`(() => { const i = document.querySelector('.proj-scheda[data-numero="1"] .proj-sottotitolo'); i.value = 'serata di prova'; i.dispatchEvent(new Event('change')); })()`);
+    await aspetta(0.5);
+    controlla('il sottotitolo si scrive sulla scheda e va in proj.json', JSON.parse((await leggi(path.join(p1, 'proj.json'))) ?? '{}').sottotitolo === 'serata di prova');
+    await js(`cutxProva.fermaTutto()`);
+    await aspetta(1.5);
+    await js(`cutxProva.schermataProj.mostra({ aperto: 2, ultimo: 2 })`);
+    await js(`document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').click()`);
+    await aspetta(1);
+    controlla('a live fermo «apri» cambia PROJ subito', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01 · serata di prova' && (await js(`document.getElementById('proj-schermata').hidden`)));
+    controlla('stash.json ricorda l\'ultimo PROJ', JSON.parse((await leggi(path.join(tmp, 'stash.json'))) ?? '{}').proj?.ultimo === 1);
+    // --- l'interruttore ---
+    await js(`cutxProva.imp.disegna()`);
+    controlla('nelle impostazioni c\'è «riapri l\'ultimo PROJ»', /riapri l'ultimo PROJ/.test(await js(`document.getElementById('imp-proj-riapri').textContent`)));
+  } finally {
+    await js(`cutxProva.fermaTutto(); cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraLinguette(); cutxProva.schermataProj.radice.hidden = true`).catch(() => {});
+    stash._percorsoPerProva(vero);
+    await js('cutxProva.ricaricaStash()').catch(() => {});
+    await aspetta(1);
+    await rm(tmp, { recursive: true, force: true });
+  }
   return ok;
 }
 

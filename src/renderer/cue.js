@@ -484,7 +484,8 @@ export class Cue {
     this.mostraModo();
   }
 
-  // Una clip nuova in fondo al brano attivo o al prossimo (dal synth). Ritorna l'errore, o null. Il brano resta da salvare.
+  // Una clip nuova in fondo al brano attivo o al prossimo (dal synth, o copiata da un altro PROJ). Ritorna l'errore, o null. Il brano resta da salvare.
+  // categoria: il tipo del synth ('bass'…), oppure tutte le info della riga della clip (copia da un altro PROJ).
   aggiungiClip(dove, nome, codice, categoria = '') {
     const slot = this.slot[dove];
     if (!slot) return it.synth.msg.nessunBranoApertoSlot.replace('{dove}', it.synth.destinazioni[dove]);
@@ -493,7 +494,7 @@ export class Cue {
     for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
     const prima = this.linguetta;
     this.linguetta = dove; // modifica() lavora sul brano della linguetta in vista: ci si sposta il tempo di scrivere
-    this.modifica(B.conSezioneInFondo(slot.modello, unico, categoria ? { [categoria]: true } : {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
+    this.modifica(B.conSezioneInFondo(slot.modello, unico, typeof categoria === 'object' ? categoria : categoria ? { [categoria]: true } : {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
     this.linguetta = prima;
     this.mostraModo();
     return null;

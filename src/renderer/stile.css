@@ -3503,8 +3503,7 @@ input[type='checkbox'] {
 .proj-scheda.scelta {
   border-color: var(--testo);
 }
-.proj-scheda.aperta .proj-numero,
-.proj-scheda.aperta .proj-segno {
+.proj-scheda.in-live .proj-numero {
   color: var(--marcio);
   text-shadow: var(--bagliore-testo);
 }
@@ -3512,6 +3511,9 @@ input[type='checkbox'] {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+.proj-scheda.aperta .proj-segno {
+  color: var(--testo);
 }
 .proj-sigla {
   font-family: var(--stencil);

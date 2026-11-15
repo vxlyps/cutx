@@ -328,6 +328,7 @@ export class Impostazioni {
     riga.append(testo, scelta);
     $('imp-proiezione').append(riga);
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
+    $('imp-proj-riapri').replaceChildren(rigaInterruttore(it.proj.riapri, !!this.dati.preferenze().riapriUltimoProj, (x) => this.dati.salvaPreferenze({ riapriUltimoProj: x })));
     this.disegnaMoviola();
     this.disegnaScorciatoie();
     this.disegnaAbleton();

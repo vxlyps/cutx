@@ -22,7 +22,7 @@ const data = (ms) => {
 };
 
 export class SchermataProj {
-  // azioni: { apri(numero), nuovo(sottotitolo), rinomina(numero, sottotitolo), elenco(), liveSuona() }
+  // azioni: { apri(numero), nuovo(sottotitolo), rinomina(numero, sottotitolo), elenco(), liveSuona(), projInLive() → Set dei numeri che suonano }
   constructor(azioni) {
     this.azioni = azioni;
     this.radice = $('proj-schermata');
@@ -75,6 +75,7 @@ export class SchermataProj {
     s.tabIndex = 0;
     if (p.numero === this.scelto) s.classList.add('scelta');
     if (p.numero === this.aperto) s.classList.add('aperta');
+    if (this.azioni.projInLive?.().has(p.numero)) s.classList.add('in-live'); // verde solo se da questo PROJ suona qualcosa
     const testa = el('div', 'proj-testa');
     testa.append(el('span', 'proj-sigla', 'PROJ'), el('span', 'proj-numero', numeroProj(p.numero)));
     if (p.numero === this.aperto) testa.append(el('span', 'proj-segno', T.aperto));

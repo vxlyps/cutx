@@ -351,6 +351,14 @@
     "roll-velocity": {
       "nome": "velocity",
       "testo": "Sotto le note: una barra per ogni punto in cui parte una nota (le note di un accordo ne hanno una sola). Clicca o trascina nella striscia per cambiarla: in alto è la velocity piena (non si scrive), più in basso è più piano. Nel codice diventa .velocity(\"…\") dopo le note. Se la barra è fra le note scelte le cambi tutte."
+    },
+    "proj-copia-brano": {
+      "nome": "copia il brano",
+      "testo": "Copia il brano nel PROJ aperto, con una riga «// viene da PROJ … · nome». L'originale non si tocca."
+    },
+    "proj-copia-clip": {
+      "nome": "copia la clip",
+      "testo": "→ brano: in fondo al brano aperto nel CUE (la linguetta che guardi). → kit: nel kit del PROJ aperto. Con una riga «// viene da…»."
     }
   },
   "impostazioni": {
@@ -714,6 +722,18 @@
     "kitDa": "kit da",
     "kitVuoto": "kit vuoto",
     "liveSuona": "il live suona: cambiare PROJ non lo ferma",
-    "confermaLive": "il live suona e continua: cambiano libreria, set e kit · premi di nuovo per confermare"
+    "confermaLive": "il live suona e continua: cambiano libreria, set e kit · premi di nuovo per confermare",
+    "riapri": {
+      "nome": "riapri l'ultimo PROJ",
+      "testo": "all'avvio si apre da solo l'ultimo PROJ usato, senza la schermata dei PROJ. Si cambia sempre dal tasto PROJ in alto."
+    },
+    "altri": "altri PROJ",
+    "nessunBrano": "nessun brano",
+    "copia": "copia",
+    "nelBrano": "→ brano",
+    "nelKit": "→ kit",
+    "copiato": "copiato in libreria: {file}",
+    "clipNelBrano": "clip «{nome}» in fondo al brano · ⌘S per salvarlo",
+    "clipNelKit": "clip «{nome}» nel kit"
   }
 }

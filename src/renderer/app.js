@@ -261,7 +261,9 @@ async function goLive(pezzo = null) {
   // una scena del beat: se il beat suona già, la coda e il volume dei suoi livelli restano com'erano (le manopole contano)
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
-  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
+  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
   if (!r.errore) entraTraUsato();
   // una clip di un brano che ha un beat, e nessun beat suona né sta arrivando: la base non parte da sola, lo dico (e la card BEAT lampeggia)
@@ -952,6 +954,8 @@ async function apriStash(stato) {
 
 let projAperto = null; // { numero, sottotitolo, … } o null
 let projUltimo = null;
+const projDelLivello = new Map(); // nome del livello live → numero del PROJ da cui è partito
+const projInLive = () => new Set(pila.livelli.map((l) => projDelLivello.get(l.nome)).filter(Boolean));
 const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto']);
 function mostraProj(info) {
   projAperto = info?.aperto ?? null;
@@ -981,6 +985,7 @@ const schermataProj = new SchermataProj({
   },
   rinomina: async (n, sottotitolo) => mostraProj(await window.cutx.proj.rinomina(n, sottotitolo)),
   liveSuona: () => pila.livelli.length > 0,
+  projInLive,
 });
 $('proj').onclick = () => haStash && schermataProj.mostra({ aperto: projAperto?.numero ?? null, ultimo: projUltimo });
 
@@ -1093,6 +1098,12 @@ browser = new Browser(
     durataSuono,
     inserisci: (testo) => cue.inserisci(testo),
     apriBrano: (file) => cue.apri(file),
+    altriProj: () => altriProj,
+    braniDi: (n) => window.cutx.libreria(n),
+    clipDi: async (n, file) => B.leggi(await window.cutx.leggiBrano(file, n)).sezioni.map((x) => ({ nome: x.nome, info: x.info, corpo: x.corpo })),
+    copiaBrano: (n, file) => copiaBranoDaProj(n, file),
+    copiaClip: (n, brano, clip, dove) => copiaClipDaProj(n, brano, clip, dove),
+    branoInCue: () => cue.modo === 'brano' && !!cue.brano,
     disegnaSet: (el, filtro) => serata.disegna(el, filtro),
     rileggiSet: () => serata.carica(),
     cartelleAbleton: () => preferenze.cartelleAbleton ?? [],
@@ -1164,7 +1175,30 @@ function mostraBrowser() {
 
 async function aggiornaLibreria() {
   libreria = await window.cutx.libreria();
+  altriProj = haStash ? (await window.cutx.proj.elenco()).filter((p) => p.numero !== projAperto?.numero) : [];
   mostraBrowser();
+}
+let altriProj = []; // i PROJ non aperti, per «altri PROJ» in libreria
+
+// Da «altri PROJ»: un brano intero nella libreria del PROJ aperto, o una clip nel brano del CUE (o nel kit). Sempre con «// viene da…».
+async function copiaBranoDaProj(n, file) {
+  try {
+    const r = await window.cutx.proj.copiaBrano(n, file);
+    await aggiornaLibreria();
+    cue.avviso(it.proj.copiato.replace('{file}', r.file));
+  } catch (e) {
+    cue.avviso(String(e.message ?? e));
+  }
+}
+async function copiaClipDaProj(n, brano, clip, dove) {
+  const viene = `// viene da PROJ ${String(n).padStart(2, '0')} · ${brano.nome}`;
+  const corpo = [viene, ...clip.corpo.filter((r) => r !== viene)].join('\n');
+  if (dove === 'brano' && cue.modo === 'brano' && cue.brano && !cue.aggiungiClip(cue.linguetta, clip.nome, corpo, clip.info ?? {})) return cue.avviso(it.proj.clipNelBrano.replace('{nome}', clip.nome));
+  const kit = (await window.cutx.leggiKit().catch(() => null)) ?? '';
+  await window.cutx.scriviKit(`${kit.replace(/\s+$/, '')}${kit.trim() ? '\n' : ''}${B.rigaSezione(clip.nome, clip.info)}\n${corpo.replace(/\s+$/, '')}\n`);
+  await serata.carica();
+  mostraBrowser();
+  cue.avviso(it.proj.clipNelKit.replace('{nome}', clip.nome));
 }
 
 // --- uscite (provvisorie, nelle impostazioni) ---
