@@ -371,3 +371,15 @@ body {
   color: var(--marcio);
   text-shadow: 0 0 calc(10 * var(--u)) rgba(159, 194, 58, 0.4);
 }
+
+/* l'onda LED sotto la batteria (onda-led.js): grande, i puntini fanno da sé il fondo */
+.striscia-viva.onda {
+  height: calc(120 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+.striscia-viva.onda .sv-note {
+  border: none;
+}
+.striscia-viva.onda .sv-testina {
+  opacity: 0.35;
+}

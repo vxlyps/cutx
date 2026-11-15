@@ -267,7 +267,7 @@ export class Cue {
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
     const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
     const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
-    return { nome: blocco.nome, provenienza: 'scratch', volume: blocco.info?.volume, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
+    return { nome: blocco.nome, provenienza: 'scratch', volume: blocco.info?.volume, drum: !!blocco.info?.drum, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
   }
 
   // Una scena del beat come clip da mandare: si chiama «beat», porta con sé tutte le scene (per ◀ ▶) e quello da cui parte.
@@ -322,6 +322,7 @@ export class Cue {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
       volume: m.sezioni[carta.i].info?.volume,
+      drum: !!m.sezioni[carta.i].info?.drum, // · drum nella riga della clip: sotto la sua card c'è l'onda
       ...B.codice(m, carta.i, righe),
       bpmBrano: B.bpmDelBrano(m),
       dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },

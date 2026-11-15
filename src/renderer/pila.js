@@ -14,6 +14,7 @@ import { aspetto, epocaDi } from './aspetto.js';
 import { resta } from './dissolvenza.js';
 import { StatoMisura, testoMisura } from './striscia.js';
 import { creaStriscia, disegnaNote, muoviTestina } from './striscia-vista.js';
+import { MemoriaOnda, disegnaLed } from './onda-led.js';
 import { leggiVoce, righeScorrevoli, righeVisibili } from './coda.js';
 
 function el(tag, classe, testo) {
@@ -36,6 +37,9 @@ export class Pila {
     this.fase = 0; // 0 = card intere … 3 = solo intestazione e striscia, 4 = tutto su una riga
     this.firmaAdatta = '';
     this.strisce = new Map(); // id del livello → { ciclo: eventi } (le note vere, dal motore live)
+    this.onde = new Map(); // id del livello batteria → MemoriaOnda (i picchi veri, dal motore live)
+    this.inNote = new Set(); // nomi dei livelli batteria che ho rimesso a note (clic sulla striscia)
+    this.caricoOnde = 0; // dal motore: 0 normale, 1-2 carico → l'onda si ridisegna meno spesso
     this.selezionato = null; // id del livello scelto con un clic sulla card: a lui vanno le code da sole (e, col controller, i colpi)
     this.modifiche = new Map(); // nome del livello → { editor, carta } mentre lo modifico
     // Come su un mixer: ogni livello (per nome) tiene la sua manopola 3–7 finché non è sparito del tutto, anche mentre esce.
@@ -209,6 +213,7 @@ export class Pila {
     art.append(testa, barra, codice, editor, coda, striscia.radice, piede, errore);
     const c = { el: art, livello: l, apriSynth, nome, manopola, conteggio, provenienza, stato, conto, barra, pieno, codice, editorEl: editor, striscia, piede, errore, pienoVolume, muto, coda, codaTesto, righeCoda: [] };
     pulisci.onclick = () => this.azioni.pulisciCoda?.(c.livello.id);
+    striscia.radice.onclick = () => this.cambiaOnda(c); // batteria: onda ↔ note
 
     togli.onclick = () => this.azioni.togli(c.livello.id);
     apriSynth.onclick = () => this.azioni.apriNelSynth?.(c.livello.codice, c.livello.nome);
@@ -505,16 +510,54 @@ export class Pila {
     }
   }
 
+  // I picchi veri dei livelli batteria ({ ciclo, passo, carico, livelli: { id: [0..255] } }).
+  suOnde(m) {
+    this.caricoOnde = m.carico ?? 0;
+    for (const [id, picchi] of Object.entries(m.livelli)) {
+      const n = Number(id);
+      if (!this.carte.has(n)) continue;
+      if (!this.onde.has(n)) this.onde.set(n, new MemoriaOnda());
+      this.onde.get(n).aggiungi(m.ciclo, m.passo, picchi);
+    }
+    for (const n of this.onde.keys()) if (!this.carte.has(n)) this.onde.delete(n);
+  }
+
+  inOnda(c) {
+    return !!c.livello.batteria && !this.inNote.has(c.livello.nome);
+  }
+
+  cambiaOnda(c) {
+    if (!c.livello.batteria) return;
+    if (this.inNote.has(c.livello.nome)) this.inNote.delete(c.livello.nome);
+    else this.inNote.add(c.livello.nome);
+    c.striscia.firma = ''; // le note si ridisegnano da capo
+  }
+
   disegnaStriscia(c, a) {
     const s = c.striscia;
     // un livello in arrivo ha già la sua barra «entra tra»: la striscia aspetta
     s.radice.hidden = a.arriva;
     if (a.arriva) return;
-    const eventi = this.strisce.get(c.livello.id);
     const intero = Math.floor(a.ciclo);
-    const ev = eventi?.[intero] ?? eventi?.[intero - 1] ?? [];
-    disegnaNote(s, ev);
-    muoviTestina(s, a.ciclo - intero);
+    const onda = this.inOnda(c);
+    s.radice.classList.toggle('onda', onda);
+    s.radice.classList.toggle('batteria', !!c.livello.batteria); // si può cliccare: onda ↔ note
+    if (onda) {
+      // la postazione rallenta per prima quando il motore è carico: 30, 15, 8 fotogrammi al secondo
+      const ora = performance.now();
+      if (ora - (c.ultimaOnda ?? 0) >= [33, 66, 125][this.caricoOnde] - 4) {
+        c.ultimaOnda = ora;
+        disegnaLed(s.note, this.onde.get(c.livello.id), a.ciclo, 4);
+      }
+      s.disegno = null;
+      s.firma = '';
+      s.testina.style.transform = `translateX(${((a.ciclo - intero) * 100).toFixed(2)}%)`;
+    } else {
+      const eventi = this.strisce.get(c.livello.id);
+      const ev = eventi?.[intero] ?? eventi?.[intero - 1] ?? [];
+      disegnaNote(s, ev);
+      muoviTestina(s, a.ciclo - intero);
+    }
     // dissolvenza o uscita: al posto del dB c'è quanto manca
     const sfuma = c.livello.sfuma && a.ciclo < c.livello.sfuma.a ? c.livello.sfuma : null;
     const manca = sfuma ? sfuma.a - a.ciclo : c.livello.a !== null ? c.livello.a - a.ciclo : null;

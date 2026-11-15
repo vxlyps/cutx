@@ -218,6 +218,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
+  if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
@@ -4430,6 +4431,78 @@ async function provaProj({ finestre, scrivi }) {
   return ok;
 }
 
+// --- l'onda LED sotto la batteria (5.1): una clip «· drum» live col volume generale a zero (l'orecchio del livello sta prima del master:
+// misura il suono vero, ma dalle casse non esce niente). Card del LIVE: onda e non note, puntini accesi, clic → note e ritorno.
+// Proiettore: onda grande, e l'interruttore «onda sotto la batteria» la spegne.
+async function provaOnda({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  // quanti puntini verdi accesi ci sono nel canvas dell'onda (pixel col verde marcio pieno)
+  const accesi = (dove) => `(() => { const cv = ${dove}; if (!cv || !cv.width) return -1; const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 170 && d[i] > 130 && d[i + 2] < 110) n++; return n; })()`;
+  const carta = (nome) => `[...cutxProva.pila.carte.values()].find((c) => c.livello.nome === '${nome}')`;
+  const brano = '// @brano onde\n// @bpm 120\nsetcpm(120/4)\n// @clip colpi · drum\ns("square*4").decay(.08).sustain(0).gain(.5)\n// @clip basso\nnote("c2 eb2").s("sine").gain(.3)\n';
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+    await aspetta(1.5);
+    await js(`cutxProva.cue.apriModello('onde.cutx', ${JSON.stringify(brano)})`);
+    await aspetta(0.5);
+    for (const k of [0, 1]) {
+      await js(`cutxProva.cue.scegliSezione(${k}); document.getElementById('go-live').click()`);
+      await aspetta(0.6);
+    }
+    await aspetta(3);
+    const l = (await live()).livelli ?? [];
+    controlla('nel live «colpi» (· drum) è batteria, «basso» no', l.find((x) => x.nome === 'colpi')?.batteria === true && l.find((x) => x.nome === 'basso')?.batteria === false, JSON.stringify(l.map((x) => [x.nome, x.batteria])));
+    controlla('col volume generale a zero dalle casse non esce niente', (await live()).master === 0, String((await live()).master));
+    const ids = await js(`[...cutxProva.pila.onde.keys()].map((id) => cutxProva.pila.carte.get(id)?.livello.nome)`);
+    controlla('la postazione riceve i picchi solo della batteria', JSON.stringify(ids) === '["colpi"]', JSON.stringify(ids));
+    controlla('la card di «colpi» ha l\'onda, quella di «basso» le note', (await js(`${carta('colpi')}?.striscia.radice.classList.contains('onda')`)) && !(await js(`${carta('basso')}?.striscia.radice.classList.contains('onda')`)));
+    const n = await js(accesi(`${carta('colpi')}?.striscia.note`));
+    controlla('sotto «colpi» ci sono puntini accesi (il suono vero, anche a master zero)', n > 20, String(n));
+    await js(`${carta('colpi')}.striscia.radice.click()`);
+    await aspetta(0.3);
+    controlla('un clic sulla striscia torna alle note', !(await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`)));
+    await js(`${carta('colpi')}.striscia.radice.click()`);
+    await aspetta(0.3);
+    controlla('un altro clic rimette l\'onda', await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`));
+    await js(`${carta('basso')}.striscia.radice.click()`);
+    await aspetta(0.3);
+    controlla('sulla clip melodica il clic non cambia niente (restano le note)', !(await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)));
+    // il proiettore
+    if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+    await aspetta(3);
+    const u = (c) => chiedi(finestre.uscita, c);
+    controlla('sul proiettore una sola onda (sotto «colpi»)', (await u(`document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`)) === 1);
+    const nu = await u(accesi(`document.querySelector('.striscia-viva.onda canvas')`));
+    controlla('e ha i puntini accesi', nu > 50, String(nu));
+    const alta = await u(`document.querySelector('.striscia-viva.onda')?.offsetHeight ?? 0`);
+    controlla('ed è grande (più alta della striscia delle note)', alta > (await u(`document.querySelector('.striscia-viva:not(.onda)')?.offsetHeight ?? 0`)) * 2, String(alta));
+    // le foto, per guardarle (Scrivania → cutx-schermate → onda)
+    const cartellaFoto = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'onda');
+    await mkdir(cartellaFoto, { recursive: true });
+    await writeFile(path.join(cartellaFoto, 'vera-postazione.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await writeFile(path.join(cartellaFoto, 'vera-proiettore.png'), (await finestre.uscita.webContents.capturePage()).toPNG());
+    const prima = (await js('window.cutx.preferenze()')).testiPubblico ?? {};
+    await js(`window.cutx.salvaPreferenze({ testiPubblico: { ...${JSON.stringify(prima)}, onda: { acceso: false } } })`);
+    await aspetta(1);
+    controlla('«onda sotto la batteria» spenta: sul proiettore tornano le note', (await u(`document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`)) === 0);
+    await js(`window.cutx.salvaPreferenze({ testiPubblico: ${JSON.stringify(prima)} })`);
+    await aspetta(0.5);
+    await js(`cutxProva.imp.disegna()`);
+    controlla('l\'interruttore è nelle impostazioni del proiettore', /onda sotto la batteria/.test(await js(`document.body.textContent`)));
+  } finally {
+    await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+    await js('window.cutx.uscitaAperta().then((a) => a && window.cutx.uscitaOnOff())').catch(() => {});
+    await aspetta(1);
+  }
+  return ok;
+}
+
 // --- il CUE a due linguette: una foto (solo uno screenshot: npx electron . --prova=cue-aspetto) ---
 async function provaCueAspetto({ finestre, scrivi }) {
   const js = (codice) => chiedi(finestre.controllo, codice);
@@ -4703,7 +4776,8 @@ async function provaStriscia({ finestre, scrivi }) {
   controlla('le note vere del ciclo arrivano (8 note, con altezze diverse)', melodia.length === 8 && new Set(melodia.map((e) => e[2])).size >= 5, JSON.stringify(melodia.slice(0, 4)));
   const batt = await eventi('batteria');
   controlla('le batterie sono tacche (classi grave/media/acuta, non note)', batt.length >= 8 && batt.every((e) => e[2] < 0) && new Set(batt.map((e) => e[2])).size === 3, JSON.stringify([...new Set(batt.map((e) => e[2]))]));
-  const alte = await js(`[...document.querySelectorAll('#livelli .card.livello .striscia-viva')].map((s) => Math.round(s.getBoundingClientRect().height))`);
+  // sotto la batteria (beat, clip · drum) c'è l'onda LED, più alta (44 px); le altre strisce restano basse
+  const alte = await js(`[...document.querySelectorAll('#livelli .card.livello .striscia-viva:not(.onda)')].map((s) => Math.round(s.getBoundingClientRect().height))`);
   controlla('la striscia è bassa (26 px)', alte.length >= 7 && alte.every((h) => h >= 24 && h <= 30), JSON.stringify(alte));
   controlla('il misuratore dice i dB del suono vero, su una riga', /^−\d+ dB$/.test(await testoMisura('melodia')), await testoMisura('melodia'));
   controlla('un livello senza suono (gain bassissimo): SILENZIO', (await testoMisura('muto')) === 'SILENZIO' && (await testoMisura('batteria')) === 'SILENZIO', JSON.stringify([await testoMisura('muto'), await testoMisura('batteria')]));
@@ -4726,7 +4800,7 @@ async function provaStriscia({ finestre, scrivi }) {
   await aspetta(2);
   const p1 = await proiettore();
   controlla('proiettore: accendendo il misuratore compare, con i dB', p1.misuratori >= 5 && /dB|SILENZIO|TROPPO|MUTO/.test(p1.testo ?? ''), JSON.stringify(p1));
-  await js(`window.cutx.salvaPreferenze({ testiPubblico: { striscia: { acceso: false } } })`);
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { striscia: { acceso: false }, onda: { acceso: false } } })`); // l'onda sotto la batteria ha il suo interruttore
   await aspetta(1);
   controlla('proiettore: spenta nei testi per il pubblico, sparisce', (await proiettore()).strisce === 0);
   await js(`window.cutx.salvaPreferenze({ testiPubblico: {} })`);
@@ -5345,7 +5419,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1);
   controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
   const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
-  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 19, String(righeTesti));
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 20, String(righeTesti));
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');

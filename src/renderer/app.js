@@ -262,7 +262,7 @@ async function goLive(pezzo = null) {
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
-  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
   if (!r.errore) entraTraUsato();
@@ -1605,6 +1605,7 @@ for (const m of [live, cuffia]) {
     }
     else if (msg.tipo === 'globali') mostraGlobali(msg.righe);
     else if (msg.tipo === 'strisce') pila.suStrisce(msg);
+    else if (msg.tipo === 'onde') pila.suOnde(msg);
     else if (msg.tipo === 'misure') pila.suMisure(msg, performance.now(), mappa?.cps ? 1000 / mappa.cps : 2000);
     else if (msg.tipo === 'suoni-mancanti' && !inTest) {
       // un campione che non c'è nello stash non suona: lo si dice, non resta silenzio

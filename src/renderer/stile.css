@@ -3567,3 +3567,19 @@ input[type='checkbox'] {
 .proj-nuovo .proj-numero {
   color: var(--grigio);
 }
+
+/* l'onda LED sotto la batteria (onda-led.js): più alta della striscia delle note; un clic torna alle note e viceversa */
+.striscia-viva.onda {
+  height: 44px;
+}
+.striscia-viva.onda .sv-note {
+  background: #0a0d06;
+  border-color: #1f2614;
+}
+.card.livello .striscia-viva {
+  cursor: default;
+}
+.striscia-viva.onda,
+.striscia-viva.batteria {
+  cursor: pointer;
+}
