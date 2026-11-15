@@ -1,5 +1,18 @@
 # Novità di CUTX
 
+## 0.5.1-beta.2 «CUTX_05_1_2» (15/11/2026)
+
+L'X-Touch Mini diventa uno **strumento** nel SYNTH, più l'interruttore **CASSE**. Come provarlo: `docs/NOVITA-5.1.2.md`.
+
+### X-Touch come strumento (layer A / B)
+- **Layer A = batteria**: lo schermo passa alla scheda DRUM e i 16 tasti sono il **sequencer** (un tocco = passo acceso/spento, la luce corre sui passi; manopola 1 = riga, 2 = suono; passo tenuto + manopola 1 = velocity; spinta della manopola 3 = pagina 17–32). Premuto di nuovo: **pad** (ogni tasto suona la sua riga in cuffia).
+- **Layer B = synth**: lo schermo passa all'ultima scheda suono/note e i tasti sono il **piano** (bianchi in basso, neri in alto; manopola 1 = ottava; le manopole 2–7 restano i parametri). Premuto di nuovo: **parametri** (tasti in alto = gruppi, come prima).
+- Nel DRUM e nel piano niente paracadute dal controller (resta nel LIVE). Fader e volume generale restano sempre del LIVE.
+- La riga cliccata col mouse nella griglia è anche quella del controller; luci aggiornate subito e ogni 50 ms mentre suona il sequencer.
+
+### CASSE
+- Nuovo interruttore nella barra del SYNTH: il suono del SYNTH (▶, tasti del Mac, piano e pad) esce dall'uscita del live invece che in cuffia. Si somma al live. Parte spento e si spegne da solo uscendo dal SYNTH. Cambia solo il motore cuffia, il live non si tocca.
+
 ## 0.5.1-beta.1 «CUTX_05_1_1» (15/11/2026)
 
 Una cosa sola, ma grossa: la **CIMICE**, una creatura di linee che cammina sul codice **sul proiettore** (mai nella schermata dove lavori). Dettagli in `docs/CIMICE.md`; la prova guidata in `docs/NOVITA-5.1.1.md`.
