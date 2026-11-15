@@ -24,13 +24,14 @@ const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton,neon,tempo,solidita,uscita' : null);
 const SCHERMATE = process.argv.find((a) => a.startsWith('--schermate='))?.slice('--schermate='.length); // giro di tutti i pannelli a più dimensioni
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
+const FOTO_PROJ = process.argv.find((a) => a.startsWith('--foto-proj='))?.slice('--foto-proj='.length); // foto della schermata dei PROJ
 const SALTINO = process.argv.includes('--saltino'); // misura del saltino al salvataggio
 const SFONDO = process.argv.find((a) => a.startsWith('--sfondo='))?.slice('--sfondo='.length); // foto dello sfondo del proiettore
 const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('--chiusura='.length); // prova: si apre e si chiude in un certo modo
 
 // OGNI flag di prova, foto o misura gira con dati a parte (CUTX-prova, CUTX-chiusura), accanto a una CUTX eventualmente aperta e senza
 // toccarne le preferenze vere. Un flag nuovo si aggiunge QUI: se la cartella dati non è quella separata l'app non parte (guardia sotto).
-const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
+const PER_PROVE = !!(PROVA || FOTO || FOTO_PROJ || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
 // Prova «senza rete» (scripts/prova-suoni-strudel.mjs --senza-rete): l'app di prova non risolve nessun indirizzo (solo localhost), il resto del Mac resta in rete.
 if (PER_PROVE && process.env.CUTX_PROVA_SENZA_RETE === '1') app.commandLine.appendSwitch('host-resolver-rules', 'MAP * ~NOTFOUND, EXCLUDE localhost');
 if (PER_PROVE) {
@@ -426,13 +427,32 @@ ipcMain.handle('suoni:durata', async (_e, rel) => {
     return null;
   }
 });
-ipcMain.handle('libreria:elenco', () => stash.elencoLibreria());
+ipcMain.handle('libreria:elenco', (_e, numero) => stash.elencoLibreria(numero));
+// I PROJ. All'avvio: se uno è già aperto (l'interfaccia è ripartita) resta quello; se le impostazioni lo chiedono (o è una prova)
+// si riapre l'ultimo; altrimenti l'interfaccia mostra la schermata dei PROJ.
+ipcMain.handle('proj:avvio', async () => {
+  const stato = await stash.stato();
+  if (!stato.config) return { schermata: false, proj: null }; // niente stash: prima si sceglie quello
+  if (stato.proj.aperto) return { schermata: false, proj: stato.proj };
+  if (PER_PROVE && !process.argv.includes('--schermata-proj')) {
+    const elenco = await stash.elencoProj();
+    if (!elenco.length) return { schermata: false, proj: await stash.nuovoProj('prova') };
+    return { schermata: false, proj: await stash.apriProj(stato.proj.ultimo ?? elenco.at(-1).numero) };
+  }
+  if (preferenze.leggi().riapriUltimoProj && stato.proj.ultimo) return { schermata: false, proj: await stash.apriProj(stato.proj.ultimo) };
+  return { schermata: true, proj: stato.proj };
+});
+ipcMain.handle('proj:elenco', () => stash.elencoProj());
+ipcMain.handle('proj:apri', (_e, numero) => stash.apriProj(numero));
+ipcMain.handle('proj:nuovo', (_e, sottotitolo) => stash.nuovoProj(sottotitolo));
+ipcMain.handle('proj:rinomina', (_e, numero, sottotitolo) => stash.rinominaProj(numero, sottotitolo));
+ipcMain.handle('proj:copia-brano', (_e, da, file) => stash.copiaBranoDa(da, file));
 ipcMain.handle('colpi:leggi', () => stash.leggiColpi());
 ipcMain.handle('set:leggi', () => stash.leggiSet());
 ipcMain.handle('set:scrivi', (_e, testo) => stash.scriviSet(testo));
 ipcMain.handle('kit:leggi', () => stash.leggiKit());
 ipcMain.handle('kit:scrivi', (_e, testo) => stash.scriviKit(testo));
-ipcMain.handle('libreria:leggi', (_e, nome) => stash.leggiBrano(nome));
+ipcMain.handle('libreria:leggi', (_e, nome, numero) => stash.leggiBrano(nome, numero));
 ipcMain.handle('libreria:scrivi', (_e, nome, testo, opzioni) => stash.scriviBrano(nome, testo, opzioni));
 ipcMain.handle('preferenze:leggi', () => preferenze.leggi());
 // Gli eventi delle finestre per la MOVIOLA arrivano a pacchetti, senza risposta; la cartella delle prove si apre dalle impostazioni.
@@ -706,6 +726,13 @@ app.whenReady().then(async () => {
   if (preferenze.leggi().uscitaApriAvvio === true) creaUscita();
   // le prove stanno a parte e non entrano nel pacchetto: si caricano solo se le chiedi
   if (PROVA) import('./prova.js').then((m) => m.prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') })).then((ok) => app.exit(ok ? 0 : 1));
+  if (FOTO_PROJ)
+    import('./prova.js')
+      .then(async (m) => {
+        await new Promise((r) => setTimeout(r, 4000));
+        await m.fotoProj(finestre, FOTO_PROJ);
+      })
+      .then(() => app.exit(0));
   if (FOTO) import('./prova.js').then((m) => m.foto({ finestre, file: FOTO })).then(() => app.exit(0));
   if (SALTINO) import('./prova.js').then((m) => m.saltino({ finestre })).then(() => app.exit(0));
   if (SFONDO) import('./prova.js').then((m) => m.sfondo({ finestre, cartella: path.resolve(SFONDO) })).then((ok) => app.exit(ok ? 0 : 1));

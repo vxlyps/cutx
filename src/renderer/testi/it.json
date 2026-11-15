@@ -3,7 +3,11 @@
   "aiuto": {
     "stash": {
       "nome": "stash",
-      "testo": "La cartella del set: suoni, libreria dei brani, video. Di solito sta sull'SSD."
+      "testo": "La cartella di tutto: suoni, video e i PROJ. Di solito sta sull'SSD."
+    },
+    "proj": {
+      "nome": "PROJ",
+      "testo": "Il progetto aperto: i suoi brani, il suo set e il suo kit. I suoni sono di tutti. Clic per cambiarlo o farne uno nuovo."
     },
     "cuffia-pausa": {
       "nome": "pausa cuffia",
@@ -692,5 +696,24 @@
     "entraTra": "entra tra {n} cicli",
     "senzaBeat": "«{nome}» va live senza il BEAT · per la base: go live sulla card BEAT",
     "vuota": "«{nome}» è vuota: niente da mandare live"
+  },
+  "proj": {
+    "titolo": "PROJ",
+    "nessuno": "PROJ –",
+    "aperto": "aperto",
+    "ultimo": "ultimo",
+    "apri": "apri",
+    "torna": "torna",
+    "apriComunque": "apri comunque",
+    "nuovo": "+ nuovo PROJ",
+    "chiudi": "esc",
+    "brano": "brano",
+    "brani": "brani",
+    "sottotitoloVuoto": "scrivi cos'è",
+    "sottotitoloNuovo": "cos'è (si cambia dopo)",
+    "kitDa": "kit da",
+    "kitVuoto": "kit vuoto",
+    "liveSuona": "il live suona: cambiare PROJ non lo ferma",
+    "confermaLive": "il live suona e continua: cambiano libreria, set e kit · premi di nuovo per confermare"
   }
 }

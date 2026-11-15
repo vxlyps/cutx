@@ -21,6 +21,9 @@
       <button id="stash" data-aiuto="stash" class="key">
         <span class="lbl">stash</span><span id="stash-nome">nessuno</span><i id="stash-dove"></i>
       </button>
+      <button id="proj" data-aiuto="proj" class="key">
+        <span id="proj-nome">PROJ –</span>
+      </button>
       <div class="vista-scelta" role="tablist" aria-label="Vista">
         <button id="vista-live" data-aiuto="vista-live" class="key on" role="tab">LIVE</button>
         <button id="vista-synth-btn" data-aiuto="vista-synth" class="key" role="tab">SYNTH</button>
@@ -213,6 +216,25 @@
         <button id="importa-avanti" class="key acid grande">avanti →</button>
         <button id="importa-vai" class="key acid grande">importa</button>
       </footer>
+    </div>
+
+    <!-- La schermata dei PROJ (proj-vista.js): all'avvio e dal tasto PROJ della barra. -->
+    <div id="proj-schermata" class="proj-schermata" hidden>
+      <header class="proj-alto">
+        <img id="proj-wordmark" class="proj-wordmark" alt="CUTX" />
+        <div class="spazio"></div>
+        <button id="proj-chiudi" class="key" hidden></button>
+      </header>
+      <div class="proj-corpo">
+        <div class="proj-lato">
+          <img id="proj-gatto" class="proj-gatto" alt="" />
+          <h1 id="proj-titolo" class="proj-titolo"></h1>
+        </div>
+        <div class="proj-destra">
+          <div id="proj-avviso" class="proj-avviso"></div>
+          <div id="proj-griglia" class="proj-griglia"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Le impostazioni: come design/riferimenti/impostazioni.html. Le righe di scorciatoie, proiezione e help si disegnano da impostazioni.js. -->

@@ -6,6 +6,7 @@ import { Cue } from './cue.js';
 import { VistaSynth } from './synth-vista.js';
 import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
 import it from './testi/it.json';
+import { SchermataProj, etichettaProj } from './proj-vista.js';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
@@ -858,6 +859,7 @@ window.addEventListener(
     for (const a of AZIONI) {
       const r = corrisponde(e, a, mappa[a.id]);
       if (!r) continue;
+      if (schermataProj.visibile && !SEMPRE_DEL_LIVE.has(a.id)) continue; // sulla schermata dei PROJ restano solo i tasti che proteggono il live
       if (scrivendo && (a.soloFuori || scriveTesto(mappa[a.id]))) continue;
       e.preventDefault();
       e.stopPropagation();
@@ -936,10 +938,51 @@ async function apriStash(stato) {
     ? nomi.map((n) => `${n} (${suoni[n].length})`).join(' · ')
     : 'nessun suono: metti dei WAV in suoni/<nome>/';
   $('offset-cuffia').value = config.offsetCuffiaMs ?? 0;
+  // il PROJ: riaperto da solo (impostazione, o l'interfaccia è ripartita) oppure si sceglie dalla schermata
+  const avvio = haStash ? await window.cutx.proj.avvio() : { schermata: false, proj: null };
+  mostraProj(avvio.proj);
   await aggiornaLibreria();
   await caricaSerata(stato);
   await aggiornaElenchi();
+  if (avvio.schermata && !schermataProj.visibile) await schermataProj.mostra({ ultimo: avvio.proj?.ultimo });
+  else if (!haStash) schermataProj.chiudi();
 }
+
+// --- i PROJ ---
+
+let projAperto = null; // { numero, sottotitolo, … } o null
+let projUltimo = null;
+const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto']);
+function mostraProj(info) {
+  projAperto = info?.aperto ?? null;
+  projUltimo = info?.ultimo ?? null;
+  $('proj-nome').textContent = etichettaProj(projAperto);
+  $('proj').disabled = !haStash;
+}
+// Un altro PROJ: libreria, set e kit nuovi. A live fermo il CUE si svuota; col live che suona (confermato) il CUE resta com'è.
+async function cambiatoProj(info) {
+  mostraProj(info);
+  if (!pila.livelli.length && !cue.slot.attivo?.sporco && !cue.slot.prossimo?.sporco) {
+    cue.slot = { attivo: null, prossimo: null };
+    cue.mostraLinguette();
+    cue.mostraBrano?.(true);
+  }
+  await aggiornaLibreria();
+  await caricaSerata({ percorso: percorsoStash });
+  window.cutx.logEvento('info', 'proj', `aperto ${etichettaProj(projAperto)}`);
+}
+const schermataProj = new SchermataProj({
+  elenco: () => window.cutx.proj.elenco(),
+  apri: async (n) => cambiatoProj(await window.cutx.proj.apri(n)),
+  nuovo: async (sottotitolo) => {
+    const info = await window.cutx.proj.nuovo(sottotitolo);
+    await cambiatoProj(info);
+    return info;
+  },
+  rinomina: async (n, sottotitolo) => mostraProj(await window.cutx.proj.rinomina(n, sottotitolo)),
+  liveSuona: () => pila.livelli.length > 0,
+});
+$('proj').onclick = () => haStash && schermataProj.mostra({ aperto: projAperto?.numero ?? null, ultimo: projUltimo });
 
 // --- impostazioni e help ---
 
@@ -1105,8 +1148,9 @@ async function caricaProssimoDopo(file) {
 async function caricaSerata(stato) {
   await serata.carica();
   mostraBrowser();
-  if (!stato?.percorso || setAvviato === stato.percorso || cue.slot.attivo || cue.slot.prossimo) return;
-  setAvviato = stato.percorso;
+  const chiave = `${stato?.percorso}|${projAperto?.numero}`; // il brano che apre il set: una volta per stash e PROJ
+  if (!stato?.percorso || !projAperto || setAvviato === chiave || cue.slot.attivo || cue.slot.prossimo) return;
+  setAvviato = chiave;
   const primo = serata.primo();
   if (primo && libreria.some((b) => b.file === primo)) await cue.apri(primo, 'prossimo', { fuoco: false });
 }
@@ -1663,6 +1707,7 @@ globalThis.cutxProva = {
   accendiInsegna: () => insegna.sfarfalla(),
   spegniLettera: () => insegna.spegniLettera(),
   fermaInsegna: () => insegna.ferma(),
+  schermataProj,
   libreria: () => libreria,
   provaInCuffia,
   suoniStash: () => suoni,

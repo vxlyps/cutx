@@ -7,13 +7,15 @@ import * as preferenze from './preferenze.js';
 import * as brano from '../renderer/brano.js';
 import { COLPI_PREDEFINITI } from '../renderer/colpi.js';
 import * as log from './log.js';
+import * as proj from './proj.js';
 import { leggiJson, mettiDaParte, scriviSicuro } from './scrivi-sicuro.js';
 
 export const FORMATO = 1;
-const CARTELLE = ['suoni', 'libreria', 'video', 'estensioni'];
+const CARTELLE = ['suoni', 'video', 'estensioni']; // libreria, set e kit stanno nei PROJ (proj.js)
 const AUDIO = new Set(['wav', 'mp3', 'ogg', 'flac']);
 
 let percorso = null;
+let projAperto = null; // il numero del PROJ aperto (null: nessuno, si sceglie dalla schermata dei PROJ)
 
 const fileImpostazioni = () => path.join(app.getPath('userData'), 'impostazioni.json');
 const fileConfig = () => path.join(attivo() ?? percorso, 'stash.json');
@@ -40,6 +42,7 @@ export function carica() {
   try {
     const impostazioni = JSON.parse(readFileSync(fileImpostazioni(), 'utf8'));
     percorso = impostazioni.stash ?? impostazioni.valigetta ?? null;
+    projAperto = null;
   } catch {
     percorso = null;
   }
@@ -47,6 +50,7 @@ export function carica() {
 
 export async function imposta(nuovo) {
   percorso = nuovo;
+  projAperto = null;
   await prepara();
   await scriviSicuro(fileImpostazioni(), JSON.stringify({ stash: nuovo }, null, 2));
 }
@@ -59,6 +63,14 @@ async function prepara() {
   for (const c of CARTELLE) await mkdir(path.join(base, c), { recursive: true });
   if (!existsSync(fileConfig())) {
     await scriviConfig({ nome: path.basename(percorso), formato: FORMATO, uscite: {}, offsetCuffiaMs: 0 });
+  }
+  // la libreria, il set e il kit di prima diventano PROJ 01 (copiati: i file vecchi restano dove sono). Solo sullo stash vero, non sulla copia.
+  if (base === percorso) {
+    try {
+      if ((await proj.migra(base)).fatto) log.scrivi('info', 'stash', 'libreria, set e kit copiati in PROJ 01 (i file di prima sono rimasti dove erano)');
+    } catch (e) {
+      log.scrivi('errore', 'stash', `non riesco a creare PROJ 01: ${e.message}`);
+    }
   }
 }
 
@@ -87,7 +99,48 @@ export async function stato() {
   if (!percorso) return { percorso: null };
   if (!radice()) return { percorso, mancante: true, copia: copiaPronta() };
   await prepara();
-  return { percorso, copiaAttiva: inCopia(), config: await leggiConfig(), suoni: await mappaSuoni() };
+  return { percorso, copiaAttiva: inCopia(), config: await leggiConfig(), suoni: await mappaSuoni(), proj: await infoProj() };
+}
+
+// --- i PROJ ---
+
+// La cartella del PROJ aperto (libreria, set, kit), o null.
+export const cartellaProj = (numero = projAperto) => (attivo() && numero ? proj.cartella(attivo(), numero) : null);
+export const elencoProj = async () => (attivo() ? proj.elenca(attivo()) : []);
+
+// Il PROJ aperto e l'ultimo aperto (da stash.json), per la barra e la schermata.
+async function infoProj() {
+  const elenco = await elencoProj();
+  const ultimo = (await leggiConfig()).proj?.ultimo ?? null;
+  return { aperto: elenco.find((p) => p.numero === projAperto) ?? null, ultimo: elenco.some((p) => p.numero === ultimo) ? ultimo : null };
+}
+
+export async function apriProj(numero) {
+  if (!cartellaProj(numero)) throw new Error('PROJ non trovato');
+  projAperto = numero;
+  const config = await leggiConfig();
+  await salvaConfig({ proj: { ...config.proj, ultimo: numero } });
+  return infoProj();
+}
+
+// Nuovo PROJ: vuoto, col kit dell'ultimo aperto. Si apre subito.
+export async function nuovoProj(sottotitolo = '') {
+  if (!radice()) throw new Error('nessuno stash');
+  const kitDa = projAperto ?? (await infoProj()).ultimo;
+  const nuovo = await proj.crea(attivo(), { sottotitolo, kitDa });
+  return apriProj(nuovo.numero);
+}
+
+export async function rinominaProj(numero, sottotitolo) {
+  if (!radice()) throw new Error('nessuno stash');
+  await proj.rinomina(attivo(), numero, sottotitolo);
+  return infoProj();
+}
+
+// Un brano di un altro PROJ copiato in quello aperto (con la riga «// viene da PROJ 01 · nome»).
+export async function copiaBranoDa(da, file) {
+  if (!radice() || !projAperto) throw new Error('nessun PROJ aperto');
+  return proj.copiaBrano(attivo(), da, projAperto, file);
 }
 
 // Ogni sottocartella di suoni/ diventa un suono Strudel (come @strudel/sampler).
@@ -120,15 +173,16 @@ const nomeSuono = (s) => s.toLowerCase().trim().replace(/\s+/g, '_');
 
 const ESTENSIONE = '.cutx';
 
-function fileBrano(nome) {
-  const radiceLibreria = path.join(attivo(), 'libreria');
+function fileBrano(nome, numero = projAperto) {
+  const radiceLibreria = path.join(cartellaProj(numero) ?? '/nessun-proj', 'libreria');
   const file = path.resolve(radiceLibreria, path.basename(nome));
   return file.startsWith(radiceLibreria + path.sep) && file.endsWith(ESTENSIONE) ? file : null;
 }
 
-export async function elencoLibreria() {
-  if (!radice()) return [];
-  const cartella = path.join(attivo(), 'libreria');
+// I brani del PROJ aperto, o di un altro PROJ (per «altri PROJ»).
+export async function elencoLibreria(numero = projAperto) {
+  if (!cartellaProj(numero)) return [];
+  const cartella = path.join(cartellaProj(numero), 'libreria');
   let nomi;
   try {
     nomi = (await readdir(cartella)).filter((n) => n.endsWith(ESTENSIONE) && !n.startsWith('.'));
@@ -164,12 +218,12 @@ export async function leggiColpi() {
   }
 }
 
-// set.cutx (la serata: i brani in ordine) e kit.cutx (le clip sempre disponibili), nella radice dello stash. Li scrive Valerio a mano
+// set.cutx (la serata: i brani in ordine) e kit.cutx (le clip sempre disponibili), nella cartella del PROJ aperto. Li scrive Valerio a mano
 // o dall'interfaccia: se non ci sono, ritornano null e non si creano da soli.
 async function leggiFileStash(nome) {
-  if (!radice()) return null;
+  if (!cartellaProj()) return null;
   try {
-    return await readFile(path.join(attivo(), nome), 'utf8');
+    return await readFile(path.join(cartellaProj(), nome), 'utf8');
   } catch {
     return null;
   }
@@ -179,23 +233,23 @@ export const leggiSet = () => leggiFileStash('set.cutx');
 export const leggiKit = () => leggiFileStash('kit.cutx');
 
 async function scriviFileStash(nome, testo) {
-  if (!radice()) throw new Error('nessuno stash');
-  await scriviSicuro(path.join(attivo(), nome), String(testo));
+  if (!cartellaProj()) throw new Error('nessun PROJ aperto');
+  await scriviSicuro(path.join(cartellaProj(), nome), String(testo));
   return true;
 }
 
 export const scriviSet = (testo) => scriviFileStash('set.cutx', testo);
 export const scriviKit = (testo) => scriviFileStash('kit.cutx', testo);
 
-export async function leggiBrano(nome) {
-  const file = radice() && fileBrano(nome);
+export async function leggiBrano(nome, numero = projAperto) {
+  const file = radice() && fileBrano(nome, numero);
   if (!file) throw new Error('brano fuori dalla libreria');
   return readFile(file, 'utf8');
 }
 
 // Scrive un brano. Senza sovrascrivi, un file che esiste già non si tocca.
 export async function scriviBrano(nome, testo, { sovrascrivi = false } = {}) {
-  if (!radice()) throw new Error('nessuno stash');
+  if (!cartellaProj()) throw new Error('nessun PROJ aperto');
   const file = fileBrano(nome);
   if (!file) throw new Error('nome non valido');
   if (!sovrascrivi && existsSync(file)) return { esiste: true, file: path.basename(file) };
@@ -208,6 +262,7 @@ export async function scriviBrano(nome, testo, { sovrascrivi = false } = {}) {
 export function _percorsoPerProva(nuovo) {
   const vecchio = percorso;
   percorso = nuovo;
+  projAperto = null; // all'avvio successivo (proj:avvio) si riapre l'ultimo PROJ di quello stash
   return vecchio;
 }
 

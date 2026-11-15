@@ -258,6 +258,27 @@ note("c2 [eb2 g2] c3 <bb1 f2>").s("sawtooth").lpf(800).gain(.0001)`;
 const FOTO_CUE = `n("0 3 7 <10 12>").scale("C:minor")
   .s("triangle").room(.6).delay(.4).gain(.0001)`;
 
+// La schermata dei PROJ con un elenco finto (lo stash di prova non si tocca): all'avvio, e col live che suona e una scheda armata.
+export async function fotoProj(finestre, fotoFile) {
+  const giorno = 86400000;
+  const finti = [
+    { numero: 1, sottotitolo: 'prima serata al circolo', modificato: Date.now() - 40 * giorno, brani: 6 },
+    { numero: 2, sottotitolo: 'jungle tech sexy', modificato: Date.now() - 9 * giorno, brani: 11 },
+    { numero: 3, sottotitolo: 'compleanno di Tizia', modificato: Date.now() - 2 * giorno, brani: 4 },
+    { numero: 4, sottotitolo: '', modificato: Date.now() - 3600000, brani: 0 },
+  ];
+  const js = (c) => chiedi(finestre.controllo, c);
+  await js(`(() => { const s = cutxProva.schermataProj; s._elenco = s.azioni.elenco; s.azioni.elenco = async () => ${JSON.stringify(finti)}; return s.mostra({ ultimo: 3 }); })()`);
+  await aspetta(0.8);
+  await writeFile(fotoFile.replace(/\.png$/, '-proj.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  console.log(`[foto] ${fotoFile.replace(/\.png$/, '-proj.png')}`);
+  await js(`(() => { const s = cutxProva.schermataProj; s.radice.hidden = true; s._live = s.azioni.liveSuona; s.azioni.liveSuona = () => true; return s.mostra({ aperto: 3, ultimo: 3 }).then(() => { s.armato = 2; s.disegna(); }); })()`);
+  await aspetta(0.8);
+  await writeFile(fotoFile.replace(/\.png$/, '-proj-live.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  console.log(`[foto] ${fotoFile.replace(/\.png$/, '-proj-live.png')}`);
+  await js(`(() => { const s = cutxProva.schermataProj; s.azioni.elenco = s._elenco; s.azioni.liveSuona = s._live; s.radice.hidden = true; document.body.classList.remove('con-proj'); })()`);
+}
+
 export async function foto({ finestre, file: fotoFile }) {
   const pronta = () => chiedi(finestre.controllo, '!!globalThis.cutxProva && !!document.querySelector(".cm-editor")');
   await aspettaChe(async () => (await chiedi(finestre.live, 'globalThis.cutxStato?.()')) && (await pronta()));
@@ -280,6 +301,7 @@ export async function foto({ finestre, file: fotoFile }) {
   await aspetta(0.5);
   await writeFile(fotoFile.replace(/\.png$/, '-help.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
   console.log(`[foto] ${fotoFile.replace(/\.png$/, '-help.png')}`);
+  await fotoProj(finestre, fotoFile);
   // I progetti Ableton di Valerio (solo letti), se ci sono
   const progettiVeri = path.join(os.homedir(), 'Desktop', 'x1 Project');
   if (existsSync(progettiVeri)) {
@@ -301,7 +323,7 @@ export async function foto({ finestre, file: fotoFile }) {
   }
   await chiedi(finestre.controllo, `cutxProva.browser.vai('suoni')`);
   // Un brano aperto: intro live, melodia in cuffia, drop selezionata a metà.
-  const cartella = path.join(stash.radice(), 'libreria');
+  const cartella = path.join(stash.cartellaProj(), 'libreria');
   const file = 'foto_notte.cutx';
   await writeFile(path.join(cartella, file), NOTTE);
   const js = (codice) => chiedi(finestre.controllo, codice);
@@ -388,7 +410,7 @@ async function provaBrani({ finestre, scrivi }) {
     await aspetta(1);
     return fatto;
   };
-  const cartella = path.join(stash.radice(), 'libreria');
+  const cartella = path.join(stash.cartellaProj(), 'libreria');
   const leggi = (file) => readFile(path.join(cartella, file), 'utf8');
   const oggi = new Date().toLocaleDateString('sv-SE');
   const sigla = Date.now().toString(36);
@@ -755,7 +777,7 @@ async function provaLivelli({ finestre, scrivi }) {
   const sigla = Date.now().toString(36);
   wc().executeJavaScript('cutxProva.salvaLiveComeBrano()');
   await rispondi(`live prova ${sigla}`);
-  const file = path.join(stash.radice(), 'libreria', `live_prova_${sigla}.cutx`);
+  const file = path.join(stash.cartellaProj(), 'libreria', `live_prova_${sigla}.cutx`);
   const salvato = await readFile(file, 'utf8').catch(() => '');
   const b = await import('../renderer/brano.js');
   const sezioni = b.leggi(salvato).sezioni;
@@ -793,7 +815,7 @@ async function provaBrowser({ finestre, scrivi }) {
   await mkdir(cartellaSuoni, { recursive: true });
   await writeFile(path.join(cartellaSuoni, 'a.wav'), wavSilenzio(3));
   await writeFile(path.join(cartellaSuoni, 'b.wav'), 'RIFF');
-  await writeFile(path.join(stash.radice(), 'libreria', file), '// @brano browser\n// @bpm 100\n// @sezione uno\ns("sine")\n');
+  await writeFile(path.join(stash.cartellaProj(), 'libreria', file), '// @brano browser\n// @bpm 100\n// @sezione uno\ns("sine")\n');
   try {
     await js('cutxProva.ricaricaStash()');
     await js('cutxProva.fermaTutto?.(); cutxProva.cue.cambiaModo("libero"); cutxProva.scriviCue("")');
@@ -894,7 +916,7 @@ async function provaBrowser({ finestre, scrivi }) {
     await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
   } finally {
     await rm(cartellaSuoni, { recursive: true, force: true });
-    await rm(path.join(stash.radice(), 'libreria', file), { force: true });
+    await rm(path.join(stash.cartellaProj(), 'libreria', file), { force: true });
     await js('cutxProva.ricaricaStash()');
   }
   return ok;
@@ -1264,7 +1286,7 @@ async function provaAbleton({ finestre, scrivi }) {
     controlla('e si richiude', (await conta('#importa-sezioni .sezione-codice')) === 0);
     await js(`cutxProva.importa.vai(3)`);
     // importa: il brano nella libreria, i suoni nello stash, aperto nel CUE in modalità brano
-    const fileBrano = path.join(stash.radice(), 'libreria', 'tre_notti.cutx');
+    const fileBrano = path.join(stash.cartellaProj(), 'libreria', 'tre_notti.cutx');
     const cartellaSuono = path.join(stash.radice(), 'suoni', 'tre_loop');
     await rm(fileBrano, { force: true });
     await js(`document.getElementById('importa-vai').click()`);
@@ -1334,7 +1356,7 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
     for (const [nome, sigla] of [['x1', 'x1'], ['Mayia u influeced me a bit maybe?', 'mayia']]) {
       const percorso = path.join(cartellaProgetti, `${nome}.als`);
       const titolo = `prova${sigla}`; // una sola parola: i nomi dei suoni cominciano così e non si confondono con quelli di Valerio
-      const fileBrano = path.join(radiceStash, 'libreria', `prova${sigla}.cutx`);
+      const fileBrano = path.join(stash.cartellaProj(), 'libreria', `prova${sigla}.cutx`);
       if (existsSync(fileBrano)) throw new Error(`${fileBrano} esiste già: non lo tocco`);
       const modello = await leggiAlsFile(percorso);
       // quello che il pannello sa dei file: quanto pesano e se si possono ritagliare
@@ -1516,7 +1538,7 @@ export async function schermate({ finestre, cartella }) {
     await scatta('browser-help');
     await scheda('suoni');
     // il CUE in modalità brano
-    const cartellaLibreria = path.join(stash.radice(), 'libreria');
+    const cartellaLibreria = path.join(stash.cartellaProj(), 'libreria');
     await writeFile(path.join(cartellaLibreria, 'schermate_notte.cutx'), NOTTE);
     await js(`cutxProva.cue.apri('schermate_notte.cutx')`);
     await aspetta(1);
@@ -1691,8 +1713,8 @@ async function provaTempo({ finestre, scrivi }) {
     await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(${bpm}/4)\\ns("sine*2").gain(.0001)')`);
     await aspetta(0.8);
   };
-  const file = path.join(stash.radice(), 'libreria', 'prova_tempo.cutx');
-  const filesLibro = path.join(stash.radice(), 'libreria', 'prova_tempo_salvato.cutx');
+  const file = path.join(stash.cartellaProj(), 'libreria', 'prova_tempo.cutx');
+  const filesLibro = path.join(stash.cartellaProj(), 'libreria', 'prova_tempo_salvato.cutx');
   await writeFile(file, '// @brano prova tempo\n// @bpm 86\nsetcpm(86/4)\n// @sezione drum\ns("sine*2").gain(.0001)\n// @sezione loop\ns("sine").begin(.1).end(.5).gain(.0001)\n');
   try {
     await js('cutxProva.cue.brano = null; cutxProva.cue.cambiaModo("libero"); cutxProva.fermaTutto()');
@@ -2156,7 +2178,7 @@ export async function saltino({ finestre }) {
   console.log(`[saltino] ${tipi.length === 0 ? 'OK   ' : 'FALLITO'} ⌘S non manda niente ai motori (a parte i ping)${tipi.length ? ` · ${tipi.join(', ')}` : ''}`);
   await fase('controllo: i motori rileggono lo stash', () => dieci(() => js('window.cutx.rileggiStash()')));
   // una libreria grande: 300 brani (file finti, tolti alla fine)
-  const libreria = path.join(stash.radice(), 'libreria');
+  const libreria = path.join(stash.cartellaProj(), 'libreria');
   const finti = Array.from({ length: 300 }, (_, i) => path.join(libreria, `saltino_zz_${i}.cutx`));
   for (const f of finti) await writeFile(f, '// @brano finto\n// @bpm 120\n// @sezione uno\ns("sine*2")\n// @sezione due\ns("hh*8")\n');
   await js('window.cutx.rileggiStash()');
@@ -2174,7 +2196,7 @@ export async function saltino({ finestre }) {
   await rm(cartellaSuono, { recursive: true, force: true });
   await js('window.cutx.rileggiStash()');
   console.log(`[saltino] JSON ${JSON.stringify(rapporto)}`);
-  await rm(path.join(stash.radice(), 'libreria', 'saltino_prova.cutx'), { force: true });
+  await rm(path.join(stash.cartellaProj(), 'libreria', 'saltino_prova.cutx'), { force: true });
   return true;
 }
 
@@ -2700,8 +2722,7 @@ async function provaClipVisibili({ finestre, scrivi }) {
     ok &&= !!vero;
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
-  const radice = stash.radice();
-  const file = path.join(radice, 'libreria', 'brano_1.cutx');
+  const file = path.join(stash.cartellaProj(), 'libreria', 'brano_1.cutx');
   const testo = existsSync(file) ? await readFile(file, 'utf8') : '// @brano b\n// @clip melodia\ns("sine").gain(.0001)\n// @clip sub\ns("sine").gain(.0001)\n// @clip reese\ns("sine").gain(.0001)\n// @clip pad\ns("sine").gain(.0001)\n';
   await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
   try {
@@ -2855,15 +2876,16 @@ async function provaPassaggio({ finestre, scrivi }) {
   const bpm = async () => (await js('cutxProva.diagnosi()')).bpm;
   const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
   const radice = stash.radice();
+  const libreriaVera = path.join(stash.cartellaProj(), 'libreria');
   const brani3 = ['brano_1.cutx', 'brano_2.cutx', 'brano_3.cutx'];
-  if (!brani3.every((f) => existsSync(path.join(radice, 'libreria', f)))) {
+  if (!brani3.every((f) => existsSync(path.join(libreriaVera, f)))) {
     scrivi('INFO  nello stash di prova non ci sono brano_1, brano_2 e brano_3: la prova del passaggio non si fa');
     return true;
   }
   // uno stash temporaneo con il set di prova esatto (i tre brani veri, copiati; i suoni collegati in sola lettura): il set vero di Valerio non si tocca
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-passaggio-'));
   await mkdir(path.join(tmp, 'libreria'), { recursive: true });
-  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), await readFile(path.join(radice, 'libreria', f), 'utf8'));
+  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), await readFile(path.join(libreriaVera, f), 'utf8'));
   await writeFile(path.join(tmp, 'set.cutx'), '// @set prova serata\n\nbrano_1.cutx · apre\nbrano_2.cutx\nbrano_3.cutx · chiude\n');
   if (existsSync(path.join(radice, 'suoni'))) await symlink(path.join(radice, 'suoni'), path.join(tmp, 'suoni'));
   const vero = stash._percorsoPerProva(tmp);
@@ -3027,14 +3049,14 @@ async function provaSet({ finestre, scrivi }) {
     controlla('un clic sul nome apre il codice della clip', (await js(`document.querySelectorAll('#elenco .kit-codice .cm-content').length`)) === 1);
     await js(`cutxProva.serata.editors[0].codice = 'note("e2").s("sine").gain(.0001)'`);
     await aspetta(1.2);
-    controlla('la modifica va in kit.cutx', (await readFile(path.join(tmp, 'kit.cutx'), 'utf8')).includes('note("e2")'), await readFile(path.join(tmp, 'kit.cutx'), 'utf8'));
+    controlla('la modifica va in kit.cutx', (await readFile(path.join(stash.cartellaProj(), 'kit.cutx'), 'utf8')).includes('note("e2")'), await readFile(path.join(stash.cartellaProj(), 'kit.cutx'), 'utf8'));
     // aggiungere un brano al set dal menu
     await js(`document.querySelector('#elenco .kit-riga')?.parentElement; (() => { const s = document.querySelector('#elenco .aggiungi-al-set'); s.value = 'd.cutx'; s.dispatchEvent(new Event('change')); })()`);
     await aspetta(0.8);
-    controlla('+ aggiungi: d.cutx entra nel set (e nel file)', (await readFile(path.join(tmp, 'set.cutx'), 'utf8')).includes('d.cutx') && (await righe()).length === 4);
+    controlla('+ aggiungi: d.cutx entra nel set (e nel file)', (await readFile(path.join(stash.cartellaProj(), 'set.cutx'), 'utf8')).includes('d.cutx') && (await righe()).length === 4);
     await js(`document.querySelectorAll('#elenco .set-riga')[3].querySelectorAll('.strumenti-set button')[0].click()`); // «apre» su d
     await aspetta(0.6);
-    controlla('«apre» sposta il segno (file riscritto)', /d\.cutx · apre/.test(await readFile(path.join(tmp, 'set.cutx'), 'utf8')) && !/a\.cutx · apre/.test(await readFile(path.join(tmp, 'set.cutx'), 'utf8')));
+    controlla('«apre» sposta il segno (file riscritto)', /d\.cutx · apre/.test(await readFile(path.join(stash.cartellaProj(), 'set.cutx'), 'utf8')) && !/a\.cutx · apre/.test(await readFile(path.join(stash.cartellaProj(), 'set.cutx'), 'utf8')));
     const cartellaFoto = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'set');
     await mkdir(cartellaFoto, { recursive: true });
     await js(`document.querySelectorAll('#elenco .set-riga')[1].dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
@@ -4272,7 +4294,7 @@ async function provaCueAspetto({ finestre, scrivi }) {
   const js = (codice) => chiedi(finestre.controllo, codice);
   await js(`cutxProva.fermaTutto()`);
   const radice = stash.radice();
-  const leggiBrano = async (f) => readFile(path.join(radice, 'libreria', f), 'utf8');
+  const leggiBrano = async (f) => readFile(path.join(stash.cartellaProj(), 'libreria', f), 'utf8');
   const uno = await leggiBrano('brano_1.cutx');
   const due = (await leggiBrano('mayia.cutx').catch(() => uno));
   await js(`cutxProva.cue.apriModello('brano_1.cutx', ${JSON.stringify(uno)}, 'attivo')`);
