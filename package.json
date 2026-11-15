@@ -72,7 +72,7 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "extendInfo": {
-        "NSCameraUsageDescription": "CUTX usa la camera solo se accendi le mani (tasto M): riconosce la posizione della tua mano per comandare il filtro. Le immagini restano sul Mac e non vengono salvate."
+        "NSCameraUsageDescription": "CUTX usa la camera solo se accendi le mani (tasto M): riconosce la posizione della tua mano per comandare filtro, spazio (riverbero ed eco) e distorsione. Le immagini restano sul Mac e non vengono salvate."
       }
     },
     "dmg": {
