@@ -4451,11 +4451,14 @@ async function provaOnda({ finestre, scrivi }) {
     await aspetta(1.5);
     await js(`cutxProva.cue.apriModello('onde.cutx', ${JSON.stringify(brano)})`);
     await aspetta(0.5);
-    for (const k of [0, 1]) {
-      await js(`cutxProva.cue.scegliSezione(${k}); document.getElementById('go-live').click()`);
-      await aspetta(0.6);
-    }
+    // prima solo «basso» (melodica, nessun beat live): senza il segno · drum resta con le note, anche se è il primo livello che suona
+    await js(`cutxProva.cue.scegliSezione(1); document.getElementById('go-live').click()`);
     await aspetta(3);
+    const solo = (await live()).livelli ?? [];
+    controlla('senza beat, una clip melodica da sola NON è batteria (resta con le note)', solo.length === 1 && solo[0].nome === 'basso' && solo[0].batteria === false, JSON.stringify(solo.map((x) => [x.nome, x.batteria])));
+    controlla('e la sua card ha le note, nessuna onda, e il motore non manda picchi', !(await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)) && (await js('cutxProva.pila.onde.size')) === 0 && !(await js('cutxProva.pila.vuoleOnde()')), JSON.stringify(await js(`[${await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)}, cutxProva.pila.onde.size, cutxProva.pila.vuoleOnde()]`)));
+    await js(`cutxProva.cue.scegliSezione(0); document.getElementById('go-live').click()`);
+    await aspetta(3.5);
     const l = (await live()).livelli ?? [];
     controlla('nel live «colpi» (· drum) è batteria, «basso» no', l.find((x) => x.nome === 'colpi')?.batteria === true && l.find((x) => x.nome === 'basso')?.batteria === false, JSON.stringify(l.map((x) => [x.nome, x.batteria])));
     controlla('col volume generale a zero dalle casse non esce niente', (await live()).master === 0, String((await live()).master));
@@ -4467,6 +4470,8 @@ async function provaOnda({ finestre, scrivi }) {
     await js(`${carta('colpi')}.striscia.radice.click()`);
     await aspetta(0.3);
     controlla('un clic sulla striscia torna alle note', !(await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`)));
+    await aspetta(1);
+    controlla('nessuna card mostra l\'onda: la postazione non la richiede più al motore', (await js('cutxProva.pila.vuoleOnde()')) === false);
     await js(`${carta('colpi')}.striscia.radice.click()`);
     await aspetta(0.3);
     controlla('un altro clic rimette l\'onda', await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`));

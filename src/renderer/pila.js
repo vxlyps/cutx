@@ -95,6 +95,7 @@ export class Pila {
         c.el.remove(); // le altre card si stringono e tengono il loro numero
         this.carte.delete(id);
         this.inizioUscita.delete(id);
+        this.onde.delete(id); // la memoria dell'onda esce col livello (in una serata lunga ne passano centinaia)
       }
     }
     this.contenitore.querySelector('.vuoto')?.remove();
@@ -520,6 +521,12 @@ export class Pila {
       this.onde.get(n).aggiungi(m.ciclo, m.passo, picchi);
     }
     for (const n of this.onde.keys()) if (!this.carte.has(n)) this.onde.delete(n);
+  }
+
+  // C'è almeno una card che mostra l'onda? Se no, il motore non legge i picchi.
+  vuoleOnde() {
+    for (const c of this.carte.values()) if (!c.el.hidden && this.inOnda(c)) return true;
+    return false;
   }
 
   inOnda(c) {

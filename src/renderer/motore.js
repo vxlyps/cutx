@@ -691,7 +691,7 @@ const descrivi = (l) => ({
   muto: l.muto,
   scritto: l.scritto,
   beat: l.beat ?? null,
-  batteria: eBeatVera(l) || !!l.drum, // beat o clip «· drum»: sotto c'è l'onda LED
+  batteria: eNomeBeat(l.nome) || !!l.drum, // beat o clip «· drum»: sotto c'è l'onda LED (non eBeatVera: quella tratta da beat anche la prima clip melodica)
   sfuma: l.sfuma,
   primo: l.primo ?? null,
   ultimo: l.ultimo ?? null,
@@ -979,18 +979,19 @@ setInterval(misura, 66);
 // del suono uscito dall'ultima volta, 0..255. Se questo giro arriva in ritardo (il motore è carico) l'onda rallenta: il suono mai.
 const ONDA_PASSO_S = 1 / 120;
 let ondeUscita = false; // il proiettore la vuole (interruttore «onda sotto la batteria»)
+let ondeControllo = false; // la postazione ha almeno una card che mostra l'onda (e la striscia è accesa)
 let ultimaOndaAudio = 0;
 let ultimaOndaMs = 0;
 let caricoOnde = 0; // 0 normale, 1 in ritardo, 2 molto in ritardo: postazione e proiettore abbassano i fotogrammi
 let saltaOnda = false;
 function onde() {
-  if (!LIVE || !rip.mappa?.cps) return;
+  if (!LIVE || !rip.mappa?.cps || !((ondeControllo && strisceOn) || ondeUscita)) return; // nessuno la guarda: non si legge niente
   const adesso = performance.now();
   const intervallo = ultimaOndaMs ? adesso - ultimaOndaMs : 33;
   ultimaOndaMs = adesso;
   caricoOnde = intervallo > 80 ? 2 : intervallo > 50 ? 1 : Math.max(0, caricoOnde - 1);
   if (caricoOnde === 2 && (saltaOnda = !saltaOnda)) return; // molto carico: un giro sì e uno no
-  const batterie = livelli.filter((l) => (l.drum || eBeatVera(l)) && guadagni.has(l.id));
+  const batterie = livelli.filter((l) => (l.drum || eNomeBeat(l.nome)) && guadagni.has(l.id));
   if (!batterie.length) return;
   const ora = ac.currentTime;
   const dt = Math.min(0.08, Math.max(ONDA_PASSO_S, ultimaOndaAudio ? ora - ultimaOndaAudio : 0.033));
@@ -1013,7 +1014,7 @@ function onde() {
     picchi[l.id] = v;
   }
   const m = { tipo: 'onde', ciclo: rip.ciclo(ora), passo: ONDA_PASSO_S * rip.mappa.cps, carico: caricoOnde, livelli: picchi };
-  manda('controllo', m);
+  if (ondeControllo && strisceOn) manda('controllo', m);
   if (ondeUscita) manda('uscita', m);
 }
 setInterval(onde, 33);
@@ -1335,6 +1336,9 @@ async function ricevi(da, m) {
     case 'strisce-on': // l'interfaccia (o le impostazioni) accende e spegne la striscia viva: spenta non costa niente
       strisceOn = !!m.on;
       for (const l of livelli) l.strisciaCiclo = null;
+      return;
+    case 'onde-controllo': // la postazione mostra (o non più) l'onda LED di qualche card
+      if (da === 'controllo') ondeControllo = !!m.on;
       return;
     case 'onde-uscita': // il proiettore vuole l'onda LED sotto la batteria
       if (da === 'uscita') ondeUscita = !!m.on;

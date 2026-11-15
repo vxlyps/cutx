@@ -1630,7 +1630,17 @@ function registraMessaggio(motore, msg) {
   } else if (msg.tipo === 'guardiano') moviola.scrivi('live', 'guardiano', msg);
 }
 
+// L'onda LED: al motore si dice se la postazione la sta mostrando (altrimenti non legge niente). Si ricontrolla due volte al secondo.
+let ondeChieste = null;
+setInterval(() => {
+  const on = preferenze.striscia !== false && pila.vuoleOnde();
+  if (on === ondeChieste) return;
+  ondeChieste = on;
+  live.manda({ tipo: 'onde-controllo', on });
+}, 500);
+
 live.suCollegato = () => {
+  ondeChieste = null; // un live rinato non sa niente: si richiede
   live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (masterLive !== null) live.manda({ tipo: 'master', volume: masterLive }); // e con il volume generale di prima (altrimenti tornerebbe al massimo)
