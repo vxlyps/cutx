@@ -2964,9 +2964,8 @@ input[type='checkbox'] {
   flex: none;
 }
 
-/* il beat: le sue scene hanno un filo doppio a sinistra, diverso dai pezzi; il cambio che aspetta la fine della frase è tratteggiato */
-.card.scena { border-left: 3px double var(--secondario); }
-.card.scena.e-live { border-left-color: var(--marcio); }
+/* il beat: le scene hanno il bordo uguale agli altri; verde (tutto intorno) solo quando suonano live; il cambio che aspetta la fine della frase è tratteggiato */
+.card.scena.e-live { border-color: var(--marcio); }
 .card.scena.in-arrivo { outline: 1px dashed var(--marcio); outline-offset: -1px; }
 .card.scena.in-arrivo .lbl { color: var(--marcio); }
 .editor .cm-line.cm-beat.cm-sez-testa { border-left-style: double; }
@@ -3030,7 +3029,6 @@ input[type='checkbox'] {
 }
 
 .beat-card {
-  border-left: 3px double var(--secondario);
   gap: 8px;
 }
 .beat-card.senza-beat {
@@ -3039,7 +3037,10 @@ input[type='checkbox'] {
 .beat-card .nome-beat {
   font-family: var(--stencil);
   letter-spacing: 0.1em;
-  color: var(--marcio);
+  color: var(--testo);
+}
+.beat-card:has(.pillola.live) .nome-beat {
+  color: var(--marcio); /* verde solo quando una scena del beat suona live */
 }
 .pillole {
   display: flex;
@@ -3238,15 +3239,15 @@ input[type='checkbox'] {
   white-space: pre-wrap;
   pointer-events: none;
 }
-.apertura-card {
-  border-left: 3px solid var(--marcio-scuro);
-}
 .apertura-card.e-live {
-  border-left-color: var(--marcio);
+  border-color: var(--marcio); /* verde solo quando suona live, tutto intorno */
 }
 .apertura-card .nome-apertura {
   font-family: var(--stencil);
   letter-spacing: 0.1em;
+  color: var(--testo);
+}
+.apertura-card.e-live .nome-apertura {
   color: var(--marcio);
 }
 .apertura-card.senza-apertura {
