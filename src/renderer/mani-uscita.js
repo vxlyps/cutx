@@ -28,6 +28,24 @@ export function geometria(ar, zona, w, h) {
   return { scala, punto: ([x, y]) => [ox + (x - z.x) * a * scala, oy + (y - z.y) * scala] };
 }
 
+// La mano non si taglia mai: se esce dallo spazio si ferma al bordo (si sposta soltanto), se è più grande dello spazio (molto vicina alla
+// camera) si rimpicciolisce per starci tutta, sempre con una scala sola. pts: [[x, y]] in px · m: margine (bagliore e anello).
+export function contieni(pts, w, h, m = 0) {
+  const xs = pts.map((q) => q[0]);
+  const ys = pts.map((q) => q[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const k = Math.min(1, Math.max(1e-3, w - 2 * m) / Math.max(1e-3, x1 - x0), Math.max(1e-3, h - 2 * m) / Math.max(1e-3, y1 - y0));
+  const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+  // prima si rimpicciolisce attorno al centro, poi si sposta dentro il bordo
+  const nx0 = cx - ((x1 - x0) * k) / 2;
+  const nx1 = cx + ((x1 - x0) * k) / 2;
+  const ny0 = cy - ((y1 - y0) * k) / 2;
+  const ny1 = cy + ((y1 - y0) * k) / 2;
+  const dx = nx0 < m ? m - nx0 : nx1 > w - m ? w - m - nx1 : 0;
+  const dy = ny0 < m ? m - ny0 : ny1 > h - m ? h - m - ny1 : 0;
+  return { pts: pts.map(([x, y]) => [cx + (x - cx) * k + dx, cy + (y - cy) * k + dy]), k };
+}
+
 export class ManoUscita {
   // radice: l'elemento (con dentro un canvas e la riga dei valori); u: () => pixel di un'unità della tavola (larghezza/1440)
   constructor({ radice, canvas, valore, u }) {
@@ -86,7 +104,8 @@ export class ManoUscita {
     // La mano com'è: i punti sono in coordinate della camera (x e y sono 0..1 di larghezza e altezza, che non sono la stessa lunghezza):
     // si portano alla stessa unità (x × ar) e si disegnano con UNA scala sola, così la forma non si stira mai. L'area che si vede è la zona
     // (o tutta l'inquadratura), centrata nello spazio libero e senza nessun riquadro: se la mano si muove su e giù si vede muoversi.
-    const { punto: pt } = geometria(d.ar, d.zona, w, h);
+    const { punto } = geometria(d.ar, d.zona, w, h);
+    const pp = contieni(p.map(punto), w, h, 16 * unita).pts; // mai tagliata dal bordo
     g.lineCap = 'round';
     g.lineJoin = 'round';
     g.strokeStyle = `rgba(${s.colore}, ${s.alfa})`;
@@ -96,21 +115,21 @@ export class ManoUscita {
     g.lineWidth = 2 * unita;
     g.beginPath();
     for (const [a, b] of OSSA) {
-      const [x0, y0] = pt(p[a]);
-      const [x1, y1] = pt(p[b]);
+      const [x0, y0] = pp[a];
+      const [x1, y1] = pp[b];
       g.moveTo(x0, y0);
       g.lineTo(x1, y1);
     }
     g.stroke();
-    for (const q of p) {
-      const [x, y] = pt(q);
+    for (const [x, y] of pp) {
       g.beginPath();
       g.arc(x, y, 2.6 * unita, 0, Math.PI * 2);
       g.fill();
     }
     // l'anello sul palmo: si riempie prima dell'aggancio, poi resta pieno e piccolo
     if (s.anello) {
-      const [cx, cy] = pt([[0, 5, 9, 13, 17].reduce((a, i) => a + p[i][0], 0) / 5, [0, 5, 9, 13, 17].reduce((a, i) => a + p[i][1], 0) / 5]);
+      const cx = [0, 5, 9, 13, 17].reduce((a, i) => a + pp[i][0], 0) / 5;
+      const cy = [0, 5, 9, 13, 17].reduce((a, i) => a + pp[i][1], 0) / 5;
       const frazione = s.anello === 'pieno' ? 1 : Math.max(0, Math.min(1, d.progresso ?? 0));
       if (frazione > 0.02) {
         g.shadowBlur = 6 * unita * s.bagliore;

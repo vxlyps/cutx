@@ -8,8 +8,9 @@ const PUNTE = [8, 12, 16, 20];
 const BASI = [5, 9, 13, 17];
 const PALMO = [0, 5, 9, 13, 17];
 
-// quanto sono estese le dita (punta/polso rispetto a base/polso): aperta ~1.8, pugno ~1.0 (da tarare con la mano vera)
-export const SOGLIE = { apertaMedia: 1.6, apertaMin: 1.35, pugnoMedia: 1.25, ditaMin: 0.55, ditaMax: 1.9 };
+// Tarate sul video vero di Valerio (15/11/2026): estese = punta/polso rispetto a base/polso: aperta 1.6–2.4, pugno 0.5–1.24, a metà in mezzo;
+// dita = punta dell'indice – punta del mignolo in larghezze di palmo (non col pollice, che si muove per conto suo): unite ~1.1, a ventaglio ~2.1.
+export const SOGLIE = { apertaMedia: 1.6, apertaMin: 1.35, pugnoMedia: 1.25, ditaMin: 1.05, ditaMax: 2.1 };
 
 const dist = (a, b, ar) => Math.hypot((a[0] - b[0]) * ar, a[1] - b[1]);
 const limita = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -25,8 +26,8 @@ export function analizza(punti, ar = 4 / 3) {
   const forma = media >= SOGLIE.apertaMedia && minimo >= SOGLIE.apertaMin ? 'aperta' : media <= SOGLIE.pugnoMedia ? 'pugno' : 'mista';
   const cx = PALMO.reduce((s, i) => s + punti[i][0], 0) / PALMO.length;
   const cy = PALMO.reduce((s, i) => s + punti[i][1], 0) / PALMO.length;
-  const larghezza = dist(punti[4], punti[20], ar) / dim; // pollice-mignolo, in «palmi»
-  const dita = limita((larghezza - SOGLIE.ditaMin) / (SOGLIE.ditaMax - SOGLIE.ditaMin));
+  const palmoLargo = Math.max(1e-4, dist(punti[5], punti[17], ar)); // larghezza del palmo: non cambia quando la mano si inclina
+  const dita = limita((dist(punti[8], punti[20], ar) / palmoLargo - SOGLIE.ditaMin) / (SOGLIE.ditaMax - SOGLIE.ditaMin));
   return { centro: [1 - cx, cy], dim, forma, dita, estese: media };
 }
 

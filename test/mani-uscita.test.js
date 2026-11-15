@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { geometria } from '../src/renderer/mani-uscita.js';
+import { contieni, geometria } from '../src/renderer/mani-uscita.js';
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -33,4 +33,38 @@ test('con una zona, la zona riempie lo spazio (la mano si vede più grande)', ()
   assert.ok(zona.scala > intera.scala * 1.9);
   const [x, y] = zona.punto([0.5, 0.5]);
   assert.ok(Math.abs(x - 195) < 1e-9 && Math.abs(y - 123) < 1e-9, 'il centro della zona è il centro dello spazio');
+});
+
+const larghezza = (pts) => Math.max(...pts.map((p) => p[0])) - Math.min(...pts.map((p) => p[0]));
+const altezza = (pts) => Math.max(...pts.map((p) => p[1])) - Math.min(...pts.map((p) => p[1]));
+const dentro = (pts, w, h, m) => pts.every(([x, y]) => x >= m - 1e-9 && x <= w - m + 1e-9 && y >= m - 1e-9 && y <= h - m + 1e-9);
+const mano = [[100, 80], [130, 60], [160, 90], [140, 130], [110, 120]];
+
+test('la mano dentro lo spazio non si tocca', () => {
+  const r = contieni(mano, 400, 250, 10);
+  assert.deepEqual(r.pts, mano);
+  assert.equal(r.k, 1);
+});
+
+test('la mano che arriva al bordo si ferma lì: si sposta soltanto, la forma resta uguale', () => {
+  for (const [dx, dy] of [[500, 0], [-500, 0], [0, 500], [0, -500], [-500, 500]]) {
+    const fuori = mano.map(([x, y]) => [x + dx, y + dy]);
+    const r = contieni(fuori, 400, 250, 10);
+    assert.ok(dentro(r.pts, 400, 250, 10), `${dx},${dy}`);
+    assert.equal(r.k, 1);
+    assert.ok(Math.abs(larghezza(r.pts) - larghezza(mano)) < 1e-9 && Math.abs(altezza(r.pts) - altezza(mano)) < 1e-9);
+  }
+});
+
+test('la mano più grande dello spazio (vicina alla camera) si rimpicciolisce per starci tutta, senza stirarsi', () => {
+  const grande = mano.map(([x, y]) => [x * 8 - 300, y * 8 - 200]);
+  const r = contieni(grande, 400, 250, 10);
+  assert.ok(r.k < 0.5);
+  assert.ok(dentro(r.pts, 400, 250, 10));
+  assert.ok(Math.abs(larghezza(r.pts) / altezza(r.pts) - larghezza(grande) / altezza(grande)) < 1e-9, 'stesse proporzioni');
+});
+
+test('spazio più piccolo del margine: non si rompe', () => {
+  const r = contieni(mano, 10, 10, 20);
+  assert.ok(r.pts.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)));
 });

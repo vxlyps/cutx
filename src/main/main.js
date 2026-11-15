@@ -37,7 +37,7 @@ if (PER_PROVE && process.env.CUTX_PROVA_SENZA_RETE === '1') app.commandLine.appe
 // Le mani: la prova automatica usa un video di una mano al posto della webcam (Chromium sa leggere un file come finta camera).
 // Il file è un .mjpeg (o .y4m): da mano.mov si fa con ffmpeg (vedi docs/MANI.md). Senza il file la prova «mani» si salta.
 const VIDEO_MANO = process.env.CUTX_VIDEO_MANO || path.join(app.getPath('home'), 'Progetti', 'cutx-prova-mani', 'mano.mjpeg');
-if (PROVA && PROVA.split(',').includes('mani') && existsSync(VIDEO_MANO)) {
+if (PROVA && PROVA.split(',').some((p) => p === 'mani' || p === 'mani-dump') && existsSync(VIDEO_MANO)) {
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
   app.commandLine.appendSwitch('use-file-for-fake-video-capture', VIDEO_MANO);

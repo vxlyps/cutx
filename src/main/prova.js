@@ -221,6 +221,8 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
   if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
   if (parti.includes('mani')) ok = (await sicura('mani', provaMani)) && ok;
+  // strumento, non prova (non entra nel giro lungo): registra i punti delle mani che la camera vede, per ritarare i gesti sul video vero
+  if (parti.indexOf('mani-dump') >= 0) ok = (await sicura('mani-dump', provaManiDump)) && ok;
   if (parti.includes('mani-proiettore')) ok = (await sicura('mani-proiettore', provaManoProiettore)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
@@ -4717,6 +4719,25 @@ async function provaMani({ finestre, scrivi }) {
   return ok;
 }
 
+// --- strumento: registra i punti delle mani del video di prova (CUTX_VIDEO_MANO) in CUTX_MANI_DUMP, per i test dei gesti (test/mani-video.test.js) ---
+async function provaManiDump({ finestre, scrivi }) {
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const fuori = process.env.CUTX_MANI_DUMP;
+  const secondi = Number(process.env.CUTX_MANI_DUMP_S) || 55;
+  if (!fuori) {
+    scrivi('ERRORE manca CUTX_MANI_DUMP (il file dove scrivere i punti)');
+    return false;
+  }
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  await js(`window.__dump = []; (() => { const c = cutxProva.maniClient; const orig = c.suMano; window.__t0 = null; c.suMano = (m) => { orig(m); const t = performance.now(); window.__t0 ??= t; window.__dump.push([Math.round(t - window.__t0), Math.round(m.ar * 1000) / 1000, (m.mani ?? []).map((h) => h.map(([x, y]) => [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]))]); }; })(); cutxProva.accendiMani()`);
+  await aspetta(secondi);
+  const dump = await js('window.__dump');
+  await js('cutxProva.spegniMani()');
+  await writeFile(fuori, JSON.stringify(dump));
+  scrivi(`OK    ${dump.length} fotogrammi in ${fuori}`);
+  return dump.length > secondi * 10;
+}
+
 // --- la mano sul proiettore: lo scheletro in alto al centro (punti finti, niente camera) + le foto per guardare dimensione e posizione ---
 async function provaManoProiettore({ finestre, scrivi }) {
   let ok = true;
@@ -4788,6 +4809,20 @@ async function provaManoProiettore({ finestre, scrivi }) {
   controlla('lo scheletro è disegnato (punti e linee, non un\'immagine)', pixel > 200, String(pixel));
   const dati = await js(`JSON.stringify({ punti: ${manoFinta}(.5,.5,.28,'aperta') }).length`);
   controlla('al proiettore arrivano solo i punti (pochi byte, mai l\'immagine)', dati > 100 && dati < 1500, String(dati));
+  // il bordo: la mano non si taglia mai. Al margine si ferma, e se è enorme (vicina alla camera) si rimpicciolisce per starci tutta
+  const sulBordo = () => u(`(() => { const c = document.getElementById('mano-canvas'); const g = c.getContext('2d'); const w = c.width, h = c.height; const lati = [g.getImageData(0, 0, w, 3), g.getImageData(0, h - 3, w, 3), g.getImageData(0, 0, 3, h), g.getImageData(w - 3, 0, 3, h)]; return lati.reduce((n, im) => n + im.data.filter((v, i) => i % 4 === 3 && v > 6).length, 0); })()`);
+  const pienezza = () => u(`(() => { const c = document.getElementById('mano-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let v = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 40) v++; return v; })()`);
+  for (const [nome, o] of [['a destra, oltre il bordo', { cx: 1.08, cy: 0.5 }], ['in basso, oltre il bordo', { cx: 0.5, cy: 1.1 }], ['in alto a sinistra, oltre il bordo', { cx: -0.05, cy: -0.02 }]]) {
+    await manda({ fase: 'agganciata', s: 0.3, ...o });
+    await aspetta(0.5);
+    controlla(`la mano ${nome}: si ferma al bordo, non si taglia`, (await sulBordo()) === 0 && (await pienezza()) > 200, `${await sulBordo()} pixel sul bordo`);
+  }
+  await manda({ fase: 'agganciata', s: 1.4, cx: 0.5, cy: 0.6 });
+  await aspetta(0.5);
+  controlla('la mano enorme (molto vicina alla camera) si rimpicciolisce per starci tutta', (await sulBordo()) === 0 && (await pienezza()) > 200, `${await sulBordo()} pixel sul bordo`);
+  await manda({ fase: 'agganciata', s: 1.4, cx: 0.5, cy: 0.6 });
+  await aspetta(0.2);
+  await js(`0`);
   // le foto: tre grandezze/posizioni, poi gli stati
   const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'mano');
   await mkdir(cartella, { recursive: true });
@@ -4808,6 +4843,12 @@ async function provaManoProiettore({ finestre, scrivi }) {
   await manda({ fase: 'agganciata', cx: 0.5, cy: 0.45, s: 0.3, zona: { x: 0.25, y: 0.1, w: 0.5, h: 0.75 } });
   await aspetta(0.6);
   await foto('E-con-la-zona-disegnata');
+  await manda({ fase: 'agganciata', cx: 1.08, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('F-al-bordo-a-destra');
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.6, s: 1.4 });
+  await aspetta(0.6);
+  await foto('G-molto-vicina-alla-camera');
   scrivi(`INFO  foto in ${cartella}`);
   // esce: si dissolve
   await manda({ punti: null });
