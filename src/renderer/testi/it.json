@@ -359,6 +359,11 @@
     "proj-copia-clip": {
       "nome": "copia la clip",
       "testo": "→ brano: in fondo al brano aperto nel CUE (la linguetta che guardi). → kit: nel kit del PROJ aperto. Con una riga «// viene da…»."
+    },
+    "mani": {
+      "nome": "mani (sperimentale)",
+      "testo": "La webcam vede la mano: più in alto = filtro passa-basso più aperto su tutto il live, più in basso = più chiuso. Se la mano sparisce il filtro torna aperto in 2 cicli. M accende e spegne (da spento la camera è chiusa). Solo sul tuo schermo: sul proiettore non va niente.",
+      "azione": "mani"
     }
   },
   "impostazioni": {
@@ -735,5 +740,29 @@
     "copiato": "copiato in libreria: {file}",
     "clipNelBrano": "clip «{nome}» in fondo al brano · ⌘S per salvarlo",
     "clipNelKit": "clip «{nome}» nel kit"
+  },
+  "mani": {
+    "titolo": "MANI · sperimentale",
+    "acceso": "MANO ON",
+    "nessunaMano": "niente mano",
+    "errore": "camera",
+    "fotogrammi": "fps",
+    "avvisoAcceso": "mani accese: l'altezza della mano comanda il filtro · M per spegnere",
+    "avvisoSpento": "mani spente: la camera è chiusa",
+    "avvisoCaduta": "le mani si sono fermate ({motivo}): camera chiusa, il filtro è tornato com'era",
+    "serie": {
+      "nome": "mani accese all'avvio",
+      "testo": "parte da sola la camera con il riconoscimento delle mani. Spento di serie: il tasto M le accende e spegne quando serve."
+    },
+    "camera": {
+      "nome": "camera",
+      "testo": "quale webcam usare. Da spenta la camera è chiusa del tutto e non pesa niente."
+    },
+    "cameraPredefinita": "predefinita di macOS",
+    "sensibilita": {
+      "nome": "sensibilità",
+      "testo": "quanta strada deve fare la mano: bassa = serve tutta l'inquadratura, alta = basta meno della metà."
+    },
+    "cosaFa": "Mano in alto = filtro aperto, in basso = chiuso (200–16000 Hz). Se la camera perde la mano il filtro torna aperto in 2 cicli."
   }
 }

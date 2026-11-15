@@ -159,7 +159,7 @@ export function soloCoda(testo) {
 // --- le righe globali: all(x => x.lpf(1920)) ---
 // Il fader del controller e i colpi «su tutto» scrivono righe globali con la funzione all di Strudel; il motore le mette su OGNI livello,
 // dopo la sua coda. Qui si legge una riga e la si applica a un pattern.
-const GLOBALE = /^\s*all\(\s*x\s*=>\s*(x\.[\s\S]+?)\s*\)\s*;?\s*$/;
+const GLOBALE = /^\s*all\(\s*x\s*=>\s*(x\.[\s\S]+?)\s*\)\s*;?\s*(?:\/\/[^\n]*)?$/; // un commento in fondo (// mano) è ammesso: dice chi ha scritto la riga
 
 // L'espressione di una riga globale (x.lpf(1920)), o null se non è una riga globale.
 export const leggiGlobale = (riga) => GLOBALE.exec(String(riga))?.[1] ?? null;

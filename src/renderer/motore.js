@@ -357,9 +357,9 @@ function micro(l, ciclo) {
 const globali = new Map(); // chiave → riga
 let breakFattore = 1; // il «break» del fader: tutti le clip tranne il beat (per ora il primo livello) a questa frazione del volume
 function mandaGlobali() {
-  const m = { tipo: 'globali', righe: [...globali.values()] };
-  manda('controllo', m);
-  manda('uscita', m);
+  const righe = [...globali.values()];
+  manda('controllo', { tipo: 'globali', righe });
+  manda('uscita', { tipo: 'globali', righe: righe.filter((r) => !/\/\/ mano\s*$/.test(r)) }); // la riga delle mani (sperimentale) per ora non va sul proiettore
 }
 const idBeat = () => livelli.find((x) => x.a === Infinity)?.id ?? null;
 // il beat vero (il livello «beat», anche mentre cambia scena); se non c'è, il primo livello come prima

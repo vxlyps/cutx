@@ -4536,9 +4536,84 @@ async function provaMani({ finestre, scrivi }) {
     const pid = finestre.mani && !finestre.mani.isDestroyed() ? finestre.mani.webContents.getOSProcessId() : 0;
     return app.getAppMetrics().find((m) => m.pid === pid)?.cpu.percentCPUUsage ?? 0;
   };
+  // Il collegamento al live: tasto M, la riga «mano» sul filtro, il fader che cede il posto, la mano persa che torna aperta.
+  async function collegamento() {
+    const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+    const mano = (g) => g.map((r) => /^all\(x => x\.lpf\((\d+)\)\) \/\/ mano$/.exec(r)?.[1]).find(Boolean);
+    const faderRiga = 'all(x => x.lpf(900))';
+    await js(`cutxProva.globaleDelController('fader', ${JSON.stringify(faderRiga)})`);
+    await aspetta(0.6);
+    controlla('prima delle mani: nel live c\'è la riga del fader', (await live()).globali.includes(faderRiga));
+    await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', bubbles: true }))`);
+    await aspetta(0.5);
+    controlla('il tasto M accende le mani (finestra «mani» viva, finestrella visibile)', !!finestre.mani && !(await js(`document.getElementById('mani-finestra').hidden`)));
+    const serie = [];
+    const t0 = Date.now();
+    let faderVisto = false;
+    let manoPrima = null;
+    while (Date.now() - t0 < 46000) {
+      const g = (await live()).globali ?? [];
+      const f = await js(`(() => { const f = cutxProva.maniFiltro(); return [!!f.controlla, !!cutxProva.maniClient.ultimaMano?.visibile, f.a]; })()`);
+      const hz = mano(g);
+      if (hz && manoPrima === null) manoPrima = Date.now() - t0;
+      if (hz && g.includes(faderRiga)) faderVisto = true;
+      serie.push({ t: Date.now() - t0, hz: hz ? Number(hz) : null, controlla: f[0], vista: f[1] });
+      await aspetta(0.25);
+    }
+    const hzs = serie.filter((x) => x.hz !== null).map((x) => x.hz);
+    scrivi(`INFO  mani: la riga «mano» è apparsa dopo ${manoPrima} ms · filtro da ${Math.min(...hzs)} a ${Math.max(...hzs)} Hz · ${serie.length} letture`);
+    controlla('la mano scrive la riga all(x => x.lpf(…)) // mano nel live', hzs.length > 20 && manoPrima !== null, String(hzs.length));
+    controlla('mano bassa = filtro chiuso, mano alta = aperto (da meno di 1500 a più di 6000 Hz)', Math.min(...hzs) < 1500 && Math.max(...hzs) > 6000, `${Math.min(...hzs)}–${Math.max(...hzs)}`);
+    controlla('mentre la mano comanda, la riga del fader non è nel live (comanda uno solo)', !faderVisto);
+    // quante volte è cambiata la riga: mai più di ~16 al secondo
+    let cambi = 0;
+    for (let i = 1; i < serie.length; i++) if (serie[i].hz !== serie[i - 1].hz) cambi++;
+    controlla('la riga non cambia troppo spesso (letture a 4 al secondo: ci stanno tutte)', cambi <= serie.length, `${cambi}/${serie.length}`);
+    // mano persa: ogni tratto senza mano lungo almeno 1,5 s vede il filtro solo salire (verso aperto), mai fermo a metà
+    let ok1 = true;
+    let tratti = 0;
+    let lunghi = 0;
+    for (let i = 0; i < serie.length; i++) {
+      if (serie[i].vista || serie[i].hz === null) continue;
+      let j = i;
+      while (j + 1 < serie.length && !serie[j + 1].vista) j++;
+      const lunghezza = serie[j].t - serie[i].t;
+      if (lunghezza >= 1500) {
+        tratti++;
+        const vals = serie.slice(i, j + 1).map((x) => x.hz).filter((h) => h !== null);
+        let scende = false;
+        for (let k = 1; k < vals.length; k++) if (vals[k] < vals[k - 1]) scende = true;
+        const fine = serie.slice(i, j + 1).at(-1);
+        scrivi(`INFO  mani: tratto senza mano ${(lunghezza / 1000).toFixed(1)} s · filtro ${vals[0]} → ${vals.at(-1)} Hz · ${scende ? 'SCENDE' : 'sale'} · comanda ancora alla fine: ${fine.controlla}`);
+        if (scende) ok1 = false;
+        if (lunghezza >= 5200) {
+          lunghi++;
+          if (fine.controlla) ok1 = false; // dopo 5 secondi senza mano non deve più comandare niente
+        }
+      }
+      i = j;
+    }
+    scrivi(`INFO  mani: ${tratti} tratti senza mano (${lunghi} lunghi): il filtro è sempre tornato aperto`);
+    controlla('mano persa: il filtro risale verso aperto senza fermarsi a metà', ok1 && tratti >= 1, `${tratti} tratti`);
+    await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', bubbles: true }))`);
+    await aspetta(1.5);
+    const dopo = (await live()).globali ?? [];
+    controlla('con M spenta: la riga «mano» è sparita e torna quella del fader', !mano(dopo) && dopo.includes(faderRiga), JSON.stringify(dopo));
+    controlla('e la finestrella è nascosta, la finestra «mani» chiusa', (await js(`document.getElementById('mani-finestra').hidden`)) && (!finestre.mani || finestre.mani.isDestroyed()));
+    await js(`cutxProva.globaleDelController('fader', null)`);
+    // le impostazioni: la sezione MANI, e la sensibilità arriva al filtro
+    await js(`cutxProva.imp.disegna()`);
+    controlla('nelle impostazioni c\'è la sezione MANI: camera, sensibilità, accese di serie', await js(`!!document.getElementById('imp-mani-camera') && !!document.getElementById('imp-mani-sensibilita') && /MANI/.test(document.getElementById('imp-titolo-mani').textContent) && /accese all'avvio/.test(document.getElementById('imp-mani').textContent)`));
+    await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.9 } })`);
+    await aspetta(0.5);
+    controlla('la sensibilità cambiata nelle impostazioni arriva al filtro', (await js('cutxProva.maniFiltro().sensibilita')) === 0.9);
+    await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5 } })`);
+  }
+
   try {
     await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
-    await js(`window.__mani = []; cutxProva.maniClient.suMano = (m) => window.__mani.push(m.visibile ? Math.round(m.y * 1000) / 1000 : null); cutxProva.maniClient.accendi({ fps: 'normale', anteprima: true })`);
+    // la prova si affianca all'app (richiama le sue funzioni), non le sostituisce
+    await js(`window.__mani = []; (() => { const c = cutxProva.maniClient; window.__app = { m: c.suMano, i: c.suImmagine }; c.suMano = (m) => { window.__app.m(m); window.__mani.push(m.visibile ? Math.round(m.y * 1000) / 1000 : null); }; })(); cutxProva.accendiMani()`);
     await aspetta(6); // la camera, il modello, il Wasm
     const st = await js('cutxProva.maniClient.stato');
     controlla('la finestra «mani» è un processo a parte, nascosto', !!finestre.mani && !finestre.mani.isVisible() && finestre.mani.webContents.getOSProcessId() !== finestre.live.webContents.getOSProcessId());
@@ -4581,14 +4656,16 @@ async function provaMani({ finestre, scrivi }) {
       piuLunga = Math.max(piuLunga, giu);
     }
     controlla('vede anche quando la mano esce dall\'inquadratura (un tratto senza mano)', piuLunga > stato.fps * 1.5, `${piuLunga} misure di fila`);
-    const immagine = await js(`new Promise((r) => { const prima = Date.now(); cutxProva.maniClient.suImmagine = (b) => r(b.byteLength); setTimeout(() => r(0), 3000); })`);
+    const immagine = await js(`new Promise((r) => { const c = cutxProva.maniClient; c.suImmagine = (b) => { window.__app.i(b); r(b.byteLength); }; setTimeout(() => r(0), 3000); })`);
+    await js(`(() => { const c = cutxProva.maniClient; c.suMano = window.__app.m; c.suImmagine = window.__app.i; })()`);
     controlla('arriva anche l\'immagine piccola della camera (JPEG)', immagine > 500 && immagine < 60000, String(immagine));
-    await js('cutxProva.maniClient.spegni()');
+    await js('cutxProva.spegniMani()');
     await aspetta(1.5);
+    await collegamento();
     controlla('spenta: la finestra non esiste più (camera chiusa, niente pesa)', !finestre.mani || finestre.mani.isDestroyed(), String(!!finestre.mani));
     controlla('e dal processo principale risulta chiusa', (await js('window.cutx.mani.aperta()')) === false);
   } finally {
-    await js(`cutxProva.maniClient.spegni(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+    await js(`cutxProva.spegniMani(); cutxProva.globaleDelController('fader', null); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
   }
   return ok;
 }

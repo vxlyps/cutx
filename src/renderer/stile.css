@@ -3583,3 +3583,62 @@ input[type='checkbox'] {
 .striscia-viva.batteria {
   cursor: pointer;
 }
+
+/* le mani (mani-vista.js, sperimentale): la finestrella nella colonna a sinistra, solo mentre il riconoscimento è acceso */
+.mani-finestra {
+  flex-shrink: 0;
+  margin: 8px 12px 0;
+  padding: 8px;
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--fondo);
+}
+.mani-finestra[hidden] {
+  display: none;
+}
+.mani-immagine {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  transform: scaleX(-1); /* a specchio: la mano a destra va a destra */
+  background: #0a0d06;
+}
+.mani-barra {
+  height: 6px;
+  background: var(--linea);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.mani-barra i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--spento);
+}
+.mani-finestra.comanda .mani-barra i {
+  background: var(--marcio); /* verde solo mentre la mano comanda il filtro del live */
+}
+.mani-finestra.rilascio .mani-barra i {
+  background: #d9a23a; /* ambra: la mano è persa, il filtro sta tornando aperto */
+}
+.mani-riga {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.mani-sigla {
+  font-family: var(--stencil);
+  letter-spacing: 0.1em;
+  color: var(--testo);
+}
+.mani-valore {
+  color: var(--spento);
+}
+.mani-nota {
+  font-size: 10px;
+  color: var(--spento);
+}

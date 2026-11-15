@@ -8,6 +8,8 @@ import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codi
 import it from './testi/it.json';
 import { SchermataProj, etichettaProj } from './proj-vista.js';
 import { ManiClient } from './mani-client.js';
+import { ManiVista } from './mani-vista.js';
+import { FiltroMano } from './mani-filtro.js';
 import { risolvi as risolviTestiPubblico } from './testi-pubblico.js';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
@@ -844,6 +846,7 @@ const FA = {
   fraseDaCapo,
   paracadute: paracaduteDoppio,
   uscitaIntera: () => window.cutx.uscitaSchermoIntero(),
+  mani: () => alternaMani(),
   sfondo: () => window.cutx.salvaPreferenze({ sfondoProiettore: modoDopo(modoValido(preferenze.sfondoProiettore)) }),
 };
 
@@ -1372,8 +1375,85 @@ function mostraImpostazioni() {
 // Verso la finestra di uscita passano solo le bozze: quello che sto scrivendo nel LIVE.
 let portaUscita = null;
 let ultimeBozze = { livelli: {}, jam: null };
-// Le mani (sperimentale): il client della finestra «mani». Il filtro e la finestrella si collegano nel passo successivo.
-const maniClient = new ManiClient({});
+// --- le mani (sperimentale) ---
+// La finestra «mani» (processo a parte) vede la mano; qui l'altezza diventa un filtro passa-basso su tutto il live, scritto come riga
+// globale segnata «mano» (all(x => x.lpf(…)) // mano). Mentre la mano comanda, il fader non scrive la sua riga (la ricorda e la
+// rimette quando la mano smette): al filtro comanda uno solo. Da spenta la camera è chiusa del tutto.
+const maniPref = () => ({ acceso: false, camera: '', sensibilita: 0.5, ...preferenze.mani });
+const cicloMsMani = () => (mappa?.cps ? 1000 / mappa.cps : 2000);
+const maniVista = new ManiVista($('mani-finestra'));
+let maniFiltro = new FiltroMano({ cicloMs: cicloMsMani });
+let maniControlla = false; // la riga «mano» è nel live (e quella del fader è messa da parte)
+let faderRiga = null; // l'ultima riga globale del fader
+let ultimaMano = { visibile: false };
+let ultimaManoOra = 0;
+const maniClient = new ManiClient({
+  suMano: (m) => {
+    ultimaMano = m;
+    ultimaManoOra = performance.now();
+    maniVista.suMano(m);
+  },
+  suImmagine: (jpeg) => maniVista.immagine(jpeg),
+  suStato: (s) => maniVista.stato(s),
+  suChiusa: (motivo) => {
+    fermaFiltroMani();
+    maniVista.mostra(false);
+    cue.avviso(it.mani.avvisoCaduta.replace('{motivo}', motivo), { persistente: true });
+    window.cutx.logEvento('avviso', 'mani', `finestra chiusa: ${motivo}`);
+  },
+});
+function scriviMano(r) {
+  if (r.controlla) {
+    if (!maniControlla) {
+      maniControlla = true;
+      if (faderRiga) live.manda({ tipo: 'globale', chiave: 'fader', riga: null });
+    }
+    live.manda({ tipo: 'globale', chiave: 'mano', riga: r.riga });
+  } else if (maniControlla) {
+    maniControlla = false;
+    live.manda({ tipo: 'globale', chiave: 'mano', riga: null });
+    if (faderRiga) live.manda({ tipo: 'globale', chiave: 'fader', riga: faderRiga });
+  }
+}
+function fermaFiltroMani() {
+  scriviMano(maniFiltro.ferma());
+  maniVista.filtro({ controlla: false, altezza: 0, rilascio: false });
+}
+// Il filtro gira a passo suo: se la finestra «mani» non manda più niente la mano conta come persa (mai un filtro fermo a metà).
+setInterval(() => {
+  if (!maniClient.acceso) return;
+  const ora = performance.now();
+  const fresca = ora - ultimaManoOra < 400;
+  const r = maniFiltro.aggiorna({ visibile: fresca && ultimaMano.visibile, y: ultimaMano.y, ora });
+  maniVista.filtro(r);
+  if (r.cambia) scriviMano(r);
+}, 40);
+async function accendiMani() {
+  if (maniClient.acceso || !haStash) return;
+  const p = maniPref();
+  maniFiltro = new FiltroMano({ sensibilita: p.sensibilita, cicloMs: cicloMsMani });
+  ultimaMano = { visibile: false };
+  ultimaManoOra = 0;
+  maniVista.mostra(true);
+  await maniClient.accendi({ camera: p.camera, fps: 'normale', anteprima: true });
+  cue.avviso(it.mani.avvisoAcceso);
+}
+async function spegniMani() {
+  if (!maniClient.acceso) return;
+  fermaFiltroMani();
+  maniVista.mostra(false);
+  await maniClient.spegni();
+  cue.avviso(it.mani.avvisoSpento);
+}
+const alternaMani = () => (maniClient.acceso ? spegniMani() : accendiMani());
+// Le righe globali del controller (fader, colpi «su tutto»). Quella del fader aspetta mentre la mano comanda il filtro.
+function globaleDelController(chiave, riga, griglia = 0, taglio = null) {
+  if (chiave === 'fader') {
+    faderRiga = riga ?? null;
+    if (maniControlla) return;
+  }
+  live.manda({ tipo: 'globale', chiave, riga, griglia, taglio });
+}
 const mandaOndaNote = () => portaUscita?.postMessage({ tipo: 'onda-note', nomi: [...pila.inNote] }); // i livelli batteria che ho rimesso a note
 window.addEventListener('message', (e) => {
   if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
@@ -1649,6 +1729,7 @@ setInterval(() => {
 
 live.suCollegato = () => {
   ondeChieste = null; // un live rinato non sa niente: si richiede
+  maniFiltro.inviata = null; // e la riga delle mani (se comanda) si riscrive al primo passo
   live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (masterLive !== null) live.manda({ tipo: 'master', volume: masterLive }); // e con il volume generale di prima (altrimenti tornerebbe al massimo)
@@ -1761,6 +1842,13 @@ globalThis.cutxProva = {
   spegniLettera: () => insegna.spegniLettera(),
   fermaInsegna: () => insegna.ferma(),
   maniClient,
+  maniVista,
+  maniFiltro: () => maniFiltro,
+  alternaMani,
+  accendiMani,
+  spegniMani,
+  faderRigaMani: () => ({ faderRiga, maniControlla }),
+  globaleDelController,
   schermataProj,
   libreria: () => libreria,
   provaInCuffia,
@@ -1883,7 +1971,7 @@ const controllerMidi = new Controller({
   },
   // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
   faderEffetto: () => preferenze.controller?.fader, // una stringa (le versioni vecchie avevano { A, B }: non vale più, torna il filtro)
-  globale: (chiave, riga, griglia = 0, taglio = null) => live.manda({ tipo: 'globale', chiave, riga, griglia, taglio }),
+  globale: (chiave, riga, griglia = 0, taglio = null) => globaleDelController(chiave, riga, griglia, taglio),
   // i colpi: righe di coda e livelli temporanei, sulla griglia scelta nelle impostazioni (1/4 o 1/8)
   colpiGriglia: () => preferenze.colpiGriglia ?? 0.25,
   stopTorna: () => preferenze.stopTorna ?? 'battuta',
@@ -1980,6 +2068,7 @@ function applicaPreferenze(p) {
   if (p.striscia !== strisciaPrima) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
+  maniFiltro.sensibilita = maniPref().sensibilita; // la sensibilità si cambia anche mentre la mano comanda
   $('paracadute').hidden = p.paracadute === false;
   moviola.imposta(!!p.moviola);
   live.manda({ tipo: 'moviola', on: !!p.moviola });
@@ -2011,3 +2100,6 @@ suoniVista = new SuoniVista({
   logEvento: (livello, testo) => window.cutx.logEvento(livello, 'suoni', testo),
 });
 await suoniVista.inizia();
+
+// Le mani accese di serie (sperimentale): partono dopo lo stash e il resto. Spento di fabbrica.
+if (maniPref().acceso) accendiMani();
