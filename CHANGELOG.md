@@ -1,6 +1,8 @@
 # Novità di CUTX
 
-## Dopo la 0.5.1-beta.2 (non ancora in una release)
+## 0.5.1-beta.3 «CUTX_05_1_3» (15/11/2026)
+
+Nella scheda DRUM i tasti del Mac suonano le righe e c'è il REC. Come provarli: `docs/NOVITA-5.1.3.md`.
 
 ### DRUM: tasti del Mac e REC
 - **Una riga per tasto**: A S D F G H J K suonano le prime otto righe, Q W E R T Y U I le altre otto (la lettera è scritta accanto alla riga). Suonano in cuffia.
