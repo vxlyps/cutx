@@ -438,11 +438,10 @@ export class Cue {
     const t = B.testa(this.brano.modello);
     const stash = this.azioni.suoniStash();
     const mancano = (t.suoni ?? []).filter((n) => !(n in stash));
-    if (mancano.length) {
-      this.avviso(`attenzione: nello stash mancano ${mancano.join(', ')} · le clip che li usano non suoneranno`, {
-        persistente: true,
-      });
-    } else this.avviso('');
+    const testo = mancano.length ? `attenzione: nello stash mancano ${mancano.join(', ')} · le clip che li usano non suoneranno` : '';
+    if (testo) this.avviso(testo, { persistente: true });
+    else if (this.avvisoSuoni && $('cue-avviso').textContent === this.avvisoSuoni) this.avviso(''); // tolgo solo il mio avviso, non quelli degli altri
+    this.avvisoSuoni = testo;
   }
 
   // etichetta: se c'è, l'azione si può annullare con ⌘Z (unisci, dividi, rinomina, sezione nuova…); le modifiche al testo no: sono dell'editor.

@@ -131,7 +131,7 @@ try {
   const bozza = localStorage.getItem(CHIAVE_BOZZA);
   if (ricaricata && bozza && bozza !== CODICE_INIZIALE) {
     cue.libero.codice = bozza;
-    cue.avviso("l'interfaccia è ripartita: ho ripreso il testo del CUE");
+    cue.avviso("l'interfaccia è ripartita: ho ripreso il testo del CUE", { persistente: true });
   }
 } catch {
   // idem
