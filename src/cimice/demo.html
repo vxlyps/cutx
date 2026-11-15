@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CIMICE · demo (parole finte)</title>
+<style>
+:root{--fondo:#050604;--testo:#d9dccc;--spento:#7a7e72;--marcio:#b6f000;--marcio-scuro:#6d8a14;--mono:'Fragment Mono',ui-monospace,Menlo,monospace}
+html,body{margin:0;height:100%;background:var(--fondo);color:var(--testo);font:13px/1.4 var(--mono)}
+#barra{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;gap:8px;align-items:center;padding:8px 12px;background:#0b0b0b;border-bottom:1px solid #2a2a28}
+button,label{font:inherit;color:var(--testo)}
+button{background:#111;border:1px solid #2a2a28;padding:4px 10px;cursor:pointer}
+button:hover{border-color:var(--marcio)}
+#scena{position:absolute;inset:44px 0 0 0;overflow:hidden}
+pre#codice{margin:0;padding:24px 40px;font:15px/1.9 var(--mono);color:var(--testo);white-space:pre}
+.suona{color:var(--marcio)}
+small{color:var(--spento)}
+</style></head><body>
+<div id="barra">
+  <b>CIMICE · demo con parole finte</b>
+  <button id="entra">entra</button><button id="via">se ne va</button>
+  <button id="drop">drop</button><button id="var">variazione</button>
+  <label><input type="checkbox" id="lampi" checked> lampi</label>
+  <label><input type="checkbox" id="corr" checked> corrompe</label>
+  <label>grandezza <input type="range" id="scala" min="0.6" max="1.5" step="0.05" value="1"></label>
+  <small id="stato"></small>
+</div>
+<div id="scena"><pre id="codice"></pre></div>
+<script type="module" src="./demo.js"></script>
+</body></html>

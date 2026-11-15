@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CUTX Bug</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* layout: barra in alto con quello che la cimice "sente", due pannelli di codice, canvas trasparente sopra, impostazioni in basso */
+:root{
+  --bg:#0a0c07;
+  --panel:#10130b;
+  --edge:#263015;
+  --acid:#b6f000;
+  --rot:#6d8a14;
+  --ink:#d6ecae;
+  --dim:#56643a;
+  --rust:#ff5b1f;
+  --f-disp:'Big Shoulders Stencil Display','Saira Stencil One',Impact,'Arial Narrow',sans-serif;
+  --f-code:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-code);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
+.bar{display:flex;align-items:center;gap:18px;padding:10px 16px;border-bottom:1px solid var(--edge);flex-wrap:wrap}
+.brand{font-family:var(--f-disp);font-weight:900;font-size:32px;letter-spacing:.05em;color:var(--acid);line-height:1;text-shadow:0 0 14px rgba(182,240,0,.45)}
+.meta{font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
+.spacer{flex:1}
+.readout{display:flex;align-items:center;gap:16px;font-size:12px;letter-spacing:.08em;font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.readout b{color:var(--acid);font-weight:600}
+.readout span{color:var(--dim)}
+.cells{display:flex;gap:3px;align-items:center}
+.cells i{width:6px;height:12px;border:1px solid var(--rot);display:block}
+.cells i.on{background:var(--acid);border-color:var(--acid)}
+.cells i.hot{background:var(--rust);border-color:var(--rust)}
+.dots{display:flex;gap:5px}
+.dots i{width:8px;height:8px;border:1px solid var(--rot);display:block}
+.dots i.on{background:var(--acid);border-color:var(--acid);box-shadow:0 0 8px var(--acid)}
+.chip{font-size:11px;letter-spacing:.12em;padding:4px 8px;border:1px solid var(--edge);color:var(--dim);text-transform:uppercase}
+.chip.live{color:var(--bg);background:var(--acid);border-color:var(--acid)}
+.chip.drop{background:var(--rust);border-color:var(--rust);color:var(--bg)}
+
+.stage{position:relative;display:grid;grid-template-columns:minmax(260px,1fr) 1.5fr;gap:14px;padding:14px 16px;min-height:0}
+.pane{border:1px solid var(--edge);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.pane-head{display:flex;gap:10px;align-items:baseline;padding:7px 12px;border-bottom:1px solid var(--edge);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.pane-head .tag{font-family:var(--f-disp);font-weight:700;font-size:18px;letter-spacing:.06em;color:var(--acid)}
+.pane-head .onair{margin-left:auto;color:var(--acid)}
+.code{margin:0;padding:12px 14px 12px 6px;overflow:auto;font-family:var(--f-code);font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word;flex:1;min-height:0;counter-reset:l}
+.ln{position:relative;padding-left:3em;min-height:1.7em}
+.ln::before{counter-increment:l;content:counter(l);position:absolute;left:0;width:2.2em;text-align:right;color:#323c20;font-variant-numeric:tabular-nums}
+.ln.muted{opacity:.32}
+.code.rgb{text-shadow:-1.5px 0 rgba(255,91,31,.75),1.5px 0 rgba(182,240,0,.55)}
+.cm,.cs,.cn{color:var(--dim)}
+.cs{color:#6c7a48}
+.me{color:#93bd2c}
+.id{color:var(--ink)}
+.nu{color:#effcd2}
+.pu{color:#6f7d52}
+.at{color:var(--acid)}
+#fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+.ctrl{display:flex;align-items:center;gap:14px;padding:10px 16px;border-top:1px solid var(--edge);flex-wrap:wrap}
+.ctrl button{font-family:var(--f-disp);font-weight:700;font-size:16px;letter-spacing:.08em;background:var(--acid);color:var(--bg);border:1px solid var(--acid);padding:7px 14px;cursor:pointer}
+.ctrl button[aria-pressed="true"]{background:transparent;color:var(--acid)}
+.ctrl button:focus-visible,.ctrl input:focus-visible,.ctrl select:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.set{display:flex;align-items:center;gap:14px;padding-left:14px;border-left:1px solid var(--edge);flex-wrap:wrap}
+.set .lbl{font-family:var(--f-disp);font-weight:700;font-size:15px;letter-spacing:.08em;color:var(--acid)}
+.ctrl label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);letter-spacing:.04em}
+.ctrl input{accent-color:var(--acid)}
+.ctrl select{background:var(--panel);color:var(--ink);border:1px solid var(--rot);font-family:var(--f-code);font-size:12px;padding:4px 6px}
+.hint{margin-left:auto;font-size:11px;color:var(--dim);letter-spacing:.05em;max-width:46ch;line-height:1.5}
+.hint kbd{font-family:var(--f-code);color:var(--ink);border:1px solid var(--edge);padding:0 4px}
+
+@media (max-width:820px){
+  .stage{grid-template-columns:1fr;grid-template-rows:minmax(150px,.6fr) 1.4fr}
+  .hint{margin-left:0;max-width:none}
+  .set{border-left:0;padding-left:0}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">CUTX</div>
+  <div class="meta">PROJ 01 · prova cimice</div>
+  <div class="spacer"></div>
+  <div class="readout">
+    <div><span>BPM</span> <b>120</b></div>
+    <div><span>POS</span> <b id="pos">1.1.1</b></div>
+    <div class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div><span>SEZIONE</span> <b id="sec">INTRO</b></div>
+    <div class="cells" id="meter" title="energia che sente la cimice"><span>ENERGIA&nbsp;</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="chip" id="chip">cimice · nascosta</div>
+  </div>
+</header>
+
+<main class="stage" id="stage">
+  <section class="pane">
+    <div class="pane-head"><span class="tag">BEAT</span><span>909 sporco</span><span class="onair">● live</span></div>
+    <pre class="code" id="codeBeat"></pre>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span class="tag">LIVE 1</span><span>clip · melodia</span><span class="onair">● live</span></div>
+    <pre class="code" id="codeClip"></pre>
+  </section>
+  <canvas id="fx" aria-hidden="true"></canvas>
+</main>
+
+<footer class="ctrl">
+  <button id="bAudio" aria-pressed="false">▶ AUDIO</button>
+  <div class="set">
+    <span class="lbl">CIMICE</span>
+    <label for="cOn"><input type="checkbox" id="cOn" checked> attiva</label>
+    <label for="sFreq">passa
+      <select id="sFreq">
+        <option value="rara">di rado</option>
+        <option value="normale" selected>ogni tanto</option>
+        <option value="spessa">spesso</option>
+      </select>
+    </label>
+    <label for="cDrop"><input type="checkbox" id="cDrop" checked> impazzisce sul drop</label>
+  </div>
+  <div class="hint">Non premi niente: la cimice entra quando il pezzo cambia e impazzisce quando sente il drop. Qui il beat cambia sezione da solo per fartelo vedere. <kbd>spazio</kbd> audio.</div>
+</footer>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- codice mostrato ---------- */
+const BEAT_SRC = `// BEAT · 909 sporco
+$: s("bd*4").bank("RolandTR909").shape(.3)
+$: s("[~ hh]*4").bank("RolandTR909").gain(.7)
+$: s("~ sd ~ sd").bank("RolandTR909").room(.1)`;
+
+const CLIP_SRC = `// @synth {"forma":"square","voci":3,"detune":0.12,"spread":0.52,"pw":0.44,"fm":0.04,"fmh":2.99,"ottava":1,"pan":0.47,"cutoff":1225,"q":7.9,"ftype":"ladder","fenv":2.4,"fdecay":0.172,"fsustain":0.15,"frelease":0.14,"attack":0.024,"decay":0.07,"sustain":0.22,"release":0.29,"pdecay":0.07,"gain":0.75,"shape":0.38,"delaysync":"1/8","delayfeedback":0.36,"room":0.2,"roomsize":3.6,"phaser":0.1,"phaserdepth":0.71,"tremolodepth":0.66,"anteprima":"clip","note":"2 1 0 4","mano":[".transpose(1)",".sound(\\"sawtooth\\")",".fast(4)"],"scala":"f:minor"}
+n("2 1 0 4")
+  .scale("f:minor")
+  .trans(12)
+  .add(note("-.12,0,.12"))
+  .s("square")
+  .fm(.04).fmh(2.99)
+  .pan(.47)
+  .lpf(1225).lpq(7.9).ftype("ladder")
+  .lpenv(2.4).lpattack(.01).lpdecay(.172)
+  .lpsustain(.15).lprelease(.14)
+  .attack(.024).decay(.07).sustain(.22).release(.29)
+  .gain(.75)
+  .shape(.38)
+  .phaser(.1).phaserdepth(.71)
+  .room(.2).roomsize(3.6)
+  .transpose(1)
+  .sound("sawtooth")
+  .fast(4)`;
+
+/* ---------- costanti ---------- */
+const BPM = 120;
+const STEP_MS = 60000 / BPM / 4;
+const ACID = '#b6f000', ROT = '#6d8a14', INK = '#d6ecae', RUST = '#ff5b1f', BG = '#0a0c07';
+const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SCALE = [0, 2, 3, 5, 7, 8, 10];
+const MIDI = [2, 1, 0, 4].map(d => 53 + SCALE[d] + 13);
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+
+// arrangiamento del prototipo (in CUTX questo lo fai tu suonando)
+const SECTIONS = [
+  { name: 'INTRO',  bars: 4, kick: 0, hat: 0, snare: 0 },
+  { name: 'SALITA', bars: 4, kick: 0, hat: 1, snare: 1 },
+  { name: 'DROP',   bars: 8, kick: 1, hat: 1, snare: 1 },
+  { name: 'PAUSA',  bars: 4, kick: 0, hat: 1, snare: 0 },
+];
+const LOOP_BARS = SECTIONS.reduce((a, s) => a + s.bars, 0);
+function sectionAt(bar) {
+  let b = bar % LOOP_BARS;
+  for (const s of SECTIONS) { if (b < s.bars) return s; b -= s.bars; }
+  return SECTIONS[0];
+}
+const FREQ = {
+  rara:    { p: .35, cool: 12 },
+  normale: { p: .6,  cool: 6 },
+  spessa:  { p: .9,  cool: 2 },
+};
+
+/* ---------- dom ---------- */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), canvas = $('fx'), g = canvas.getContext('2d');
+const preBeat = $('codeBeat'), preClip = $('codeClip');
+const posEl = $('pos'), secEl = $('sec'), chip = $('chip');
+const dots = [...document.querySelectorAll('.dots i')];
+const cells = [...document.querySelectorAll('#meter i')];
+const bAudio = $('bAudio'), cOn = $('cOn'), sFreq = $('sFreq'), cDrop = $('cDrop');
+
+/* ---------- tokenizzazione ---------- */
+const tokens = [];
+const lineEls = new Map();
+function addTok(lineEl, text, cls, pre, li, lineText, atom) {
+  const sp = document.createElement('span');
+  sp.className = cls; sp.textContent = text;
+  lineEl.appendChild(sp);
+  const t = { el: sp, text, cls, pre, li, lineText, atom: !!atom,
+    x: 0, y: 0, w: 0, h: 0, cx: 0, cy: 0, vis: false, hl: 0, held: 0, scrUntil: 0, scrNext: 0 };
+  tokens.push(t);
+  return t;
+}
+function render(pre, src) {
+  src.split('\n').forEach((line, li) => {
+    const ln = document.createElement('div');
+    ln.className = 'ln';
+    lineEls.set(pre.id + ':' + li, ln);
+    const isCm = line.trimStart().startsWith('//');
+    const re = /("(?:[^"\\]|\\.)*")|(\.[A-Za-z_$][\w$]*)|(@\w+|[A-Za-z_$][\w$]*)|(-?\d*\.?\d+)|(\s+)|(.)/g;
+    let m;
+    while ((m = re.exec(line))) {
+      const [txt, str, meth, ident, num, ws] = m;
+      if (ws) { ln.appendChild(document.createTextNode(ws)); continue; }
+      if (str && !isCm) {
+        addTok(ln, '"', 'pu', pre, li, line);
+        const are = /(\*\d+)|([^\s,\[\]~*<>]+)|(\s+)|([,\[\]~<>])/g;
+        let a;
+        while ((a = are.exec(str.slice(1, -1)))) {
+          if (a[3]) ln.appendChild(document.createTextNode(a[3]));
+          else if (a[2]) addTok(ln, a[2], 'at', pre, li, line, true);
+          else addTok(ln, a[0], 'pu', pre, li, line);
+        }
+        addTok(ln, '"', 'pu', pre, li, line);
+        continue;
+      }
+      const cls = isCm ? (str ? 'cs' : num ? 'cn' : 'cm') : meth ? 'me' : ident ? 'id' : num ? 'nu' : 'pu';
+      addTok(ln, txt, cls, pre, li, line);
+    }
+    pre.appendChild(ln);
+  });
+}
+render(preBeat, BEAT_SRC);
+render(preClip, CLIP_SRC);
+
+const atomsOn = (pre, needle) => tokens.filter(t => t.pre === pre && t.atom && t.lineText.includes(needle));
+const A = {
+  mel: atomsOn(preClip, 'n("2 1 0 4")'),
+  det: atomsOn(preClip, 'note("'),
+  scale: atomsOn(preClip, '.scale(')[0],
+  square: atomsOn(preClip, '.s("square")')[0],
+  ladder: atomsOn(preClip, 'ftype(')[0],
+  saw: atomsOn(preClip, '.sound("sawtooth")')[0],
+};
+const lineOf = needle => tokens.find(t => t.pre === preBeat && t.lineText.includes(needle)).li;
+const LAYERS = {
+  kick:  { li: lineOf('"bd*4"') },
+  hat:   { li: lineOf('hh') },
+  snare: { li: lineOf('sd ~ sd') },
+};
+for (const L of Object.values(LAYERS)) {
+  L.dollar = tokens.find(t => t.pre === preBeat && t.li === L.li && t.text === '$');
+  L.atoms = tokens.filter(t => t.pre === preBeat && t.li === L.li && t.atom);
+  L.on = true;
+}
+const BD = LAYERS.kick.atoms.find(t => t.text === 'bd');
+const HH = LAYERS.hat.atoms.find(t => t.text === 'hh');
+const SD = LAYERS.snare.atoms.filter(t => t.text === 'sd');
+const bankOf = L => L.atoms.find(t => t.text === 'RolandTR909');
+
+// _$: in Strudel mette in muto una riga: lo mostriamo davvero nel codice
+function setLayer(name, on) {
+  const L = LAYERS[name];
+  if (L.on === on) return;
+  L.on = on;
+  L.dollar.text = on ? '$' : '_$';
+  L.dollar.el.textContent = L.dollar.text;
+  lineEls.get('codeBeat:' + L.li).classList.toggle('muted', !on);
+  needMeasure = true;
+}
+
+/* ---------- misure ---------- */
+let W = 0, H = 0, dpr = 1, needMeasure = true;
+function measure() {
+  const sr = stage.getBoundingClientRect();
+  W = stage.clientWidth; H = stage.clientHeight;
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  }
+  const prs = new Map([[preBeat, preBeat.getBoundingClientRect()], [preClip, preClip.getBoundingClientRect()]]);
+  for (const t of tokens) {
+    const r = t.el.getClientRects()[0] || t.el.getBoundingClientRect();
+    const pr = prs.get(t.pre);
+    t.x = r.left - sr.left; t.y = r.top - sr.top; t.w = r.width; t.h = r.height;
+    t.cx = t.x + t.w / 2; t.cy = t.y + t.h / 2;
+    t.vis = r.width > 0 && r.bottom > pr.top + 4 && r.top < pr.bottom - 4 && r.left < pr.right - 4;
+  }
+  needMeasure = false;
+}
+addEventListener('resize', () => needMeasure = true);
+preBeat.addEventListener('scroll', () => needMeasure = true, { passive: true });
+preClip.addEventListener('scroll', () => needMeasure = true, { passive: true });
+
+/* ---------- audio (imitazione del tuo synth, non Strudel) ---------- */
+let ac = null, master, synthBus, drumBus, revIn, noise, audioOn = false;
+function curve(amt) {
+  const k = 2 * amt / (1 - amt), n = 1024, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = i * 2 / (n - 1) - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); }
+  return c;
+}
+function initAudio() {
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -12; comp.knee.value = 6; comp.ratio.value = 10; comp.attack.value = .003; comp.release.value = .12;
+  master = ac.createGain(); master.gain.value = 0;
+  master.connect(comp); comp.connect(ac.destination);
+  const len = Math.floor(ac.sampleRate * 2.4), ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+  const conv = ac.createConvolver(); conv.buffer = ir;
+  revIn = ac.createGain(); const revOut = ac.createGain(); revOut.gain.value = .5;
+  revIn.connect(conv); conv.connect(revOut); revOut.connect(master);
+  noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+  const nd = noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  const sh = ac.createWaveShaper(); sh.curve = curve(.38); sh.oversample = '2x';
+  const sg = ac.createGain(); sg.gain.value = .75 * .34;
+  const pan = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
+  if (pan.pan) pan.pan.value = .47 * 2 - 1;
+  const sr = ac.createGain(); sr.gain.value = .2;
+  sh.connect(sg); sg.connect(pan); pan.connect(master); pan.connect(sr); sr.connect(revIn);
+  synthBus = sh;
+  const dsh = ac.createWaveShaper(); dsh.curve = curve(.3);
+  const dg = ac.createGain(); dg.gain.value = .72;
+  const dr = ac.createGain(); dr.gain.value = .1;
+  dsh.connect(dg); dg.connect(master); dg.connect(dr); dr.connect(revIn);
+  drumBus = dsh;
+}
+function synth(midi, t) {
+  const dur = STEP_MS / 1000, end = t + dur;
+  const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 7.9;
+  const f0 = 1225, peak = Math.min(f0 * Math.pow(2, 2.4), 16000), fs = f0 + (peak - f0) * .15;
+  f.frequency.setValueAtTime(f0, t); f.frequency.linearRampToValueAtTime(peak, t + .01);
+  f.frequency.setTargetAtTime(fs, t + .01, .172 / 3); f.frequency.setValueAtTime(fs, end); f.frequency.setTargetAtTime(f0, end, .14 / 3);
+  const amp = ac.createGain(), vEnd = .22 + .78 * Math.exp(-(dur - .024) / (.07 / 3));
+  amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(1, t + .024);
+  amp.gain.setTargetAtTime(.22, t + .024, .07 / 3); amp.gain.setValueAtTime(vEnd, end); amp.gain.setTargetAtTime(0, end, .29 / 4);
+  const vg = ac.createGain(); vg.gain.value = .33;
+  vg.connect(f); f.connect(amp); amp.connect(synthBus);
+  for (const off of [-.12, 0, .12]) {
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(midi + off);
+    o.connect(vg); o.start(t); o.stop(end + .45);
+  }
+}
+function noiseHit(t, type, freq, q, level, decay) {
+  const s = ac.createBufferSource(); s.buffer = noise;
+  const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = freq; fl.Q.value = q;
+  const e = ac.createGain(); e.gain.setValueAtTime(level, t); e.gain.exponentialRampToValueAtTime(.001, t + decay);
+  s.connect(fl); fl.connect(e); e.connect(drumBus); s.start(t, Math.random() * .5); s.stop(t + decay + .02);
+}
+function kick(t) {
+  const o = ac.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(165, t); o.frequency.exponentialRampToValueAtTime(46, t + .11);
+  const e = ac.createGain(); e.gain.setValueAtTime(1, t); e.gain.exponentialRampToValueAtTime(.001, t + .42);
+  o.connect(e); e.connect(drumBus); o.start(t); o.stop(t + .45);
+  noiseHit(t, 'highpass', 2500, .7, .22, .016);
+}
+function snare(t) {
+  noiseHit(t, 'bandpass', 1900, .8, .6, .19);
+  const o = ac.createOscillator(); o.type = 'triangle';
+  o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(140, t + .08);
+  const e = ac.createGain(); e.gain.setValueAtTime(.4, t); e.gain.exponentialRampToValueAtTime(.001, t + .1);
+  o.connect(e); e.connect(drumBus); o.start(t); o.stop(t + .12);
+}
+const hat = t => noiseHit(t, 'highpass', 7500, .5, .3 * .7, .05);
+function scheduleAudio(ev) {
+  let at = ac.currentTime + (ev.time - performance.now()) / 1000;
+  if (at < ac.currentTime - .01) return;
+  at = Math.max(at, ac.currentTime + .002);
+  const s = ev.step % 16, sec = sectionAt(Math.floor(ev.step / 16));
+  synth(MIDI[ev.step % 4], at);
+  if (sec.kick && s % 4 === 0) kick(at);
+  if (sec.hat && s % 4 === 2) hat(at);
+  if (sec.snare && (s === 4 || s === 12)) snare(at);
+}
+function toggleAudio() {
+  if (!ac) { try { initAudio(); } catch (e) { bAudio.textContent = 'AUDIO NON DISPONIBILE'; return; } }
+  if (ac.state === 'suspended') ac.resume();
+  audioOn = !audioOn;
+  master.gain.setTargetAtTime(audioOn ? .85 : 0, ac.currentTime, .02);
+  bAudio.setAttribute('aria-pressed', audioOn);
+  bAudio.textContent = audioOn ? '■ AUDIO' : '▶ AUDIO';
+}
+
+/* ---------- clock unico ---------- */
+const queue = [];
+let nextStep = 0, nextTime = performance.now() + 250, lastBeatTime = -1e9, curStep = 0;
+setInterval(() => {
+  const now = performance.now();
+  if (nextTime < now - 400) nextTime = now + 40;
+  while (nextTime < now + 140) {
+    const ev = { step: nextStep, time: nextTime };
+    queue.push(ev);
+    if (audioOn && ac) scheduleAudio(ev);
+    nextStep++; nextTime += STEP_MS;
+  }
+}, 25);
+
+/* ---------- il sensore: cosa "sente" la cimice ---------- */
+// legge cosa sta suonando (righe attive e loro peso), non un tasto
+const sense = { hist: [], low: [], crazyBars: 0, barsSinceLeft: 99, lastDrop: -99 };
+function barEnergy(sec) {
+  const total = 4.8 + sec.kick * 6 + sec.hat * 2 + sec.snare * 2.4;
+  const low = sec.kick * 12;
+  return { total, low };
+}
+function senseBar(bar) {
+  const sec = sectionAt(bar);
+  const e = barEnergy(sec);
+  const prev = sense.hist.length ? sense.hist[sense.hist.length - 1] : e.total;
+  const prevLow = sense.low.slice(-2);
+  const avgLow = prevLow.length ? prevLow.reduce((a, b) => a + b, 0) / prevLow.length : e.low;
+  sense.hist.push(e.total); sense.low.push(e.low);
+  if (sense.hist.length > 16) { sense.hist.shift(); sense.low.shift(); }
+  const variation = Math.abs(e.total - prev) / prev > .25;
+  const drop = e.low > 8 && avgLow < 3;
+  const lvl = Math.round(Math.min(1, e.total / 15.2) * 8);
+  cells.forEach((c, i) => { c.className = i < lvl ? (drop || (sec.kick && i > 5) ? 'hot' : 'on') : ''; });
+  return { variation, drop, sec };
+}
+
+/* ---------- effetti ---------- */
+let bug = null, shake = 0, reenter = null;
+const threads = [], bars = [];
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const crazy = () => !!bug && sense.crazyBars > 0 && cDrop.checked;
+function flash(t, v = 1) { if (t) t.hl = Math.max(t.hl, v); }
+function scramble(t, ms) {
+  if (reduced || !t || t.cls === 'pu') return;
+  const now = performance.now();
+  if (t.scrUntil < now) t.scrNext = 0;
+  t.scrUntil = Math.max(t.scrUntil, now + ms);
+}
+const GLYPH = '01#%&/\\<>[]{}=+*!?$@XZKQ_';
+function addThread(x1, y1, x2, y2, color, max = .35) {
+  threads.push({ x1, y1, x2, y2, color, life: 0, max });
+  if (threads.length > 70) threads.shift();
+}
+function glitchBar() {
+  if (reduced) return;
+  const c = crazy();
+  bars.push({ x: rnd(-40, W * .7), y: rnd(0, H), w: rnd(90, c ? 620 : 300), h: rnd(4, c ? 24 : 12),
+    color: c && Math.random() < .6 ? RUST : Math.random() < .25 ? INK : ACID, life: 0, max: rnd(.06, .18) });
+}
+const playing = () => tokens.filter(t => t.vis && t.hl > .5);
+
+/* ---------- la cimice biomeccanica: linee, nodi, vertebre ---------- */
+const SEGS = 6, SEG_GAP = 9;
+const REACH = 64, LEG_A = REACH * .45, LEG_B = REACH * .55;
+const PAIRS = [
+  { seg: 0, ang: 55,  fwd: 1 },
+  { seg: 1, ang: 92,  fwd: -1 },
+  { seg: 2, ang: 125, fwd: -1 },
+];
+const FEELER_REST = 26, FEELER_REACH = 95, FEELER_REACH_CRAZY = 170;
+
+function segAngle(b, i) {
+  if (i === 0) return b.h;
+  const p = b.segs[i - 1], s = b.segs[i];
+  return Math.atan2(p.y - s.y, p.x - s.x);
+}
+function hipPos(b, leg) {
+  const s = b.segs[leg.seg], a = segAngle(b, leg.seg) + leg.side * Math.PI / 2;
+  return { x: s.x + Math.cos(a) * 4, y: s.y + Math.sin(a) * 4 };
+}
+function idealFoot(b, leg, ahead) {
+  const hp = hipPos(b, leg), sa = segAngle(b, leg.seg), a = sa + leg.side * leg.ang;
+  return { x: hp.x + Math.cos(a) * REACH * .72 + Math.cos(sa) * ahead,
+           y: hp.y + Math.sin(a) * REACH * .72 + Math.sin(sa) * ahead };
+}
+// il piede si appoggia solo su parole a distanza simile: zampe sempre uguali
+function chooseFoot(b, leg) {
+  const hp = hipPos(b, leg), id = idealFoot(b, leg, REACH * .3);
+  let best = null, bs = Infinity;
+  for (const t of tokens) {
+    if (!t.vis || t.held > 0 || t.cls === 'pu') continue;
+    const dh = Math.hypot(t.cx - hp.x, t.cy - hp.y);
+    if (dh < REACH * .6 || dh > REACH * .88) continue;
+    const d2 = (t.cx - id.x) ** 2 + (t.cy - id.y) ** 2;
+    if (d2 > (REACH * .55) ** 2) continue;
+    const sc = d2 + Math.random() * 120;
+    if (sc < bs) { bs = sc; best = t; }
+  }
+  return best ? { x: best.cx, y: best.cy, tok: best } : { x: id.x, y: id.y, tok: null };
+}
+function startStep(leg, target, dur) {
+  if (leg.tok) { leg.tok.held--; leg.tok = null; }
+  if (target.tok) target.tok.held++;
+  leg.from = { x: leg.foot.x, y: leg.foot.y };
+  leg.to = target; leg.t = 0; leg.dur = dur;
+}
+function makeBug(x, y, h, plant) {
+  const b = { x, y, h, segs: [], legs: [], ants: [], state: 'walk', target: null, pulse: 0,
+    age: 0, maxBars: Math.round(rnd(4, 8)), tag: 0, tagOn: false, tagOffAge: 0,
+    mode: 'creep', modeUntil: performance.now() + rnd(1200, 2600), armed: false, redUntil: 0, blink: false };
+  for (let i = 0; i < SEGS; i++) b.segs.push({ x: x - Math.cos(h) * SEG_GAP * i, y: y - Math.sin(h) * SEG_GAP * i });
+  [-1, 1].forEach(side => PAIRS.forEach((p, i) => {
+    b.legs.push({ side, seg: p.seg, ang: p.ang * Math.PI / 180, fwd: p.fwd, group: (i + (side > 0 ? 1 : 0)) % 2,
+      foot: { x: 0, y: 0 }, from: null, to: null, t: 1, dur: .09, tok: null });
+  }));
+  for (const leg of b.legs) {
+    const tg = plant ? chooseFoot(b, leg) : (() => { const p = idealFoot(b, leg, 0); return { x: p.x, y: p.y, tok: null }; })();
+    leg.foot = { x: tg.x, y: tg.y };
+    if (tg.tok) { tg.tok.held++; leg.tok = tg.tok; }
+  }
+  for (const side of [-1, 1]) b.ants.push({ side, tip: { x: x + Math.cos(h) * 30, y: y + Math.sin(h) * 30 }, tok: null, phase: Math.random() * 6, base: null });
+  return b;
+}
+function pickTarget(b) {
+  const pool = playing().filter(t => t.cx > 40 && t.cx < W - 40 && t.cy > 30 && t.cy < H - 30);
+  const any = tokens.filter(t => t.vis && t.cls !== 'pu' && t.cx > 40 && t.cx < W - 40);
+  const t = pick(pool.length && Math.random() < .6 ? pool : any);
+  const off = rnd(12, 36), a = rnd(0, Math.PI * 2);
+  b.target = t ? { x: t.cx + Math.cos(a) * off, y: t.cy + Math.sin(a) * off } : { x: W / 2, y: H / 2 };
+}
+function summon() {
+  if (bug) return;
+  reenter = null;
+  const edges = [[-60, rnd(H * .2, H * .8), 0], [W + 60, rnd(H * .2, H * .8), Math.PI],
+                 [rnd(W * .2, W * .8), -60, Math.PI / 2], [rnd(W * .2, W * .8), H + 60, -Math.PI / 2]];
+  const [x, y, h] = pick(edges);
+  bug = makeBug(x, y, h, false);
+  pickTarget(bug);
+}
+function dismiss() {
+  if (!bug || bug.state === 'exit') return;
+  bug.state = 'exit'; bug.mode = 'dart'; bug.armed = false;
+  const dl = bug.x, dr = W - bug.x, dt = bug.y, db = H - bug.y, m = Math.min(dl, dr, dt, db);
+  bug.target = m === dl ? { x: -160, y: bug.y } : m === dr ? { x: W + 160, y: bug.y } : m === dt ? { x: bug.x, y: -160 } : { x: bug.x, y: H + 160 };
+}
+function removeBug() {
+  for (const leg of bug.legs) if (leg.tok) leg.tok.held--;
+  if (bug.blink && cOn.checked) {
+    // sparisce e rientra subito da un altro lato
+    reenter = { at: performance.now() + rnd(150, 700), keep: { age: bug.age, maxBars: bug.maxBars, tagOn: bug.tagOn, tagOffAge: bug.tagOffAge } };
+    bug = null; return;
+  }
+  bug = null; sense.barsSinceLeft = 0;
+}
+// movimento da insetto: entra piano, scatto veloce, si blocca, altro scatto
+function startDart(b, now, c) {
+  pickTarget(b);
+  b.mode = 'dart'; b.armed = false;
+  b.modeUntil = now + rnd(130, c ? 260 : 420);
+  b.h = Math.atan2(b.target.y - b.y, b.target.x - b.x) + rnd(-.25, .25);
+  if (Math.random() < .25) b.redUntil = now + rnd(150, 500);
+}
+function endDart(b, now, c) {
+  b.mode = 'freeze'; b.armed = false;
+  b.modeUntil = now + (c ? rnd(50, 220) : rnd(250, 1100));
+}
+function blinkOut(b) {
+  dismiss();
+  b.blink = true;
+}
+// la firma: compare poco dopo l'entrata, poi ogni tanto, poi sparisce
+function tagTick(b) {
+  if (b.age === 2) { b.tagOn = true; b.tagOffAge = b.age + 3; }
+  else if (!b.tagOn && b.age > 5 && Math.random() < .12) { b.tagOn = true; b.tagOffAge = b.age + 2; }
+  if (b.tagOn && b.age >= b.tagOffAge) b.tagOn = false;
+}
+function knee(hx, hy, fx, fy, a, b, bend) {
+  const dx = fx - hx, dy = fy - hy;
+  let d = Math.hypot(dx, dy);
+  d = Math.min(Math.max(d, Math.abs(a - b) + .01), a + b - .01);
+  const base = Math.atan2(dy, dx);
+  const A = Math.acos(Math.max(-1, Math.min(1, (a * a + d * d - b * b) / (2 * a * d))));
+  const ang = base + bend * A;
+  return [hx + Math.cos(ang) * a, hy + Math.sin(ang) * a];
+}
+
+/* decide da sola, a inizio battuta */
+function bugBrain(bar) {
+  const { variation, drop, sec } = senseBar(bar);
+  secEl.textContent = sec.name;
+  const f = FREQ[sFreq.value];
+  if (!bug) sense.barsSinceLeft++;
+  if (!cOn.checked) { if (bug) dismiss(); return; }
+  if (drop && cDrop.checked) {
+    sense.crazyBars = 4;
+    if (!bug) summon();
+    if (bug) { bug.maxBars = Math.max(bug.maxBars, bug.age + 6); if (bug.state === 'exit') bug.state = 'walk'; }
+  } else if (variation) {
+    if (!bug && sense.barsSinceLeft >= f.cool && Math.random() < f.p) summon();
+    else if (bug && bug.age >= 3 && sense.crazyBars <= 0 && Math.random() < .5) dismiss();
+  }
+  if (bug) {
+    bug.age++;
+    tagTick(bug);
+    if (bug.state === 'walk' && sense.crazyBars <= 0 && bug.age >= 2 && bug.age < bug.maxBars - 1 && Math.random() < .2) blinkOut(bug);
+    if (bug.age >= bug.maxBars && sense.crazyBars <= 0) dismiss();
+  }
+  if (sense.crazyBars > 0) sense.crazyBars--;
+}
+
+function bugOnStep(k) {
+  const b = bug, s = k % 16, c = crazy();
+  if (b.armed && b.state === 'walk') startDart(b, performance.now(), c);
+  if (s % 4 === 0 && !c && Math.random() < .12) b.redUntil = performance.now() + rnd(200, 700);
+  if (b.state !== 'exit') {
+    const cands = [];
+    for (const leg of b.legs) {
+      if (leg.t < 1 || leg.group !== k % 2) continue;
+      const id = idealFoot(b, leg, 0);
+      const st = Math.hypot(leg.foot.x - id.x, leg.foot.y - id.y);
+      if (st > REACH * .3) cands.push([st, leg]);
+    }
+    cands.sort((p, q) => q[0] - p[0]);
+    cands.slice(0, c ? 4 : 2).forEach(([, leg]) => startStep(leg, chooseFoot(b, leg), c ? .05 : .09));
+  }
+  const held = b.legs.filter(l => l.tok && l.t >= 1).map(l => l.tok);
+  const pl = playing();
+  if (s % 4 === 0) {
+    b.pulse = 1;
+    for (let i = 0; i < (c ? 3 : 1); i++) {
+      const t = pick(held);
+      if (t) addThread(b.x, b.y, t.cx + (t.cx - b.x) * .9, t.cy + (t.cy - b.y) * .9, Math.random() < .3 ? INK : ACID);
+    }
+    if (c) {
+      for (const t of pl) addThread(b.x, b.y, t.cx, t.cy, Math.random() < .5 ? RUST : ACID, .3);
+      for (let i = 0; i < 3; i++) { const t1 = pick(pl), t2 = pick(pl); if (t1 && t2 && t1 !== t2) addThread(t1.cx, t1.cy, t2.cx, t2.cy, ACID, .4); }
+      glitchBar(); glitchBar(); if (Math.random() < .7) glitchBar();
+      shake = .09;
+    } else {
+      if (pl.length && Math.random() < .5) { const t = pick(pl); addThread(b.x, b.y, t.cx, t.cy, RUST, .3); }
+      if (Math.random() < .3) glitchBar();
+    }
+  }
+  if (s === 4 || s === 12) {
+    const vis = tokens.filter(t => t.vis && t.cls !== 'pu');
+    const t1 = pick(pl.length ? pl : vis), t2 = pick(vis);
+    if (t1 && t2) addThread(t1.cx, t1.cy, t2.cx, t2.cy, c ? RUST : ROT, .45);
+  }
+  // il virus: rovina per un attimo le parole sotto la testa
+  for (const t of tokens) if (t.vis && Math.abs(t.cx - b.x) < 26 && Math.abs(t.cy - b.y) < 16) scramble(t, 160);
+}
+
+function updateBug(dt, now) {
+  const b = bug; if (!b) return;
+  const c = crazy();
+  if (!b.target) pickTarget(b);
+  if (b.state === 'walk' && Math.hypot(b.target.x - b.x, b.target.y - b.y) < 20) {
+    if (b.mode === 'dart') endDart(b, now, c); else pickTarget(b);
+  }
+  if (b.state === 'exit') b.mode = 'dart';
+  else if (b.mode === 'dart' && now >= b.modeUntil) endDart(b, now, c);
+  else if (b.mode !== 'dart' && now >= b.modeUntil) b.armed = true;
+  let diff = Math.atan2(b.target.y - b.y, b.target.x - b.x) - b.h;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  const turn = (b.mode === 'dart' ? 14 : c ? 5 : 2.4) * dt;
+  b.h += Math.max(-turn, Math.min(turn, diff));
+  if (c && !reduced) b.h += rnd(-.06, .06);
+  const v = (b.mode === 'dart' ? (b.state === 'exit' ? 340 : c ? 380 : 270) : b.mode === 'creep' ? 22 : 0) * (reduced ? .5 : 1);
+  b.x += Math.cos(b.h) * v * dt; b.y += Math.sin(b.h) * v * dt;
+  b.pulse *= Math.exp(-dt * 8);
+  // le vertebre seguono la testa
+  b.segs[0].x = b.x; b.segs[0].y = b.y;
+  for (let i = 1; i < SEGS; i++) {
+    const p = b.segs[i - 1], s = b.segs[i];
+    const dx = s.x - p.x, dy = s.y - p.y, d = Math.hypot(dx, dy) || 1;
+    const wob = c ? rnd(-1.5, 1.5) : 0;
+    s.x = p.x + dx / d * SEG_GAP + wob; s.y = p.y + dy / d * SEG_GAP + wob;
+  }
+
+  for (const leg of b.legs) {
+    if (leg.t < 1) {
+      leg.t = Math.min(1, leg.t + dt / leg.dur);
+      const e = leg.t < .5 ? 2 * leg.t * leg.t : 1 - Math.pow(-2 * leg.t + 2, 2) / 2;
+      leg.foot.x = leg.from.x + (leg.to.x - leg.from.x) * e;
+      leg.foot.y = leg.from.y + (leg.to.y - leg.from.y) * e;
+      if (leg.t >= 1 && leg.to.tok) { leg.tok = leg.to.tok; flash(leg.tok, .4); }
+    } else {
+      const hp = hipPos(b, leg);
+      if (Math.hypot(leg.foot.x - hp.x, leg.foot.y - hp.y) > REACH * .97) {
+        if (b.state === 'exit') { const p = idealFoot(b, leg, REACH * .3); startStep(leg, { x: p.x, y: p.y, tok: null }, .035); }
+        else startStep(leg, chooseFoot(b, leg), b.mode === 'dart' ? .035 : .07);
+      }
+    }
+  }
+
+  // antenne: toccano solo quello che sta suonando
+  const reach = c ? FEELER_REACH_CRAZY : FEELER_REACH;
+  const pl = playing();
+  const hc = Math.cos(b.h), hs = Math.sin(b.h);
+  for (const an of b.ants) {
+    const base = { x: b.x + hc * 7 - hs * an.side * 2.5, y: b.y + hs * 7 + hc * an.side * 2.5 };
+    if (an.tok && (an.tok.hl < .35 || !an.tok.vis || Math.hypot(an.tok.cx - base.x, an.tok.cy - base.y) > reach)) an.tok = null;
+    if (!an.tok || an.tok.hl < .9) {
+      let best = null, bs = Infinity;
+      for (const t of pl) {
+        if (b.ants.some(o => o !== an && o.tok === t) && pl.length > 1) continue;
+        const d = Math.hypot(t.cx - base.x, t.cy - base.y);
+        if (d > reach) continue;
+        const cross = hc * (t.cy - b.y) - hs * (t.cx - b.x);
+        const sc = d - (Math.sign(cross) === an.side ? 25 : 0) - (t.hl > .9 ? 30 : 0);
+        if (sc < bs) { bs = sc; best = t; }
+      }
+      if (best && best !== an.tok) { an.tok = best; if (c) scramble(best, 90); }
+    }
+    an.phase += dt * (c ? 18 : b.mode === 'freeze' ? 9 : 4) + (b.mode === 'freeze' && Math.random() < .04 ? rnd(-2, 2) : 0);
+    let gx, gy;
+    if (an.tok) { gx = an.tok.cx; gy = an.tok.cy; }
+    else {
+      const a = b.h + an.side * (.4 + Math.sin(an.phase) * .2);
+      gx = base.x + Math.cos(a) * FEELER_REST; gy = base.y + Math.sin(a) * FEELER_REST;
+    }
+    const k = Math.min(1, dt * (c ? 40 : 22));
+    an.tip.x += (gx - an.tip.x) * k; an.tip.y += (gy - an.tip.y) * k;
+    an.base = base;
+  }
+
+  b.tag += ((b.tagOn && b.state === 'walk' ? 1 : 0) - b.tag) * Math.min(1, dt * 3);
+  if (b.state === 'exit' && (b.x < -150 || b.x > W + 150 || b.y < -150 || b.y > H + 150)) removeBug();
+}
+
+/* ---------- passo del sequencer ---------- */
+function fireStep(ev) {
+  const k = ev.step, s = k % 16, bar = Math.floor(k / 16);
+  curStep = k;
+  const sec = sectionAt(bar);
+  if (s === 0) {
+    setLayer('kick', !!sec.kick); setLayer('hat', !!sec.hat); setLayer('snare', !!sec.snare);
+    bugBrain(bar);
+  }
+  flash(A.mel[k % 4]);
+  A.det.forEach(t => flash(t, .7));
+  flash(A.scale, .45); flash(A.square, .35); flash(A.ladder, .35); flash(A.saw, .45);
+  if (sec.kick && s % 4 === 0) { flash(BD); flash(bankOf(LAYERS.kick), .6); }
+  if (sec.hat && s % 4 === 2) { flash(HH, .85); flash(bankOf(LAYERS.hat), .55); }
+  if (sec.snare && (s === 4 || s === 12)) { flash(SD[s === 4 ? 0 : 1]); flash(bankOf(LAYERS.snare), .6); }
+  if (s % 4 === 0) {
+    lastBeatTime = ev.time;
+    dots.forEach((d, i) => d.classList.toggle('on', i === s / 4));
+  }
+  posEl.textContent = `${bar + 1}.${Math.floor(s / 4) + 1}.${(s % 4) + 1}`;
+  if (bug) bugOnStep(k);
+  ui();
+}
+
+/* ---------- disegno ---------- */
+function updateFx(dt) {
+  for (const t of tokens) t.hl = t.hl > .01 ? t.hl * Math.exp(-dt * 8) : 0;
+  for (const arr of [threads, bars]) for (let i = arr.length - 1; i >= 0; i--) { arr[i].life += dt; if (arr[i].life > arr[i].max) arr.splice(i, 1); }
+  if (shake > 0 && !reduced) { shake -= dt; stage.style.transform = shake > 0 ? `translate(${rnd(-3, 3)}px,${rnd(-2, 2)}px)` : ''; }
+  const rgb = crazy() && (performance.now() - lastBeatTime) < 90 && !reduced;
+  preBeat.classList.toggle('rgb', rgb); preClip.classList.toggle('rgb', rgb);
+}
+function updateScramble(now) {
+  for (const t of tokens) {
+    if (!t.scrUntil) continue;
+    const node = t.el.firstChild;
+    if (now > t.scrUntil) { node.nodeValue = t.text; t.scrUntil = 0; continue; }
+    if (now > t.scrNext) {
+      let s = '';
+      for (let i = 0; i < t.text.length; i++) s += Math.random() < .55 ? GLYPH[(Math.random() * GLYPH.length) | 0] : t.text[i];
+      node.nodeValue = s; t.scrNext = now + 45;
+    }
+  }
+}
+function draw() {
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const b of bars) { g.globalAlpha = .85; g.fillStyle = b.color; g.fillRect(b.x, b.y, b.w, b.h); }
+  // quello che suona, come in Strudel
+  for (const t of tokens) {
+    if (t.hl <= .02 || !t.vis) continue;
+    g.globalAlpha = t.hl * .16; g.fillStyle = ACID; g.fillRect(t.x - 2, t.y, t.w + 4, t.h);
+    g.globalAlpha = t.hl; g.strokeStyle = ACID; g.lineWidth = 1; g.strokeRect(t.x - 2, t.y - 1, t.w + 4, t.h + 2);
+  }
+  for (const th of threads) {
+    const k = 1 - th.life / th.max;
+    g.globalAlpha = k * .8; g.strokeStyle = th.color; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(th.x1, th.y1); g.lineTo(th.x2, th.y2); g.stroke();
+    g.fillStyle = th.color; g.fillRect(th.x2 - 1.5, th.y2 - 1.5, 3, 3);
+  }
+  if (bug) drawBug();
+  g.globalAlpha = 1;
+}
+function drawBug() {
+  const b = bug, c = crazy();
+  const now = performance.now();
+  const red = c ? Math.floor(now / 110) % 2 === 0 : now < b.redUntil;
+  const col = red ? RUST : ACID, feel = red ? INK : RUST;
+
+  // parole su cui poggia
+  for (const leg of b.legs) {
+    const t = leg.tok;
+    if (!t || leg.t < 1 || !t.vis) continue;
+    g.globalAlpha = .85; g.strokeStyle = red ? RUST : ACID; g.lineWidth = 1.1;
+    g.strokeRect(t.x - 3, t.y - 1.5, t.w + 6, t.h + 3);
+  }
+
+  // antenne sulle note che suonano
+  for (const an of b.ants) {
+    if (!an.base) continue;
+    const mx = (an.base.x + an.tip.x) / 2, my = (an.base.y + an.tip.y) / 2;
+    const dx = an.tip.x - an.base.x, dy = an.tip.y - an.base.y, L = Math.hypot(dx, dy) || 1;
+    const kk = an.side * (5 + Math.sin(an.phase * 1.3) * 4), nx = -dy / L, ny = dx / L;
+    const j1x = an.base.x + dx * .3 + nx * kk, j1y = an.base.y + dy * .3 + ny * kk;
+    const j2x = an.base.x + dx * .65 - nx * kk * .5, j2y = an.base.y + dy * .65 - ny * kk * .5;
+    g.globalAlpha = .95; g.strokeStyle = feel; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(an.base.x, an.base.y); g.lineTo(j1x, j1y); g.lineTo(j2x, j2y); g.lineTo(an.tip.x, an.tip.y); g.stroke();
+    g.fillStyle = INK; g.fillRect(j1x - 1, j1y - 1, 2, 2); g.fillRect(j2x - 1, j2y - 1, 2, 2);
+    g.fillStyle = feel; g.beginPath(); g.arc(an.tip.x, an.tip.y, an.tok ? 2.2 : 1.4, 0, Math.PI * 2); g.fill();
+    if (an.tok) { const t = an.tok; g.strokeStyle = feel; g.lineWidth = 1.3; g.strokeRect(t.x - 4, t.y - 2, t.w + 8, t.h + 4); }
+  }
+
+  const pts = b.legs.map(leg => {
+    const hp = hipPos(b, leg);
+    const [kx, ky] = knee(hp.x, hp.y, leg.foot.x, leg.foot.y, LEG_A, LEG_B, -leg.side * leg.fwd);
+    return { leg, hp, kx, ky };
+  });
+
+  g.save();
+  g.shadowColor = red ? 'rgba(255,91,31,.75)' : 'rgba(182,240,0,.7)'; g.shadowBlur = 7;
+  // rete tra le ginocchia
+  g.globalAlpha = .3; g.strokeStyle = col; g.lineWidth = 1;
+  for (const side of [-1, 1]) {
+    const sp = pts.filter(p => p.leg.side === side);
+    g.beginPath(); sp.forEach((p, i) => i ? g.lineTo(p.kx, p.ky) : g.moveTo(p.kx, p.ky)); g.stroke();
+  }
+  // zampe
+  g.globalAlpha = 1; g.lineWidth = 1.2; g.strokeStyle = col;
+  for (const p of pts) { g.beginPath(); g.moveTo(p.hp.x, p.hp.y); g.lineTo(p.kx, p.ky); g.lineTo(p.leg.foot.x, p.leg.foot.y); g.stroke(); }
+  // colonna vertebrale
+  g.beginPath(); b.segs.forEach((s, i) => i ? g.lineTo(s.x, s.y) : g.moveTo(s.x, s.y)); g.stroke();
+  g.shadowBlur = 0;
+  for (const p of pts) {
+    g.fillStyle = INK; g.beginPath(); g.arc(p.kx, p.ky, 1.8, 0, Math.PI * 2); g.fill();
+    g.fillStyle = p.leg.tok && p.leg.t >= 1 ? ACID : ROT;
+    g.fillRect(p.leg.foot.x - 2, p.leg.foot.y - 2, 4, 4);
+  }
+  // vertebre, dalla coda alla testa
+  for (let i = SEGS - 1; i >= 1; i--) {
+    const s = b.segs[i], a = segAngle(b, i), w = 11 - i * 1.3, h = 7.5 - i * .9;
+    g.save(); g.translate(s.x, s.y); g.rotate(a);
+    g.fillStyle = BG; g.fillRect(-w / 2, -h / 2, w, h);
+    g.strokeStyle = col; g.lineWidth = 1.1; g.strokeRect(-w / 2, -h / 2, w, h);
+    g.beginPath(); g.moveTo(0, -h / 2 - 2.5); g.lineTo(0, -h / 2); g.moveTo(0, h / 2); g.lineTo(0, h / 2 + 2.5); g.stroke();
+    g.fillStyle = i % 2 ? INK : col; g.fillRect(-1, -1, 2, 2);
+    g.restore();
+  }
+  // testa
+  g.translate(b.x, b.y); g.rotate(b.h);
+  const sc = 1 + b.pulse * .18; g.scale(sc, sc);
+  g.fillStyle = BG; g.fillRect(-6, -5, 13, 10);
+  g.shadowColor = red ? 'rgba(255,91,31,.8)' : 'rgba(182,240,0,.8)'; g.shadowBlur = 9;
+  g.strokeStyle = col; g.lineWidth = 1.4; g.strokeRect(-6, -5, 13, 10);
+  g.shadowBlur = 0;
+  g.globalAlpha = .45 + .55 * b.pulse; g.fillStyle = red ? INK : ACID; g.fillRect(-3.5, -2.5, 5, 5);
+  g.globalAlpha = 1; g.fillStyle = INK; g.fillRect(4, -1, 2, 2);
+  g.restore();
+
+  // firma, ogni tanto
+  if (b.tag > .02) {
+    const tail = b.segs[SEGS - 1];
+    g.globalAlpha = b.tag * .8; g.fillStyle = ROT; g.font = `500 9px ${MONO}`; g.textBaseline = 'top';
+    g.fillText('idea by @rybinfx', tail.x - 30, tail.y + 14);
+  }
+  g.globalAlpha = 1;
+}
+
+/* ---------- ciclo ---------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (needMeasure) measure();
+  const lat = audioOn && ac ? ((ac.outputLatency || 0) + (ac.baseLatency || 0)) * 1000 : 0;
+  while (queue.length && queue[0].time + lat <= now) {
+    const ev = queue.shift();
+    if (now - ev.time - lat < 300) fireStep(ev);
+  }
+  if (!bug && reenter && now >= reenter.at) {
+    const keep = reenter.keep; summon(); Object.assign(bug, keep);
+    bug.mode = 'dart'; bug.armed = false; bug.modeUntil = now + rnd(200, 450);
+  }
+  updateBug(dt, now); updateFx(dt); updateScramble(now); draw();
+  requestAnimationFrame(frame);
+}
+
+function ui() {
+  const c = crazy();
+  chip.className = 'chip' + (c ? ' drop' : bug ? ' live' : '');
+  chip.textContent = !bug ? (cOn.checked ? 'cimice · nascosta' : 'cimice · spenta') : bug.state === 'exit' ? 'cimice · se ne va' : c ? 'cimice · impazzita' : 'cimice · in giro';
+}
+bAudio.addEventListener('click', toggleAudio);
+cOn.addEventListener('change', () => { if (!cOn.checked) dismiss(); ui(); });
+addEventListener('keydown', e => { if (e.code === 'Space' && !e.repeat && e.target.tagName !== 'SELECT') { e.preventDefault(); toggleAudio(); } });
+
+function start() {
+  measure();
+  bug = makeBug(W * .62, H * .36, -.3, true);
+  pickTarget(bug);
+  sense.barsSinceLeft = 0;
+  ui();
+  requestAnimationFrame(frame);
+}
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(start, start);
+})();
+</script>
+</body>
+</html>
