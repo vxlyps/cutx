@@ -466,7 +466,8 @@
       "filtro": "filtro",
       "amp": "ampiezza",
       "drive": "drive",
-      "space": "space"
+      "space": "space",
+      "arp": "arpeggio"
     },
     "parametri": {
       "forma": "forma",
@@ -508,11 +509,18 @@
       "delaysync": "time",
       "delayfeedback": "feedback",
       "room": "room",
-      "roomsize": "size"
+      "roomsize": "size",
+      "arp": "modo",
+      "arppasso": "passo",
+      "arpgate": "gate"
     },
     "scelte": {
       "sawtooth": "saw",
       "triangle": "tri",
+      "su": "su",
+      "giu": "giù",
+      "sugiu": "su-giù",
+      "caso": "caso",
       "": "no"
     },
     "anteprime": {

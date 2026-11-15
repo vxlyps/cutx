@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
+import { ARP_MODI, ARP_PASSI, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
 import { velValida } from './synth-note.js';
 
 export const MARCA = '// @synth';
@@ -17,6 +17,7 @@ export function num(v) {
 // Le note che suonano davvero secondo lo schema di prova scelto.
 export function noteEffettive(s) {
   if (s.anteprima === 'tenuta') return NOTE_ANTEPRIMA.tenuta;
+  if (s.anteprima === 'arpeggio' && s.arp) return NOTE_ANTEPRIMA.accordo; // l'arpeggio ha bisogno di un accordo da suonare
   if (s.anteprima === 'clip' && noteValide(s.note)) return s.note;
   return NOTE_ANTEPRIMA.arpeggio;
 }
@@ -40,7 +41,36 @@ const MOTORE = { voci: 5, detune: 0.18, spread: 0.6, pw: 0.5, fmh: 1, phaserdept
 // Le note della clip hanno una velocity scritta (.velocity("…"))? Solo con lo schema «clip» e le note del pianoroll (non con un inizio scritto a mano).
 export const conVelocity = (s) => !!s.vel && s.anteprima === 'clip' && noteValide(s.note) && !(s.testa && testaValida(s.testa));
 
+// L'ARPEGGIO si scrive solo dove ci sono accordi veri: le note della clip (o l'accordo di prova), non la nota tenuta dei tasti, non un inizio scritto
+// a mano, e non se il codice a mano ha già il suo arpeggio.
+const ARP_A_MANO = /^\.arp(?:With)?\(/;
+export const conArp = (s) => {
+  if (!s.arp || !ARP_MODI.includes(s.arp) || s.anteprima === 'tenuta') return false;
+  if (s.anteprima === 'clip' && !noteValide(s.note)) return false;
+  if (s.testa && testaValida(s.testa)) return false;
+  return !(s.mano ?? []).some((m) => ARP_A_MANO.test(m.trim()));
+};
+
+// La chiamata dell'arpeggio, su una riga (se la si ritocca a mano resta com'è, a mano). `run(n)` conta i passi del ciclo; `late` li fa ripartire dall'inizio
+// di ogni accordo; `h` sono le note dell'accordo, dalla più bassa alla più alta (il pianoroll le scrive in quell'ordine).
+export const ARP_PASSI_CICLO = { '1/4': 4, '1/8': 8, '1/16': 16 };
+export function chiamataArp(modo, passo) {
+  const n = ARP_PASSI_CICLO[passo] ?? 16;
+  if (modo === 'caso') return `.arpWith(h => rand.segment(${n}).fmap(r => h[Math.floor(r * h.length)]))`;
+  const nota = { su: 'h[i % h.length]', giu: 'h.at(-1 - i % h.length)', sugiu: 'h[h.length - 1 - Math.abs(h.length - 1 - i % Math.max(2 * h.length - 2, 1))]' }[modo];
+  return `.arpWith(h => run(${n}).late(h[0].whole.begin).fmap(i => ${nota}))`;
+}
+const spazi = (x) => String(x).replace(/\s+/g, ' ').trim();
+// Il contrario: la chiamata scritta → { modo, passo } se è proprio una di quelle del pannello, altrimenti null.
+export function leggiArp(args) {
+  const a = spazi(`.arpWith(${args})`);
+  for (const modo of ARP_MODI.slice(1)) for (const passo of ARP_PASSI) if (a === spazi(chiamataArp(modo, passo))) return { modo, passo };
+  return null;
+}
+
 export const inGradi = (s) => !!s.scala && scalaValida(s.scala) && s.anteprima === 'clip' && noteValide(s.note);
+
+const nomiManoDi = (s) => new Set((s.mano ?? []).map((m) => /^\.(\w+)/.exec(m.trim())?.[1]).filter(Boolean));
 
 // Il codice del suono, con le note dello schema scelto. Righe corte: si legge anche sul proiettore.
 export function codice(stato) {
@@ -51,6 +81,11 @@ export function codice(stato) {
   else if (inGradi(s)) r.push(`n("${s.note}")`, `  .scale("${s.scala}")`);
   else r.push(`note("${noteEffettive(s)}")`);
   if (conVelocity(s)) r.push(`  .velocity("${s.vel}")`);
+  // l'arpeggio sta subito dopo le note: prima di .trans e .add, che sovrappongono voci e farebbero un accordo di ogni nota
+  if (conArp(s)) {
+    r.push(`  ${chiamataArp(s.arp, s.arppasso)}`);
+    if (s.arpgate < 1 && !nomiManoDi(s).has('clip')) r.push(`  .clip(${num(s.arpgate)})`);
+  }
 
   if (!rumore) {
     if (s.ottava) r.push(`  .trans(${s.ottava * 12})`);
@@ -311,6 +346,14 @@ export function leggiCodice(testo, base = iniziale()) {
       preso = true;
     } else if (n === 'add' && !visti.has(n) && !eRumore(s.forma)) {
       preso = leggiAdd(c.args, s);
+    } else if (n === 'arpWith' && !visti.has(n) && s.anteprima === 'clip' && !s.testa && leggiArp(c.args)) {
+      const a = leggiArp(c.args);
+      s.arp = a.modo;
+      s.arppasso = a.passo;
+      preso = true;
+    } else if (n === 'clip' && !visti.has(n) && s.arp && v !== null && v >= 0.1 && v < 1) {
+      s.arpgate = pulisciValore(parametro('arpgate'), v);
+      preso = true;
     } else if (n === 'velocity' && !visti.has(n) && s.anteprima === 'clip' && !s.testa) {
       // .velocity("1 .5 .8") o .velocity(.6): la velocity delle note, se si legge nel pianoroll; altrimenti resta a mano
       const testo = str ?? (v !== null ? num(v) : null);

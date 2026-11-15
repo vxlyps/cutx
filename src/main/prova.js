@@ -3256,7 +3256,7 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('il tasto SYNTH è acceso', (await js(`document.getElementById('vista-synth-btn').classList.contains('on')`)) === true);
   const quante = await js(`document.querySelectorAll('.synth-pannello .ctl').length`);
   controlla('il pannello ha tutte le manopole', quante >= 40, String(quante));
-  controlla('cinque gruppi: oscillatore, filtro, ampiezza, drive, space', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|drive|space');
+  controlla('sei gruppi: oscillatore, filtro, ampiezza, drive, space, arpeggio', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|drive|space|arpeggio');
   controlla('il codice del suono init è visibile e leggibile', (await codiceSynth()).includes('.s("sawtooth")') && (await codiceSynth()).includes('.lpf(2400)'), await codiceSynth());
   controlla('niente frasi sotto il codice', (await js(`document.querySelectorAll('.synth-codice .secondario').length`)) === 0);
   controlla('le etichette delle manopole stanno su una riga', (await js(`[...document.querySelectorAll('.ctl-nome')].every((e) => e.getBoundingClientRect().height < 14)`)) === true);
@@ -3326,6 +3326,40 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.cambia('q', 12)`);
   await aspetta(0.8);
   controlla('girando una manopola la cuffia riceve il codice nuovo', ((await cuffiaStato())?.codice ?? '').includes('.lpq(12)'));
+
+  // l'ARPEGGIO: il codice che il pannello scrive deve suonare davvero, nel motore vero (gli errori di arpWith saltano fuori solo quando si interroga il pattern)
+  await js(`cutxProva.synth.imponi({ ...cutxProva.synth.stato, anteprima: 'clip', note: '[c3,e3,g3] ~ [d2,a2]', arp: 'su', arppasso: '1/16', arpgate: 1, q: 1 })`);
+  await aspetta(0.5);
+  const haps = async (extra) => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1, 16)`);
+  const nomi = (v) => (Array.isArray(v) ? v.map((x) => `${x.i}:${x.n}`).join(' ') : JSON.stringify(v));
+  // c3 e3 g3 = 48 52 55; d2 a2 = 38 45. Il ciclo è 16 scatti: [0..8) il primo accordo (8 passi di 1/16 su metà ciclo), poi un riposo, poi [12..16) il secondo.
+  const su = await haps();
+  controlla('arpeggio «su»: l\'accordo suona una nota alla volta, a passo fisso, e riparte a ogni accordo', Array.isArray(su) && su.length >= 8 && su.slice(0, 4).map((x) => x.n).join() === '48,52,55,48' && su.every((x) => x.l === 1), nomi(su));
+  controlla('il secondo accordo ricomincia dalla sua nota più bassa', Array.isArray(su) && su.find((x) => x.i >= 10)?.n === 38, nomi(su));
+  await js(`cutxProva.synth.cambia('arp', 'giu')`);
+  await aspetta(0.3);
+  const giu = await haps();
+  controlla('arpeggio «giù»: dall\'alto', Array.isArray(giu) && giu.slice(0, 3).map((x) => x.n).join() === '55,52,48', nomi(giu));
+  await js(`cutxProva.synth.cambia('arp', 'sugiu')`);
+  await aspetta(0.3);
+  const sg = await haps();
+  controlla('arpeggio «su-giù»: su e poi giù senza ripetere gli estremi', Array.isArray(sg) && sg.slice(0, 5).map((x) => x.n).join() === '48,52,55,52,48', nomi(sg));
+  await js(`cutxProva.synth.cambia('arp', 'caso')`);
+  await aspetta(0.3);
+  const caso = await haps();
+  controlla('arpeggio «caso»: suona solo note dell\'accordo', Array.isArray(caso) && caso.length >= 8 && caso.slice(0, 8).every((x) => [48, 52, 55].includes(x.n)), nomi(caso));
+  await js(`cutxProva.synth.cambia('arp', 'su'); cutxProva.synth.cambia('arppasso', '1/8')`);
+  await aspetta(0.3);
+  const otto = await haps();
+  controlla('passo 1/8: una nota ogni due scatti', Array.isArray(otto) && otto.slice(0, 3).map((x) => `${x.i}:${x.l}`).join() === '0:2,2:2,4:2', nomi(otto));
+  await js(`cutxProva.synth.cambia('arpgate', 0.5)`);
+  await aspetta(0.3);
+  controlla('il gate scrive .clip(.5) e il codice è quello del pannello', (await codiceSynth()).includes('.clip(.5)') && (await codiceSynth()).indexOf('.arpWith') < (await codiceSynth()).indexOf('.s("sawtooth")'));
+  await js(`cutxProva.synth.cambia('arp', '')`);
+  await aspetta(0.3);
+  controlla('spento: niente arpeggio nel codice', !(await codiceSynth()).includes('arpWith') && !(await codiceSynth()).includes('.clip('));
+  await js(`cutxProva.synth.imponi({ ...cutxProva.synth.stato, anteprima: 'arpeggio', note: 'c3 eb3 g3 bb3', arpgate: 1, q: 12 })`);
+  await aspetta(0.3);
 
 
   // il codice si può scrivere: quello che il pannello conosce sposta le manopole, il resto resta a mano, un errore non ferma il suono

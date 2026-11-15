@@ -13,7 +13,9 @@ export const PENDENZE = ['12db', 'ladder', '24db']; // ftype di superdough
 export const VOCALI = ['', 'a', 'e', 'i', 'o', 'u']; // '' = niente
 export const DIVISIONI = ['1/16', '1/8', '3/16', '1/4', '3/8', '1/2']; // del ciclo (una battuta in 4/4): delaysync
 export const ANTEPRIME = ['arpeggio', 'tenuta', 'clip'];
-export const NOTE_ANTEPRIMA = { tenuta: 'c3', arpeggio: 'c3 eb3 g3 bb3' };
+export const NOTE_ANTEPRIMA = { tenuta: 'c3', arpeggio: 'c3 eb3 g3 bb3', accordo: '[c3,eb3,g3,bb3]' }; // accordo: lo schema «arpeggio corto» quando l'ARPEGGIO è acceso
+export const ARP_MODI = ['', 'su', 'giu', 'sugiu', 'caso']; // '' = spento: le note suonano com'è scritto
+export const ARP_PASSI = ['1/4', '1/8', '1/16']; // la durata di ogni nota dell'arpeggio (un ciclo = una battuta)
 
 // I tetti: il live non deve mai soffrire. Le voci in un colpo solo sono (unison del supersaw o layer) × (1 + sub).
 export const LAYER_MAX = 5; // voci sovrapposte di un oscillatore normale
@@ -68,6 +70,10 @@ export const PARAMETRI = [
   { k: 'phaserdepth', g: 'space', tipo: 'num', min: 0, max: 1, def: 0.75, dec: 2, se: (s) => s.phaser > 0 },
   { k: 'tremolo', g: 'space', tipo: 'int', min: 0, max: 16, def: 0 },
   { k: 'tremolodepth', g: 'space', tipo: 'num', min: 0, max: 1, def: 0.5, dec: 2, se: (s) => s.tremolo > 0 },
+  // ARPEGGIO: gli accordi delle note della clip suonati una nota alla volta, a passo fisso, ripartendo a ogni accordo
+  { k: 'arp', g: 'arp', tipo: 'scelta', scelte: ARP_MODI, def: '' },
+  { k: 'arppasso', g: 'arp', tipo: 'scelta', scelte: ARP_PASSI, def: '1/16', se: (s) => s.arp !== '' },
+  { k: 'arpgate', g: 'arp', tipo: 'num', min: 0.1, max: 1, def: 1, dec: 2, se: (s) => s.arp !== '' },
 ];
 
 export const GRUPPI = [
@@ -76,6 +82,7 @@ export const GRUPPI = [
   { id: 'amp' },
   { id: 'drive' },
   { id: 'space' },
+  { id: 'arp' },
 ];
 
 const PER_CHIAVE = new Map(PARAMETRI.map((p) => [p.k, p]));
@@ -317,7 +324,7 @@ export function mutate(s, quanto, rng = Math.random, categoria = s.categoria ?? 
   const nuovo = sorprendi(rng, s, categoria);
   const out = { ...s };
   for (const p of PARAMETRI) {
-    if (p.k === 'gain') continue;
+    if (p.k === 'gain' || p.g === 'arp') continue; // l'arpeggio non si muta: è una scelta musicale, non un colore del suono
     if (p.tipo === 'scelta' || p.tipo === 'bool') {
       if (rng() < q) out[p.k] = nuovo[p.k];
     } else {
