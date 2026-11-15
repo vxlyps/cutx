@@ -2938,8 +2938,17 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(1);
     controlla('CUFFIA + ◀ ancora: il brano che suona (1) non si può scegliere come prossimo', (await ling('prossimo')).includes('▸ brano 2'), await ling('prossimo'));
     await midi(0x90, cuffia, 0);
-    // il tasto 3 tenuto: passa a brano 2 con la rampa
+    // il tasto 3 tenuto: passa a brano 2 con la rampa. Il BPM si legge di continuo da PRIMA di premere: la rampa parte mentre il
+    // tasto è ancora giù, e leggendo solo dopo il rilascio a volte si perdeva l'inizio (prova ballerina).
     const t3 = await tasto(3);
+    const visti = [];
+    let campiona = true;
+    const campionatore = (async () => {
+      while (campiona) {
+        visti.push(Math.round((await bpm()) * 100) / 100);
+        await aspetta(0.15);
+      }
+    })();
     await midi(0x90, t3, 127);
     await aspetta(0.4);
     controlla('il tasto 3 lampeggia mentre lo tengo', (await js(`cutxProva.controllerMidi.desiderate().get('t${t3}')[2]`)) === 1);
@@ -2947,13 +2956,11 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(0.9);
     controlla('scattato: la barra è verde e piena (classe scatta), non più in carica', await js(`document.getElementById('passa-brano').classList.contains('scatta') && !document.getElementById('passa-brano').classList.contains('carica')`));
     await midi(0x90, t3, 0);
-    const visti = [];
-    let dopoPasso = [];
-    for (let i = 0; i < 40; i++) {
-      visti.push(Math.round((await bpm()) * 100) / 100);
-      if (i === 4) dopoPasso = (await live()).livelli; // un'istantanea poco dopo l'entrata del brano nuovo (la rampa dura ~3 s, lo sweep 11)
-      await aspetta(0.35);
-    }
+    await aspetta(1.4);
+    const dopoPasso = (await live()).livelli; // un'istantanea poco dopo l'entrata del brano nuovo (la rampa dura ~3 s, lo sweep 11)
+    await aspetta(11.6);
+    campiona = false;
+    await campionatore;
     const sub = dopoPasso.find((l) => l.nome === 'sub');
     controlla('transizione (sweep 8): la clip vecchia non scelta (sub) esce, con una fine già programmata', !!sub && sub.a !== null && Number.isFinite(sub.a), JSON.stringify(sub));
     controlla('transizione: la clip scelta sul controller (melodia) resta', dopoPasso.some((l) => l.nome === 'melodia' && l.a === null), JSON.stringify(dopoPasso.map((l) => [l.nome, l.a])));
