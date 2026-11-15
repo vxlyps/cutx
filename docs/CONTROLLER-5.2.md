@@ -1,4 +1,4 @@
-# X-Touch Mini a ruoli (5.2): proposta da approvare PRIMA di scrivere codice (15/11/2026)
+# X-Touch Mini a ruoli (5.2): proposta APPROVATA il 15/11/2026 (con le decisioni qui sotto)
 
 L'X-Touch Mini ha 8 manopole (si girano e si premono), 16 tasti (8 in alto, 8 in basso), i due tasti **layer A / B**, un fader. Oggi: nel LIVE comanda livelli ed effetti; nel SYNTH (⌘2) le manopole sono i parametri e i tasti in alto scelgono il gruppo, quelli in basso sono comandi (CUE, mutate, annulla…). Sempre del LIVE, in ogni vista: **fader**, **manopola 8 = volume generale**, **paracadute** (oggi tasto in alto 8, tenuto 1 s).
 
@@ -32,3 +32,15 @@ L'X-Touch Mini ha 8 manopole (si girano e si premono), 16 tasti (8 in alto, 8 in
 5. **Luci** (l'X-Touch Mini ha solo acceso/lampeggia/spento, niente colore né livelli): ti va la regola «acceso = passo, lampeggio = dove siamo, spento = niente»? Per la velocity niente luce: si vede a schermo.
 
 Dopo il tuo ok: modulo puro con i test (mappa e luci, senza hardware), poi il collegamento e la prova coi cavi veri.
+
+
+## Decisioni di Valerio (15/11/2026): valgono al posto delle proposte sopra
+- **Nel DRUM e nel PIANO l'X-Touch Mini è uno strumento e basta**: i 16 tasti sono passi, pad o tasti del piano. **Niente paracadute dal controller** in queste viste (resta nel LIVE, com'è). Niente ▶ cuffia, ■, REC, → CUE, annulla sul controller: si fanno con tastiera e mouse. Quindi non servono le spinte delle manopole per quelle cose.
+- **Unico comando in più sul controller**: il cambio pagina 1–16 ↔ 17–32 del sequencer (proposta: spinta della manopola 3, solo a 32 passi), perché fa parte dello strumento. Se preferisci il layer o altro si cambia.
+- **Velocity fissa**: quella di default dei programmi di musica, 100/127 ≈ **.8** (già il valore dei passi nuovi). Poi si modifica a mano (sequencer: passo tenuto + manopola 1; sul Mac: trascinamento).
+- **Luci** come proposto: acceso = passo, lampeggio = dove siamo, spento = niente. **Deve funzionare come un Pocket Operator**: una luce che corre sui passi e le luci fisse dove c'è qualcosa.
+- Fader, volume generale (manopola 8) e layer restano com'è nel resto; il fader resta sempre del LIVE.
+
+## Come si scrive (pronto per la sessione dopo)
+1. Modulo puro `controller-ruoli.js` + test, senza hardware: dato (vista, scheda, layer) dice il ruolo; per ogni ruolo trasforma gli eventi dell'X-Touch (tasto n giù/su, manopola n ±, spinta n) in azioni sulla griglia o sul piano e dice le luci (16 stati: spento/acceso/lampeggio). Adatto a Codex con un brief preciso (nessuna decisione di design da lasciargli).
+2. Collegamento in `controller.js` (sceglie il ruolo, manda le luci, tiene il paracadute spento in queste viste) e in `drum-vista.js` / `synth-vista.js` (riga scelta, pagina, testina, nota suonata). Prova automatica con eventi finti, poi coi cavi veri.

@@ -76,3 +76,12 @@ Da fare, in quest'ordine: (1) **REC e tasti del Mac**: i tasti suonano le righe 
 - **Blocco C, controller X-Touch a ruoli** (prima la mappa tasto per tasto e luce per luce, da approvare): DRUM livello A = SEQUENCER (16 tasti come passi, luce che corre, manopola 1 = riga, 2 = suono, tieni passo + manopola = velocity, cambio pagina 32 passi), DRUM livello B = PAD, SYNTH livello B = PIANO; fader, master e paracadute sempre live; velocity fissa.
 - **Blocco D, arpeggio** (solo valutazione, niente codice): cosa si può fare con codice Strudel vero, se le note tenute si arpeggiano dal vivo, dove sta nel pannello e sul controller, quanti giorni, 5.2 o dopo.
 - **Prove**: una prova alla volta (vedi `scripts/prova-libera.mjs`); con due sessioni di lavoro, dati separati con `CUTX_PROVA_NOME=altro` (e `CUTX_PROVA_STASH` per uno stash di prova a parte), ma il volume del Mac resta uno solo.
+
+## 5.2: «synth al volo» (idea di Valerio, 15/11/2026)
+Oggi il pulsante «synth» c'è solo sulle clip fatte dal synth (`// @synth`) e dalla scheda DRUM. Voluto: **su qualsiasi clip, nel CUE e nel LIVE, un pulsante che la porta nel SYNTH** per modificarla comodamente (senza il live, senza copia e incolla), e poi **«aggiorna»**: riscrive quella clip dov'è, oppure **→ CUE come clip nuova** (con un nome nuovo, ben chiaro nella schermata che serve).
+- Il SYNTH sa già leggere il codice scritto a mano (quello che conosce muove le manopole, il resto resta com'è come «mano»): la parte difficile non è aprirla.
+- Il SYNTH si ricorda **da dove viene** la clip (brano e sezione nel CUE/kit; per un livello live la clip di origine dalla `provenienza`, se c'è) e mostra **«aggiorna «nome»»** accanto a → CUE. **Aggiornare non tocca il livello che suona live**: cambia la clip, e per sentirla live si rimanda come sempre.
+- Cose da decidere/guardare: riscrivere una clip a mano la porta alla forma canonica del synth (righe sconosciute conservate in fondo) e mette la riga `// @synth`; ⌘Z nel CUE deve poterla riavere; un livello live senza clip di origine (scratch) può solo andare in → CUE come nuova.
+- Il DRUM funziona già così per «aprire»; «aggiorna» va fatto uguale anche lì.
+
+Ordine proposto per la 5.2: 1) controller a ruoli (`docs/CONTROLLER-5.2.md`), 2) REC e tasti del Mac nel DRUM, 3) synth al volo + aggiorna, 4) → CUE come scena del beat, 5) valutazione arpeggio (solo testo).
