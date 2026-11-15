@@ -226,6 +226,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.indexOf('mani-dump') >= 0) ok = (await sicura('mani-dump', provaManiDump)) && ok;
   if (parti.includes('mani-proiettore')) ok = (await sicura('mani-proiettore', provaManoProiettore)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
+  if (parti.includes('strumento')) ok = (await sicura('strumento', provaStrumento)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
   if (parti.includes('cue-aspetto')) ok = (await sicura('cue-aspetto', provaCueAspetto)) && ok;
@@ -3128,6 +3129,61 @@ async function provaSfoglia({ finestre, scrivi }) {
 }
 
 // --- la vista SYNTH: pannello, codice, cuffia prudente, annulla, A/B, tetti, il live che non si ferma (npx electron . --prova=synth) ---
+// L'X-Touch nel SYNTH (layer A = batteria, B = synth) e il tasto CASSE: nell'app vera, guardando cosa arriva ai motori.
+async function provaStrumento({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const midi = (...b) => js(`cutxProva.controllerMidi.riceve(${JSON.stringify(b)})`);
+  const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
+  const layer = (l) => js(`cutxProva.controllerMidi.tab.layer.${l}`);
+  const messaggi = () => js('window.__msg.map((m) => JSON.stringify(m))');
+  const riga = 's("bd ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~").gain(".8 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~")';
+  await js(`window.cutx.salvaPreferenze({ controller: null }); cutxProva.fermaTutto(); cutxProva.mostraVista('synth'); cutxProva.synth.drum.carica({ codice: 'stack(\\n  ${riga.replaceAll("'", "\\'")}\\n)', nome: 'prova' });`);
+  await js(`(() => { const c = cutxProva.controllerMidi; c.modo = 'MC'; c.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; window.__msg = []; const m = cutxProva.motori.cuffia; const o = m.manda.bind(m); m.manda = (x) => { window.__msg.push(x); return o(x); }; })()`);
+  await aspetta(0.8);
+  controlla('nel SYNTH il controller comanda il synth (ruolo parametri)', (await js('cutxProva.controllerMidi.ruolo')) === 'synth');
+  await midi(0x90, await layer('B'), 127);
+  await aspetta(0.3);
+  controlla('layer B: piano', (await js('cutxProva.controllerMidi.ruolo')) === 'piano');
+  await midi(0x90, await tasto(9), 127);
+  await aspetta(0.3);
+  await midi(0x90, await tasto(9), 0);
+  await aspetta(0.3);
+  const note = (await messaggi()).filter((m) => m.includes('synth-nota'));
+  controlla('un tasto del piano manda la nota alla cuffia (do, midi 48) e poi la rilascia', note.some((m) => m.includes('"on":true') && m.includes('"midi":48')) && note.some((m) => m.includes('"on":false') && m.includes('"midi":48')), note.join(' | '));
+  await midi(0x90, await layer('A'), 127);
+  await aspetta(0.3);
+  controlla('layer A: lo schermo passa alla batteria e il ruolo è il sequencer', (await js('cutxProva.synth.scheda')) === 'drum' && (await js('cutxProva.controllerMidi.ruolo')) === 'sequencer');
+  await midi(0x90, await tasto(2), 127);
+  await midi(0x90, await tasto(2), 0);
+  await aspetta(0.3);
+  controlla('un tocco su un tasto accende il passo sulla griglia', (await js('cutxProva.synth.drum.stato.righe[0].vel[1]')) > 0);
+  await midi(0x90, await layer('A'), 127);
+  await aspetta(0.2);
+  controlla('A di nuovo: pad', (await js('cutxProva.controllerMidi.ruolo')) === 'pad');
+  await midi(0x90, await tasto(1), 127);
+  await midi(0x90, await tasto(1), 0);
+  await aspetta(0.3);
+  const colpi = (await messaggi()).filter((m) => m.includes('drum-colpo'));
+  controlla('un pad manda il colpo di quella riga alla cuffia', colpi.some((m) => m.includes('s(\\"bd\\")')), colpi.join(' | '));
+  controlla('il tasto 8 non è il paracadute nel DRUM', (await js('cutxProva.controllerMidi.paracaduteTenuto')) !== true);
+  // CASSE: acceso manda l'ordine alla cuffia; uscendo dal SYNTH si spegne da solo
+  await js(`window.__msg.length = 0; document.querySelector('.synth-casse').click()`);
+  await aspetta(0.5);
+  controlla('CASSE acceso: la cuffia riceve l\'ordine', (await messaggi()).some((m) => m.includes('"tipo":"casse"') && m.includes('"on":true')));
+  controlla('il bottone è acceso', await js(`document.querySelector('.synth-casse').classList.contains('acceso')`));
+  await js(`cutxProva.mostraVista('cue')`);
+  await aspetta(0.5);
+  controlla('uscendo dal SYNTH CASSE si spegne da solo e la cuffia torna in cuffia', (await messaggi()).some((m) => m.includes('"tipo":"casse"') && m.includes('"on":false')) && !(await js(`document.querySelector('.synth-casse').classList.contains('acceso')`)));
+  const cuffia = await chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+  controlla('la cuffia non ha errori dopo il cambio di uscita', !cuffia?.errore, String(cuffia?.errore ?? ''));
+  return ok;
+}
+
 async function provaSynth({ finestre, scrivi }) {
   let ok = true;
   const controlla = (nome, vero, dettagli = '') => {

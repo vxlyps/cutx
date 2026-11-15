@@ -1,7 +1,7 @@
-# Ultimo stato - 15/11/2026 (sera, dopo il passo 2 del blocco C)
+# Ultimo stato - 15/11/2026 (sera, dopo la prima prova coi cavi)
 
-1. Fatto: l'X-Touch è collegato ai ruoli. SYNTH + layer A/B scelgono il ruolo (DRUM: A sequencer, B pad; suono/note: A parametri, B piano). Nel DRUM e nel PIANO niente paracadute dal controller; fader e manopola 8 restano del LIVE.
-2. Funziona: 7 test nuovi in `test/controller.test.js` (46 ok) e `prova:parte -- controller,drum` (71 ok, volume al 20% e rimesso). Colpo del pad = nuovo messaggio `drum-colpo` al motore cuffia (`motore.js`).
-3. Non provato coi cavi veri: luci e lampeggio della testina, pad in cuffia (primo colpo di un campione può tardare), piano, riga evidenziata a schermo.
-4. File: `controller.js`, `drum-vista.js` (+`perControllo`), `synth-vista.js` (+`notaControllo`, `perControllo`), `motore.js` (+`colpoDrum`), `app.js` (+`colpo`), `drum.css` (riga scelta), `test/controller.test.js`.
-5. Prossimo: prova coi cavi (lista data a Valerio); poi blocco 2: REC e tasti del Mac nel DRUM (`docs/PROSSIMI.md`). Testi nuovi del controller scritti dentro `controller.js` come quelli di prima, da spostare in `it.json` con gli altri.
+1. Fatto: i layer portano alla scheda (A = batteria: sequencer, di nuovo pad; B = synth: piano, di nuovo parametri). Luci più rapide (50 ms e subito dopo il tocco), la riga cliccata col mouse è anche quella del controller. Nuovo interruttore CASSE nella barra del SYNTH (la cuffia esce dall'uscita del live; spento all'avvio e uscendo dal SYNTH).
+2. Funziona: test puri 429 ok; `prova:parte -- strumento` (nuova, 12 ok: layer, piano, pad, colpo, CASSE) e controller,drum,synth,cue-controller,specchio-aspetto (382 ok).
+3. Non provato coi cavi/orecchie: luci vere sull'X-Touch (se ancora lente o sbagliate dirlo), CASSE con l'uscita vera delle casse (la prova non ha un'uscita separata), lampeggio dei layer.
+4. File: `controller.js`, `drum-vista.js`, `synth-vista.js`, `motore.js` (`casse`, `drum-colpo`), `app.js`, `synth.css`, `drum.css`, `it.json`, `src/main/prova.js` (parte `strumento`), `test/controller.test.js`, `docs/CONTROLLER-5.2.md`.
+5. Prossimo: Valerio riprova coi cavi; poi blocco 2 (REC e tasti del Mac nel DRUM, `docs/PROSSIMI.md`). Testi nuovi del controller ancora dentro `controller.js`.

@@ -151,6 +151,7 @@ export class VistaDrum {
     g.addEventListener('pointerdown', (e) => {
       const c = e.target.closest?.('.drum-passo');
       if (!c || e.button !== 0) return;
+      this.evidenzia(Number(c.dataset.r)); // la riga che tocco col mouse è anche quella del controller
       const r = Number(c.dataset.r);
       const i = Number(c.dataset.i);
       const riga = this.stato.righe[r];
@@ -388,10 +389,15 @@ export class VistaDrum {
 
   // La testina: la colonna che suona adesso nella cuffia (si muove solo se la prova suona).
   testina() {
+    this.mettiTestina(this.colonnaOra());
+  }
+
+  // La colonna che suona in questo momento (-1 se la prova non suona): la leggono anche le luci del controller.
+  colonnaOra() {
     const ciclo = this.opz.suonaOra() ? this.opz.ciclo() : null;
-    if (ciclo === null || ciclo === undefined) return this.mettiTestina(-1);
+    if (ciclo === null || ciclo === undefined) return -1;
     const n = slot(this.stato);
-    this.mettiTestina(Math.floor((((ciclo % this.stato.cicli) + this.stato.cicli) % this.stato.cicli) / this.stato.cicli * n));
+    return Math.floor((((ciclo % this.stato.cicli) + this.stato.cicli) % this.stato.cicli) / this.stato.cicli * n);
   }
 
   mettiTestina(colonna) {
@@ -408,7 +414,8 @@ export class VistaDrum {
   perControllo() {
     return {
       stato: () => this.stato,
-      testina: () => this.colonna,
+      testina: () => this.colonnaOra(),
+      rigaScelta: () => this.rigaScelta,
       evidenzia: (r) => this.evidenzia(r),
       passo: (r, i, vel) => this.passo(() => this.imponi(impostaPasso(this.stato, r, i, vel))),
       velocita: (r, i, vel) => this.gestoControllo(() => this.imponi(impostaPasso(this.stato, r, i, vel))),

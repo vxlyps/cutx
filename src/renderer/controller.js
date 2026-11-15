@@ -14,6 +14,7 @@ const TENUTA_MS = 350; // una manopola tenuta così a lungo è «selezione», no
 const PARACADUTE_MS = 1000;
 const X_VALIDO_MS = 1500; // il valore che sto girando vale finché giro (e un attimo dopo); poi torna a valere la coda, che è la verità
 const LUCI_MS = 150;
+const LUCI_STRUMENTO_MS = 50;
 const CODA_OGNI_MS = 33; // le righe di coda partono al massimo 30 volte al secondo
 const PRIMO_POSTO = 2; // la manopola del beat (la 1 è la navigazione del CUE)
 
@@ -52,7 +53,8 @@ export class Controller {
     this.sy = { gruppo: GRUPPI_TASTI[0], pagina: 0 }; // nel SYNTH: il gruppo di parametri e la sua pagina
     this.pushSynth = new Map(); // nel SYNTH: n → { giu, usato } per il push delle manopole (premuto e rilasciato = valore di partenza)
     this.synthPrima = false;
-    this.layerSynth = 'A'; // nel SYNTH il layer sceglie il ruolo (A: com'è, o sequencer nel DRUM; B: piano, o pad nel DRUM)
+    // Nel SYNTH il layer A porta nella batteria (sequencer; premuto di nuovo: pad), il B nel synth (piano; premuto di nuovo: parametri).
+    this.modoSynth = { drum: 'sequencer', synth: 'parametri' };
     this.ruoli = { sequencer: nuovoSequencer(), pad: nuovoPad(), piano: nuovoPiano() };
     this.ruoloPrima = 'live';
   }
@@ -64,6 +66,15 @@ export class Controller {
   }
 
   // Il ruolo del controller adesso: lo decidono vista, scheda e layer. «strumento» = quelli che lo usano come uno strumento (16 tasti, niente paracadute).
+  get inDrum() {
+    return this.azioni.synth?.scheda?.() === 'drum';
+  }
+
+  // Il layer che il ruolo corrente rappresenta (A o B) e se è il modo «secondo» (pad, parametri): per ruolo e luce.
+  get layerSynth() {
+    return this.inDrum ? (this.modoSynth.drum === 'pad' ? 'B' : 'A') : this.modoSynth.synth === 'piano' ? 'B' : 'A';
+  }
+
   get ruolo() {
     if (!this.nelSynth) return 'live';
     return ruoloDi({ vista: 'synth', scheda: this.azioni.synth?.scheda?.(), layer: this.layerSynth });
@@ -106,7 +117,17 @@ export class Controller {
     };
     this.access.onstatechange = () => sicuro('controller · porte', cerca);
     cerca();
-    this.timerLuci = setInterval(() => sicuro('controller · luci', () => this.luci()), LUCI_MS);
+    // le luci si rifanno ogni 150 ms; come strumento (la luce corre sui passi) ogni 50
+    this.timerLuci = setInterval(
+      () =>
+        sicuro('controller · luci', () => {
+          const ora = this.ora();
+          if (!this.strumento && ora - (this.ultimeLuci ?? -Infinity) < LUCI_MS - 5) return;
+          this.ultimeLuci = ora;
+          this.luci();
+        }),
+      LUCI_STRUMENTO_MS,
+    );
   }
 
   // Il controller è arrivato o è sparito (cavo staccato e riattaccato a metà serata).
@@ -241,11 +262,29 @@ export class Controller {
 
   // --- l'X-Touch come strumento (controller-ruoli.js): sequencer e pad nella scheda DRUM, piano nelle altre schede del SYNTH ---
 
+  // Layer A → la batteria (di nuovo: sequencer ↔ pad). Layer B → il synth (di nuovo: piano ↔ parametri). La scheda sullo schermo segue.
   scegliLayerSynth(layer) {
-    if (layer !== 'A' && layer !== 'B') return;
-    this.layerSynth = layer;
+    const sy = this.azioni.synth;
+    if (!sy) return;
+    let testo;
+    if (layer === 'A') {
+      if (this.inDrum) this.modoSynth.drum = this.modoSynth.drum === 'sequencer' ? 'pad' : 'sequencer';
+      else {
+        this.modoSynth.drum = 'sequencer';
+        sy.vaiA?.('drum');
+      }
+      testo = this.modoSynth.drum === 'pad' ? 'DRUM · PAD' : 'DRUM · SEQUENCER';
+    } else if (layer === 'B') {
+      if (!this.inDrum) this.modoSynth.synth = this.modoSynth.synth === 'piano' ? 'parametri' : 'piano';
+      else {
+        this.modoSynth.synth = 'piano';
+        sy.vaiA?.('synth');
+      }
+      testo = this.modoSynth.synth === 'piano' ? 'SYNTH · PIANO' : 'SYNTH · PARAMETRI';
+    } else return;
     this.controllaRuolo();
-    this.toccaSynth(null, `SYNTH · LAYER ${layer}`);
+    this.toccaSynth(null, testo);
+    this.luci(); // la luce segue subito, non al prossimo giro
     this.cambiato();
   }
 
@@ -258,6 +297,7 @@ export class Controller {
     if (prima === 'piano') this.azioni.synth?.fermaNote?.();
     this.ruoli = { sequencer: { ...this.ruoli.sequencer, tenuti: [], mossi: [] }, pad: nuovoPad(), piano: nuovoPiano() };
     if (ruolo === 'piano') this.ruoli.piano.ottava = this.azioni.synth?.ottava?.() ?? this.ruoli.piano.ottava;
+    if (ruolo === 'sequencer') this.azioni.synth?.drum?.evidenzia(this.ruoli.sequencer.riga);
     this.ultime.clear();
     this.cambiato();
   }
@@ -276,15 +316,19 @@ export class Controller {
   contestoStrumento(r) {
     const d = this.azioni.synth?.drum;
     if (r === 'piano' || !d) return {};
+    const vista = d.rigaScelta();
+    if (r === 'sequencer' && vista >= 0 && vista !== this.ruoli.sequencer.riga) this.ruoli.sequencer = { ...this.ruoli.sequencer, riga: vista }; // la riga toccata col mouse è anche la mia
     return { g: d.stato(), testina: d.testina() };
   }
 
   eventoStrumento(e) {
+    this.controllaRuolo(); // il ruolo di questo evento è già quello giusto (niente reset a metà gesto)
     const r = this.strumento;
     const d = this.azioni.synth?.drum;
+    const ctx = this.contestoStrumento(r); // prima del resto: può cambiare la riga scelta col mouse
     const prima = this.ruoli[r];
     const f = r === 'sequencer' ? eventoSequencer : r === 'pad' ? eventoPad : eventoPiano;
-    const { stato, azioni } = f(prima, e, this.contestoStrumento(r));
+    const { stato, azioni } = f(prima, e, ctx);
     this.ruoli[r] = stato;
     for (const a of azioni) this.azioneStrumento(a);
     if (r === 'sequencer') {
@@ -297,6 +341,7 @@ export class Controller {
       this.azioni.synth?.ottava?.(stato.ottava);
       this.toccaSynth(null, `PIANO · OTTAVA ${stato.ottava}`);
     }
+    this.luci(); // la luce segue subito il tocco
     this.cambiato();
   }
 
@@ -991,12 +1036,12 @@ export class Controller {
     if (!sy) {
       for (const i of this.colpi.attivi.keys()) stati.set(this.tab.tasti[8 + i], true); // un colpo si vede acceso finché lo tengo
       stati.set(this.tab.layer[this.pagina], true); // la pagina
-    } else if (!this.strumento) stati.set(this.tab.layer[this.layerSynth], true); // nel SYNTH il layer dice il ruolo
+    } else if (!this.strumento) stati.set(this.tab.layer.B, 'lampeggia'); // nel SYNTH (parametri) B lampeggia: il piano è un altro tocco di B
     const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
     if (this.strumento) {
       // strumento: i 16 tasti sono passi, pad o tasti del piano; niente paracadute. Il layer acceso dice quale ruolo.
       this.luciStrumento().forEach((x, i) => stati.set(this.tab.tasti[i], x));
-      stati.set(this.tab.layer[this.layerSynth], true);
+      stati.set(this.tab.layer[this.inDrum ? 'A' : 'B'], this.ruolo === 'pad' ? 'lampeggia' : true); // A = batteria, B = synth; lampeggio = il secondo modo (pad)
       for (const nota of noteTasti(this.tab)) luci.set(`t${nota}`, messaggioTasto(nota, stati.get(nota) ?? false));
       return luci;
     }

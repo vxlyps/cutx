@@ -59,6 +59,8 @@ export class VistaSynth {
     this.timerRuota = null;
     this.quanto = 30; // quanto cambia mutate (0–100)
     this.ottava = OTTAVA_INIZIALE; // l'ottava dei tasti del Mac (Z e X)
+    this.ultimaSynth = 'suono'; // l'ultima scheda che non era la batteria
+    this.casse = false; // il suono esce dalle casse invece che dalla cuffia
     this.tenuti = new Map(); // tasto premuto → nota suonata
     this.rec = null;
     this.attiva_ = false;
@@ -87,6 +89,10 @@ export class VistaSynth {
     this.nomeEl.oninput = () => (this.nome = this.nomeEl.value);
 
     this.playEl = this.tasto(T.barra.play, '⌘↵', () => this.suonaOFerma(), 'synth-play');
+    this.casseEl = crea('button', 'key synth-casse', T.barra.casse);
+    this.casseEl.dataset.aiuto = 'synth-casse';
+    this.casseEl.setAttribute('aria-pressed', 'false');
+    this.casseEl.onclick = () => this.impostaCasse(!this.casse);
     this.recEl = crea('button', 'key synth-rec', T.barra.rec);
     this.recEl.dataset.aiuto = 'synth-rec';
     this.recEl.onclick = () => this.avviaRec();
@@ -136,7 +142,7 @@ export class VistaSynth {
     this.avvisoEl = crea('span', 'synth-avviso');
     this.avvisoEl.setAttribute('role', 'status');
 
-    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
+    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.casseEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.destinazioneEl, this.cueEl);
     for (const [el, chiave] of [[this.playEl, 'synth-play'], [this.initEl, 'synth-init'], [this.cueEl, 'synth-cue']]) el.dataset.aiuto = chiave;
 
     const corpo = crea('div', 'synth-corpo');
@@ -318,9 +324,19 @@ export class VistaSynth {
     this.drum.attiva(on && this.scheda === 'drum');
     if (on) this.inviaSuono();
     else {
+      this.impostaCasse(false); // uscendo dal SYNTH il CUE non deve finire sulle casse
       this.fermaNote();
       this.fermaRec(true);
     }
+  }
+
+  // CASSE: il suono del SYNTH esce dalle casse (l'uscita del live) invece che dalla cuffia. Parte sempre spento.
+  impostaCasse(on) {
+    if (on === this.casse) return;
+    this.casse = on;
+    this.casseEl.classList.toggle('acceso', on);
+    this.casseEl.setAttribute('aria-pressed', String(on));
+    this.opz.casse?.(on);
   }
 
   // Il suono dei tasti: il codice del pannello con una nota sola (l'inizio scritto a mano non conta: i tasti hanno la nota).
@@ -410,6 +426,7 @@ export class VistaSynth {
       registra: () => !!this.rec,
       lato: () => this.slot.lato,
       scheda: () => this.scheda,
+      vaiA: (cosa) => this.mostraScheda(cosa === 'drum' ? 'drum' : this.ultimaSynth), // A = la batteria, B = l'ultima scheda del synth
       nota: (midi, vel, giu) => this.notaControllo(midi, vel, giu),
       ottava: (n) => {
         if (Number.isInteger(n)) {
@@ -419,6 +436,7 @@ export class VistaSynth {
         return this.ottava;
       },
       fermaNote: () => this.fermaNote(),
+      casse: () => this.casse,
       drum: this.drum.perControllo(),
     };
   }
@@ -549,6 +567,7 @@ export class VistaSynth {
   mostraScheda(id) {
     if (this.scheda === 'drum' && id !== 'drum') this.drum.fermaAnteprima(); // si lascia la batteria: la sua prova in cuffia si ferma
     this.scheda = id;
+    if (id !== 'drum') this.ultimaSynth = id;
     this.r.classList.toggle('modo-drum', id === 'drum');
     this.drum.attiva(id === 'drum' && !!this.attiva_);
     this.pannelloEl ??= this.r.querySelector('.synth-pannello');

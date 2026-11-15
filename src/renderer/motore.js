@@ -1037,6 +1037,9 @@ function giro() {
 // Se la scheda sparisce mentre suona, o il contesto si ferma, si dice e si suona sull'uscita predefinita (meglio che restare muti);
 // quando la scheda torna, si riprende da soli. L'interfaccia legge `uscita` dallo stato e avvisa.
 let uscitaVoluta = ''; // il nome scelto nello stash ('' = predefinita di macOS)
+let uscitaBase = ''; // quella del ruolo (cuffia o live)
+let uscitaCasse = ''; // quella delle casse (l'uscita del live): la cuffia ci va solo se il SYNTH lo chiede
+let suCasse = false;
 let uscitaStato = { ok: true, dettaglio: '' };
 let controllandoUscita = false;
 
@@ -1115,7 +1118,11 @@ async function configura() {
   // Lo stash c'era e adesso non c'è (disco staccato a metà serata): uscita, offset e suoni restano quelli di prima.
   // Senza questo il live passava all'uscita predefinita del Mac (via dalle casse) alla prima rilettura.
   const config = stato.config ?? null;
-  if (config) uscitaVoluta = config.uscite?.[RUOLO] ?? '';
+  if (config) {
+    uscitaBase = config.uscite?.[RUOLO] ?? '';
+    uscitaCasse = config.uscite?.live ?? '';
+    uscitaVoluta = suCasse && !LIVE ? uscitaCasse : uscitaBase;
+  }
   else if (stato.percorso) console.warn(`${RUOLO}: lo stash non è collegato: tengo uscita e suoni di prima`);
   await controllaUscita(); // non lancia mai: se l'uscita non c'è si suona sulla predefinita e si dice
   errore = uscitaStato.ok ? null : uscitaStato.dettaglio;
@@ -1438,6 +1445,11 @@ async function ricevi(da, m) {
     case 'drum-colpo':
       if (!LIVE) return void colpoDrum(m);
       return;
+    case 'casse': // solo la cuffia: il SYNTH la manda sulle casse (uscita del live) o la riporta in cuffia. Il live non cambia mai
+      if (LIVE) return;
+      suCasse = !!m.on;
+      uscitaVoluta = suCasse ? uscitaCasse : uscitaBase;
+      return void controllaUscita();
     case 'synth-click':
       if (!LIVE) clickSynth(!!m.accento);
       return;

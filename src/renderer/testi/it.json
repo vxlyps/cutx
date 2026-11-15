@@ -328,6 +328,10 @@
       "nome": "mini-notazione",
       "testo": "Le note come le scrive Strudel. Cambia qui o nel pianoroll: restano allineati. Quello che il pianoroll non legge (? / euclidei) resta com'è."
     },
+    "synth-casse": {
+      "nome": "CASSE",
+      "testo": "Il suono del SYNTH (▶, tasti, piano e pad dell'X-Touch) esce dalle casse invece che dalla cuffia. Si somma a quello che sta suonando il live. Si spegne da solo quando esci dal SYNTH."
+    },
     "synth-rec": {
       "nome": "REC",
       "testo": "Registra le note che suoni, a tempo col live: una battuta di conteggio, poi un giro (1, 2, 4 o 8 cicli come nel pianoroll), quantizzato al 1/16. Con le note già scritte aggiunge; con lo schema di prova (arpeggio, nota tenuta) parte da vuoto. Un altro clic ferma."
@@ -530,6 +534,7 @@
       "categoria": "Tipo del suono",
       "codiceSlot": "codice · {lato}",
       "rec": "REC",
+      "casse": "CASSE",
       "tastiera": "tasti C{n}"
     },
     "destinazioni": {

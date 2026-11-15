@@ -44,3 +44,10 @@ Dopo il tuo ok: modulo puro con i test (mappa e luci, senza hardware), poi il co
 ## Come si scrive (pronto per la sessione dopo)
 1. Modulo puro `controller-ruoli.js` + test, senza hardware: dato (vista, scheda, layer) dice il ruolo; per ogni ruolo trasforma gli eventi dell'X-Touch (tasto n giù/su, manopola n ±, spinta n) in azioni sulla griglia o sul piano e dice le luci (16 stati: spento/acceso/lampeggio). Adatto a Codex con un brief preciso (nessuna decisione di design da lasciargli).
 2. Collegamento in `controller.js` (sceglie il ruolo, manda le luci, tiene il paracadute spento in queste viste) e in `drum-vista.js` / `synth-vista.js` (riga scelta, pagina, testina, nota suonata). Prova automatica con eventi finti, poi coi cavi veri.
+
+
+## Cambio del 15/11/2026 (sera, dopo la prima prova coi cavi): i layer portano alla scheda
+- **Layer A = batteria**: lo schermo passa alla scheda DRUM, tasti = sequencer. Premuto di nuovo: **pad** (il layer lampeggia).
+- **Layer B = synth**: lo schermo passa all'ultima scheda suono/note, tasti = piano (manopola 1 = ottava, 2-7 parametri). Premuto di nuovo: **parametri** (tasti in alto = gruppi, come prima; il layer lampeggia).
+- Entrando nel SYNTH si parte dai parametri, come prima. La riga cliccata col mouse nella griglia è anche quella del sequencer. Luci ogni 50 ms come strumento, e subito dopo ogni tocco.
+- **CASSE** nella barra del SYNTH: la cuffia esce dall'uscita del live (solo il motore cuffia cambia uscita). Parte spento e si spegne uscendo dal SYNTH.

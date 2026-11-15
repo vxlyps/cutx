@@ -148,5 +148,11 @@
 
 /* la riga scelta dal controller */
 .drum-riga.scelta .drum-capo {
-  box-shadow: inset 3px 0 0 var(--testo);
+  box-shadow: inset 4px 0 0 var(--testo);
+  color: var(--testo);
+}
+
+.drum-riga.scelta .drum-passi {
+  outline: 1px solid var(--bordo);
+  outline-offset: 3px;
 }

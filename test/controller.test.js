@@ -802,10 +802,16 @@ function strumento(scheda = 'drum') {
   const p = prova([L(1, 'drum')]);
   let g = aggiungiRiga(aggiungiRiga(drumIniziale(), 'bd'), 'sd');
   let ottava = 3;
+  let schedaAttuale = scheda;
+  let rigaVista = -1;
   const drum = {
     stato: () => g,
     testina: () => 2,
-    evidenzia: (r) => p.log.push(['evidenzia', r]),
+    rigaScelta: () => rigaVista,
+    evidenzia: (r) => {
+      rigaVista = r;
+      p.log.push(['evidenzia', r]);
+    },
     passo: (r, i, vel) => {
       g = impostaPasso(g, r, i, vel);
       p.log.push(['passo', r, i, vel]);
@@ -818,7 +824,11 @@ function strumento(scheda = 'drum') {
     colpo: (r, vel) => p.log.push(['colpo', r, vel]),
   };
   const synth = {
-    scheda: () => scheda,
+    scheda: () => schedaAttuale,
+    vaiA: (cosa) => {
+      schedaAttuale = cosa === 'drum' ? 'drum' : 'note';
+      p.log.push(['vaiA', cosa]);
+    },
     drum,
     nota: (midi, vel, giu) => p.log.push(['nota', midi, vel, giu]),
     ottava: (n) => ((ottava = n ?? ottava), ottava),
@@ -833,7 +843,7 @@ function strumento(scheda = 'drum') {
   p.azioni.synth = synth;
   const note = (n) => p.c.tab.tasti[n - 1];
   const layer = (x) => p.c.tab.layer[x];
-  return { ...p, note, layer, drum, synth, passoDi: () => g };
+  return { ...p, note, layer, drum, synth, passoDi: () => g, scegliRiga: (r) => (rigaVista = r) };
 }
 
 test('DRUM layer A = sequencer: un tocco su un tasto accende il passo, sulla pagina tenuto + manopola 1 = velocity', () => {
@@ -862,13 +872,15 @@ test('DRUM layer A: manopola 1 cambia riga (e la evidenzia), manopola 2 il suono
   assert.ok(log.some((x) => x[0] === 'master'), 'il volume generale resta del LIVE');
 });
 
-test('DRUM layer B = pad: ogni tasto suona la sua riga; una nota del piano non parte', () => {
+test('DRUM: layer A di nuovo = pad (ogni tasto suona la sua riga); una nota del piano non parte', () => {
   const { c, log, note, layer } = strumento('drum');
-  c.riceve(tasto(layer('B'), true));
+  c.riceve(tasto(layer('A'), true));
   assert.equal(c.ruolo, 'pad');
   c.riceve(tasto(note(2), true));
   assert.deepEqual(log.find((x) => x[0] === 'colpo'), ['colpo', 1, 0.8]);
   assert.ok(!log.some((x) => x[0] === 'nota'));
+  c.riceve(tasto(layer('A'), true));
+  assert.equal(c.ruolo, 'sequencer', 'un altro tocco di A torna al sequencer');
 });
 
 test('suono / note layer B = piano: le note vanno al synth e la manopola 1 cambia ottava; le altre manopole restano i parametri', () => {
@@ -891,7 +903,33 @@ test('cambiando layer con una nota tenuta il piano si ferma; col cavo staccato p
   c.riceve(tasto(note(9), true));
   c.riceve(tasto(layer('A'), true));
   assert.ok(log.some((x) => x[0] === 'fermaNote'));
-  assert.equal(c.ruolo, 'synth');
+  assert.equal(c.ruolo, 'sequencer');
+});
+
+test('i layer cambiano anche la scheda: A porta alla batteria, B al synth; di nuovo lo stesso layer = l\'altro modo', () => {
+  const { c, log, layer } = strumento('suono');
+  assert.equal(c.ruolo, 'synth', 'entrando nel SYNTH i parametri come prima');
+  c.riceve(tasto(layer('A'), true));
+  assert.deepEqual(log.filter((x) => x[0] === 'vaiA').at(-1), ['vaiA', 'drum']);
+  assert.equal(c.ruolo, 'sequencer');
+  c.riceve(tasto(layer('B'), true));
+  assert.deepEqual(log.filter((x) => x[0] === 'vaiA').at(-1), ['vaiA', 'synth']);
+  assert.equal(c.ruolo, 'piano');
+  c.riceve(tasto(layer('B'), true));
+  assert.equal(c.ruolo, 'synth', 'B di nuovo = parametri');
+  c.riceve(tasto(layer('B'), true));
+  assert.equal(c.ruolo, 'piano');
+});
+
+test('la riga toccata col mouse è anche quella delle luci e dei tasti', () => {
+  const { c, log, note, scegliRiga } = strumento('drum');
+  c.riceve(tasto(note(1), true));
+  c.riceve(tasto(note(1), false));
+  assert.equal(log.find((x) => x[0] === 'passo')[1], 0);
+  scegliRiga(1); // clic sulla seconda riga
+  c.riceve(tasto(note(2), true));
+  c.riceve(tasto(note(2), false));
+  assert.equal(log.filter((x) => x[0] === 'passo').at(-1)[1], 1, 'il passo va sulla riga scelta col mouse');
 });
 
 test('luci dello strumento: passo acceso = acceso, testina = lampeggia, nel DRUM nessuna luce del paracadute', () => {

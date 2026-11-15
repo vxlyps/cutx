@@ -481,3 +481,9 @@
   border-color: var(--avviso);
   background: rgba(224, 160, 58, 0.08);
 }
+
+/* CASSE acceso: il suono va sulle casse, si somma al live. Ambra = attenzione (il verde è solo del live) */
+.synth-casse.acceso {
+  border-color: var(--avviso);
+  color: var(--avviso);
+}
