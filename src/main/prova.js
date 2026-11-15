@@ -3100,7 +3100,7 @@ async function provaSfoglia({ finestre, scrivi }) {
   const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  const brano = await readFile(path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test', 'libreria', 'brano_1.cutx'), 'utf8');
+  const brano = await readFile(path.join(process.env.CUTX_PROVA_STASH || path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test'), 'libreria', 'brano_1.cutx'), 'utf8');
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
   await aspetta(1.5);
   const scelta = () => js(`cutxProva.cue.nomeSezioneScelta()`);

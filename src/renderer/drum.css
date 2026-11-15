@@ -109,7 +109,7 @@
   pointer-events: none;
 }
 .drum-passo:hover {
-  border-color: var(--marcio);
+  border-color: var(--testo);
 }
 /* il verde è solo del live: la griglia è in bianco, la testina in ambra come gli avvisi del synth */
 .drum-passo.ora {

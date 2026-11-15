@@ -3570,8 +3570,7 @@ input[type='checkbox'] {
   border-bottom-width: 3px;
 }
 .proj-apri:hover:not(:disabled) {
-  border-color: var(--marcio);
-  color: var(--marcio);
+  border-color: var(--testo); /* bianco: il verde è solo di quello che suona live */
 }
 .proj-nuovo {
   background: none;
