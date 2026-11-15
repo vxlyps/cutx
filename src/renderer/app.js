@@ -1407,6 +1407,7 @@ const maniClient = new ManiClient({
     ultimaMano = { visibile: !!scelta, punti: scelta?.punti, ar: m.ar };
     ultimaManoOra = performance.now();
     maniVista.suMano({ visibile: !!scelta, punti: scelta?.punti });
+    if (ultimoControlloMani) mandaManoUscita(ultimoControlloMani, !!scelta); // i punti al proiettore appena li vede la camera
   },
   suImmagine: (jpeg) => maniVista.immagine(jpeg),
   suStato: (s) => maniVista.stato(s),
@@ -1463,7 +1464,7 @@ function scriviMano(r) {
     maniCedeFader = false;
   }
 }
-// La mano sul proiettore: solo i punti (leggeri, ~20 volte al secondo), mai l'immagine. Se l'interruttore nei testi per il pubblico è
+// La mano sul proiettore: solo i punti (leggeri, ~30 volte al secondo), mai l'immagine. Se l'interruttore nei testi per il pubblico è
 // spento, o la mano è uscita, non va niente (al proiettore arriva un «null» una volta sola, così si dissolve).
 let manoMandata = false;
 let manoUltimoInvio = 0;
@@ -1472,12 +1473,14 @@ function mandaManoUscita(r, visibile) {
   const on = visibile && maniClient.acceso && !!ultimaMano.punti && risolviTestiPubblico(preferenze).mano.acceso;
   if (on) {
     const ora = performance.now();
-    if (ora - manoUltimoInvio < 50) return;
+    if (ora - manoUltimoInvio < 33) return; // ~30 al secondo: quanto la camera
     manoUltimoInvio = ora;
     manoMandata = true;
     portaUscita.postMessage({
       tipo: 'mano',
       punti: ultimaMano.punti.map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]),
+      ar: Math.round((ultimaMano.ar ?? 4 / 3) * 1000) / 1000,
+      zona: maniControllo.zona === ZONA_TUTTA ? null : { x: 1 - (maniControllo.zona.x + maniControllo.zona.w), y: maniControllo.zona.y, w: maniControllo.zona.w, h: maniControllo.zona.h }, // la zona è a specchio, i punti no
       fase: r.fase,
       progresso: Math.round(r.progresso * 100) / 100,
       testo: r.breve, // solo i numeri: sul proiettore non c'è il nome del modo
@@ -1488,7 +1491,9 @@ function mandaManoUscita(r, visibile) {
     portaUscita.postMessage({ tipo: 'mano', punti: null });
   }
 }
+let ultimoControlloMani = null;
 const mostraControlloMani = (r) => {
+  ultimoControlloMani = r;
   const vede = ultimaMano.visibile && performance.now() - ultimaManoOra < 400;
   maniVista.controllo(r, vede);
   mandaManoUscita(r, vede);
