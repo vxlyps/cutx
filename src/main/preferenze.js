@@ -21,7 +21,7 @@ export const PREDEFINITE = {
   stopTorna: 'battuta', // lo stop dei colpi torna sull'1 della battuta (il vuoto prima del drop) o sul battito
   colpiGriglia: 0.25, // i colpi del controller entrano e escono sulla griglia: ¼ di ciclo (un battito) o ⅛
   scivolata: 0.25, // quanto scivola un numero della coda cambiato a mano, in cicli (battute): 0, ¼ (un battito), ½, 1
-  mani: { acceso: false, camera: '', sensibilita: 0.5 }, // le mani (sperimentale, mani-filtro.js): acceso = parte all'avvio; il tasto M le accende e spegne; camera = id della webcam ('' = predefinita)
+  mani: { acceso: false, camera: '', sensibilita: 0.5, modo: 'filtro', ambito: 'tutto', aggancioMs: 500, numMani: 2, zona: null }, // le mani (sperimentale, mani-controllo.js): acceso = pronte all'avvio (il tasto M le accende e spegne); camera = id della webcam ('' = predefinita); modo = quello di partenza; ambito = 'tutto' il live o il 'livello' scelto; aggancioMs = quanto tenere la mano ferma; numMani = 2 (la più grande dentro la zona, più pesante) o 1; zona = { x, y, w, h } a specchio (null = tutta)
   moviola: false, // la scatola nera delle prove (moviola.js): spenta finché non la accendo
   moviolaTastoController: null, // il numero MIDI del tasto del controller che mette un SEGNO nel registro
   paracaduteCicli: 2, // la transizione del paracadute

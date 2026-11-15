@@ -5,6 +5,7 @@ import it from './testi/it.json';
 import { AZIONI, caps, comboCifra, comboDa, conflitto, effettive, eRiservata } from './scorciatoie.js';
 import { creaEditor } from './editor.js';
 import { MODI, modoValido } from './sfondo.js';
+import { MODI as MANI_MODI } from './mani-modi.js';
 import { PREDEFINITI, SEGNAPOSTO, risolvi as risolviTesti } from './testi-pubblico.js';
 import { Anteprima } from './anteprima.js';
 import { OPZIONI, norma } from './scrittura.js';
@@ -411,8 +412,43 @@ export class Impostazioni {
   disegnaMani() {
     const m = it.mani;
     $('imp-titolo-mani').textContent = m.titolo;
-    const p = { acceso: false, camera: '', sensibilita: 0.5, ...this.dati.preferenze().mani };
-    const salva = (parziale) => this.dati.salvaPreferenze({ mani: { ...p, ...parziale } });
+    const p = { acceso: false, camera: '', sensibilita: 0.5, modo: 'filtro', ambito: 'tutto', aggancioMs: 500, numMani: 2, ...this.dati.preferenze().mani };
+    const salva = (parziale) => this.dati.salvaPreferenze({ mani: { ...p, ...this.dati.preferenze().mani, ...parziale } });
+    // una riga con una tendina (modo di partenza, su cosa agisce)
+    const tendina = (id, testi, valori, scelto, cambia) => {
+      const riga = crea('div', 'imp-riga');
+      const t = crea('div', 'imp-testo');
+      t.append(crea('span', '', testi.nome), crea('span', 'imp-nota', testi.testo));
+      const sel = crea('select');
+      sel.id = id;
+      for (const [v, nome] of valori) sel.append(new Option(nome, v));
+      sel.value = scelto;
+      sel.onchange = () => cambia(sel.value);
+      riga.append(t, sel);
+      return riga;
+    };
+    const modo = tendina('imp-mani-modo', m.modo, Object.entries(MANI_MODI).map(([id, x]) => [id, x.nome]), p.modo, (v) => salva({ modo: v }));
+    const ambito = tendina('imp-mani-ambito', m.ambito, [['tutto', m.ambito.tutto], ['livello', m.ambito.livello]], p.ambito, (v) => salva({ ambito: v }));
+    const aggancio = crea('div', 'imp-riga');
+    const ta = crea('div', 'imp-testo');
+    ta.append(crea('span', '', m.aggancio.nome), crea('span', 'imp-nota', m.aggancio.testo));
+    const ca = crea('div', 'imp-controlli');
+    const ia = crea('input');
+    ia.id = 'imp-mani-aggancio';
+    ia.type = 'range';
+    ia.min = 300;
+    ia.max = 1500;
+    ia.step = 50;
+    ia.value = p.aggancioMs;
+    const va = crea('span', 'lbl', `${(p.aggancioMs / 1000).toFixed(2)} s`);
+    let timerA = null;
+    ia.oninput = () => {
+      va.textContent = `${(Number(ia.value) / 1000).toFixed(2)} s`;
+      clearTimeout(timerA);
+      timerA = setTimeout(() => salva({ aggancioMs: Number(ia.value) }), 150);
+    };
+    ca.append(ia, va);
+    aggancio.append(ta, ca);
     const camera = crea('div', 'imp-riga');
     const t = crea('div', 'imp-testo');
     t.append(crea('span', '', m.camera.nome), crea('span', 'imp-nota', m.camera.testo));
@@ -450,7 +486,16 @@ export class Impostazioni {
     };
     comandi.append(i, valore);
     sens.append(ts, comandi);
-    $('imp-mani').replaceChildren(rigaInterruttore(m.serie, !!p.acceso, (x) => salva({ acceso: x })), camera, sens, crea('p', 'secondario a-capo', m.cosaFa));
+    $('imp-mani').replaceChildren(
+      rigaInterruttore(m.serie, !!p.acceso, (x) => salva({ acceso: x })),
+      modo,
+      ambito,
+      aggancio,
+      rigaInterruttore(m.dueMani, p.numMani !== 1, (x) => salva({ numMani: x ? 2 : 1 })),
+      camera,
+      sens,
+      crea('p', 'secondario a-capo', m.cosaFa),
+    );
   }
 
   // La MOVIOLA: interruttore, il tasto SEGNA del controller (quello della tastiera sta tra le scorciatoie), la cartella delle prove.

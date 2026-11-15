@@ -4601,15 +4601,55 @@ async function provaMani({ finestre, scrivi }) {
     for (let i = 0; i < serie.length; i++) if (i === 0 || serie[i].fase !== serie[i - 1].fase) cambiFase.push(`${(serie[i].t / 1000).toFixed(1)}s ${serie[i].fase}${serie[i].vista ? '' : '(senza mano)'}`);
     scrivi(`INFO  mani: fasi del controllo nel video: ${cambiFase.join(' → ')}`);
     controlla('mano persa: il valore resta fermo 2 s, poi risale verso aperto senza tornare indietro', ok1 && tratti >= 1, `${tratti} tratti`);
+    // ⇧M: il modo dopo (FILTRO → SPAZIO → CTX → FILTRO), si riparte da neutro e la riga del vecchio modo sparisce
+    const modo = () => js('cutxProva.maniControllo().modoId');
+    const maniModoTasto = () => js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'M', shiftKey: true, bubbles: true }))`);
+    controlla('si parte dal modo FILTRO', (await modo()) === 'filtro');
+    const sequenza = [];
+    for (let i = 0; i < 3; i++) {
+      await maniModoTasto();
+      await aspetta(0.6);
+      sequenza.push(await modo());
+    }
+    controlla('⇧M passa SPAZIO → CTX → FILTRO', sequenza.join(',') === 'spazio,ctx,filtro', sequenza.join(','));
+    controlla('cambiando modo la riga «mano» del vecchio modo non c\'è più', !mano((await live()).globali ?? []));
     await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', bubbles: true }))`);
     await aspetta(1.5);
     const dopo = (await live()).globali ?? [];
     controlla('con M spenta: la riga «mano» è sparita e torna quella del fader', !mano(dopo) && dopo.includes(faderRiga), JSON.stringify(dopo));
     controlla('e la finestrella è nascosta, la finestra «mani» chiusa', (await js(`document.getElementById('mani-finestra').hidden`)) && (!finestre.mani || finestre.mani.isDestroyed()));
+    // su un livello scelto: righe di coda di quel livello (non la riga globale), a fine gesto la coda torna com'era
+    {
+      const attivo = async () => (await live()).livelli.filter((l) => l.a === null).at(-1);
+      await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+      await aspetta(1.5);
+      const r = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*16").gain(.0001)', nome: 'cima', provenienza: 'prova', cicli: 1 })})`);
+      await aspetta(2.5);
+      const id = r.livello;
+      await js(`cutxProva.motori.live.manda({ tipo: 'coda', livello: ${id}, imposta: ['.lpf(1200)'] })`);
+      await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5, ambito: 'livello' } })`);
+      await aspetta(0.5);
+      await js(`cutxProva.pila.seleziona(${id})`);
+      await js(`cutxProva.scriviMano({ controlla: true, modo: 'filtro', riga: 'all(x => x.lpf(900).lpq(6)) // mano', voci: ['.lpf(900)', '.lpq(6)'] })`);
+      await aspetta(0.8);
+      let l = await attivo();
+      controlla('sul livello scelto: le voci vanno nella coda di quel livello', l?.coda?.includes('.lpf(900)') && l.coda.includes('.lpq(6)'), JSON.stringify(l?.coda));
+      controlla('e non c\'è la riga globale «mano»', !mano((await live()).globali ?? []));
+      await js(`cutxProva.scriviMano({ controlla: true, modo: 'filtro', riga: 'all(x => x.lpf(500)) // mano', voci: ['.lpf(500)'] })`);
+      await aspetta(0.6);
+      l = await attivo();
+      controlla('una voce che si spegne (la risonanza a zero) toglie la sua riga', l?.coda?.includes('.lpf(500)') && !l.coda.some((c) => c.startsWith('.lpq')), JSON.stringify(l?.coda));
+      await js(`cutxProva.scriviMano({ controlla: false, modo: 'filtro', riga: null, voci: [] })`);
+      await aspetta(0.8);
+      l = await attivo();
+      controlla('a fine gesto la coda torna com\'era (.lpf(1200) di prima, niente .lpq)', l?.coda?.length === 1 && l.coda[0] === '.lpf(1200)', JSON.stringify(l?.coda));
+      await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5, ambito: 'tutto' } })`);
+      await js(`cutxProva.fermaTutto()`);
+    }
     await js(`cutxProva.globaleDelController('fader', null)`);
     // le impostazioni: la sezione MANI, e la sensibilità arriva al filtro
     await js(`cutxProva.imp.disegna()`);
-    controlla('nelle impostazioni c\'è la sezione MANI: camera, sensibilità, accese di serie', await js(`!!document.getElementById('imp-mani-camera') && !!document.getElementById('imp-mani-sensibilita') && /MANI/.test(document.getElementById('imp-titolo-mani').textContent) && /accese all'avvio/.test(document.getElementById('imp-mani').textContent)`));
+    controlla('nelle impostazioni c\'è la sezione MANI: pronte all\'avvio, modo, su cosa agisce, aggancio, camera, sensibilità', await js(`!!document.getElementById('imp-mani-camera') && !!document.getElementById('imp-mani-sensibilita') && /MANI/.test(document.getElementById('imp-titolo-mani').textContent) && /pronte all'avvio/.test(document.getElementById('imp-mani').textContent) && !!document.getElementById('imp-mani-modo') && !!document.getElementById('imp-mani-ambito') && !!document.getElementById('imp-mani-aggancio')`));
     await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.9 } })`);
     await aspetta(0.5);
     controlla('la sensibilità cambiata nelle impostazioni arriva al filtro', (await js('cutxProva.maniControllo().sensibilita')) === 0.9);

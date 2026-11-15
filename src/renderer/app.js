@@ -10,7 +10,7 @@ import { SchermataProj, etichettaProj } from './proj-vista.js';
 import { ManiClient } from './mani-client.js';
 import { ManiVista } from './mani-vista.js';
 import { ControlloMano } from './mani-controllo.js';
-import { scegliMano } from './mani-gesto.js';
+import { scegliMano, ZONA_TUTTA } from './mani-gesto.js';
 import { MODI as MANI_MODI, modoDopo as maniModoDopo, modoValido as maniModoValido } from './mani-modi.js';
 import { risolvi as risolviTestiPubblico } from './testi-pubblico.js';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
@@ -1383,12 +1383,17 @@ let ultimeBozze = { livelli: {}, jam: null };
 // e comanda un modo (FILTRO, SPAZIO, CTX), scritto come riga globale segnata «mano» (all(x => …) // mano). Nel modo FILTRO, finché la
 // mano comanda, il fader non scrive la sua riga (la ricorda e la rimette quando la mano smette): al filtro comanda uno solo.
 // Da spenta la camera è chiusa del tutto.
-const maniPref = () => ({ acceso: false, camera: '', sensibilita: 0.5, modo: 'filtro', aggancioMs: 500, ...preferenze.mani });
+const maniPref = () => ({ acceso: false, camera: '', sensibilita: 0.5, modo: 'filtro', ambito: 'tutto', aggancioMs: 500, numMani: 2, ...preferenze.mani });
 const cicloMsMani = () => (mappa?.cps ? 1000 / mappa.cps : 2000);
-const maniVista = new ManiVista($('mani-finestra'));
+const salvaZonaMani = (zona) => {
+  window.cutx.salvaPreferenze({ mani: { ...maniPref(), zona } });
+  maniControllo.zona = zona ?? ZONA_TUTTA;
+  maniVista.mostraZona(zona);
+};
+const maniVista = new ManiVista($('mani-finestra'), { suZona: salvaZonaMani });
 const nuovoControlloMani = () => {
   const p = maniPref();
-  return new ControlloMano({ modo: p.modo, sensibilita: p.sensibilita, aggancioMs: p.aggancioMs, zona: p.zona ?? undefined, cicloMs: cicloMsMani });
+  return new ControlloMano({ modo: p.modo, sensibilita: p.sensibilita, aggancioMs: p.aggancioMs, zona: p.zona ?? ZONA_TUTTA, cicloMs: cicloMsMani });
 };
 let maniControllo = nuovoControlloMani();
 let maniControlla = false; // la riga «mano» è nel live
@@ -1412,17 +1417,48 @@ const maniClient = new ManiClient({
     window.cutx.logEvento('avviso', 'mani', `finestra chiusa: ${motivo}`);
   },
 });
+// Dove va l'effetto: su tutto il live (riga globale «mano») o sul livello scelto (righe di coda di quel livello, come le manopole del
+// controller). Il livello si sceglie quando l'effetto compare; senza livello scelto vale «su tutto». A fine gesto la coda torna com'era.
+let maniLivello = null; // { id, prima: Map(chiave → voce di prima | null), scritte: Set(chiavi) }
+const chiaveVoce = (v) => leggiVoce(v)?.chiave;
+function ripristinaVoceLivello(chiave) {
+  const l = maniLivello;
+  if (!l || !livelloVivo(l.id)) return;
+  const prima = l.prima.get(chiave);
+  live.manda({ tipo: 'coda', livello: l.id, ...(prima ? { imposta: [prima] } : { togli: [chiave] }), origine: 'manopola' });
+}
+function scriviVociLivello(voci) {
+  const l = maniLivello;
+  if (!livelloVivo(l.id)) return;
+  const attuali = new Set(voci.map(chiaveVoce));
+  for (const chiave of [...l.scritte]) {
+    if (attuali.has(chiave)) continue;
+    ripristinaVoceLivello(chiave); // una voce che si è spenta (a zero): torna quella di prima
+    l.scritte.delete(chiave);
+  }
+  for (const v of voci) {
+    const chiave = chiaveVoce(v);
+    if (!l.prima.has(chiave)) l.prima.set(chiave, (livelloVivo(l.id).coda ?? []).find((c) => chiaveVoce(c) === chiave) ?? null);
+    l.scritte.add(chiave);
+    live.manda({ tipo: 'coda', livello: l.id, imposta: [v], origine: 'manopola' });
+  }
+}
 function scriviMano(r) {
   if (r.controlla) {
     if (!maniControlla) {
       maniControlla = true;
-      maniCedeFader = r.modo === 'filtro';
+      maniLivello = maniPref().ambito === 'livello' && livelloVivo(pila.selezionato) ? { id: pila.selezionato, prima: new Map(), scritte: new Set() } : null;
+      maniCedeFader = !maniLivello && r.modo === 'filtro';
       if (maniCedeFader && faderRiga) live.manda({ tipo: 'globale', chiave: 'fader', riga: null });
     }
-    live.manda({ tipo: 'globale', chiave: 'mano', riga: r.riga });
+    if (maniLivello) scriviVociLivello(r.voci);
+    else live.manda({ tipo: 'globale', chiave: 'mano', riga: r.riga });
   } else if (maniControlla) {
     maniControlla = false;
-    live.manda({ tipo: 'globale', chiave: 'mano', riga: null });
+    if (maniLivello) {
+      for (const chiave of maniLivello.scritte) ripristinaVoceLivello(chiave);
+      maniLivello = null;
+    } else live.manda({ tipo: 'globale', chiave: 'mano', riga: null });
     if (maniCedeFader && faderRiga) live.manda({ tipo: 'globale', chiave: 'fader', riga: faderRiga });
     maniCedeFader = false;
   }
@@ -1436,6 +1472,7 @@ function fermaControlloMani() {
 // Il controllo gira a passo suo: se la finestra «mani» non manda più niente la mano conta come persa (mai un valore fermo a metà).
 setInterval(() => {
   if (!maniClient.acceso) return;
+  if (maniLivello && !livelloVivo(maniLivello.id)) fermaControlloMani(); // il livello è stato tolto: niente più da comandare
   const ora = performance.now();
   const fresca = ora - ultimaManoOra < 400;
   const r = maniControllo.aggiorna({ mano: fresca && ultimaMano.visibile ? { punti: ultimaMano.punti, ar: ultimaMano.ar } : null, ora });
@@ -1449,8 +1486,9 @@ async function accendiMani() {
   ultimaMano = { visibile: false };
   ultimaManoOra = 0;
   maniVista.mostra(true);
+  maniVista.mostraZona(p.zona ?? null);
   mostraControlloMani(maniControllo.ferma());
-  await maniClient.accendi({ camera: p.camera, fps: 'normale', anteprima: true });
+  await maniClient.accendi({ camera: p.camera, fps: 'normale', anteprima: true, numMani: p.numMani });
   cue.avviso(it.mani.avvisoAcceso);
 }
 async function spegniMani() {
@@ -1867,11 +1905,12 @@ globalThis.cutxProva = {
   maniClient,
   maniVista,
   maniControllo: () => maniControllo,
+  scriviMano,
   cambiaModoMani,
   alternaMani,
   accendiMani,
   spegniMani,
-  faderRigaMani: () => ({ faderRiga, maniControlla, maniCedeFader }),
+  faderRigaMani: () => ({ faderRiga, maniControlla, maniCedeFader, maniLivello: maniLivello ? { id: maniLivello.id, scritte: [...maniLivello.scritte] } : null }),
   globaleDelController,
   schermataProj,
   libreria: () => libreria,
@@ -2094,6 +2133,8 @@ function applicaPreferenze(p) {
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
   maniControllo.sensibilita = maniPref().sensibilita; // sensibilità e durata dell'aggancio si cambiano anche mentre la mano comanda
   maniControllo.aggancioMs = maniPref().aggancioMs;
+  maniControllo.zona = maniPref().zona ?? ZONA_TUTTA;
+  maniVista.mostraZona(maniPref().zona ?? null);
   $('paracadute').hidden = p.paracadute === false;
   moviola.imposta(!!p.moviola);
   live.manda({ tipo: 'moviola', on: !!p.moviola });

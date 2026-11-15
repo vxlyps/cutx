@@ -3615,6 +3615,20 @@ input[type='checkbox'] {
 .mani-quadro {
   position: relative;
 }
+.mani-quadro {
+  cursor: crosshair;
+  touch-action: none;
+}
+.mani-zona {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--marcio);
+  box-shadow: 0 0 0 9999px rgba(5, 6, 4, 0.5); /* fuori dalla zona l'immagine si spegne: la mano lì non conta */
+  pointer-events: none;
+}
+.mani-zona.provvisoria {
+  border-style: dashed;
+}
 .mani-anello {
   position: absolute;
   left: calc(50% - 20px);

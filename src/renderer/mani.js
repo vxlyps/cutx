@@ -52,7 +52,7 @@ async function avvia() {
     landmarker = await HandLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: `${BASE}/hand_landmarker.task`, delegate: 'CPU' },
       runningMode: 'VIDEO',
-      numHands: 1,
+      numHands: config.numMani === 1 ? 1 : 2, // con 2 la più grande dentro la zona è la mia (mani-gesto.js); con 1 costa meno
       minHandDetectionConfidence: 0.5,
       minHandPresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,

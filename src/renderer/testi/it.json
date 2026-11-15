@@ -751,8 +751,8 @@
     "avvisoSpento": "mani spente: la camera è chiusa",
     "avvisoCaduta": "le mani si sono fermate ({motivo}): camera chiusa, il filtro è tornato com'era",
     "serie": {
-      "nome": "mani accese all'avvio",
-      "testo": "parte da sola la camera con il riconoscimento delle mani. Spento di serie: il tasto M le accende e spegne quando serve."
+      "nome": "mani pronte all'avvio",
+      "testo": "la camera parte da sola con l'app, così la mano è già riconosciuta quando serve (ci vogliono ~7 secondi). Spento di serie: il tasto M le accende e spegne."
     },
     "camera": {
       "nome": "camera",
@@ -772,6 +772,25 @@
       "rilascio": "mano persa · torna a neutro",
       "bloccata": "BLOCCATA · riaggancia aprendo la mano"
     },
-    "avvisoModo": "mani · modo {modo}"
+    "avvisoModo": "mani · modo {modo}",
+    "zonaAiuto": "La zona: trascina sull'immagine per disegnarla (conta solo la mano dentro, la più grande); doppio clic = tutta l'inquadratura.",
+    "modo": {
+      "nome": "modo di partenza",
+      "testo": "FILTRO: altezza = taglio, destra-sinistra = risonanza · SPAZIO: altezza = riverbero, dita aperte = eco · CTX: altezza = crush, destra-sinistra = distorsione. ⇧M passa al modo dopo."
+    },
+    "ambito": {
+      "nome": "su cosa agisce",
+      "testo": "tutto il live (una riga «mano» globale) o il livello che hai scelto (righe nella sua coda, che a fine gesto tornano com'erano). Senza livello scelto vale tutto il live.",
+      "tutto": "su tutto il live",
+      "livello": "sul livello scelto"
+    },
+    "aggancio": {
+      "nome": "durata dell'aggancio",
+      "testo": "quanto tenere la mano aperta e ferma verso la camera prima che comandi. Più basso = più pronta, ma una mano che passa può agganciare."
+    },
+    "dueMani": {
+      "nome": "riconosci fino a 2 mani",
+      "testo": "serve a ignorare le mani degli altri: conta la più grande dentro la zona. Spento riconosce una mano sola e pesa meno (~20 punti di un core in meno)."
+    }
   }
 }

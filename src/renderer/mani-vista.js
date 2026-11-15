@@ -14,8 +14,10 @@ const el = (tag, classe, testo) => {
 };
 
 export class ManiVista {
-  constructor(radice) {
+  // suZona({ x, y, w, h } | null): chiamata quando disegno la zona (null = tutta l'inquadratura)
+  constructor(radice, { suZona } = {}) {
     this.radice = radice;
+    this.suZona = suZona;
     this.canvas = el('canvas', 'mani-immagine');
     this.canvas.width = 160;
     this.canvas.height = 120;
@@ -36,7 +38,11 @@ export class ManiVista {
     this.anelloGiro.setAttribute('stroke-dasharray', '0 100');
     this.anello.append(this.anelloFondo, this.anelloGiro);
     const quadro = el('div', 'mani-quadro');
-    quadro.append(this.canvas, this.anello);
+    this.zonaEl = el('div', 'mani-zona');
+    this.zonaEl.hidden = true;
+    quadro.append(this.canvas, this.zonaEl, this.anello);
+    quadro.title = T.zonaAiuto;
+    this.disegnaZona(quadro);
     this.sigla = el('span', 'mani-sigla', T.acceso);
     this.valore = el('span', 'mani-valore', '');
     this.barra = el('i');
@@ -53,6 +59,40 @@ export class ManiVista {
     this.mano = null;
     this.disegnata = false;
     this.mostra(false);
+  }
+
+  // La zona: si trascina sull'immagine (che è a specchio, quindi le coordinate dello schermo sono già quelle a specchio); doppio clic = tutta.
+  disegnaZona(quadro) {
+    let inizio = null;
+    const punto = (e) => {
+      const r = quadro.getBoundingClientRect();
+      return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))];
+    };
+    const rettangolo = (a, b) => ({ x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]) });
+    quadro.addEventListener('pointerdown', (e) => {
+      inizio = punto(e);
+      quadro.setPointerCapture(e.pointerId);
+    });
+    quadro.addEventListener('pointermove', (e) => {
+      if (inizio) this.mostraZona(rettangolo(inizio, punto(e)), true);
+    });
+    quadro.addEventListener('pointerup', (e) => {
+      if (!inizio) return;
+      const z = rettangolo(inizio, punto(e));
+      inizio = null;
+      if (z.w < 0.15 || z.h < 0.15) return this.mostraZona(this.zonaFissata); // un clic o un rettangolino: niente
+      this.suZona?.(z);
+    });
+    quadro.addEventListener('dblclick', () => this.suZona?.(null));
+  }
+
+  // z: la zona fissata (null = tutta l'inquadratura, niente rettangolo); provvisoria = mentre la sto disegnando
+  mostraZona(z, provvisoria = false) {
+    if (!provvisoria) this.zonaFissata = z;
+    this.zonaEl.hidden = !z;
+    if (!z) return;
+    Object.assign(this.zonaEl.style, { left: `${z.x * 100}%`, top: `${z.y * 100}%`, width: `${z.w * 100}%`, height: `${z.h * 100}%` });
+    this.zonaEl.classList.toggle('provvisoria', provvisoria);
   }
 
   mostra(si) {

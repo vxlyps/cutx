@@ -56,6 +56,7 @@ export class ControlloMano {
     this.valori = this.neutri();
     this.inviati = null; // i valori dell'ultima riga scritta (null = nessuna riga nel live)
     this.riga = null;
+    this.voci = []; // le stesse cose della riga, una per una (per il livello scelto)
     this.ultimaOra = null;
     this.ultimoInvio = -Infinity;
     this.ultimaVista = -Infinity; // l'ultima volta che ho visto la mano
@@ -83,6 +84,7 @@ export class ControlloMano {
       progresso: this.progresso,
       controlla: this.riga !== null,
       riga: this.riga,
+      voci: [...this.voci],
       cambia,
       valori: [...this.valori],
       altezza: this.valori[0],
@@ -209,10 +211,12 @@ export class ControlloMano {
     if (distanza(this.valori, riferimento) < ZONA_MORTA) return false;
     if (ora - this.ultimoInvio < OGNI_MS) return false;
     this.ultimoInvio = ora;
+    const voci = this.modo.voci(this.valori);
     const nuova = this.modo.riga(this.valori);
     this.inviati = nuova === null ? null : [...this.valori];
     if (nuova === this.riga) return false; // la riga è uguale (valori diversi ma stesso testo, o ancora tutto spento)
     this.riga = nuova;
+    this.voci = voci;
     return true;
   }
 
