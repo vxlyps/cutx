@@ -13,6 +13,7 @@ import os from 'node:os';
 import { AZIONI } from '../renderer/scorciatoie.js';
 import { frazioneAmbra } from '../../strumenti/analizza-prova-lib.mjs';
 import { existsSync } from 'node:fs';
+import { provaCimice } from './prova-cimice.js';
 import { execFileSync } from 'node:child_process';
 
 // Lo stesso click del test di sfasamento, più piano: la prova suona dalle casse del Mac.
@@ -224,6 +225,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('drum')) ok = (await sicura('drum', provaDrum)) && ok;
   // strumento, non prova (non entra nel giro lungo): registra i punti delle mani che la camera vede, per ritarare i gesti sul video vero
   if (parti.indexOf('mani-dump') >= 0) ok = (await sicura('mani-dump', provaManiDump)) && ok;
+  if (parti.includes('cimice')) ok = (await sicura('cimice', (a) => provaCimice({ ...a, chiedi, aspetta }))) && ok;
   if (parti.includes('mani-proiettore')) ok = (await sicura('mani-proiettore', provaManoProiettore)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('strumento')) ok = (await sicura('strumento', provaStrumento)) && ok;

@@ -325,6 +325,17 @@ export class Pila {
     });
   }
 
+  // Le righe di coda di un dispetto della cimice: in ruggine finché è attivo. righe: { nomeLivello: Set(righe) }
+  segnaDispetti(righe) {
+    for (const c of this.carte.values()) {
+      const set = righe[c.livello?.nome];
+      for (const riga of c.codaTesto.children) {
+        const dentro = !!set && set.has(riga.firstChild?.textContent);
+        if (riga.classList.contains('dispetto') !== dentro) riga.classList.toggle('dispetto', dentro);
+      }
+    }
+  }
+
   // --- modificare sul posto ---
 
   apriModifica(c) {

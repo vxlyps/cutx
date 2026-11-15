@@ -1,5 +1,16 @@
 # Novità di CUTX
 
+## 0.5.1-beta.1 «CUTX_05_1_1» (15/11/2026)
+
+Una cosa sola, ma grossa: la **CIMICE**, una creatura di linee che cammina sul codice **sul proiettore** (mai nella schermata dove lavori). Dettagli in `docs/CIMICE.md`; la prova guidata in `docs/NOVITA-5.1.1.md`.
+
+### La cimice
+- **Solo disegno**: un canvas trasparente sopra il codice del proiettore; non tocca mai il codice, il set, l'audio. 7 zampe (non equilibrate, apposta), antenne che toccano solo le note che suonano, firma «idea by @rybinfx» (di @rybinfx, la citazione non si spegne).
+- **Decide da sola** leggendo i dati veri: livelli live, volumi, ritorno della cassa, scena `drop`, fader che si riapre di scatto. Sul drop impazzisce.
+- **Impostazioni CIMICE**: attiva, quanto spesso, quanto resta, drop e sensibilità, grandezza (×0.5–×2), velocità, lampi, corrompe le parole, tremito.
+- **Dispetti** (spenti di serie): ogni tanto, mentre tocca una nota, fa un glitch VERO sul suono di quel livello (filtro, eco, balbettio, buchi, fuori tempo…), da 0.5 a 2 secondi, a tempo sulla griglia, poi tutto torna com'era. Si vede nella card (riga in ruggine). ⌥⌘X li ferma, il paracadute pure.
+- **Finale HACK**: il bottone **HACK** (due clic) o **⌥⌘⇧H** due volte. Dura 1–3 minuti (di serie 2): dispetti sempre più fitti, volumi che scendono, cimici fino a 8, il codice «mangiato» anche nel tuo editor (solo un disegno sopra), poi il set si chiude nel silenzio e il proiettore resta nero con la sola scritta TECNOLOGIA CANAGLIA. Solo in memoria; il paracadute lo ferma e rimette tutto.
+
 ## 0.5.1-beta «CUTX_05_1» (15/11/2026)
 
 Cinque cose nuove: i PROJ, la scheda DRUM, l'onda sotto la batteria, le mani (sperimentale) e qualche rifinitura. Dettaglio tasto per tasto in `docs/NOVITA-5.1.md`.
