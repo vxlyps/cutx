@@ -1246,7 +1246,7 @@ input[type='checkbox'] {
 
 .card.livello.selezionato {
   border-color: var(--marcio);
-  box-shadow: inset 4px 0 0 var(--marcio), 0 0 0 1px var(--marcio), 0 0 10px rgba(159, 194, 58, 0.35);
+  box-shadow: 0 0 0 1px var(--marcio), 0 0 10px rgba(159, 194, 58, 0.35);
 }
 
 .livello.in-modifica {
@@ -2887,7 +2887,7 @@ input[type='checkbox'] {
 /* la sezione scelta nel CUE (con il mouse o col controller): bordo chiaro, non verde (il verde è solo il live) */
 .card.sezione.attiva:not(.in-cuffia):not(.e-live) {
   border-color: var(--testo);
-  box-shadow: inset 3px 0 0 var(--testo);
+  box-shadow: 0 0 0 1px var(--testo);
 }
 
 /* le righe globali (fader, colpi su tutto): codice in fondo ai livelli */
@@ -3382,7 +3382,7 @@ input[type='checkbox'] {
 }
 .card.sezione.attiva:not(.in-cuffia):not(.e-live) {
   border-color: var(--testo);
-  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo);
+  box-shadow: 0 0 0 2px var(--testo); /* la scelta è una cornice uguale su tutti i lati, niente fascia a sinistra */
 }
 .card.sezione.attiva:not(.e-live) .nome-sezione {
   background: var(--testo);
@@ -3395,7 +3395,7 @@ input[type='checkbox'] {
 /* la scena del beat scelta (manopola 1 o clic): si legge da lontano come le clip — card incorniciata e pillola in negativo, più grande */
 #carte .beat-card:has(.beat-codice.attiva) {
   border-color: var(--testo);
-  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo), 0 10px 12px -6px var(--fondo);
+  box-shadow: 0 0 0 2px var(--testo), 0 10px 12px -6px var(--fondo);
 }
 .beat-card:has(.beat-codice.attiva) .pillola.scelta:not(.live):not(.in-arrivo) {
   background: var(--testo);
