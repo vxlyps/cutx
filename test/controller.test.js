@@ -793,3 +793,127 @@ test('volume generale: il primo scatto parte dal volume vero del live, non da qu
   c.riceve(giro(8, 1));
   assert.deepEqual(log.filter((x) => x[0] === 'master').at(-1), ['master', 0.12]);
 });
+
+// --- X-Touch come strumento (SYNTH: sequencer, pad, piano) ---
+import { aggiungiRiga, iniziale as drumIniziale, impostaPasso } from '../src/renderer/drum-codice.js';
+import { messaggioTasto } from '../src/renderer/controller-mc.js';
+
+function strumento(scheda = 'drum') {
+  const p = prova([L(1, 'drum')]);
+  let g = aggiungiRiga(aggiungiRiga(drumIniziale(), 'bd'), 'sd');
+  let ottava = 3;
+  const drum = {
+    stato: () => g,
+    testina: () => 2,
+    evidenzia: (r) => p.log.push(['evidenzia', r]),
+    passo: (r, i, vel) => {
+      g = impostaPasso(g, r, i, vel);
+      p.log.push(['passo', r, i, vel]);
+    },
+    velocita: (r, i, vel) => {
+      g = impostaPasso(g, r, i, vel);
+      p.log.push(['velocita', r, i, vel]);
+    },
+    suono: (r, verso) => p.log.push(['suono', r, verso]),
+    colpo: (r, vel) => p.log.push(['colpo', r, vel]),
+  };
+  const synth = {
+    scheda: () => scheda,
+    drum,
+    nota: (midi, vel, giu) => p.log.push(['nota', midi, vel, giu]),
+    ottava: (n) => ((ottava = n ?? ottava), ottava),
+    fermaNote: () => p.log.push(['fermaNote']),
+    stato: () => ({}),
+    nome: (k) => k,
+    corto: (k) => k,
+    testo: () => '',
+    gruppo: (x) => x,
+  };
+  p.azioni.nelSynth = () => true;
+  p.azioni.synth = synth;
+  const note = (n) => p.c.tab.tasti[n - 1];
+  const layer = (x) => p.c.tab.layer[x];
+  return { ...p, note, layer, drum, synth, passoDi: () => g };
+}
+
+test('DRUM layer A = sequencer: un tocco su un tasto accende il passo, sulla pagina tenuto + manopola 1 = velocity', () => {
+  const { c, log, note } = strumento('drum');
+  assert.equal(c.ruolo, 'sequencer');
+  c.riceve(tasto(note(3), true));
+  c.riceve(tasto(note(3), false));
+  assert.deepEqual(log.find((x) => x[0] === 'passo'), ['passo', 0, 2, 0.8]);
+  c.riceve(tasto(note(3), true));
+  c.riceve(giro(1, 1));
+  c.riceve(tasto(note(3), false));
+  assert.ok(log.some((x) => x[0] === 'velocita' && x[2] === 2), 'la velocity del passo tenuto è cambiata');
+  assert.equal(log.filter((x) => x[0] === 'passo').length, 1, 'il rilascio dopo la manopola non spegne il passo');
+});
+
+test('DRUM layer A: manopola 1 cambia riga (e la evidenzia), manopola 2 il suono, il tasto 8 non è il paracadute', () => {
+  const { c, log, note, avanza } = strumento('drum');
+  c.riceve(giro(1, 1));
+  assert.deepEqual(log.filter((x) => x[0] === 'evidenzia').at(-1), ['evidenzia', 1]);
+  c.riceve(giro(2, 1));
+  assert.deepEqual(log.find((x) => x[0] === 'suono'), ['suono', 1, 1]);
+  c.riceve(tasto(note(8), true));
+  avanza(2000);
+  assert.ok(!log.some((x) => x[0] === 'paracadute'), 'nel DRUM il controller non lancia il paracadute');
+  c.riceve(giro(8, -5));
+  assert.ok(log.some((x) => x[0] === 'master'), 'il volume generale resta del LIVE');
+});
+
+test('DRUM layer B = pad: ogni tasto suona la sua riga; una nota del piano non parte', () => {
+  const { c, log, note, layer } = strumento('drum');
+  c.riceve(tasto(layer('B'), true));
+  assert.equal(c.ruolo, 'pad');
+  c.riceve(tasto(note(2), true));
+  assert.deepEqual(log.find((x) => x[0] === 'colpo'), ['colpo', 1, 0.8]);
+  assert.ok(!log.some((x) => x[0] === 'nota'));
+});
+
+test('suono / note layer B = piano: le note vanno al synth e la manopola 1 cambia ottava; le altre manopole restano i parametri', () => {
+  const { c, log, note, layer, synth } = strumento('suono');
+  assert.equal(c.ruolo, 'synth');
+  c.riceve(tasto(layer('B'), true));
+  assert.equal(c.ruolo, 'piano');
+  c.riceve(tasto(note(9), true)); // do dell'ottava 3 = midi 48
+  assert.deepEqual(log.find((x) => x[0] === 'nota'), ['nota', 48, 0.8, true]);
+  c.riceve(tasto(note(9), false));
+  assert.deepEqual(log.filter((x) => x[0] === 'nota').at(-1), ['nota', 48, 0, false]);
+  c.riceve(giro(1, 1));
+  assert.equal(synth.ottava(), 4);
+  assert.equal(c.manopole()[0].testo, '4');
+});
+
+test('cambiando layer con una nota tenuta il piano si ferma; col cavo staccato pure', () => {
+  const { c, log, note, layer } = strumento('suono');
+  c.riceve(tasto(layer('B'), true));
+  c.riceve(tasto(note(9), true));
+  c.riceve(tasto(layer('A'), true));
+  assert.ok(log.some((x) => x[0] === 'fermaNote'));
+  assert.equal(c.ruolo, 'synth');
+});
+
+test('luci dello strumento: passo acceso = acceso, testina = lampeggia, nel DRUM nessuna luce del paracadute', () => {
+  const { c, note, layer, passoDi } = strumento('drum');
+  c.riceve(tasto(note(1), true));
+  c.riceve(tasto(note(1), false));
+  const luci = c.desiderate();
+  assert.deepEqual(luci.get(`t${note(1)}`), messaggioTasto(note(1), true));
+  assert.deepEqual(luci.get(`t${note(3)}`), messaggioTasto(note(3), 'lampeggia')); // la testina è sul passo 3 (indice 2)
+  assert.deepEqual(luci.get(`t${note(8)}`), messaggioTasto(note(8), false));
+  assert.deepEqual(luci.get(`t${layer('A')}`), messaggioTasto(layer('A'), true));
+  assert.equal(passoDi().righe[0].vel[0], 0.8);
+});
+
+test('fuori dal SYNTH il controller non cambia: layer = pagine del LIVE, tasto 8 = paracadute', () => {
+  const { c, azioni, layer, note, log, avanza } = strumento('drum');
+  azioni.nelSynth = () => false;
+  assert.equal(c.ruolo, 'live');
+  c.riceve(tasto(layer('B'), true));
+  assert.equal(c.pagina, 'B');
+  c.riceve(tasto(layer('A'), true));
+  c.riceve(tasto(note(8), true));
+  avanza(1100);
+  assert.ok(log.some((x) => x[0] === 'paracadute'));
+});

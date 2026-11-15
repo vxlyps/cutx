@@ -55,6 +55,8 @@ export class VistaDrum {
     this.timerCodice = null;
     this.timerTestina = null;
     this.firmaDest = '';
+    this.rigaScelta = -1; // la riga scelta dal controller (evidenziata)
+    this.timerManopola = null; // un giro di manopola è un passo solo di ⌘Z
     this.costruisci();
     this.disegna();
   }
@@ -401,6 +403,59 @@ export class VistaDrum {
     this.colonna = colonna;
   }
 
+  // --- l'X-Touch (controller-ruoli.js): cosa deve sapere e fare sulla griglia ---
+
+  perControllo() {
+    return {
+      stato: () => this.stato,
+      testina: () => this.colonna,
+      evidenzia: (r) => this.evidenzia(r),
+      passo: (r, i, vel) => this.passo(() => this.imponi(impostaPasso(this.stato, r, i, vel))),
+      velocita: (r, i, vel) => this.gestoControllo(() => this.imponi(impostaPasso(this.stato, r, i, vel))),
+      suono: (r, verso) => this.suonoControllo(r, verso),
+      colpo: (r, vel) => this.colpo(r, vel),
+    };
+  }
+
+  // Un giro di manopola: il primo registra l'annulla, i successivi (a meno di mezzo secondo) si uniscono.
+  gestoControllo(fa) {
+    if (!this.timerManopola) this.registra();
+    clearTimeout(this.timerManopola);
+    this.timerManopola = setTimeout(() => (this.timerManopola = null), 600);
+    this.inGesto = true;
+    fa();
+    this.inGesto = false;
+  }
+
+  evidenzia(r) {
+    if (r === this.rigaScelta) return;
+    this.rigaScelta = r;
+    this.segnaRigaScelta();
+  }
+
+  segnaRigaScelta() {
+    [...this.grigliaEl.querySelectorAll('.drum-riga')].forEach((el, i) => el.classList.toggle('scelta', i === this.rigaScelta));
+  }
+
+  suonoControllo(r, verso) {
+    const riga = this.stato.righe[r];
+    if (riga?.tipo !== 'griglia' || !verso) return;
+    const stash = Object.keys(this.opz.suoniStash?.() ?? {}).filter((k) => k !== '_base').sort((a, b) => a.localeCompare(b));
+    const elenco = [...new Set([...stash, ...SUONI_STRUDEL])];
+    const i = elenco.indexOf(riga.suono);
+    const dopo = elenco[Math.max(0, Math.min(elenco.length - 1, (i < 0 ? 0 : i + Math.sign(verso))))];
+    if (!dopo || dopo === riga.suono) return;
+    this.gestoControllo(() => this.imponi(cambiaSuono(this.stato, r, dopo, '')));
+    this.colpo(r, VEL_DI_SERIE); // si sente il suono nuovo
+  }
+
+  // Un colpo in cuffia con il suono della riga (i pad).
+  colpo(r, vel) {
+    const riga = this.stato.righe[r];
+    if (riga?.tipo !== 'griglia') return;
+    this.opz.colpo?.(`s("${riga.suono}")${riga.banco ? `.bank("${riga.banco}")` : ''}`, vel);
+  }
+
   // Le opzioni dei suoni: quelli dello stash, quelli di Strudel, e (se serve) quello già scelto che non sta in nessuna lista.
   opzioniSuoni(corrente = '') {
     const stash = Object.keys(this.opz.suoniStash?.() ?? {}).filter((k) => k !== '_base').sort((a, b) => a.localeCompare(b));
@@ -485,6 +540,7 @@ export class VistaDrum {
     });
     if (!righe.length) righe.push(crea('p', 'drum-vuoto', T.msg.vuota));
     this.grigliaEl.replaceChildren(...righe);
+    this.segnaRigaScelta();
     // le opzioni del menu «+ suono»
     this.aggiungiEl.replaceChildren(new Option(T.nuovaRiga, ''), ...this.opzioniSuoni());
     this.aggiungiEl.value = '';

@@ -736,6 +736,7 @@ const synth = new VistaSynth($('vista-synth'), {
     return errore;
   },
   nota: (m) => cuffia.manda({ tipo: 'synth-nota', ...m }),
+  colpo: (codice, vel) => cuffia.manda({ tipo: 'drum-colpo', codice, vel }), // un colpo di batteria (i pad dell'X-Touch)
   click: (accento) => cuffia.manda({ tipo: 'synth-click', accento }),
   fermaNote: () => cuffia.manda({ tipo: 'synth-ferma-note' }),
   suonoTasti: async (codice) => (await cuffia.richiesta({ tipo: 'synth-suono', codice })).errore ?? null,

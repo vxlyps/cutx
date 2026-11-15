@@ -1284,6 +1284,25 @@ function clickSynth(accento) {
   webaudioOutput(hap, 0, 0.05, rip.mappa ? rip.cpsAl(ac.currentTime) : CPS_INIZIALE, ac.currentTime + 0.005);
 }
 
+// Un colpo di batteria (i pad dell'X-Touch nella scheda DRUM): il codice di una nota sola (s("bd").bank("…")) diventa il valore del colpo.
+const colpiDrum = new Map(); // codice → valore
+async function colpoDrum({ codice, vel = 0.8 }) {
+  if (typeof codice !== 'string' || codice.length > 200) return;
+  let valore = colpiDrum.get(codice);
+  if (!valore) {
+    const c = await compila(codice);
+    if (c.errore) return;
+    const hap = c.pattern.queryArc(0, 1)[0];
+    if (!hap) return;
+    valore = { ...(typeof hap.value === 'object' ? hap.value : { s: hap.value }) };
+    colpiDrum.set(codice, valore);
+  }
+  const voce = orbitaTasti(VOCI_TASTI + 1); // un'orbita sua
+  voce.gain.gain.setValueAtTime(1, ac.currentTime);
+  const hap = { value: { ...valore, orbit: voce.orbita, velocity: Math.max(0.05, Math.min(1, Number(vel) || 0.8)) }, ensureObjectValue() {}, whole: { begin: { valueOf: () => 0 } } };
+  webaudioOutput(hap, 0, 0.5, rip.mappa ? rip.cpsAl(ac.currentTime) : CPS_INIZIALE, ac.currentTime + 0.01);
+}
+
 async function ricevi(da, m) {
   switch (m.tipo) {
     case 'valuta': {
@@ -1415,6 +1434,9 @@ async function ricevi(da, m) {
       return;
     case 'synth-ferma-note':
       if (!LIVE) fermaTasti();
+      return;
+    case 'drum-colpo':
+      if (!LIVE) return void colpoDrum(m);
       return;
     case 'synth-click':
       if (!LIVE) clickSynth(!!m.accento);

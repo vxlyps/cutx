@@ -409,6 +409,17 @@ export class VistaSynth {
       suona: () => !!this.opz.suonaOra?.(),
       registra: () => !!this.rec,
       lato: () => this.slot.lato,
+      scheda: () => this.scheda,
+      nota: (midi, vel, giu) => this.notaControllo(midi, vel, giu),
+      ottava: (n) => {
+        if (Number.isInteger(n)) {
+          this.ottava = n;
+          this.disegnaOttava();
+        }
+        return this.ottava;
+      },
+      fermaNote: () => this.fermaNote(),
+      drum: this.drum.perControllo(),
     };
   }
 
@@ -457,6 +468,15 @@ export class VistaSynth {
     this.tenuti.delete(e.code);
     this.notaOff(n);
     return true;
+  }
+
+  // Le note del PIANO dell'X-Touch: come i tasti del Mac (cuffia, REC, pianoroll), con la velocity fissa del controller.
+  notaControllo(midi, vel, giu) {
+    if (!this.attiva_ || this.scheda === 'drum') return;
+    if (giu) {
+      this.tenuti.set(`x${midi}`, midi);
+      this.notaOn(midi, Math.max(1, Math.round(vel * 127)));
+    } else if (this.tenuti.delete(`x${midi}`)) this.notaOff(midi);
   }
 
   // Un tocco sul pianoroll: la nota si sente un attimo.

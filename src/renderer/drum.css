@@ -145,3 +145,8 @@
   align-self: flex-start;
   width: 150px;
 }
+
+/* la riga scelta dal controller */
+.drum-riga.scelta .drum-capo {
+  box-shadow: inset 3px 0 0 var(--testo);
+}
