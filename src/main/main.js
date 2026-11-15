@@ -43,12 +43,14 @@ if (PROVA && PROVA.split(',').some((p) => p === 'mani' || p === 'mani-dump') && 
   app.commandLine.appendSwitch('use-file-for-fake-video-capture', VIDEO_MANO);
 }
 if (PER_PROVE) {
-  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : 'CUTX-prova');
+  // Due sessioni di lavoro non devono usare gli stessi dati di prova: CUTX_PROVA_NOME=altro dà dati (CUTX-prova-altro) e, se serve, CUTX_PROVA_STASH uno stash di prova a parte.
+  const nome = (process.env.CUTX_PROVA_NOME || '').replace(/[^\w-]/g, '');
+  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : `CUTX-prova${nome ? `-${nome}` : ''}`);
   app.setPath('userData', dati);
   const impostazioni = path.join(dati, 'impostazioni.json');
   if (!existsSync(impostazioni)) {
     mkdirSync(dati, { recursive: true });
-    writeFileSync(impostazioni, JSON.stringify({ stash: path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test') }));
+    writeFileSync(impostazioni, JSON.stringify({ stash: process.env.CUTX_PROVA_STASH || path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test') }));
   }
 }
 

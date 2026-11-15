@@ -1,5 +1,38 @@
 # Novità di CUTX
 
+## 0.5.1-beta (da datare alla pubblicazione)
+
+Cinque cose nuove: i PROJ, la scheda DRUM, l'onda sotto la batteria, le mani (sperimentale) e qualche rifinitura. Dettaglio tasto per tasto in `docs/NOVITA-5.1.md`.
+
+### PROJ
+- **Un progetto per volta**: libreria, set e kit stanno in `PROJ/PROJ NN/` (brani, `set.cutx`, `kit.cutx`, `proj.json`); suoni, video, estensioni e `colpi.cutx` restano comuni a tutti. La libreria e il set di prima finiscono in PROJ 01 **copiati, non spostati**.
+- **Schermata dei PROJ** all'avvio (e dal tasto **PROJ** in alto, che mostra «PROJ 03 · sottotitolo»): schede numerate con sottotitolo libero, «apri», «+ nuovo PROJ» (il kit si copia dall'ultimo aperto). Il numero è verde solo se da quel PROJ suona qualcosa nel live. Cambiare PROJ non ferma il live.
+- Interruttore **«riapri l'ultimo PROJ»** nelle impostazioni.
+- **«altri PROJ»** in libreria: copia di brani e di clip (→ brano, → kit) con la riga `// viene da PROJ 01 · nome`.
+
+### DRUM
+- Terza scheda della vista SYNTH (⌘2), accanto a «suono» e «note»: **griglia a passi** per la batteria. Righe = suoni dello stash e di Strudel; 16 o 32 passi; 1, 2 o 4 cicli; clic accende e spegne, trascinando su e giù cambia la velocity.
+- **Scrive codice vero** (`stack(s("bd ~ …").gain(".8 ~ …"), …)`) e lo rilegge anche se lo scrivi a mano; quello che non sa leggere resta nel testo con un avviso, mai cancellato.
+- ▶ cuffia a tempo col live con la testina, → CUE come clip segnata **· drum**, «drum» sulle card per riaprirla, annulla con ⌘Z.
+
+### Onda
+- Sotto il BEAT e le clip **· drum** la striscia delle note diventa un'**onda LED** del suono vero (radar fisso sul ciclo); un clic sulla striscia alterna onda e note. Sul proiettore segue il clic di ogni card, e c'è l'interruttore «onda sotto la batteria» nei testi per il pubblico.
+
+### Mani (sperimentale, spente di serie)
+- **M** accende, **⇧M** cambia modo: **FILTRO** (altezza = taglio, destra-sinistra = risonanza), **SPAZIO** (altezza = riverbero, dita aperte = eco), **CTX** (altezza = crush, destra-sinistra = distorsione).
+- **Aggancio** (mano aperta e ferma ½ s), niente salto, mano persa = valore fermo 2 s poi neutro piano, **pugno = blocca**, zona disegnabile, la più grande delle mani dentro la zona.
+- Sezione **MANI** nelle impostazioni; finestrella a sinistra; **sul proiettore la mano** (solo scheletro e valori, mai la camera) con interruttore tra i testi per il pubblico. Dettagli e numeri in `docs/MANI.md`.
+
+### Rifiniture
+- Card senza la striscia a sinistra: tutti i bordi uguali, selezione con un contorno; il verde solo su quello che suona live.
+- Icona con gli angoli arrotondati e un bordo verde sottile.
+- Il pulsante «apri» dei PROJ non salta più in alto quando lo premi.
+- La prova automatica «passaggio» non è più ballerina; `solidita` è rossa solo se la MiniFuse non è collegata.
+
+### Noti, per la 5.2
+- DRUM: REC e tasti del Mac nella griglia, → CUE come scena del beat; controller a ruoli (X-Touch) e arpeggio (`docs/PROSSIMI.md`).
+- Mani: non provato il permesso della camera dal `.dmg` installato; con la luce di una serata il riconoscimento può perdere la mano più spesso.
+
 ## 0.5.0-beta.5 «CUTX_05» (14/11/2026)
 
 Beta del check-up: niente funzioni grosse nuove, il live più affidabile.

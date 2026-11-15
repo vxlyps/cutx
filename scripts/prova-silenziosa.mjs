@@ -2,8 +2,13 @@
 // A schermo solo le righe [prova] con i fallimenti e il conteggio finale; il resto sta nel file di log.
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { aspettaLibero } from './prova-libera.mjs';
 const electron = createRequire(import.meta.url)('electron');
 const parti = process.argv[2];
+if (!(await aspettaLibero())) {
+  console.log('[prova] ERRORE un\'altra prova gira da più di 10 minuti: non parto');
+  process.exit(3);
+}
 const cp = spawn(electron, ['.', parti ? `--prova=${parti}` : '--prova', '--silenzioso'], { stdio: ['ignore', 'pipe', 'pipe'] });
 let resto = '';
 cp.stdout.on('data', (d) => {
