@@ -292,3 +292,11 @@ export function suSedicesimo(m, b, k, now) {
     for (const t of m.parole) if (t.vis && Math.abs(t.cx - b.x) < 26 * G.k && Math.abs(t.cy - b.y) < 16 * G.k) m.corrompi(t, 160);
   }
 }
+
+// La firma «idea by @rybinfx»: compare 2 battute dopo l'entrata, resta 3 battute, poi sparisce (in dissolvenza, vedi `tag` in aggiorna);
+// ogni tanto ritorna per 2 battute. Non dipende da nessuna impostazione: è un credito e non si spegne. Chiamata a ogni battuta, dopo `age++`.
+export function aggiornaFirma(b, caso = Math.random) {
+  if (b.age === 2) { b.tagOn = true; b.tagOffAge = b.age + 3; }
+  else if (!b.tagOn && b.age > 5 && caso() < 0.12) { b.tagOn = true; b.tagOffAge = b.age + 2; }
+  if (b.tagOn && b.age >= b.tagOffAge) b.tagOn = false;
+}

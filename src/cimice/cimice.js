@@ -10,7 +10,7 @@
 //
 // leggiParole({ larghezza, altezza }) ritorna le parole in coordinate del contenitore:
 //   [{ x, y, w, h, testo?, font?, salta? }]   (salta = punteggiatura, i piedi non ci stanno)
-import { aggiorna, congedo, creaCorpo, geom, scegliBersaglio, suSedicesimo } from './corpo.js';
+import { aggiorna, aggiornaFirma, congedo, creaCorpo, geom, scegliBersaglio, suSedicesimo } from './corpo.js';
 import { disegnaCimice, disegnaCorrotte, disegnaSotto, glifo } from './disegno.js';
 
 export const OPZIONI = {
@@ -162,10 +162,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
     if (bug && !m.parole.some((p) => p.vis && !p.salta)) congeda(); // schermata senza codice
     if (bug) {
       bug.age++;
-      // la firma: compare un paio di battute dopo l'entrata, poi ogni tanto, poi sparisce
-      if (bug.age === 2) { bug.tagOn = true; bug.tagOffAge = bug.age + 3; }
-      else if (!bug.tagOn && bug.age > 5 && caso() < 0.12) { bug.tagOn = true; bug.tagOffAge = bug.age + 2; }
-      if (bug.tagOn && bug.age >= bug.tagOffAge) bug.tagOn = false;
+      aggiornaFirma(bug, caso);
       if (bug.state === 'walk' && folleBattute <= 0 && bug.age >= 2 && bug.age < bug.maxBars - 1 && caso() < 0.2) { congeda(); bug.blink = true; }
       if (bug.age >= bug.maxBars && folleBattute <= 0) congeda();
     }
@@ -285,6 +282,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
     },
     get parole() { return m.parole; },
     get presente() { return !!bug; },
+    get scalaEffettiva() { return m.g.k; }, // opzione grandezza × scala automatica sul testo
     get folle() { return m.folle(); },
     get acceso() { return acceso; },
   };

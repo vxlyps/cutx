@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aggiorna, creaCorpo, geom, scegliBersaglio, suSedicesimo, SEGS } from '../src/cimice/corpo.js';
+import { aggiorna, aggiornaFirma, creaCorpo, geom, scegliBersaglio, suSedicesimo, SEGS } from '../src/cimice/corpo.js';
 
 // Un mondo finto: righe di parole da 40x16, un seme fisso per il caso.
 function mondo(scala = 1) {
@@ -65,4 +65,22 @@ test('le antenne puntano solo parole che suonano', () => {
     aggiorna(m, b, 0.0167, now);
     for (const an of b.ants) if (an.tok) assert.ok(an.tok.hl >= 0.35, 'antenna su una parola che non suona');
   }
+});
+
+test('la firma: arriva alla 2ª battuta, resta 3, sparisce; poi torna ogni tanto per 2', () => {
+  const b = { age: 0, tagOn: false, tagOffAge: 0 };
+  const stato = [];
+  const mai = () => 0.99; // il caso non la fa tornare
+  for (let i = 1; i <= 9; i++) { b.age = i; aggiornaFirma(b, mai); stato.push(b.tagOn); }
+  assert.deepEqual(stato, [false, true, true, true, false, false, false, false, false]);
+  // se il caso la richiama: compare e resta esattamente 2 battute
+  const c = { age: 6, tagOn: false, tagOffAge: 0 };
+  const dentro = [];
+  for (let i = 6; i <= 9; i++) { c.age = i; aggiornaFirma(c, () => (i === 6 ? 0.01 : 0.99)); dentro.push(c.tagOn); }
+  assert.deepEqual(dentro, [true, true, false, false]);
+});
+
+test('la firma non ha nessuna impostazione che la spenga', async () => {
+  const { OPZIONI } = await import('../src/cimice/cimice.js');
+  assert.ok(!Object.keys(OPZIONI).some((k) => /firma|tag|credito/i.test(k)));
 });

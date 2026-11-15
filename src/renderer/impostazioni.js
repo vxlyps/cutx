@@ -515,7 +515,7 @@ export class Impostazioni {
       return r;
     };
     // un cursore che salva dopo un attimo (come quelli delle mani)
-    const cursore = (id, min, max, step, valore, testo, cambia) => {
+    const cursore = (id, min, max, step, valore, testo, cambia, ritardo = 150) => {
       const box = crea('div', 'imp-controlli');
       const i = crea('input');
       i.id = id;
@@ -529,7 +529,7 @@ export class Impostazioni {
       i.oninput = () => {
         v.textContent = testo(Number(i.value));
         clearTimeout(timer);
-        timer = setTimeout(() => cambia(Number(i.value)), 150);
+        timer = setTimeout(() => cambia(Number(i.value)), ritardo);
       };
       box.append(i, v);
       return box;
@@ -554,7 +554,7 @@ export class Impostazioni {
       rigaInterruttore(c.folle, p.folle !== false, (x) => salva({ folle: x })),
       riga(c.battuteFolle, cursore('imp-cimice-battute-folle', 1, 16, 1, p.battuteFolle, (n) => `${n} battute`, (n) => salva({ battuteFolle: n }))),
       riga(c.sensibilitaDrop, cursore('imp-cimice-sensibilita', 0, 1, 0.05, p.sensibilitaDrop, (n) => `${Math.round(n * 100)}%`, (n) => salva({ sensibilitaDrop: n }))),
-      riga(c.scala, cursore('imp-cimice-scala', 0.6, 1.5, 0.05, p.scala, (n) => `×${n.toFixed(2)}`, (n) => salva({ scala: n }))),
+      riga(c.scala, cursore('imp-cimice-scala', 0.5, 2, 0.05, p.scala, (n) => `×${n.toFixed(2)}`, (n) => salva({ scala: n }), 40)),
       riga(c.velocita, cursore('imp-cimice-velocita', 0.5, 2, 0.1, p.velocita, (n) => `×${n.toFixed(1)}`, (n) => salva({ velocita: n }))),
       rigaInterruttore(c.lampi, p.lampi !== false, (x) => salva({ lampi: x })),
       rigaInterruttore(c.corrompe, p.corrompe !== false, (x) => salva({ corrompe: x })),

@@ -62,6 +62,16 @@ export async function provaCimice({ finestre, scrivi, chiedi, aspetta }) {
   }
   controlla('il testo è identico anche mentre impazzisce (proiettore e interfaccia)', (await testo()) === prima && (await testoLavoro()) === lavoroPrima);
 
+  // la grandezza moltiplica la scala automatica, e cambia subito
+  const scala = (n) => js(`(async () => { const p = await window.cutx.preferenze(); await window.cutx.salvaPreferenze({ cimice: { ...p.cimice, scala: ${n} } }); })()`);
+  const k1 = Number(await u('cutxCimice().interno.scalaEffettiva'));
+  await scala(2);
+  await aspetta(1);
+  const k2 = Number(await u('cutxCimice().interno.scalaEffettiva'));
+  controlla('la grandezza ×2 raddoppia la scala automatica, subito', k1 > 0 && Math.abs(k2 / k1 - 2) < 0.05, `${k1} → ${k2}`);
+  await scala(1);
+  await aspetta(1);
+
   // spenta: sparisce subito; riaccesa: torna a esserci
   const pref = (acceso) => js(`(async () => { const p = await window.cutx.preferenze(); await window.cutx.salvaPreferenze({ cimice: { ...p.cimice, acceso: ${acceso} } }); })()`);
   await pref(false);
