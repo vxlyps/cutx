@@ -42,8 +42,8 @@ if (PROVA && PROVA.split(',').some((p) => p === 'mani' || p === 'mani-dump') && 
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
   app.commandLine.appendSwitch('use-file-for-fake-video-capture', VIDEO_MANO);
 }
+// Due sessioni di lavoro non devono usare gli stessi dati di prova: CUTX_PROVA_NOME=altro dà dati (CUTX-prova-altro) e, se serve, CUTX_PROVA_STASH uno stash di prova a parte.
 if (PER_PROVE) {
-  // Due sessioni di lavoro non devono usare gli stessi dati di prova: CUTX_PROVA_NOME=altro dà dati (CUTX-prova-altro) e, se serve, CUTX_PROVA_STASH uno stash di prova a parte.
   const nome = (process.env.CUTX_PROVA_NOME || '').replace(/[^\w-]/g, '');
   const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : `CUTX-prova${nome ? `-${nome}` : ''}`);
   app.setPath('userData', dati);
