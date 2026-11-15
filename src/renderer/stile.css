@@ -19,6 +19,7 @@
   --secondario: #a3a796;
   --marcio: #9fc23a;
   --marcio-scuro: #4e6118;
+  --ruggine: #ff5b1f; /* la cimice: il dispetto in corso */
   --su-marcio: #0b0f03;
   --grigio: #3a3a38;
   --stencil: 'Canaglia Stencil', 'Fragment Mono', monospace;
@@ -2301,6 +2302,10 @@ input[type='checkbox'] {
   opacity: 0;
 }
 
+.coda-riga.dispetto .coda-testo {
+  color: var(--ruggine);
+  text-shadow: 0 0 8px rgba(255, 91, 31, 0.55);
+}
 .coda-riga:hover .coda-x,
 .coda-x:focus-visible {
   opacity: 1;

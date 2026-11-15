@@ -39,7 +39,10 @@ import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
 import { eNomeBeat } from './nomi.js';
 import { analizza, valuta } from './analisi.js';
-import { attivi } from './evidenzia.js';
+import { attivi, patternDi } from './evidenzia.js';
+import { creaDispettiApp } from '../cimice/dispetti-app.js';
+import { creaHackApp } from '../cimice/hack-app.js';
+import { creaMangia } from '../cimice/mangia.js';
 import gattoInPiedi from '../../design/risorse/gatti/gatto_in_piedi_logo_marcio.svg';
 import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
@@ -96,6 +99,70 @@ let libreria = [];
 let browser = null; // il browser a sinistra (più sotto): serve già al CUE che si costruisce prima
 // ⌘Z fuori dagli editor (cronologia.js): un annulla non cambia mai direttamente il live
 const cronologia = new Cronologia(20);
+// I DISPETTI della cimice (src/cimice/dispetti*.js): glitch brevi e veri, fatti con la coda dei livelli. Li decide e li esegue l'interfaccia di
+// lavoro; la cimice sul proiettore dice solo «ho toccato questo livello». Spenti di serie (impostazioni CIMICE).
+const dispetti = creaDispettiApp({
+  livelli: () => livelliLive,
+  prefs: () => preferenze.cimice,
+  manda: (m) => live.manda(m),
+  pattern: patternDi,
+  limiterDb: () => live.stato?.limiter?.riduzioneDb ?? 0,
+  inModifica: (nome) => pila.modifiche.has(nome) || pila.jam.editor.haFuoco(),
+  cps: () => mappa?.cps ?? 0,
+  cronologia,
+  avviso: (t) => cue.avviso(t),
+  scrivi: (tipo, dati) => moviola.scrivi('app', tipo, dati),
+  alProiettore: (m) => portaUscita?.postMessage(m),
+});
+// Il finale HACK (src/cimice/hack*.js): la cimice si prende il codice e chiude il set. Solo in memoria; il paracadute lo ferma e rimette tutto.
+const hack = creaHackApp({
+  livelli: () => livelliLive,
+  manda: (m) => live.manda(m),
+  pattern: patternDi,
+  limiterDb: () => live.stato?.limiter?.riduzioneDb ?? 0,
+  inModifica: (nome) => pila.modifiche.has(nome) || pila.jam.editor.haFuoco(),
+  cps: () => mappa?.cps ?? 0,
+  scrivi: (tipo, dati) => moviola.scrivi('app', tipo, dati),
+  alProiettore: (m) => portaUscita?.postMessage(m),
+  avviso: (t) => cue.avviso(t),
+  fermaTutto: () => fermaTutto(),
+});
+// Il codice «mangiato» si vede anche nel mio editor (CUE e card del live), ma è solo un disegno sopra: il testo non cambia e alla fine è com'era.
+const mangiaLavoro = creaMangia({
+  radici: '.colonna.cue .cm-content, #colonna-live .cm-content, #colonna-live pre.codice',
+  frazioneDi: (radice) => {
+    const st = hack.stato;
+    if (!st) return 0;
+    const carta = [...pila.carte.values()].find((c) => c.codice === radice);
+    return carta && st.usciti.has(carta.livello?.nome) ? 1 : st.mangia; // le righe di un livello uscito si svuotano del tutto
+  },
+});
+function avviaHack() {
+  if (hack.avvia({ minuti: preferenze.cimice?.hackMinuti ?? 2, ciclo: cicloAdesso(), ms: performance.now() })) cue.avviso('HACK: la cimice si prende il set · ⌥⌘⇧H o il bottone per fermarla, il paracadute rimette tutto');
+}
+// il bottone nell'interfaccia: due clic (il primo chiede conferma); se sta girando, un clic lo ferma
+let hackConferma = 0;
+$('hack').onclick = () => {
+  if (hack.attivo) return void hack.ferma(cicloAdesso(), 'bottone');
+  const ora = performance.now();
+  if (ora - hackConferma < 3000) { hackConferma = 0; avviaHack(); } else hackConferma = ora;
+};
+// ⌥⌘⇧H due volte di fila (come il paracadute); se sta girando, una volta sola lo ferma
+let ultimoHack = 0;
+function hackDoppio() {
+  if (hack.attivo) return void hack.ferma(cicloAdesso(), 'tasto');
+  const ora = performance.now();
+  if (ora - ultimoHack < DOPPIO_MS) { ultimoHack = 0; avviaHack(); } else ultimoHack = ora;
+}
+function mostraHack() {
+  const attivo = hack.attivo;
+  if (attivo && !mangiaLavoro.attivo) mangiaLavoro.avvia();
+  else if (!attivo && mangiaLavoro.attivo) mangiaLavoro.ferma();
+  const b = $('hack');
+  const testo = attivo ? 'HACK · stop' : performance.now() - hackConferma < 3000 ? 'di nuovo: chiudo il set' : 'HACK';
+  if (b.textContent !== testo) b.textContent = testo;
+  b.classList.toggle('acid', attivo);
+}
 const cue = new Cue(CODICE_INIZIALE, {
   togliDalLive: (brano, nome) => {
     const l = livelliLive.find((x) => x.nome === nome && x.a === null && x.provenienza?.startsWith(`${brano} §`));
@@ -490,6 +557,8 @@ stack(
 )`;
 
 async function lanciaParacadute() {
+  hack.ferma(cicloAdesso(), 'paracadute'); // prima di tutto: il finale HACK si ferma e rimette i volumi
+  dispetti.fermaTutti(cicloAdesso(), 'paracadute'); // e i dispetti tornano com'erano
   if (inTest || preferenze.paracadute === false) return;
   const r = await live.richiesta({ tipo: 'paracadute', codice: config.paracadute || PARACADUTE, dissolvenza: dissolvenzaParacadute() });
   if (r.errore) cue.avviso(`paracadute: ${r.errore}`, { persistente: true });
@@ -609,6 +678,7 @@ function scegliEntraTra(n, zitto = false) {
 }
 
 function fermaTutto() {
+  hack.ferma(cicloAdesso(), 'ferma-tutto'); // se sta girando il finale, si ferma (i livelli non ci sono più: niente da rimettere)
   if (inTest) return fermaTest();
   pezzoCuffia = null;
   live.manda({ tipo: 'ferma' });
@@ -856,6 +926,8 @@ const FA = {
   aggiungiSezione: () => cue.aggiungiSezione(),
   fraseDaCapo,
   paracadute: paracaduteDoppio,
+  fermaDispetti: () => { hack.ferma(cicloAdesso(), 'tasto'); dispetti.fermaTutti(cicloAdesso(), 'tasto'); cue.avviso('dispetti fermati'); },
+  hack: hackDoppio,
   uscitaIntera: () => window.cutx.uscitaSchermoIntero(),
   mani: () => alternaMani(),
   maniModo: () => cambiaModoMani(),
@@ -973,7 +1045,7 @@ let projAperto = null; // { numero, sottotitolo, … } o null
 let projUltimo = null;
 const projDelLivello = new Map(); // nome del livello live → numero del PROJ da cui è partito
 const projInLive = () => new Set(pila.livelli.map((l) => projDelLivello.get(l.nome)).filter(Boolean));
-const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto']);
+const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto', 'fermaDispetti', 'hack']);
 function mostraProj(info) {
   projAperto = info?.aperto ?? null;
   projUltimo = info?.ultimo ?? null;
@@ -1563,6 +1635,9 @@ const mandaOndaNote = () => portaUscita?.postMessage({ tipo: 'onda-note', nomi: 
 window.addEventListener('message', (e) => {
   if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
   portaUscita = e.ports[0];
+  portaUscita.onmessage = ({ data }) => {
+    if (data.tipo === 'cimice-tocca') dispetti.suTocco({ livello: data.livello, ciclo: cicloAdesso() }); // la cimice ha toccato una nota: forse un dispetto
+  };
   portaUscita.postMessage({ tipo: 'bozze', ...ultimeBozze });
   mandaOndaNote();
 });
@@ -1752,6 +1827,10 @@ function disegnaTempo() {
   $('tempo-set').textContent = set ?? '–:–';
   $('tempo-live').textContent = set ?? '';
   evidenziaCuffia(ciclo);
+  dispetti.tic(ciclo);
+  hack.tic(ciclo, performance.now());
+  mostraHack();
+  pila.segnaDispetti(dispetti.righeAttive());
   const conti = pila.disegna(mappa, epoca);
   if (conti) {
     document.body.classList.toggle('live-suona', conti.suonano > 0);
@@ -1899,6 +1978,11 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  dispetti: () => dispetti,
+  hack: () => hack,
+  mangiaLavoro: () => mangiaLavoro,
+  avviaHack,
+  cicloAdesso,
   synth,
   synthIniziale,
   fermaCuffia,

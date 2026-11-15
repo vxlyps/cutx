@@ -10,6 +10,8 @@ import { StatoMisura, testoMisura } from './striscia.js';
 import { creaStriscia, disegnaNote, muoviTestina } from './striscia-vista.js';
 import { MemoriaOnda, disegnaLed } from './onda-led.js';
 import { ManoUscita } from './mani-uscita.js';
+import { creaAggancio } from '../cimice/aggancio.js';
+import { chiusuraDaRighe } from '../cimice/sensore.js';
 import { convertiIntervalli, filtraCodice, riempi as riempiTesto, risolvi as risolviTesti, testoEtichetta } from './testi-pubblico.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
@@ -32,6 +34,16 @@ let mappa = null;
 let livelli = [];
 let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
+// La CIMICE (src/cimice): solo disegno, solo qui sul proiettore. Legge livelli, clock, note e fader (dalle righe globali); non scrive mai niente.
+// Nel riquadro d'anteprima delle impostazioni non c'è.
+let portaControllo = null; // verso l'interfaccia di lavoro: la cimice dice «ho toccato questo livello»; i dispetti li decide e li esegue lei
+const cimice = ANTEPRIMA ? null : creaAggancio({
+  preferenze: () => preferenze.cimice,
+  livelli: () => livelli,
+  fader: () => chiusuraDaRighe(righeGlobali),
+  livelloDi: (radice) => [...blocchi].find(([, b]) => b.codice === radice)?.[0] ?? null,
+  suTocco: (nome) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome }),
+});
 let righeGlobali = []; // le righe globali del fader e dei colpi «su tutto»: all(x => x.lpf(1920))
 const strisceU = new Map(); // id del livello → { ciclo: eventi }: le note vere, dal motore live
 const misureU = new Map(); // id → { pk, quando }; lo stato del misuratore sta in statiU
@@ -105,8 +117,10 @@ window.addEventListener('message', (e) => {
       for (const [id, pk] of Object.entries(data.livelli)) misureU.set(Number(id), { pk, quando: performance.now() });
     }
     else if (data.tipo === 'preferenze' && ANTEPRIMA) applica(data.p);
+    else if (data.tipo === 'dispetto') cimice?.dispetto(data);
+    else if (data.tipo === 'hack') hackUscita(data);
   };
-  if (con === 'controllo') bozze = { livelli: {}, jam: null };
+  if (con === 'controllo') { bozze = { livelli: {}, jam: null }; portaControllo = e.ports[0]; }
 });
 
 // --- il gatto grande, a scatti ---
@@ -273,6 +287,12 @@ function disegna() {
   const quarto = Math.floor((ciclo - intero) * 4);
   const lunghezza = preferenze.lunghezzaFrase ?? 16;
   sfondo.disegna(ciclo, livelli);
+  cimice?.tic(ciclo);
+  if (nero) {
+    // il nero resta finché il live è vuoto; se rientra un livello, il set è ripartito
+    if (!livelli.length) neroVistoVuoto = true;
+    else if (neroVistoVuoto) { nero = false; document.body.classList.remove('hack-nero'); }
+  }
   // la scritta grande del controller: solo se è accesa, e per un attimo
   const visibile = testi.controller.acceso && scritta && performance.now() - scritta.quando < 1800;
   const brano = testi.brano.acceso && branoEntra && performance.now() - branoEntra.quando < 4000;
@@ -581,6 +601,7 @@ function applica(p) {
   if (sfondo.modo !== prima) chiediOnda();
   document.body.classList.toggle('senza-gatto', p.gatto === false);
   document.body.classList.toggle('senza-insegna', p.insegna === false);
+  cimice?.ricarica();
 }
 if (!ANTEPRIMA) cutx.suPreferenze(applica);
 applica(ANTEPRIMA ? {} : await cutx.preferenze());
@@ -602,4 +623,17 @@ globalThis.cutxScrittura = () => {
     arrivi: mappa ? livelli.filter((l) => l.da !== null && cicloDi(mappa, epoca) < l.da).map((l) => ({ id: l.id, nome: l.nome, fine: epocaDi(mappa, l.da) })) : [],
   };
 };
+// Il finale HACK: più cimici, il codice mangiato, e alla fine schermo nero con la sola insegna (finché non rientra un livello o lo fermo).
+let nero = false;
+let neroVistoVuoto = false;
+function hackUscita(m) {
+  cimice?.hack(m);
+  if (m.fase === 'nero') {
+    nero = true;
+    neroVistoVuoto = false;
+  } else if (nero && m.fase !== 'nero') nero = false;
+  document.body.classList.toggle('hack-nero', nero);
+}
+globalThis.cutxCimice = () => cimice;
+globalThis.cutxCimiceTocca = (nome) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome }); // per le prove
 globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala: disposizione.scala });
