@@ -358,8 +358,9 @@ export class VistaDrum {
 
   mandaCue() {
     const dest = this.destinazioneEl.value;
-    const errore = this.opz.mandaCue(dest, this.nome, clip(this.stato), { drum: true });
-    this.avviso(errore ?? formatta(it.drum.msg.mandata, { nome: this.nome, dove: it.synth.destinazioni[dest] }));
+    const beat = dest.startsWith('beat-');
+    const errore = beat ? this.opz.mandaBeat(dest.slice(5), this.nome, clip(this.stato)) : this.opz.mandaCue(dest, this.nome, clip(this.stato), { drum: true });
+    this.avviso(errore ?? formatta(beat ? it.drum.msg.mandataBeat : it.drum.msg.mandata, { nome: this.nome, dove: beat ? it.drum.destinazioniBeat[dest.slice(5)] : it.synth.destinazioni[dest] }));
   }
 
   // Riscrive la clip da cui viene la griglia, dov'è (CUE o kit). Il live non cambia.
@@ -402,7 +403,7 @@ export class VistaDrum {
 
   aggiornaDestinazioni() {
     if (!this.avviata) return;
-    const dest = this.opz.destinazioni();
+    const dest = [...this.opz.destinazioni(), ...this.opz.destinazioniBeat()];
     const firma = JSON.stringify(dest);
     if (firma === this.firmaDest) return;
     this.firmaDest = firma;

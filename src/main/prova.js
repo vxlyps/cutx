@@ -5032,6 +5032,18 @@ async function provaDrum({ finestre, scrivi }) {
   controlla('e comincia con la riga // @drum, poi lo stack', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).corpo.slice(0, 2).join('|')`)) === '// @drum|stack(');
   controlla('la clip si rilegge identica dalla griglia', (await js(`(() => { const c = cutxProva.cue.slot.attivo.modello.sezioni.at(-1).corpo.join('\\n'); return cutxProva.synth.drum.apri(c, 'colpi') === null; })()`)) === true);
 
+  // → CUE come scena del beat: «attivo · beat» crea il @beat e ci mette la scena; la seconda volta il nome si fa unico
+  await js(`cutxProva.mostraVista('synth'); cutxProva.synth.drum.aggiornaDestinazioni()`);
+  const opzioni = await js(`JSON.stringify([...document.querySelectorAll('.drum-barra select:last-of-type option')].map((o) => [o.value, o.textContent, o.disabled]))`);
+  controlla('il menu del DRUM ha «attivo · beat» e «prossimo · beat»', opzioni.includes('["beat-attivo","attivo · beat",false]') && opzioni.includes('"beat-prossimo","prossimo · beat"'), opzioni);
+  await js(`document.querySelector('.drum-barra select:last-of-type').value = 'beat-attivo'; document.querySelector('.drum-barra .acid').click()`);
+  await aspetta(0.3);
+  await js(`document.querySelector('.drum-barra .acid').click()`);
+  await aspetta(0.4);
+  const scene = await js(`JSON.stringify(cutxProva.cue.slot.attivo.modello.beat?.scene.map((x) => [x.nome, x.corpo.slice(0, 2).join('|')]))`);
+  controlla('→ CUE come scena: il beat nasce con due scene «colpi» e «colpi 2» (riga // @drum + stack)', scene === '[["colpi","// @drum|stack("],["colpi 2","// @drum|stack("]]', scene);
+  controlla('le clip non cambiano', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.length`)) === 2);
+
   // il pulsante sulla card della clip DRUM la riapre nella scheda DRUM (sulle altre clip non c'è)
   await js(`document.getElementById('vista-live').click()`);
   await aspetta(0.4);

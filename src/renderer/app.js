@@ -820,6 +820,11 @@ const synth = new VistaSynth($('vista-synth'), {
     { id: 'kit', nome: it.synth.destinazioni.kit, ok: !!serata.kit },
   ],
   mandaCue: (dove, nome, testo, categoria) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo, categoria) : cue.aggiungiClip(dove, nome, testo, categoria)),
+  destinazioniBeat: () => [
+    { id: 'beat-attivo', nome: it.drum.destinazioniBeat.attivo, ok: !!cue.slot.attivo },
+    { id: 'beat-prossimo', nome: it.drum.destinazioniBeat.prossimo, ok: !!cue.slot.prossimo },
+  ],
+  mandaBeat: (dove, nome, testo) => cue.aggiungiScena(dove, nome, testo),
   aggiorna: (origine, testo) => (origine.kit ? serata.aggiornaClipKit(origine.nome, testo) : cue.aggiornaClip(origine, testo)),
   salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
   // la scheda DRUM: quali suoni ci sono nello stash, e dove salva la sua ultima griglia

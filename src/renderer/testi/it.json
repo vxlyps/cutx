@@ -810,6 +810,10 @@
     }
   },
   "drum": {
+    "destinazioniBeat": {
+      "attivo": "attivo · beat",
+      "prossimo": "prossimo · beat"
+    },
     "nome": "Nome della clip",
     "play": "▶ cuffia",
     "rec": "REC",
@@ -834,6 +838,8 @@
       "errore": "codice: {errore}",
       "codiceNonParte": "errore: {errore}",
       "mandata": "clip «{nome}» → {dove} (· drum)",
+      "mandataBeat": "scena «{nome}» → {dove}",
+      "scenaDalDrum": "scena «{nome}» dal drum",
       "aggiornata": "«{nome}» aggiornata nel CUE (da salvare con ⌘S) · il live non è cambiato",
       "aggiornataKit": "«{nome}» aggiornata nel kit · il live non è cambiato",
       "mandataNonSalvata": "clip «{nome}» → {dove} (· drum, da salvare con ⌘S)",

@@ -501,6 +501,21 @@ export class Cue {
     return null;
   }
 
+  // Una scena nuova in fondo al beat del brano attivo o del prossimo (dal DRUM). Il beat nasce se non c'era. Ritorna l'errore, o null.
+  aggiungiScena(dove, nome, codice) {
+    const slot = this.slot[dove];
+    if (!slot) return it.synth.msg.nessunBranoApertoSlot.replace('{dove}', it.synth.destinazioni[dove]);
+    const nomi = new Set((slot.modello.beat?.scene ?? []).map((x) => x.nome));
+    let unico = nome;
+    for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
+    const prima = this.linguetta;
+    this.linguetta = dove; // modifica() lavora sul brano della linguetta in vista: ci si sposta il tempo di scrivere
+    this.modifica(B.aggiungiScena(slot.modello, unico, codice.replace(/\s+$/, '').split('\n')), prima === dove, it.drum.msg.scenaDalDrum.replace('{nome}', unico));
+    this.linguetta = prima;
+    this.mostraModo();
+    return null;
+  }
+
   // Da dove viene la clip di un livello live (provenienza «brano §N»): il brano e la clip nel CUE, se ci sono ancora e il nome torna. Altrimenti null.
   origineDi(provenienza, nome) {
     const m = /^(.*) §(\d+)$/.exec(provenienza ?? '');
