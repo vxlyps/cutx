@@ -21,7 +21,7 @@ $: note("2 1 0 4").s("square").fast(4)
   .cutoff(1225).resonance(7.9).shape(0.38)
 `;
 const pre = document.getElementById('codice');
-pre.textContent = CODICE;
+pre.textContent = CODICE.repeat(3);
 
 // Le parole: ogni pezzo di testo senza spazi, misurato col Range (come farà l'editor vero)
 function leggiParole() {

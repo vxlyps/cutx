@@ -6,15 +6,15 @@
 
 export const SEGS = 6;
 const PAIRS = [
-  { seg: 0, ang: 55, fwd: 1 },
-  { seg: 1, ang: 92, fwd: -1 },
-  { seg: 2, ang: 125, fwd: -1 },
+  { seg: 0, ang: 48, fwd: 1 },
+  { seg: 1, ang: 90, fwd: -1 },
+  { seg: 2, ang: 132, fwd: -1 },
 ];
 
 // Tutte le misure insieme: la grandezza (scala) le moltiplica, le proporzioni restano.
 export function geom(k = 1) {
-  const reach = 64 * k;
-  return { k, gap: 9 * k, reach, legA: reach * 0.45, legB: reach * 0.55, feelRest: 26 * k, feelReach: 95 * k, feelCrazy: 170 * k };
+  const reach = 96 * k; // zampe lunghe e sottili, come un ragno di linee
+  return { k, gap: 10 * k, reach, legA: reach * 0.5, legB: reach * 0.56, feelRest: 40 * k, feelReach: 150 * k, feelCrazy: 260 * k };
 }
 
 export const suonano = (m) => m.parole.filter((t) => t.vis && t.hl > 0.5);
@@ -278,8 +278,9 @@ export function suSedicesimo(m, b, k, now) {
     const t1 = m.pick(pl.length ? pl : vis), t2 = m.pick(vis);
     if (t1 && t2) m.filo(t1.cx, t1.cy, t2.cx, t2.cy, c ? RUST : ROT, 0.45);
   }
-  // il virus: rovina per un attimo le parole sotto la testa (solo disegno)
+  // il virus: rovina per un attimo le parole sotto la testa, ingrandisce parole in altri font, strisce oblique (solo disegno)
   if (m.opz.corrompe) {
+    m.glitch?.(b, c, s);
     for (const t of m.parole) if (t.vis && Math.abs(t.cx - b.x) < 26 * G.k && Math.abs(t.cy - b.y) < 16 * G.k) m.corrompi(t, 160);
   }
 }
