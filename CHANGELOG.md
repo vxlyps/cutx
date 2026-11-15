@@ -2,11 +2,22 @@
 
 ## 0.5.1-beta.3 «CUTX_05_1_3» (15/11/2026)
 
-Nella scheda DRUM i tasti del Mac suonano le righe e c'è il REC. Come provarli: `docs/NOVITA-5.1.3.md`.
+Nella scheda DRUM i tasti del Mac suonano le righe e c'è il REC; il pulsante **synth/drum** su ogni clip che si riscrive uguale; «→ CUE» anche come scena del beat. Come provarli: `docs/NOVITA-5.1.3.md`.
 
 ### DRUM: tasti del Mac e REC
 - **Una riga per tasto**: A S D F G H J K suonano le prime otto righe, Q W E R T Y U I le altre otto (la lettera è scritta accanto alla riga). Suonano in cuffia.
 - **REC** nella barra della scheda DRUM: una battuta di conteggio con il click, poi un giro (quanti cicli ha la griglia) a tempo col live. I colpi (tasti del Mac e pad dell'X-Touch) diventano passi, al più vicino; i passi già accesi restano. Un altro clic ferma; ⌘Z annulla tutto il giro.
+
+### Synth al volo
+- Su ogni clip che il pannello può **riscrivere uguale** compare il pulsante **synth** (o **drum**): la apre nel pannello. Con la sua riga `// @synth` / `// @drum` sempre; scritta a mano solo se il giro codice → pannello → codice non cambia il suono (un `s("bd*4").gain(.5)` diventerebbe un triangle: lì il pulsante non c'è).
+- **«aggiorna «nome»»** riscrive la clip dov'è (nel CUE ⌘Z la rifà; nel kit niente ⌘Z) e **non tocca il live**.
+- Un livello live risale alla sua clip dalla provenienza (`brano §N`, `kit §N`). Scratch, browser e Ableton non hanno origine: restano solo «→ CUE come clip nuova».
+
+### DRUM → CUE come scena del beat
+- «→ CUE» dalla scheda DRUM può mettere il pattern anche come **scena del beat** («attivo · beat», «prossimo · beat»), oltre che come clip.
+
+### Una sola linea (da 0.5.1-beta.3)
+- Tutto il lavoro (PROJ, DRUM, mani, X-Touch, **cimice**) sta in un solo ramo, `main`. Per lavorare in parallelo si usa una cartella a parte (`git worktree`), mai due sessioni sulla stessa cartella. L'arpeggio incompleto è nel ramo `arpeggio-wip` e non è in questa versione.
 
 ## 0.5.1-beta.2 «CUTX_05_1_2» (15/11/2026)
 

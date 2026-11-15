@@ -6114,7 +6114,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1);
   controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
   const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
-  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 20, String(righeTesti));
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 21, String(righeTesti));
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');
