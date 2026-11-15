@@ -12,6 +12,7 @@
     "start": "vite build && electron .",
     "prova": "vite build && electron . --prova",
     "prova:parte": "vite build && node scripts/prova-silenziosa.mjs",
+    "prova:tutto": "vite build && node scripts/giro-lungo.mjs",
     "test": "node --test test/*.test.js",
     "schermate": "vite build && electron . --schermate=schermate",
     "test:app": "vite build && node --test test/app/*.test.js",
