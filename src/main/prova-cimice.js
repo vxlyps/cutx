@@ -72,6 +72,52 @@ export async function provaCimice({ finestre, scrivi, chiedi, aspetta }) {
   await scala(1);
   await aspetta(1);
 
+  // --- i dispetti: glitch veri, brevi, a tempo, che tornano da soli ---
+  const prefD = (o) => js(`(async () => { const p = await window.cutx.preferenze(); await window.cutx.salvaPreferenze({ cimice: { ...p.cimice, ...${JSON.stringify(o)} } }); })()`);
+  const spenti = (await js('window.cutx.preferenze().then((p) => !p.cimice.dispetti)')) === true;
+  controlla('i dispetti sono spenti di serie', spenti);
+  const stato = async () => JSON.parse(await chiedi(finestre.live, 'JSON.stringify(globalThis.cutxStato?.())'));
+  const codaDi = async (nome) => (await stato()).livelli?.find((x) => x.nome === nome && x.a === null)?.coda ?? [];
+  await prefD({ dispetti: false });
+  controlla('spenti: nessun dispetto parte nemmeno se la cimice tocca', (await js(`cutxProva.dispetti().suTocco({ livello: 'basso', ciclo: cutxProva.cicloAdesso(), forza: true })`)) === null);
+  await prefD({ dispetti: true, dispettiFrequenza: 'spesso' });
+  await aspetta(0.5);
+  let piano = null;
+  for (let i = 0; i < 6 && !piano; i++) { // la prima volta il pattern si sta ancora valutando
+    piano = JSON.parse((await js(`JSON.stringify(cutxProva.dispetti().suTocco({ livello: 'basso', ciclo: cutxProva.cicloAdesso(), forza: true }))`)) ?? 'null');
+    if (!piano) await aspetta(0.7);
+  }
+  controlla('un dispetto parte sul livello toccato', !!piano, `${JSON.stringify(piano)} · motivo: ${await js('cutxProva.dispetti().motivo')} · errore: ${await js('cutxProva.dispetti().errore')}· vede: ${await js('cutxProva.dispetti().vede')} · livelli: ${await js("JSON.stringify(cutxProva.motori.live.stato.livelli?.map((l) => [l.nome, l.a, l.da, !!l.codice, Array.isArray(l.coda)]))")}`);
+  if (piano) {
+    const riga = piano.righe[0];
+    const durataS = (piano.fine - piano.inizio) / 0.5;
+    controlla('dura da mezzo secondo a 2 secondi, sulla griglia', durataS >= 0.49 && durataS <= 2.01 && Math.abs(piano.inizio / piano.g - Math.round(piano.inizio / piano.g)) < 1e-6, `${durataS}s g=${piano.g}`);
+    let dentro = false;
+    for (let i = 0; i < 12 && !dentro; i++) { await aspetta(0.15); dentro = (await codaDi('basso')).includes(riga); }
+    controlla('il motore ha la riga nella coda (suona davvero)', dentro, riga);
+    controlla('nella card la riga è in ruggine', (await js(`!!document.querySelector('#colonna-live .coda-riga.dispetto')`)) === true);
+    controlla('il testo del livello non cambia', (await testoLavoro()) === lavoroPrima);
+    let tornato = false;
+    for (let i = 0; i < 20 && !tornato; i++) { await aspetta(0.25); tornato = !(await codaDi('basso')).includes(riga); }
+    controlla('dopo, da solo, torna com\'era', tornato);
+    controlla('e la voce dell\'annulla non resta in cronologia', (await js('cutxProva.dispetti().attivo')) === null);
+  }
+  // dal proiettore: la cimice tocca e prima o poi parte un dispetto (probabilità, nessun forzatura)
+  let visto = false;
+  for (let i = 0; i < 40 && !visto; i++) {
+    await u(`cutxCimiceTocca('basso')`);
+    await aspetta(0.3);
+    visto = (await js('cutxProva.dispetti().attivo')) !== null;
+  }
+  controlla('il tocco dal proiettore arriva all\'interfaccia e, a caso, fa partire un dispetto', visto);
+  // lo stop riporta tutto subito
+  if (!visto) await js(`cutxProva.dispetti().suTocco({ livello: 'basso', ciclo: cutxProva.cicloAdesso(), forza: true })`);
+  const riga2 = JSON.parse((await js('JSON.stringify(cutxProva.dispetti().attivo?.righe ?? null)')) ?? 'null')?.[0];
+  await js('cutxProva.dispetti().fermaTutti(cutxProva.cicloAdesso(), "tasto")');
+  await aspetta(1);
+  controlla('lo stop ferma subito il dispetto e la coda torna vuota', (await js('cutxProva.dispetti().attivo')) === null && (!riga2 || !(await codaDi('basso')).includes(riga2)));
+  await prefD({ dispetti: false });
+
   // spenta: sparisce subito; riaccesa: torna a esserci
   const pref = (acceso) => js(`(async () => { const p = await window.cutx.preferenze(); await window.cutx.salvaPreferenze({ cimice: { ...p.cimice, acceso: ${acceso} } }); })()`);
   await pref(false);

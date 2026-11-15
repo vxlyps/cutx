@@ -39,7 +39,8 @@ import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
 import { eNomeBeat } from './nomi.js';
 import { analizza, valuta } from './analisi.js';
-import { attivi } from './evidenzia.js';
+import { attivi, patternDi } from './evidenzia.js';
+import { creaDispettiApp } from '../cimice/dispetti-app.js';
 import gattoInPiedi from '../../design/risorse/gatti/gatto_in_piedi_logo_marcio.svg';
 import { Motore } from './motori.js';
 import { elencoUscite, elencoIngressi } from './uscite.js';
@@ -96,6 +97,21 @@ let libreria = [];
 let browser = null; // il browser a sinistra (più sotto): serve già al CUE che si costruisce prima
 // ⌘Z fuori dagli editor (cronologia.js): un annulla non cambia mai direttamente il live
 const cronologia = new Cronologia(20);
+// I DISPETTI della cimice (src/cimice/dispetti*.js): glitch brevi e veri, fatti con la coda dei livelli. Li decide e li esegue l'interfaccia di
+// lavoro; la cimice sul proiettore dice solo «ho toccato questo livello». Spenti di serie (impostazioni CIMICE).
+const dispetti = creaDispettiApp({
+  livelli: () => livelliLive,
+  prefs: () => preferenze.cimice,
+  manda: (m) => live.manda(m),
+  pattern: patternDi,
+  limiterDb: () => live.stato?.limiter?.riduzioneDb ?? 0,
+  inModifica: (nome) => pila.modifiche.has(nome) || pila.jam.editor.haFuoco(),
+  cps: () => mappa?.cps ?? 0,
+  cronologia,
+  avviso: (t) => cue.avviso(t),
+  scrivi: (tipo, dati) => moviola.scrivi('app', tipo, dati),
+  alProiettore: (m) => portaUscita?.postMessage(m),
+});
 const cue = new Cue(CODICE_INIZIALE, {
   togliDalLive: (brano, nome) => {
     const l = livelliLive.find((x) => x.nome === nome && x.a === null && x.provenienza?.startsWith(`${brano} §`));
@@ -490,6 +506,7 @@ stack(
 )`;
 
 async function lanciaParacadute() {
+  dispetti.fermaTutti(cicloAdesso(), 'paracadute'); // prima di tutto: i dispetti tornano com'erano
   if (inTest || preferenze.paracadute === false) return;
   const r = await live.richiesta({ tipo: 'paracadute', codice: config.paracadute || PARACADUTE, dissolvenza: dissolvenzaParacadute() });
   if (r.errore) cue.avviso(`paracadute: ${r.errore}`, { persistente: true });
@@ -856,6 +873,7 @@ const FA = {
   aggiungiSezione: () => cue.aggiungiSezione(),
   fraseDaCapo,
   paracadute: paracaduteDoppio,
+  fermaDispetti: () => { dispetti.fermaTutti(cicloAdesso(), 'tasto'); cue.avviso('dispetti fermati'); },
   uscitaIntera: () => window.cutx.uscitaSchermoIntero(),
   mani: () => alternaMani(),
   maniModo: () => cambiaModoMani(),
@@ -973,7 +991,7 @@ let projAperto = null; // { numero, sottotitolo, … } o null
 let projUltimo = null;
 const projDelLivello = new Map(); // nome del livello live → numero del PROJ da cui è partito
 const projInLive = () => new Set(pila.livelli.map((l) => projDelLivello.get(l.nome)).filter(Boolean));
-const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto']);
+const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto', 'fermaDispetti']);
 function mostraProj(info) {
   projAperto = info?.aperto ?? null;
   projUltimo = info?.ultimo ?? null;
@@ -1563,6 +1581,9 @@ const mandaOndaNote = () => portaUscita?.postMessage({ tipo: 'onda-note', nomi: 
 window.addEventListener('message', (e) => {
   if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
   portaUscita = e.ports[0];
+  portaUscita.onmessage = ({ data }) => {
+    if (data.tipo === 'cimice-tocca') dispetti.suTocco({ livello: data.livello, ciclo: cicloAdesso() }); // la cimice ha toccato una nota: forse un dispetto
+  };
   portaUscita.postMessage({ tipo: 'bozze', ...ultimeBozze });
   mandaOndaNote();
 });
@@ -1752,6 +1773,8 @@ function disegnaTempo() {
   $('tempo-set').textContent = set ?? '–:–';
   $('tempo-live').textContent = set ?? '';
   evidenziaCuffia(ciclo);
+  dispetti.tic(ciclo);
+  pila.segnaDispetti(dispetti.righeAttive());
   const conti = pila.disegna(mappa, epoca);
   if (conti) {
     document.body.classList.toggle('live-suona', conti.suonano > 0);
@@ -1899,6 +1922,8 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  dispetti: () => dispetti,
+  cicloAdesso,
   synth,
   synthIniziale,
   fermaCuffia,

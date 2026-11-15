@@ -28,7 +28,8 @@ function misuraLivello(l, ciclo) {
 }
 
 // preferenze(): le impostazioni CIMICE · livelli(): i livelli del live · fader(): quanto è chiuso il fader (0..1) o null
-export function creaAggancio({ preferenze, livelli, fader }) {
+// livelloDi(radice) → nome del livello a cui appartiene quel riquadro di codice · suTocco(nome) → avvisa l'interfaccia di lavoro (i dispetti)
+export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suTocco = null }) {
   const lettore = creaLettore({ radici: RADICI, note: NOTE });
   const sensore = creaSensore();
   let cimice = null;
@@ -59,7 +60,10 @@ export function creaAggancio({ preferenze, livelli, fader }) {
       const pref = { ...OPZIONI, ...preferenze() };
       if (!pref.acceso) { spegni(); return; }
       if (!cimice) {
-        cimice = creaCimice({ contenitore: document.body, leggiParole: () => lettore.parole(), opzioni: { ...pref, fisso: true } });
+        cimice = creaCimice({
+          contenitore: document.body, leggiParole: () => lettore.parole(), opzioni: { ...pref, fisso: true },
+          suTocco: (parola) => { const nome = livelloDi?.(parola.radice); if (nome) suTocco?.(nome); },
+        });
         cimice.avvia();
         if (!cimice.acceso) { cimice = null; return; }
         ascolta();
@@ -113,5 +117,8 @@ export function creaAggancio({ preferenze, livelli, fader }) {
     } catch { spegni(); }
   }
 
-  return { ricarica, tic, spegni, get acceso() { return !!cimice; }, get interno() { return cimice; }, get ultima() { return ultima; } };
+  // Il messaggio dell'interfaccia: un dispetto è partito (o finito).
+  function dispetto(msg) { if (msg?.attivo) cimice?.reagisci(); }
+
+  return { ricarica, tic, spegni, dispetto, get acceso() { return !!cimice; }, get interno() { return cimice; }, get ultima() { return ultima; } };
 }

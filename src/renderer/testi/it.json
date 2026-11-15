@@ -886,6 +886,14 @@
       "nome": "schermo che trema",
       "testo": "un tremito leggero sul drop (solo il disegno della cimice, mai le finestre)"
     },
-    "firma": "La firma «idea by @rybinfx» compare sempre accanto alla cimice: è un credito all'autore dell'idea e non si spegne."
+    "firma": "La firma «idea by @rybinfx» compare sempre accanto alla cimice: è un credito all'autore dell'idea e non si spegne.",
+    "dispetti": {
+      "nome": "dispetti",
+      "testo": "ogni tanto la cimice, mentre tocca una nota, fa un glitch VERO sul suono di quel livello: un filtro che si chiude, un eco, un balbettio… da mezzo secondo a 2 secondi, a tempo, poi tutto torna com'era. Si vede nella card (riga in ruggine). ⌥⌘X li ferma subito, il paracadute pure. Spenti di serie."
+    },
+    "dispettiFrequenza": {
+      "nome": "quanto spesso i dispetti",
+      "testo": "a ogni nota toccata: di rado, ogni tanto o spesso (con una pausa tra l'uno e l'altro)"
+    }
   }
 }

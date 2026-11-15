@@ -27,6 +27,7 @@ export const AZIONI = [
   { id: 'fraseDaCapo', nome: 'frase da capo al prossimo ciclo', predefinita: 'Meta+Digit0' },
   { id: 'passaBrano', nome: 'passa al prossimo brano (due volte di fila)', predefinita: 'Shift+Meta+KeyP' },
   { id: 'paracadute', nome: 'paracadute (due volte di fila)', predefinita: 'Meta+KeyP' },
+  { id: 'fermaDispetti', nome: 'ferma i dispetti della cimice', predefinita: 'Alt+Meta+KeyX' },
   { id: 'uscitaIntera', nome: 'apri / chiudi l\'uscita', predefinita: 'Ctrl+Meta+KeyF' },
   { id: 'annullaSet', nome: 'annulla l\'ultima azione sul set (fuori dagli editor)', predefinita: 'Meta+KeyZ', soloFuori: true },
   { id: 'rifaiSet', nome: 'rifai l\'azione annullata (fuori dagli editor)', predefinita: 'Shift+Meta+KeyZ', soloFuori: true },

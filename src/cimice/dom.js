@@ -27,7 +27,7 @@ export function creaLettore({ radici, note }) {
           range.setEnd(nodo, m.index + m[0].length);
           const r = range.getClientRects()[0];
           if (!r || r.width < 1 || r.right < 0 || r.left > lar || r.bottom < 0 || r.top > alt) continue;
-          fuori.push({ x: r.left, y: r.top, w: r.width, h: r.height, testo: m[0], font, salta: false });
+          fuori.push({ x: r.left, y: r.top, w: r.width, h: r.height, testo: m[0], font, salta: false, radice });
           if (fuori.length >= MASSIMO_PAROLE) return fuori;
         }
       }

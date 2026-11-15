@@ -36,7 +36,14 @@ let bozze = { livelli: {}, jam: null };
 let preferenze = { lunghezzaFrase: 16, scritturaAMacchina: true };
 // La CIMICE (src/cimice): solo disegno, solo qui sul proiettore. Legge livelli, clock, note e fader (dalle righe globali); non scrive mai niente.
 // Nel riquadro d'anteprima delle impostazioni non c'è.
-const cimice = ANTEPRIMA ? null : creaAggancio({ preferenze: () => preferenze.cimice, livelli: () => livelli, fader: () => chiusuraDaRighe(righeGlobali) });
+let portaControllo = null; // verso l'interfaccia di lavoro: la cimice dice «ho toccato questo livello»; i dispetti li decide e li esegue lei
+const cimice = ANTEPRIMA ? null : creaAggancio({
+  preferenze: () => preferenze.cimice,
+  livelli: () => livelli,
+  fader: () => chiusuraDaRighe(righeGlobali),
+  livelloDi: (radice) => [...blocchi].find(([, b]) => b.codice === radice)?.[0] ?? null,
+  suTocco: (nome) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome }),
+});
 let righeGlobali = []; // le righe globali del fader e dei colpi «su tutto»: all(x => x.lpf(1920))
 const strisceU = new Map(); // id del livello → { ciclo: eventi }: le note vere, dal motore live
 const misureU = new Map(); // id → { pk, quando }; lo stato del misuratore sta in statiU
@@ -110,8 +117,9 @@ window.addEventListener('message', (e) => {
       for (const [id, pk] of Object.entries(data.livelli)) misureU.set(Number(id), { pk, quando: performance.now() });
     }
     else if (data.tipo === 'preferenze' && ANTEPRIMA) applica(data.p);
+    else if (data.tipo === 'dispetto') cimice?.dispetto(data);
   };
-  if (con === 'controllo') bozze = { livelli: {}, jam: null };
+  if (con === 'controllo') { bozze = { livelli: {}, jam: null }; portaControllo = e.ports[0]; }
 });
 
 // --- il gatto grande, a scatti ---
@@ -610,4 +618,5 @@ globalThis.cutxScrittura = () => {
   };
 };
 globalThis.cutxCimice = () => cimice;
+globalThis.cutxCimiceTocca = (nome) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome }); // per le prove
 globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala: disposizione.scala });

@@ -7,6 +7,7 @@ import { creaEditor } from './editor.js';
 import { MODI, modoValido } from './sfondo.js';
 import { MODI as MANI_MODI } from './mani-modi.js';
 import { FREQUENZE, frequenzaDi } from '../cimice/sensore.js';
+import { FREQUENZE_DISPETTI } from '../cimice/dispetti.js';
 import { PREDEFINITI, SEGNAPOSTO, risolvi as risolviTesti } from './testi-pubblico.js';
 import { Anteprima } from './anteprima.js';
 import { OPZIONI, norma } from './scrittura.js';
@@ -505,7 +506,7 @@ export class Impostazioni {
   disegnaCimice() {
     const c = it.cimice;
     $('imp-titolo-cimice').textContent = c.titolo;
-    const p = { acceso: true, cooldown: 8, probabilita: 0.5, durataMin: 4, durataMax: 8, folle: true, battuteFolle: 4, sensibilitaDrop: 0.5, scala: 1, velocita: 1, lampi: true, corrompe: true, trema: true, ...this.dati.preferenze().cimice };
+    const p = { acceso: true, cooldown: 8, probabilita: 0.5, durataMin: 4, durataMax: 8, folle: true, battuteFolle: 4, sensibilitaDrop: 0.5, scala: 1, velocita: 1, lampi: true, corrompe: true, trema: true, dispetti: false, dispettiFrequenza: 'ogni_tanto', ...this.dati.preferenze().cimice };
     const salva = (parziale) => this.dati.salvaPreferenze({ cimice: { ...p, ...this.dati.preferenze().cimice, ...parziale } });
     const riga = (testi, controllo) => {
       const r = crea('div', 'imp-riga');
@@ -541,6 +542,11 @@ export class Impostazioni {
     if (frequenza === 'personalizzata') sel.append(new Option(c.frequenza.valori.personalizzata, 'personalizzata'));
     sel.value = frequenza;
     sel.onchange = () => { if (FREQUENZE[sel.value]) salva(FREQUENZE[sel.value]); };
+    const selFreqDispetti = crea('select');
+    selFreqDispetti.id = 'imp-cimice-dispetti-frequenza';
+    for (const nome of Object.keys(FREQUENZE_DISPETTI)) selFreqDispetti.append(new Option(c.frequenza.valori[nome], nome));
+    selFreqDispetti.value = FREQUENZE_DISPETTI[p.dispettiFrequenza] ? p.dispettiFrequenza : 'ogni_tanto';
+    selFreqDispetti.onchange = () => salva({ dispettiFrequenza: selFreqDispetti.value });
     const durata = crea('div', 'imp-controlli');
     const dMin = cursore('imp-cimice-durata-min', 2, 16, 1, p.durataMin, (n) => `${n}`, (n) => salva({ durataMin: n, durataMax: Math.max(n, p.durataMax) }));
     const dMax = cursore('imp-cimice-durata-max', 2, 32, 1, p.durataMax, (n) => `${n} battute`, (n) => salva({ durataMax: n, durataMin: Math.min(n, p.durataMin) }));
@@ -559,6 +565,8 @@ export class Impostazioni {
       rigaInterruttore(c.lampi, p.lampi !== false, (x) => salva({ lampi: x })),
       rigaInterruttore(c.corrompe, p.corrompe !== false, (x) => salva({ corrompe: x })),
       rigaInterruttore(c.trema, p.trema !== false, (x) => salva({ trema: x })),
+      rigaInterruttore(c.dispetti, p.dispetti === true, (x) => salva({ dispetti: x })),
+      riga(c.dispettiFrequenza, selFreqDispetti),
       crea('p', 'secondario a-capo', c.firma),
     );
   }

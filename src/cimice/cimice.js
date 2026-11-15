@@ -34,7 +34,8 @@ const colore = (nome, ripiego) => {
   try { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim() || ripiego; } catch { return ripiego; }
 };
 
-export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math.random }) {
+// suTocco(parola): chiamata (al massimo una volta per movimento) quando un'antenna tocca una nota che suona.
+export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math.random, suTocco = null }) {
   const opz = { ...OPZIONI, ...opzioni };
   const rnd = (a, b) => a + caso() * (b - a);
   const pick = (arr) => arr[Math.floor(caso() * arr.length)];
@@ -175,6 +176,10 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       if (sporco) rileggi();
       if (((k % 16) + 16) % 16 % 4 === 0) fx.ultimoBattito = performance.now();
       suSedicesimo(m, bug, k, performance.now());
+      if (suTocco && bug && bug.state !== 'exit' && ((k % 4) + 4) % 4 === 0) {
+        const an = bug.ants.find((x) => x.tok && x.tok.hl > 0.5);
+        if (an) suTocco(an.tok);
+      }
     } catch { spegni(); }
   }
 
@@ -281,6 +286,8 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       }
     },
     get parole() { return m.parole; },
+    // Un dispetto è partito davvero: la cimice si accende di rosso un attimo.
+    reagisci() { if (bug) { bug.redUntil = performance.now() + 450; bug.pulse = 1; } },
     get presente() { return !!bug; },
     get scalaEffettiva() { return m.g.k; }, // opzione grandezza × scala automatica sul testo
     get folle() { return m.folle(); },
