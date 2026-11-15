@@ -7,6 +7,7 @@ import { VistaSynth } from './synth-vista.js';
 import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
 import it from './testi/it.json';
 import { SchermataProj, etichettaProj } from './proj-vista.js';
+import { ManiClient } from './mani-client.js';
 import { risolvi as risolviTestiPubblico } from './testi-pubblico.js';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
@@ -1371,6 +1372,8 @@ function mostraImpostazioni() {
 // Verso la finestra di uscita passano solo le bozze: quello che sto scrivendo nel LIVE.
 let portaUscita = null;
 let ultimeBozze = { livelli: {}, jam: null };
+// Le mani (sperimentale): il client della finestra «mani». Il filtro e la finestrella si collegano nel passo successivo.
+const maniClient = new ManiClient({});
 const mandaOndaNote = () => portaUscita?.postMessage({ tipo: 'onda-note', nomi: [...pila.inNote] }); // i livelli batteria che ho rimesso a note
 window.addEventListener('message', (e) => {
   if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
@@ -1757,6 +1760,7 @@ globalThis.cutxProva = {
   accendiInsegna: () => insegna.sfarfalla(),
   spegniLettera: () => insegna.spegniLettera(),
   fermaInsegna: () => insegna.ferma(),
+  maniClient,
   schermataProj,
   libreria: () => libreria,
   provaInCuffia,

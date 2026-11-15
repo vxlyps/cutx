@@ -19,6 +19,7 @@
     "pacchetto": "vite build && electron-builder --mac dmg --arm64"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.3",
     "fast-xml-parser": "^5.11.2"
   },
   "devDependencies": {

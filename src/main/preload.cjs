@@ -51,6 +51,12 @@ contextBridge.exposeInMainWorld('cutx', {
   uscitaOnOff: () => ipcRenderer.invoke('uscita:onoff'),
   uscitaSchermoIntero: () => ipcRenderer.invoke('uscita:schermo-intero'),
   uscitaAperta: () => ipcRenderer.invoke('uscita:aperta'),
+  mani: {
+    accendi: () => ipcRenderer.invoke('mani:accendi'),
+    spegni: () => ipcRenderer.invoke('mani:spegni'),
+    aperta: () => ipcRenderer.invoke('mani:aperta'),
+    suChiusa: (fn) => ipcRenderer.on('mani:chiusa', (_e, motivo) => fn(motivo)), // la finestra si è bloccata o è crashata: si chiude da sola
+  },
   suUscita: (fn) => ipcRenderer.on('uscita-stato', (_e, aperta) => fn(aperta)),
   moviola: (eventi) => ipcRenderer.send('moviola:eventi', eventi),
   apriCartellaMoviola: () => ipcRenderer.invoke('moviola:apri-cartella'),

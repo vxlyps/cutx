@@ -34,6 +34,14 @@ const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('-
 const PER_PROVE = !!(PROVA || FOTO || FOTO_PROJ || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
 // Prova «senza rete» (scripts/prova-suoni-strudel.mjs --senza-rete): l'app di prova non risolve nessun indirizzo (solo localhost), il resto del Mac resta in rete.
 if (PER_PROVE && process.env.CUTX_PROVA_SENZA_RETE === '1') app.commandLine.appendSwitch('host-resolver-rules', 'MAP * ~NOTFOUND, EXCLUDE localhost');
+// Le mani: la prova automatica usa un video di una mano al posto della webcam (Chromium sa leggere un file come finta camera).
+// Il file è un .mjpeg (o .y4m): da mano.mov si fa con ffmpeg (vedi docs/MANI.md). Senza il file la prova «mani» si salta.
+const VIDEO_MANO = process.env.CUTX_VIDEO_MANO || path.join(app.getPath('home'), 'Progetti', 'cutx-prova-mani', 'mano.mjpeg');
+if (PROVA && PROVA.split(',').includes('mani') && existsSync(VIDEO_MANO)) {
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+  app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+  app.commandLine.appendSwitch('use-file-for-fake-video-capture', VIDEO_MANO);
+}
 if (PER_PROVE) {
   const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : 'CUTX-prova');
   app.setPath('userData', dati);
@@ -109,7 +117,7 @@ const arrotonda1 = (x) => Math.round(x * 10) / 10;
 function cpuProcessi() {
   const processi = new Map(app.getAppMetrics().map((m) => [m.pid, m.cpu.percentCPUUsage]));
   const out = { totale: arrotonda1([...processi.values()].reduce((a, b) => a + b, 0)) };
-  for (const ruolo of ['controllo', 'live', 'cuffia', 'uscita']) {
+  for (const ruolo of ['controllo', 'live', 'cuffia', 'uscita', 'mani']) {
     const pid = finestre[ruolo] && !finestre[ruolo].isDestroyed() ? finestre[ruolo].webContents.getOSProcessId() : 0;
     if (processi.has(pid)) out[ruolo] = arrotonda1(processi.get(pid));
   }
@@ -192,14 +200,15 @@ function inoltraConsole(wc, nome) {
 
 // Tre finestre, tre processi: controllo (l'interfaccia), live e cuffia (motori nascosti).
 // Più, quando è aperta, l'uscita: quello che vede il pubblico.
-const finestre = { controllo: null, live: null, cuffia: null, uscita: null };
-const pronte = { controllo: false, live: false, cuffia: false, uscita: false };
+const finestre = { controllo: null, live: null, cuffia: null, uscita: null, mani: null };
+const pronte = { controllo: false, live: false, cuffia: false, uscita: false, mani: false };
 const COPPIE = [
   ['controllo', 'live'],
   ['controllo', 'cuffia'],
   ['live', 'cuffia'],
   ['live', 'uscita'],
   ['controllo', 'uscita'],
+  ['controllo', 'mani'],
 ];
 
 // Collega una finestra appena (ri)caricata alle altre con canali diretti, senza passare da qui.
@@ -289,6 +298,45 @@ function riavviaMotore(ruolo) {
   if (viva(vecchia)) vecchia.destroy();
   setTimeout(() => creaMotore(ruolo), 300);
 }
+
+// --- le mani (sperimentale) ---
+// Una finestra nascosta in un processo suo, solo finché il riconoscimento è acceso: da spento non esiste e la camera è chiusa.
+// Se si blocca o crasha la si chiude e si avvisa l'interfaccia (il filtro torna al fader): i motori audio non la sentono.
+function creaMani() {
+  if (chiudendo || viva(finestre.mani)) return;
+  pronte.mani = false;
+  const finestra = new BrowserWindow({ show: false, webPreferences });
+  finestre.mani = finestra;
+  const attuale = seguiCaricamento('mani', finestra);
+  const chiudi = (motivo) => {
+    if (!attuale()) return;
+    ev('avviso', 'mani', motivo);
+    chiudiMani();
+    if (viva(finestre.controllo)) finestre.controllo.webContents.send('mani:chiusa', motivo);
+  };
+  finestra.webContents.on('render-process-gone', (_e, d) => chiudi(`processo terminato (${d.reason})`));
+  finestra.on('unresponsive', () => chiudi('bloccata'));
+  finestra.on('closed', () => {
+    if (finestre.mani === finestra) finestre.mani = null;
+    pronte.mani = false;
+  });
+  finestra.loadURL(`${ORIGINE}/mani.html`);
+}
+function chiudiMani() {
+  const f = finestre.mani;
+  finestre.mani = null;
+  pronte.mani = false;
+  if (viva(f)) f.destroy(); // la camera si chiude con lei
+}
+ipcMain.handle('mani:accendi', () => {
+  creaMani();
+  return true;
+});
+ipcMain.handle('mani:spegni', () => {
+  chiudiMani();
+  return true;
+});
+ipcMain.handle('mani:aperta', () => viva(finestre.mani));
 
 // --- la finestra di uscita ---
 // Una finestra normale: la sposto dove voglio, ⌃⌘F la mette a schermo intero sullo schermo in cui

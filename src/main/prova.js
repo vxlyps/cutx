@@ -13,6 +13,7 @@ import os from 'node:os';
 import { AZIONI } from '../renderer/scorciatoie.js';
 import { frazioneAmbra } from '../../strumenti/analizza-prova-lib.mjs';
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 // Lo stesso click del test di sfasamento, più piano: la prova suona dalle casse del Mac.
 const CODICE = `setcpm(120/4)
@@ -219,6 +220,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
   if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
   if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
+  if (parti.includes('mani')) ok = (await sicura('mani', provaMani)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
@@ -4512,6 +4514,81 @@ async function provaOnda({ finestre, scrivi }) {
     await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
     await js('window.cutx.uscitaAperta().then((a) => a && window.cutx.uscitaOnOff())').catch(() => {});
     await aspetta(1);
+  }
+  return ok;
+}
+
+// --- le mani (sperimentale): un video di una mano che sale e scende al posto della webcam (~/Progetti/cutx-prova-mani/mano.mjpeg,
+// o CUTX_VIDEO_MANO). La finestra «mani» è un processo a parte: qui si controlla che riconosca la mano, quanto pesa, e che da spenta sparisca.
+async function provaMani({ finestre, scrivi }) {
+  const video = process.env.CUTX_VIDEO_MANO || path.join(os.homedir(), 'Progetti', 'cutx-prova-mani', 'mano.mjpeg');
+  if (!existsSync(video)) {
+    scrivi(`SALTATA mani: manca il video di prova (${video}) · da mano.mov: ffmpeg -i mano.mov -vf scale=640:-2,fps=30 -an -c:v mjpeg -f mjpeg mano.mjpeg`);
+    return true;
+  }
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const cpu = () => {
+    const pid = finestre.mani && !finestre.mani.isDestroyed() ? finestre.mani.webContents.getOSProcessId() : 0;
+    return app.getAppMetrics().find((m) => m.pid === pid)?.cpu.percentCPUUsage ?? 0;
+  };
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+    await js(`window.__mani = []; cutxProva.maniClient.suMano = (m) => window.__mani.push(m.visibile ? Math.round(m.y * 1000) / 1000 : null); cutxProva.maniClient.accendi({ fps: 'normale', anteprima: true })`);
+    await aspetta(6); // la camera, il modello, il Wasm
+    const st = await js('cutxProva.maniClient.stato');
+    controlla('la finestra «mani» è un processo a parte, nascosto', !!finestre.mani && !finestre.mani.isVisible() && finestre.mani.webContents.getOSProcessId() !== finestre.live.webContents.getOSProcessId());
+    controlla('la camera e il modello si aprono (nessun errore)', !st.errore && st.fps > 0, JSON.stringify(st));
+    const campioniCpu = [];
+    const campioniPs = []; // la stessa misura fatta da macOS (ps): %CPU di un core, mediata sulla vita del processo per l'ultimo secondo
+    const pidMani = finestre.mani.webContents.getOSProcessId();
+    for (let i = 0; i < 20; i++) {
+      await aspetta(2);
+      campioniCpu.push(cpu());
+      try {
+        const top = execFileSync('top', ['-l', '2', '-s', '1', '-pid', String(pidMani), '-stats', 'cpu'], { encoding: 'utf8' }).trim().split('\n').pop();
+        campioniPs.push(Number.parseFloat(top));
+      } catch {}
+    }
+    const pidGpu = app.getAppMetrics().find((m) => m.type === 'GPU')?.pid;
+    let gpuTop = -1;
+    try {
+      gpuTop = Number.parseFloat(execFileSync('top', ['-l', '2', '-s', '1', '-pid', String(pidGpu), '-stats', 'cpu'], { encoding: 'utf8' }).trim().split('\n').pop());
+    } catch {}
+    scrivi(`INFO  mani: il processo grafico (condiviso con tutta l'app) sta al ${gpuTop.toFixed(1)}% di un core`);
+    const mediaPs = campioniPs.length ? campioniPs.reduce((a, b) => a + b, 0) / campioniPs.length : -1;
+    scrivi(`INFO  mani: CPU secondo Electron ${(campioniCpu.reduce((a, b) => a + b, 0) / campioniCpu.length).toFixed(1)}% · secondo top ${mediaPs.toFixed(1)}%`);
+    const stato = await js('cutxProva.maniClient.stato');
+    const y = await js('window.__mani');
+    const viste = y.filter((v) => v !== null);
+    controlla('riconosce a 12–35 fotogrammi al secondo', stato.fps >= 12 && stato.fps <= 35, JSON.stringify(stato));
+    controlla('ogni fotogramma costa meno di 40 ms (il budget a 24 al secondo)', stato.ms > 0 && stato.ms < 40, `${stato.ms.toFixed(1)} ms`);
+    const media = Math.max(campioniCpu.reduce((a, b) => a + b, 0) / campioniCpu.length, mediaPs); // si tiene la misura più alta
+    scrivi(`INFO  mani: processo a parte, CPU media ${media.toFixed(1)}% (di un core) · ${stato.fps} fps · ${stato.ms.toFixed(1)} ms a fotogramma · ${y.length} misure`);
+    controlla('la finestra «mani» pesa meno del 60% di un core', media < 60, `${media.toFixed(1)}%`);
+    controlla('vede la mano per buona parte del video (> 40%)', viste.length > y.length * 0.4, `${viste.length}/${y.length}`);
+    const alto = Math.min(...viste);
+    const basso = Math.max(...viste);
+    controlla('la mano sale e scende: altezze molto diverse', basso - alto > 0.3, `da ${alto} a ${basso}`);
+    let giu = 0;
+    let piuLunga = 0;
+    for (const v of y) {
+      giu = v === null ? giu + 1 : 0;
+      piuLunga = Math.max(piuLunga, giu);
+    }
+    controlla('vede anche quando la mano esce dall\'inquadratura (un tratto senza mano)', piuLunga > stato.fps * 1.5, `${piuLunga} misure di fila`);
+    const immagine = await js(`new Promise((r) => { const prima = Date.now(); cutxProva.maniClient.suImmagine = (b) => r(b.byteLength); setTimeout(() => r(0), 3000); })`);
+    controlla('arriva anche l\'immagine piccola della camera (JPEG)', immagine > 500 && immagine < 60000, String(immagine));
+    await js('cutxProva.maniClient.spegni()');
+    await aspetta(1.5);
+    controlla('spenta: la finestra non esiste più (camera chiusa, niente pesa)', !finestre.mani || finestre.mani.isDestroyed(), String(!!finestre.mani));
+    controlla('e dal processo principale risulta chiusa', (await js('window.cutx.mani.aperta()')) === false);
+  } finally {
+    await js(`cutxProva.maniClient.spegni(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
   }
   return ok;
 }
