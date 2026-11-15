@@ -357,9 +357,9 @@ function micro(l, ciclo) {
 const globali = new Map(); // chiave → riga
 let breakFattore = 1; // il «break» del fader: tutti le clip tranne il beat (per ora il primo livello) a questa frazione del volume
 function mandaGlobali() {
-  const m = { tipo: 'globali', righe: [...globali.values()] };
-  manda('controllo', m);
-  manda('uscita', m);
+  const righe = [...globali.values()];
+  manda('controllo', { tipo: 'globali', righe });
+  manda('uscita', { tipo: 'globali', righe: righe.filter((r) => !/\/\/ mano\s*$/.test(r)) }); // la riga delle mani (sperimentale) per ora non va sul proiettore
 }
 const idBeat = () => livelli.find((x) => x.a === Infinity)?.id ?? null;
 // il beat vero (il livello «beat», anche mentre cambia scena); se non c'è, il primo livello come prima
@@ -493,7 +493,7 @@ function annullaIngresso(l, tieni) {
 // la scena nuova entra sempre sentita, anche se quella di prima era in muto.
 const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
 
-async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
+async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
@@ -508,6 +508,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
   if (Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
   l.beat = beat; // il beat porta con sé le sue scene (◀ ▶ li scorrono) e quello da cui parte: { base, indice, scene }
+  l.drum = !!drum; // una clip segnata «· drum»: sotto la sua card c'è l'onda (come per il beat)
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
   for (const vecchio of livelli) {
@@ -517,6 +518,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
       vecchio.a = vecchio.da;
       annullaIngresso(vecchio, false); // chi usciva per lui esce per il nuovo (lo trova questo stesso giro)
       l.beat ??= vecchio.beat;
+      if (drum === undefined) l.drum = !!vecchio.drum;
       l.volume = vecchio.volume;
       l.muto = mutoEreditato(l, vecchio);
       l.coda = vecchio.coda;
@@ -527,6 +529,7 @@ async function entra({ codice, nome, provenienza, cicli = 1, scritto = false, vo
     vecchio.a = Math.max(vecchio.da, da) + d.cicli;
     scambi.push(vecchio);
     l.beat ??= vecchio.beat; // un beat modificato dalla sua card resta un beat: tiene le sue scene (◀ ▶ e il passaggio di brano lo riconoscono)
+    if (drum === undefined) l.drum = !!vecchio.drum; // riscritto dalla card del LIVE: resta batteria
     l.volume = vecchio.volume;
     l.muto = mutoEreditato(l, vecchio);
     l.coda = vecchio.coda; // una modifica al codice non butta via la coda
@@ -688,6 +691,7 @@ const descrivi = (l) => ({
   muto: l.muto,
   scritto: l.scritto,
   beat: l.beat ?? null,
+  batteria: eNomeBeat(l.nome) || !!l.drum, // beat o clip «· drum»: sotto c'è l'onda LED (non eBeatVera: quella tratta da beat anche la prima clip melodica)
   sfuma: l.sfuma,
   primo: l.primo ?? null,
   ultimo: l.ultimo ?? null,
@@ -969,6 +973,51 @@ function misura() {
   if (misureUscita) manda('uscita', m);
 }
 setInterval(misura, 66);
+
+// --- l'onda LED sotto la batteria: i picchi veri dei livelli batteria (beat, clip «· drum») per la card del LIVE e il proiettore ---
+// Solo una lettura degli analizzatori che ci sono già (la presa della striscia viva): la catena audio non cambia. Un picco ogni ~8 ms
+// del suono uscito dall'ultima volta, 0..255. Se questo giro arriva in ritardo (il motore è carico) l'onda rallenta: il suono mai.
+const ONDA_PASSO_S = 1 / 120;
+let ondeUscita = false; // il proiettore la vuole (interruttore «onda sotto la batteria»)
+let ondeControllo = false; // la postazione ha almeno una card che mostra l'onda (e la striscia è accesa)
+let ultimaOndaAudio = 0;
+let ultimaOndaMs = 0;
+let caricoOnde = 0; // 0 normale, 1 in ritardo, 2 molto in ritardo: postazione e proiettore abbassano i fotogrammi
+let saltaOnda = false;
+function onde() {
+  if (!LIVE || !rip.mappa?.cps || !((ondeControllo && strisceOn) || ondeUscita)) return; // nessuno la guarda: non si legge niente
+  const adesso = performance.now();
+  const intervallo = ultimaOndaMs ? adesso - ultimaOndaMs : 33;
+  ultimaOndaMs = adesso;
+  caricoOnde = intervallo > 80 ? 2 : intervallo > 50 ? 1 : Math.max(0, caricoOnde - 1);
+  if (caricoOnde === 2 && (saltaOnda = !saltaOnda)) return; // molto carico: un giro sì e uno no
+  const batterie = livelli.filter((l) => (l.drum || eNomeBeat(l.nome)) && guadagni.has(l.id));
+  if (!batterie.length) return;
+  const ora = ac.currentTime;
+  const dt = Math.min(0.08, Math.max(ONDA_PASSO_S, ultimaOndaAudio ? ora - ultimaOndaAudio : 0.033));
+  ultimaOndaAudio = ora;
+  const pezzi = Math.max(1, Math.round(dt / ONDA_PASSO_S));
+  const campioni = Math.floor(ONDA_PASSO_S * ac.sampleRate);
+  const picchi = {};
+  for (const l of batterie) {
+    guadagni.get(l.id).analisi.getFloatTimeDomainData(bufferMisura);
+    const v = [];
+    for (let k = pezzi - 1; k >= 0; k--) {
+      const fine = bufferMisura.length - k * campioni;
+      let pk = 0;
+      for (let i = Math.max(0, fine - campioni); i < fine; i++) {
+        const a = Math.abs(bufferMisura[i]);
+        if (a > pk) pk = a;
+      }
+      v.push(Math.min(255, Math.round(pk * 255)));
+    }
+    picchi[l.id] = v;
+  }
+  const m = { tipo: 'onde', ciclo: rip.ciclo(ora), passo: ONDA_PASSO_S * rip.mappa.cps, carico: caricoOnde, livelli: picchi };
+  if (ondeControllo && strisceOn) manda('controllo', m);
+  if (ondeUscita) manda('uscita', m);
+}
+setInterval(onde, 33);
 
 function giro() {
   const ora = performance.now();
@@ -1287,6 +1336,12 @@ async function ricevi(da, m) {
     case 'strisce-on': // l'interfaccia (o le impostazioni) accende e spegne la striscia viva: spenta non costa niente
       strisceOn = !!m.on;
       for (const l of livelli) l.strisciaCiclo = null;
+      return;
+    case 'onde-controllo': // la postazione mostra (o non più) l'onda LED di qualche card
+      if (da === 'controllo') ondeControllo = !!m.on;
+      return;
+    case 'onde-uscita': // il proiettore vuole l'onda LED sotto la batteria
+      if (da === 'uscita') ondeUscita = !!m.on;
       return;
     case 'misure-uscita': // il proiettore vuole il misuratore (spento di default)
       if (da === 'uscita') misureUscita = !!m.on;

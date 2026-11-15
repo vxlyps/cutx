@@ -1246,7 +1246,7 @@ input[type='checkbox'] {
 
 .card.livello.selezionato {
   border-color: var(--marcio);
-  box-shadow: inset 4px 0 0 var(--marcio), 0 0 0 1px var(--marcio), 0 0 10px rgba(159, 194, 58, 0.35);
+  box-shadow: 0 0 0 1px var(--marcio), 0 0 10px rgba(159, 194, 58, 0.35);
 }
 
 .livello.in-modifica {
@@ -2887,7 +2887,7 @@ input[type='checkbox'] {
 /* la sezione scelta nel CUE (con il mouse o col controller): bordo chiaro, non verde (il verde è solo il live) */
 .card.sezione.attiva:not(.in-cuffia):not(.e-live) {
   border-color: var(--testo);
-  box-shadow: inset 3px 0 0 var(--testo);
+  box-shadow: 0 0 0 1px var(--testo);
 }
 
 /* le righe globali (fader, colpi su tutto): codice in fondo ai livelli */
@@ -2964,9 +2964,8 @@ input[type='checkbox'] {
   flex: none;
 }
 
-/* il beat: le sue scene hanno un filo doppio a sinistra, diverso dai pezzi; il cambio che aspetta la fine della frase è tratteggiato */
-.card.scena { border-left: 3px double var(--secondario); }
-.card.scena.e-live { border-left-color: var(--marcio); }
+/* il beat: le scene hanno il bordo uguale agli altri; verde (tutto intorno) solo quando suonano live; il cambio che aspetta la fine della frase è tratteggiato */
+.card.scena.e-live { border-color: var(--marcio); }
 .card.scena.in-arrivo { outline: 1px dashed var(--marcio); outline-offset: -1px; }
 .card.scena.in-arrivo .lbl { color: var(--marcio); }
 .editor .cm-line.cm-beat.cm-sez-testa { border-left-style: double; }
@@ -3030,7 +3029,6 @@ input[type='checkbox'] {
 }
 
 .beat-card {
-  border-left: 3px double var(--secondario);
   gap: 8px;
 }
 .beat-card.senza-beat {
@@ -3039,7 +3037,10 @@ input[type='checkbox'] {
 .beat-card .nome-beat {
   font-family: var(--stencil);
   letter-spacing: 0.1em;
-  color: var(--marcio);
+  color: var(--testo);
+}
+.beat-card:has(.pillola.live) .nome-beat {
+  color: var(--marcio); /* verde solo quando una scena del beat suona live */
 }
 .pillole {
   display: flex;
@@ -3238,15 +3239,15 @@ input[type='checkbox'] {
   white-space: pre-wrap;
   pointer-events: none;
 }
-.apertura-card {
-  border-left: 3px solid var(--marcio-scuro);
-}
 .apertura-card.e-live {
-  border-left-color: var(--marcio);
+  border-color: var(--marcio); /* verde solo quando suona live, tutto intorno */
 }
 .apertura-card .nome-apertura {
   font-family: var(--stencil);
   letter-spacing: 0.1em;
+  color: var(--testo);
+}
+.apertura-card.e-live .nome-apertura {
   color: var(--marcio);
 }
 .apertura-card.senza-apertura {
@@ -3382,7 +3383,7 @@ input[type='checkbox'] {
 }
 .card.sezione.attiva:not(.in-cuffia):not(.e-live) {
   border-color: var(--testo);
-  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo);
+  box-shadow: 0 0 0 2px var(--testo); /* la scelta è una cornice uguale su tutti i lati, niente fascia a sinistra */
 }
 .card.sezione.attiva:not(.e-live) .nome-sezione {
   background: var(--testo);
@@ -3395,7 +3396,7 @@ input[type='checkbox'] {
 /* la scena del beat scelta (manopola 1 o clic): si legge da lontano come le clip — card incorniciata e pillola in negativo, più grande */
 #carte .beat-card:has(.beat-codice.attiva) {
   border-color: var(--testo);
-  box-shadow: inset 6px 0 0 var(--testo), 0 0 0 2px var(--testo), 0 10px 12px -6px var(--fondo);
+  box-shadow: 0 0 0 2px var(--testo), 0 10px 12px -6px var(--fondo);
 }
 .beat-card:has(.beat-codice.attiva) .pillola.scelta:not(.live):not(.in-arrivo) {
   background: var(--testo);
@@ -3410,4 +3411,301 @@ input[type='checkbox'] {
   border-radius: 15px;
   outline: 2px solid var(--testo);
   outline-offset: 2px;
+}
+
+/* --- la schermata dei PROJ (proj-vista.js), 5.1 --- */
+.proj-schermata {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  background: var(--fondo);
+  display: flex;
+  flex-direction: column;
+}
+.proj-alto {
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--linea);
+}
+.proj-wordmark {
+  height: 38px;
+  width: auto;
+}
+.proj-corpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 40px;
+  padding: 36px 28px 28px 40px;
+}
+.proj-lato {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 18px;
+}
+.proj-gatto {
+  width: 200px;
+  height: auto;
+  filter: drop-shadow(0 0 6px rgba(159, 194, 58, 0.55));
+}
+.proj-titolo {
+  margin: 0;
+  font-family: var(--stencil);
+  font-weight: normal;
+  font-size: 96px;
+  line-height: 0.85;
+  letter-spacing: 0.02em;
+  color: var(--testo);
+}
+.proj-destra {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.proj-avviso {
+  min-height: 16px;
+  font-size: 12px;
+  color: #d9a23a;
+}
+.proj-griglia {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-auto-rows: 210px;
+  gap: 14px;
+  align-content: start;
+  padding: 2px;
+}
+.proj-scheda {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 16px 14px;
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  border-bottom-width: 3px;
+  border-radius: 10px;
+  outline: none;
+  cursor: default;
+}
+.proj-scheda.scelta {
+  border-color: var(--testo);
+}
+.proj-scheda.in-live .proj-numero {
+  color: var(--marcio);
+  text-shadow: var(--bagliore-testo);
+}
+.proj-testa {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.proj-scheda.aperta .proj-segno {
+  color: var(--testo);
+}
+.proj-sigla {
+  font-family: var(--stencil);
+  font-size: 15px;
+  color: var(--spento);
+}
+.proj-numero {
+  font-family: var(--mono);
+  font-size: 64px;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: var(--testo);
+}
+.proj-segno {
+  margin-left: auto;
+  align-self: flex-start;
+  font-size: 11px;
+  color: var(--spento);
+}
+.proj-sottotitolo {
+  width: 100%;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--testo);
+  font-family: var(--mono);
+  font-size: 15px;
+  outline: none;
+}
+.proj-sottotitolo:focus {
+  border-bottom-color: var(--bordo);
+}
+.proj-sottotitolo::placeholder {
+  color: var(--grigio);
+}
+.proj-info {
+  font-size: 11px;
+  color: var(--spento);
+}
+.proj-apri {
+  margin-top: auto;
+  align-self: flex-start;
+}
+/* niente effetto «tasto premuto» qui: .key:active cambia il margine e il pulsante, che sta in fondo alla scheda, saltava in alto (il clic andava a vuoto) */
+.proj-apri:active:not(:disabled) {
+  margin-top: auto;
+  border-bottom-width: 3px;
+}
+.proj-apri:hover:not(:disabled) {
+  border-color: var(--testo); /* bianco: il verde è solo di quello che suona live */
+}
+.proj-nuovo {
+  background: none;
+  border-style: dashed;
+  border-bottom-width: 1px;
+}
+.proj-nuovo .proj-numero {
+  color: var(--grigio);
+}
+
+/* l'onda LED sotto la batteria (onda-led.js): più alta della striscia delle note; un clic torna alle note e viceversa */
+.striscia-viva.onda {
+  height: 44px;
+}
+.striscia-viva.onda .sv-note {
+  background: #0a0d06;
+  border-color: #1f2614;
+}
+.card.livello .striscia-viva {
+  cursor: default;
+}
+.striscia-viva.onda,
+.striscia-viva.batteria {
+  cursor: pointer;
+}
+
+/* le mani (mani-vista.js, sperimentale): la finestrella nella colonna a sinistra, solo mentre il riconoscimento è acceso */
+.mani-finestra {
+  flex-shrink: 0;
+  margin: 8px 12px 0;
+  padding: 8px;
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--fondo);
+}
+.mani-finestra[hidden] {
+  display: none;
+}
+.mani-modo {
+  font-family: var(--stencil);
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--spento);
+}
+.mani-finestra.comanda .mani-modo {
+  color: var(--marcio);
+}
+.mani-finestra.rilascio .mani-modo {
+  color: #d9a23a;
+}
+.mani-quadro {
+  position: relative;
+}
+.mani-quadro {
+  cursor: crosshair;
+  touch-action: none;
+}
+.mani-zona {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--marcio);
+  box-shadow: 0 0 0 9999px rgba(5, 6, 4, 0.5); /* fuori dalla zona l'immagine si spegne: la mano lì non conta */
+  pointer-events: none;
+}
+.mani-zona.provvisoria {
+  border-style: dashed;
+}
+.mani-anello {
+  position: absolute;
+  left: calc(50% - 20px);
+  top: calc(50% - 20px);
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+.mani-anello circle {
+  fill: none;
+  stroke-width: 3;
+}
+.mani-anello circle:first-child {
+  stroke: var(--linea);
+  opacity: 0.6;
+}
+.mani-anello circle:last-child {
+  stroke: var(--marcio);
+}
+.mani-immagine {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  transform: scaleX(-1); /* a specchio: la mano a destra va a destra */
+  background: #0a0d06;
+}
+.mani-barra {
+  height: 6px;
+  background: var(--linea);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.mani-barra.piccola {
+  height: 3px;
+}
+.mani-barra i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--spento);
+}
+.mani-finestra.comanda .mani-barra i {
+  background: var(--marcio); /* verde solo mentre la mano comanda il filtro del live */
+}
+.mani-finestra.rilascio .mani-barra i {
+  background: #d9a23a; /* ambra: la mano è persa, il filtro sta tornando aperto */
+}
+.mani-finestra.bloccata .mani-barra i {
+  background: var(--spento); /* bloccata: il valore resta lì, ma la mano non comanda */
+}
+.mani-riga {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.mani-sigla {
+  font-family: var(--stencil);
+  letter-spacing: 0.1em;
+  color: var(--testo);
+}
+.mani-valore {
+  color: var(--spento);
+}
+.mani-nota {
+  font-size: 10px;
+  color: var(--spento);
 }

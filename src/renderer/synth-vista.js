@@ -4,6 +4,7 @@
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, noteValide, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
 import { PianoRoll } from './synth-roll.js';
+import { VistaDrum } from './drum-vista.js';
 import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado, scalaDelCiclo, velDaEventi, velocitaPerNote } from './synth-note.js';
 import { OTTAVA_INIZIALE, inCampoDiTesto, notaDaTasto, ottavaDopo } from './synth-tastiera.js';
 import { nuovoValore } from './controller-synth.js';
@@ -177,7 +178,7 @@ export class VistaSynth {
     const sinistra = crea('div', 'synth-sinistra');
     const schede = crea('div', 'synth-schede');
     this.schede = {};
-    for (const id of ['suono', 'note']) {
+    for (const id of ['suono', 'note', 'drum']) {
       const b = crea('button', 'key piccolo', T.schede[id]);
       b.onclick = () => this.mostraScheda(id);
       this.schede[id] = b;
@@ -204,7 +205,10 @@ export class VistaSynth {
     // lo specchio dell'X-Touch (in ambra: il verde è del live); lo riempie l'app quando c'è un controller
     this.specchioEl = crea('div', 'specchio synth-specchio');
     this.specchioEl.hidden = true;
-    this.r.replaceChildren(barra, corpo, this.specchioEl);
+    // la scheda DRUM: una vista a sé dentro il SYNTH (griglia, codice, cuffia, → CUE suoi), che prende il posto della barra e del corpo
+    this.drumEl = crea('div', 'drum-vista');
+    this.drum = new VistaDrum(this.drumEl, { ...this.opz, vaiA: (id) => this.mostraScheda(id) });
+    this.r.replaceChildren(barra, corpo, this.specchioEl, this.drumEl);
     this.scheda = 'suono';
     this.mostraScheda('suono');
   }
@@ -311,6 +315,7 @@ export class VistaSynth {
   // La vista si apre o si chiude: aperta, la cuffia riceve il suono dei tasti; chiusa, le note e il REC si fermano.
   attiva(on) {
     this.attiva_ = on;
+    this.drum.attiva(on && this.scheda === 'drum');
     if (on) this.inviaSuono();
     else {
       this.fermaNote();
@@ -409,6 +414,14 @@ export class VistaSynth {
 
   // Un tasto del Mac giù: ritorna true se era un tasto della tastiera (da non lasciare al resto dell'app).
   tastoGiu(e) {
+    if (this.scheda === 'drum') {
+      // nella batteria la tastiera del Mac non suona note; Spazio = ▶/■ della cuffia
+      if (e.code === 'Space' && !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target))) {
+        if (!e.repeat) this.drum.suonaOFerma();
+        return true;
+      }
+      return false;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) return false;
     // con «passi» acceso: Spazio = pausa, ⌫ = indietro, ←→ muovono il cursore
     if (this.roll.passiAttivi) {
@@ -437,6 +450,7 @@ export class VistaSynth {
   }
 
   tastoSu(e) {
+    if (this.scheda === 'drum') return e.code === 'Space' && !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target));
     if (e.code === 'Space') return !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)); // niente clic sul pulsante col fuoco
     const n = this.tenuti.get(e.code);
     if (n === undefined) return false;
@@ -513,7 +527,10 @@ export class VistaSynth {
   }
 
   mostraScheda(id) {
+    if (this.scheda === 'drum' && id !== 'drum') this.drum.fermaAnteprima(); // si lascia la batteria: la sua prova in cuffia si ferma
     this.scheda = id;
+    this.r.classList.toggle('modo-drum', id === 'drum');
+    this.drum.attiva(id === 'drum' && !!this.attiva_);
     this.pannelloEl ??= this.r.querySelector('.synth-pannello');
     this.pannelloEl.hidden = id !== 'suono';
     this.noteEl.hidden = id !== 'note';
@@ -656,7 +673,15 @@ export class VistaSynth {
     this.cambiato();
   }
 
+  // Una clip DRUM aperta: la scheda DRUM riparte da lì. Ritorna l'errore, o null.
+  apriDrum(testo, nome) {
+    const errore = this.drum.apri(testo, nome);
+    if (!errore) this.mostraScheda('drum');
+    return errore;
+  }
+
   annulla() {
+    if (this.scheda === 'drum') return this.drum.annulla();
     const prima = this.storia.pop();
     if (!prima) return false;
     this.ripeti.push({ A: this.slot.A, B: this.slot.B, lato: this.slot.lato });
@@ -668,6 +693,7 @@ export class VistaSynth {
   }
 
   rifai() {
+    if (this.scheda === 'drum') return this.drum.rifai();
     const dopo = this.ripeti.pop();
     if (!dopo) return false;
     this.storia.push({ A: this.slot.A, B: this.slot.B, lato: this.slot.lato });
@@ -743,10 +769,11 @@ export class VistaSynth {
 
   // ⌘↵ e il tasto: la prova in cuffia della vista SYNTH.
   provaInCuffia() {
-    return this.suonaOFerma();
+    return this.scheda === 'drum' ? this.drum.provaInCuffia() : this.suonaOFerma();
   }
 
   fermaAnteprima() {
+    this.drum.fermaAnteprima();
     clearTimeout(this.timerAnteprima);
     if (this.opz.suonaOra()) this.opz.ferma();
   }
@@ -841,6 +868,7 @@ export class VistaSynth {
 
   // Chiamata ogni 100 ms: il tasto ▶ segue quello che la cuffia sta davvero suonando.
   aggiorna() {
+    if (this.scheda === 'drum') return this.drum.aggiorna();
     this.avviata = true;
     this.playEl.classList.toggle('on', !!this.opz.suonaOra());
     this.roll.testina(this.scheda === 'note' && !!this.opz.suonaOra());

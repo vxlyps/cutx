@@ -4,7 +4,7 @@
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
 import it from './testi/it.json';
-import { haRigaSynth } from './synth-codice.js';
+import { mostraApri } from './apri-clip.js';
 import { creaEditor } from './editor.js';
 import { chiediNome, conferma } from './dialogo.js';
 import { analizza } from './analisi.js';
@@ -267,7 +267,7 @@ export class Cue {
     const prima = vuota ? blocco.da : Math.max(da, blocco.da);
     const righe = vuota ? null : testo.split('\n').slice(prima, Math.min(a + 1, blocco.a));
     const base = prima < this.libero.vista.state.doc.lines ? this.libero.vista.state.doc.line(prima + 1).from : 0;
-    return { nome: blocco.nome, provenienza: 'scratch', volume: blocco.info?.volume, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
+    return { nome: blocco.nome, provenienza: 'scratch', volume: blocco.info?.volume, drum: !!blocco.info?.drum, ...B.codice(b, blocco.sezione, righe), bpmBrano: B.bpmDelBrano(b), dove: { editor: this.libero, base } };
   }
 
   // Una scena del beat come clip da mandare: si chiama «beat», porta con sé tutte le scene (per ◀ ▶) e quello da cui parte.
@@ -322,6 +322,7 @@ export class Cue {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
       volume: m.sezioni[carta.i].info?.volume,
+      drum: !!m.sezioni[carta.i].info?.drum, // · drum nella riga della clip: sotto la sua card c'è l'onda
       ...B.codice(m, carta.i, righe),
       bpmBrano: B.bpmDelBrano(m),
       dove: { editor: carta.editor, base: vuota ? 0 : carta.editor.vista.state.doc.line(da + 1).from },
@@ -438,11 +439,10 @@ export class Cue {
     const t = B.testa(this.brano.modello);
     const stash = this.azioni.suoniStash();
     const mancano = (t.suoni ?? []).filter((n) => !(n in stash));
-    if (mancano.length) {
-      this.avviso(`attenzione: nello stash mancano ${mancano.join(', ')} · le clip che li usano non suoneranno`, {
-        persistente: true,
-      });
-    } else this.avviso('');
+    const testo = mancano.length ? `attenzione: nello stash mancano ${mancano.join(', ')} · le clip che li usano non suoneranno` : '';
+    if (testo) this.avviso(testo, { persistente: true });
+    else if (this.avvisoSuoni && $('cue-avviso').textContent === this.avvisoSuoni) this.avviso(''); // tolgo solo il mio avviso, non quelli degli altri
+    this.avvisoSuoni = testo;
   }
 
   // etichetta: se c'è, l'azione si può annullare con ⌘Z (unisci, dividi, rinomina, sezione nuova…); le modifiche al testo no: sono dell'editor.
@@ -485,7 +485,8 @@ export class Cue {
     this.mostraModo();
   }
 
-  // Una clip nuova in fondo al brano attivo o al prossimo (dal synth). Ritorna l'errore, o null. Il brano resta da salvare.
+  // Una clip nuova in fondo al brano attivo o al prossimo (dal synth, o copiata da un altro PROJ). Ritorna l'errore, o null. Il brano resta da salvare.
+  // categoria: il tipo del synth ('bass'…), oppure tutte le info della riga della clip (copia da un altro PROJ).
   aggiungiClip(dove, nome, codice, categoria = '') {
     const slot = this.slot[dove];
     if (!slot) return it.synth.msg.nessunBranoApertoSlot.replace('{dove}', it.synth.destinazioni[dove]);
@@ -494,7 +495,7 @@ export class Cue {
     for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
     const prima = this.linguetta;
     this.linguetta = dove; // modifica() lavora sul brano della linguetta in vista: ci si sposta il tempo di scrivere
-    this.modifica(B.conSezioneInFondo(slot.modello, unico, categoria ? { [categoria]: true } : {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
+    this.modifica(B.conSezioneInFondo(slot.modello, unico, typeof categoria === 'object' ? categoria : categoria ? { [categoria]: true } : {}, codice), prima === dove, it.synth.msg.dalSynth.replace('{nome}', unico));
     this.linguetta = prima;
     this.mostraModo();
     return null;
@@ -695,7 +696,7 @@ export class Cue {
       suFuoco: () => this.attiva(carta),
       suCambio: () => {
         const nuove = carta.editor.codice.split('\n');
-        if (carta.apriSynth) carta.apriSynth.hidden = !haRigaSynth(nuove.join('\n'));
+        if (carta.apriSynth) mostraApri(carta.apriSynth, nuove.join('\n'));
         const mm = this.brano.modello;
         this.modifica(preambolo ? { ...mm, preambolo: nuove } : B.conCorpo(mm, i, nuove), false);
         this.mostraMappa(mm.sezioni.map((s) => this.statoSezione(this.nomeBrano, s.nome)));
@@ -771,9 +772,9 @@ export class Cue {
         });
       };
       mostraVolume();
-      // solo le clip fatte dal synth (con la riga // @synth) si riaprono nel synth
+      // solo le clip fatte dal synth (// @synth) o dalla scheda DRUM (// @drum) si riaprono lì
       const apriSynth = tasto(it.synth.msg.apri, '', it.synth.msg.apriTitolo);
-      apriSynth.hidden = !haRigaSynth(righe.join('\n'));
+      mostraApri(apriSynth, righe.join('\n'));
       apriSynth.onclick = () => this.azioni.apriNelSynth?.(carta.editor.codice, m.sezioni[i].nome);
       carta.apriSynth = apriSynth;
       const togliClip = tasto('×', '', 'Togli la clip dal brano');

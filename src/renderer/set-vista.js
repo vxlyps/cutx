@@ -75,7 +75,7 @@ export class Serata {
 
   pezzoKit(i) {
     const m = this.kit.modello;
-    return { nome: m.sezioni[i].nome, provenienza: `kit §${i + 1}`, volume: m.sezioni[i].info?.volume, ...B.codice(m, i), bpmBrano: B.bpmDelBrano(m), dove: null };
+    return { nome: m.sezioni[i].nome, provenienza: `kit §${i + 1}`, volume: m.sezioni[i].info?.volume, drum: !!m.sezioni[i].info?.drum, ...B.codice(m, i), bpmBrano: B.bpmDelBrano(m), dove: null };
   }
 
   // Sceglie (o toglie, con null) la clip del kit: si segna senza ridisegnare e la riga si porta in vista.
@@ -103,7 +103,7 @@ export class Serata {
     const nomi = new Set(this.kit.modello.sezioni.map((x) => x.nome));
     let unico = nome;
     for (let n = 2; nomi.has(unico); n++) unico = `${nome} ${n}`;
-    this.kit.modello = B.conSezioneInFondo(this.kit.modello, unico, categoria ? { [categoria]: true } : {}, codice);
+    this.kit.modello = B.conSezioneInFondo(this.kit.modello, unico, typeof categoria === 'object' ? categoria : categoria ? { [categoria]: true } : {}, codice);
     this.salvaKitSoon();
     this.azioni.ridisegna();
     return null;

@@ -13,6 +13,7 @@ import os from 'node:os';
 import { AZIONI } from '../renderer/scorciatoie.js';
 import { frazioneAmbra } from '../../strumenti/analizza-prova-lib.mjs';
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 // Lo stesso click del test di sfasamento, più piano: la prova suona dalle casse del Mac.
 const CODICE = `setcpm(120/4)
@@ -55,6 +56,8 @@ const SIMULA_FUOCO = `(() => {
   };
 })()`;
 
+let uscitaApertaAllAvvio = false;
+
 async function primoPiano(finestre) {
   // (niente `app.focus()`: non si ruba il fuoco a quello che l'utente sta usando; basta la simulazione nella pagina)
   const f = finestre.controllo;
@@ -82,6 +85,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   scrivi(`processi: controllo ${pid('controllo')} · live ${pid('live')} · cuffia ${pid('cuffia')}`);
   await aspetta(2);
   await primoPiano(finestre);
+  uscitaApertaAllAvvio = !!finestre.uscita && !finestre.uscita.isDestroyed(); // per «finestra», che nel giro lungo gira dopo altre prove
   let ok = true;
   if (parti.includes('robustezza')) await (async () => {
     await chiedi(finestre.controllo, `cutxProva.avviaTest(${JSON.stringify(CODICE)})`);
@@ -214,6 +218,13 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('suoni-ui')) ok = (await sicura('suoni-ui', provaSuoniUi)) && ok;
   if (parti.includes('strudel')) ok = (await sicura('strudel', provaStrudel)) && ok;
   if (parti.includes('set')) ok = (await sicura('set', provaSet)) && ok;
+  if (parti.includes('proj')) ok = (await sicura('proj', provaProj)) && ok;
+  if (parti.includes('onda')) ok = (await sicura('onda', provaOnda)) && ok;
+  if (parti.includes('mani')) ok = (await sicura('mani', provaMani)) && ok;
+  if (parti.includes('drum')) ok = (await sicura('drum', provaDrum)) && ok;
+  // strumento, non prova (non entra nel giro lungo): registra i punti delle mani che la camera vede, per ritarare i gesti sul video vero
+  if (parti.indexOf('mani-dump') >= 0) ok = (await sicura('mani-dump', provaManiDump)) && ok;
+  if (parti.includes('mani-proiettore')) ok = (await sicura('mani-proiettore', provaManoProiettore)) && ok;
   if (parti.includes('synth')) ok = (await sicura('synth', provaSynth)) && ok;
   if (parti.includes('sfoglia')) ok = (await sicura('sfoglia', provaSfoglia)) && ok;
   if (parti.includes('linguette')) ok = (await sicura('linguette', provaLinguette)) && ok;
@@ -255,6 +266,27 @@ note("c2 [eb2 g2] c3 <bb1 f2>").s("sawtooth").lpf(800).gain(.0001)`;
 const FOTO_CUE = `n("0 3 7 <10 12>").scale("C:minor")
   .s("triangle").room(.6).delay(.4).gain(.0001)`;
 
+// La schermata dei PROJ con un elenco finto (lo stash di prova non si tocca): all'avvio, e col live che suona e una scheda armata.
+export async function fotoProj(finestre, fotoFile) {
+  const giorno = 86400000;
+  const finti = [
+    { numero: 1, sottotitolo: 'prima serata al circolo', modificato: Date.now() - 40 * giorno, brani: 6 },
+    { numero: 2, sottotitolo: 'jungle tech sexy', modificato: Date.now() - 9 * giorno, brani: 11 },
+    { numero: 3, sottotitolo: 'compleanno di Tizia', modificato: Date.now() - 2 * giorno, brani: 4 },
+    { numero: 4, sottotitolo: '', modificato: Date.now() - 3600000, brani: 0 },
+  ];
+  const js = (c) => chiedi(finestre.controllo, c);
+  await js(`(() => { const s = cutxProva.schermataProj; s._elenco = s.azioni.elenco; s.azioni.elenco = async () => ${JSON.stringify(finti)}; return s.mostra({ ultimo: 3 }); })()`);
+  await aspetta(0.8);
+  await writeFile(fotoFile.replace(/\.png$/, '-proj.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  console.log(`[foto] ${fotoFile.replace(/\.png$/, '-proj.png')}`);
+  await js(`(() => { const s = cutxProva.schermataProj; s.radice.hidden = true; s._live = s.azioni.liveSuona; s.azioni.liveSuona = () => true; return s.mostra({ aperto: 3, ultimo: 3 }).then(() => { s.armato = 2; s.disegna(); }); })()`);
+  await aspetta(0.8);
+  await writeFile(fotoFile.replace(/\.png$/, '-proj-live.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+  console.log(`[foto] ${fotoFile.replace(/\.png$/, '-proj-live.png')}`);
+  await js(`(() => { const s = cutxProva.schermataProj; s.azioni.elenco = s._elenco; s.azioni.liveSuona = s._live; s.radice.hidden = true; document.body.classList.remove('con-proj'); })()`);
+}
+
 export async function foto({ finestre, file: fotoFile }) {
   const pronta = () => chiedi(finestre.controllo, '!!globalThis.cutxProva && !!document.querySelector(".cm-editor")');
   await aspettaChe(async () => (await chiedi(finestre.live, 'globalThis.cutxStato?.()')) && (await pronta()));
@@ -277,6 +309,7 @@ export async function foto({ finestre, file: fotoFile }) {
   await aspetta(0.5);
   await writeFile(fotoFile.replace(/\.png$/, '-help.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
   console.log(`[foto] ${fotoFile.replace(/\.png$/, '-help.png')}`);
+  await fotoProj(finestre, fotoFile);
   // I progetti Ableton di Valerio (solo letti), se ci sono
   const progettiVeri = path.join(os.homedir(), 'Desktop', 'x1 Project');
   if (existsSync(progettiVeri)) {
@@ -298,7 +331,7 @@ export async function foto({ finestre, file: fotoFile }) {
   }
   await chiedi(finestre.controllo, `cutxProva.browser.vai('suoni')`);
   // Un brano aperto: intro live, melodia in cuffia, drop selezionata a metà.
-  const cartella = path.join(stash.radice(), 'libreria');
+  const cartella = path.join(stash.cartellaProj(), 'libreria');
   const file = 'foto_notte.cutx';
   await writeFile(path.join(cartella, file), NOTTE);
   const js = (codice) => chiedi(finestre.controllo, codice);
@@ -385,7 +418,7 @@ async function provaBrani({ finestre, scrivi }) {
     await aspetta(1);
     return fatto;
   };
-  const cartella = path.join(stash.radice(), 'libreria');
+  const cartella = path.join(stash.cartellaProj(), 'libreria');
   const leggi = (file) => readFile(path.join(cartella, file), 'utf8');
   const oggi = new Date().toLocaleDateString('sv-SE');
   const sigla = Date.now().toString(36);
@@ -752,7 +785,7 @@ async function provaLivelli({ finestre, scrivi }) {
   const sigla = Date.now().toString(36);
   wc().executeJavaScript('cutxProva.salvaLiveComeBrano()');
   await rispondi(`live prova ${sigla}`);
-  const file = path.join(stash.radice(), 'libreria', `live_prova_${sigla}.cutx`);
+  const file = path.join(stash.cartellaProj(), 'libreria', `live_prova_${sigla}.cutx`);
   const salvato = await readFile(file, 'utf8').catch(() => '');
   const b = await import('../renderer/brano.js');
   const sezioni = b.leggi(salvato).sezioni;
@@ -790,7 +823,7 @@ async function provaBrowser({ finestre, scrivi }) {
   await mkdir(cartellaSuoni, { recursive: true });
   await writeFile(path.join(cartellaSuoni, 'a.wav'), wavSilenzio(3));
   await writeFile(path.join(cartellaSuoni, 'b.wav'), 'RIFF');
-  await writeFile(path.join(stash.radice(), 'libreria', file), '// @brano browser\n// @bpm 100\n// @sezione uno\ns("sine")\n');
+  await writeFile(path.join(stash.cartellaProj(), 'libreria', file), '// @brano browser\n// @bpm 100\n// @sezione uno\ns("sine")\n');
   try {
     await js('cutxProva.ricaricaStash()');
     await js('cutxProva.fermaTutto?.(); cutxProva.cue.cambiaModo("libero"); cutxProva.scriviCue("")');
@@ -891,7 +924,7 @@ async function provaBrowser({ finestre, scrivi }) {
     await js(`(() => { const c = document.getElementById('cerca'); c.value = ''; c.dispatchEvent(new Event('input')); })()`);
   } finally {
     await rm(cartellaSuoni, { recursive: true, force: true });
-    await rm(path.join(stash.radice(), 'libreria', file), { force: true });
+    await rm(path.join(stash.cartellaProj(), 'libreria', file), { force: true });
     await js('cutxProva.ricaricaStash()');
   }
   return ok;
@@ -1261,7 +1294,7 @@ async function provaAbleton({ finestre, scrivi }) {
     controlla('e si richiude', (await conta('#importa-sezioni .sezione-codice')) === 0);
     await js(`cutxProva.importa.vai(3)`);
     // importa: il brano nella libreria, i suoni nello stash, aperto nel CUE in modalità brano
-    const fileBrano = path.join(stash.radice(), 'libreria', 'tre_notti.cutx');
+    const fileBrano = path.join(stash.cartellaProj(), 'libreria', 'tre_notti.cutx');
     const cartellaSuono = path.join(stash.radice(), 'suoni', 'tre_loop');
     await rm(fileBrano, { force: true });
     await js(`document.getElementById('importa-vai').click()`);
@@ -1331,7 +1364,7 @@ async function provaAblotonVeri({ finestre, scrivi, js, controlla }) {
     for (const [nome, sigla] of [['x1', 'x1'], ['Mayia u influeced me a bit maybe?', 'mayia']]) {
       const percorso = path.join(cartellaProgetti, `${nome}.als`);
       const titolo = `prova${sigla}`; // una sola parola: i nomi dei suoni cominciano così e non si confondono con quelli di Valerio
-      const fileBrano = path.join(radiceStash, 'libreria', `prova${sigla}.cutx`);
+      const fileBrano = path.join(stash.cartellaProj(), 'libreria', `prova${sigla}.cutx`);
       if (existsSync(fileBrano)) throw new Error(`${fileBrano} esiste già: non lo tocco`);
       const modello = await leggiAlsFile(percorso);
       // quello che il pannello sa dei file: quanto pesano e se si possono ritagliare
@@ -1513,7 +1546,7 @@ export async function schermate({ finestre, cartella }) {
     await scatta('browser-help');
     await scheda('suoni');
     // il CUE in modalità brano
-    const cartellaLibreria = path.join(stash.radice(), 'libreria');
+    const cartellaLibreria = path.join(stash.cartellaProj(), 'libreria');
     await writeFile(path.join(cartellaLibreria, 'schermate_notte.cutx'), NOTTE);
     await js(`cutxProva.cue.apri('schermate_notte.cutx')`);
     await aspetta(1);
@@ -1688,8 +1721,8 @@ async function provaTempo({ finestre, scrivi }) {
     await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(${bpm}/4)\\ns("sine*2").gain(.0001)')`);
     await aspetta(0.8);
   };
-  const file = path.join(stash.radice(), 'libreria', 'prova_tempo.cutx');
-  const filesLibro = path.join(stash.radice(), 'libreria', 'prova_tempo_salvato.cutx');
+  const file = path.join(stash.cartellaProj(), 'libreria', 'prova_tempo.cutx');
+  const filesLibro = path.join(stash.cartellaProj(), 'libreria', 'prova_tempo_salvato.cutx');
   await writeFile(file, '// @brano prova tempo\n// @bpm 86\nsetcpm(86/4)\n// @sezione drum\ns("sine*2").gain(.0001)\n// @sezione loop\ns("sine").begin(.1).end(.5).gain(.0001)\n');
   try {
     await js('cutxProva.cue.brano = null; cutxProva.cue.cambiaModo("libero"); cutxProva.fermaTutto()');
@@ -2153,7 +2186,7 @@ export async function saltino({ finestre }) {
   console.log(`[saltino] ${tipi.length === 0 ? 'OK   ' : 'FALLITO'} ⌘S non manda niente ai motori (a parte i ping)${tipi.length ? ` · ${tipi.join(', ')}` : ''}`);
   await fase('controllo: i motori rileggono lo stash', () => dieci(() => js('window.cutx.rileggiStash()')));
   // una libreria grande: 300 brani (file finti, tolti alla fine)
-  const libreria = path.join(stash.radice(), 'libreria');
+  const libreria = path.join(stash.cartellaProj(), 'libreria');
   const finti = Array.from({ length: 300 }, (_, i) => path.join(libreria, `saltino_zz_${i}.cutx`));
   for (const f of finti) await writeFile(f, '// @brano finto\n// @bpm 120\n// @sezione uno\ns("sine*2")\n// @sezione due\ns("hh*8")\n');
   await js('window.cutx.rileggiStash()');
@@ -2171,7 +2204,7 @@ export async function saltino({ finestre }) {
   await rm(cartellaSuono, { recursive: true, force: true });
   await js('window.cutx.rileggiStash()');
   console.log(`[saltino] JSON ${JSON.stringify(rapporto)}`);
-  await rm(path.join(stash.radice(), 'libreria', 'saltino_prova.cutx'), { force: true });
+  await rm(path.join(stash.cartellaProj(), 'libreria', 'saltino_prova.cutx'), { force: true });
   return true;
 }
 
@@ -2697,8 +2730,7 @@ async function provaClipVisibili({ finestre, scrivi }) {
     ok &&= !!vero;
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
-  const radice = stash.radice();
-  const file = path.join(radice, 'libreria', 'brano_1.cutx');
+  const file = path.join(stash.cartellaProj(), 'libreria', 'brano_1.cutx');
   const testo = existsSync(file) ? await readFile(file, 'utf8') : '// @brano b\n// @clip melodia\ns("sine").gain(.0001)\n// @clip sub\ns("sine").gain(.0001)\n// @clip reese\ns("sine").gain(.0001)\n// @clip pad\ns("sine").gain(.0001)\n';
   await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
   try {
@@ -2852,15 +2884,16 @@ async function provaPassaggio({ finestre, scrivi }) {
   const bpm = async () => (await js('cutxProva.diagnosi()')).bpm;
   const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
   const radice = stash.radice();
+  const libreriaVera = path.join(stash.cartellaProj(), 'libreria');
   const brani3 = ['brano_1.cutx', 'brano_2.cutx', 'brano_3.cutx'];
-  if (!brani3.every((f) => existsSync(path.join(radice, 'libreria', f)))) {
+  if (!brani3.every((f) => existsSync(path.join(libreriaVera, f)))) {
     scrivi('INFO  nello stash di prova non ci sono brano_1, brano_2 e brano_3: la prova del passaggio non si fa');
     return true;
   }
   // uno stash temporaneo con il set di prova esatto (i tre brani veri, copiati; i suoni collegati in sola lettura): il set vero di Valerio non si tocca
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-passaggio-'));
   await mkdir(path.join(tmp, 'libreria'), { recursive: true });
-  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), await readFile(path.join(radice, 'libreria', f), 'utf8'));
+  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), await readFile(path.join(libreriaVera, f), 'utf8'));
   await writeFile(path.join(tmp, 'set.cutx'), '// @set prova serata\n\nbrano_1.cutx · apre\nbrano_2.cutx\nbrano_3.cutx · chiude\n');
   if (existsSync(path.join(radice, 'suoni'))) await symlink(path.join(radice, 'suoni'), path.join(tmp, 'suoni'));
   const vero = stash._percorsoPerProva(tmp);
@@ -2912,8 +2945,17 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(1);
     controlla('CUFFIA + ◀ ancora: il brano che suona (1) non si può scegliere come prossimo', (await ling('prossimo')).includes('▸ brano 2'), await ling('prossimo'));
     await midi(0x90, cuffia, 0);
-    // il tasto 3 tenuto: passa a brano 2 con la rampa
+    // il tasto 3 tenuto: passa a brano 2 con la rampa. Il BPM si legge di continuo da PRIMA di premere: la rampa parte mentre il
+    // tasto è ancora giù, e leggendo solo dopo il rilascio a volte si perdeva l'inizio (prova ballerina).
     const t3 = await tasto(3);
+    const visti = [];
+    let campiona = true;
+    const campionatore = (async () => {
+      while (campiona) {
+        visti.push(Math.round((await bpm()) * 100) / 100);
+        await aspetta(0.15);
+      }
+    })();
     await midi(0x90, t3, 127);
     await aspetta(0.4);
     controlla('il tasto 3 lampeggia mentre lo tengo', (await js(`cutxProva.controllerMidi.desiderate().get('t${t3}')[2]`)) === 1);
@@ -2921,13 +2963,11 @@ async function provaPassaggio({ finestre, scrivi }) {
     await aspetta(0.9);
     controlla('scattato: la barra è verde e piena (classe scatta), non più in carica', await js(`document.getElementById('passa-brano').classList.contains('scatta') && !document.getElementById('passa-brano').classList.contains('carica')`));
     await midi(0x90, t3, 0);
-    const visti = [];
-    let dopoPasso = [];
-    for (let i = 0; i < 40; i++) {
-      visti.push(Math.round((await bpm()) * 100) / 100);
-      if (i === 4) dopoPasso = (await live()).livelli; // un'istantanea poco dopo l'entrata del brano nuovo (la rampa dura ~3 s, lo sweep 11)
-      await aspetta(0.35);
-    }
+    await aspetta(1.4);
+    const dopoPasso = (await live()).livelli; // un'istantanea poco dopo l'entrata del brano nuovo (la rampa dura ~3 s, lo sweep 11)
+    await aspetta(11.6);
+    campiona = false;
+    await campionatore;
     const sub = dopoPasso.find((l) => l.nome === 'sub');
     controlla('transizione (sweep 8): la clip vecchia non scelta (sub) esce, con una fine già programmata', !!sub && sub.a !== null && Number.isFinite(sub.a), JSON.stringify(sub));
     controlla('transizione: la clip scelta sul controller (melodia) resta', dopoPasso.some((l) => l.nome === 'melodia' && l.a === null), JSON.stringify(dopoPasso.map((l) => [l.nome, l.a])));
@@ -3024,14 +3064,14 @@ async function provaSet({ finestre, scrivi }) {
     controlla('un clic sul nome apre il codice della clip', (await js(`document.querySelectorAll('#elenco .kit-codice .cm-content').length`)) === 1);
     await js(`cutxProva.serata.editors[0].codice = 'note("e2").s("sine").gain(.0001)'`);
     await aspetta(1.2);
-    controlla('la modifica va in kit.cutx', (await readFile(path.join(tmp, 'kit.cutx'), 'utf8')).includes('note("e2")'), await readFile(path.join(tmp, 'kit.cutx'), 'utf8'));
+    controlla('la modifica va in kit.cutx', (await readFile(path.join(stash.cartellaProj(), 'kit.cutx'), 'utf8')).includes('note("e2")'), await readFile(path.join(stash.cartellaProj(), 'kit.cutx'), 'utf8'));
     // aggiungere un brano al set dal menu
     await js(`document.querySelector('#elenco .kit-riga')?.parentElement; (() => { const s = document.querySelector('#elenco .aggiungi-al-set'); s.value = 'd.cutx'; s.dispatchEvent(new Event('change')); })()`);
     await aspetta(0.8);
-    controlla('+ aggiungi: d.cutx entra nel set (e nel file)', (await readFile(path.join(tmp, 'set.cutx'), 'utf8')).includes('d.cutx') && (await righe()).length === 4);
+    controlla('+ aggiungi: d.cutx entra nel set (e nel file)', (await readFile(path.join(stash.cartellaProj(), 'set.cutx'), 'utf8')).includes('d.cutx') && (await righe()).length === 4);
     await js(`document.querySelectorAll('#elenco .set-riga')[3].querySelectorAll('.strumenti-set button')[0].click()`); // «apre» su d
     await aspetta(0.6);
-    controlla('«apre» sposta il segno (file riscritto)', /d\.cutx · apre/.test(await readFile(path.join(tmp, 'set.cutx'), 'utf8')) && !/a\.cutx · apre/.test(await readFile(path.join(tmp, 'set.cutx'), 'utf8')));
+    controlla('«apre» sposta il segno (file riscritto)', /d\.cutx · apre/.test(await readFile(path.join(stash.cartellaProj(), 'set.cutx'), 'utf8')) && !/a\.cutx · apre/.test(await readFile(path.join(stash.cartellaProj(), 'set.cutx'), 'utf8')));
     const cartellaFoto = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'set');
     await mkdir(cartellaFoto, { recursive: true });
     await js(`document.querySelectorAll('#elenco .set-riga')[1].dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
@@ -3058,7 +3098,7 @@ async function provaSfoglia({ finestre, scrivi }) {
   const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  const brano = await readFile(path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test', 'libreria', 'brano_1.cutx'), 'utf8');
+  const brano = await readFile(path.join(process.env.CUTX_PROVA_STASH || path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test'), 'libreria', 'brano_1.cutx'), 'utf8');
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
   await aspetta(1.5);
   const scelta = () => js(`cutxProva.cue.nomeSezioneScelta()`);
@@ -4225,6 +4265,8 @@ async function provaLinguette({ finestre, scrivi }) {
   const tasto3 = await js(`cutxProva.controllerMidi.tab.tasti[2]`);
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  // nel giro lungo le prove prima lasciano brani nelle linguette: si parte da vuote
+  await js(`cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.cambiaLinguetta('prossimo'); cutxProva.cue.mostraLinguette()`);
   const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
   const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*4").gain(.0001)\n// @clip basso\nnote("a1 a1 c2 e2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
   const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
@@ -4262,12 +4304,756 @@ async function provaLinguette({ finestre, scrivi }) {
   return ok;
 }
 
+// --- i PROJ (5.1): uno stash «di prima» migrato in PROJ 01, la schermata, il numero verde col live, nuovo PROJ col live che suona,
+// «altri PROJ» in libreria (copia di brani e clip), sottotitolo, interruttore «riapri». Tutto in uno stash temporaneo.
+async function provaProj({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-proj-'));
+  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
+  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\nnote("a1 c2").s("sine").gain(.0001)\n// @clip pad\nnote("e3").s("triangle").gain(.0001)\n';
+  const prima = {
+    'libreria/notte.cutx': notte,
+    'libreria/alba.cutx': alba,
+    'set.cutx': '// @set prova\n\nnotte.cutx · apre\nalba.cutx\n',
+    'kit.cutx': '// @clip colpo\ns("sine*4").gain(.0001)\n',
+    'colpi.cutx': '// i colpi di prova\n',
+  };
+  await mkdir(path.join(tmp, 'libreria'), { recursive: true });
+  for (const [f, t] of Object.entries(prima)) await writeFile(path.join(tmp, f), t);
+  const orari = {};
+  for (const f of Object.keys(prima)) orari[f] = (await stat(path.join(tmp, f))).mtimeMs;
+  const p1 = path.join(tmp, 'PROJ', 'PROJ 01');
+  const p2 = path.join(tmp, 'PROJ', 'PROJ 02');
+  const leggi = (f) => readFile(f, 'utf8').catch(() => null);
+  const vero = stash._percorsoPerProva(tmp);
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraLinguette(); window.cutx.salvaPreferenze({ riapriUltimoProj: false })`);
+    await aspetta(1.5); // il live si svuota
+    await js('cutxProva.ricaricaStash()');
+    await aspetta(1);
+    // --- la migrazione ---
+    controlla('migrazione: PROJ 01 ha libreria, set e kit', (await leggi(path.join(p1, 'libreria', 'notte.cutx'))) === notte && (await leggi(path.join(p1, 'set.cutx'))) === prima['set.cutx'] && (await leggi(path.join(p1, 'kit.cutx'))) === prima['kit.cutx']);
+    controlla('colpi.cutx resta solo nella radice (comune a tutti)', !existsSync(path.join(p1, 'colpi.cutx')) && existsSync(path.join(tmp, 'colpi.cutx')));
+    let intatti = true;
+    for (const [f, t] of Object.entries(prima)) intatti &&= (await leggi(path.join(tmp, f))) === t && (await stat(path.join(tmp, f))).mtimeMs === orari[f];
+    controlla('i file di prima sono intatti (contenuto e data)', intatti);
+    controlla('la barra dice «PROJ 01»', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01', await js(`document.getElementById('proj-nome').textContent`));
+    controlla('la libreria ha i brani di PROJ 01', (await js('window.cutx.libreria()')).length === 2);
+    await js('cutxProva.ricaricaStash()');
+    await aspetta(0.5);
+    controlla('una seconda apertura non migra di nuovo (c\'è solo PROJ 01)', (await readdir(path.join(tmp, 'PROJ'))).filter((x) => !x.startsWith('.')).join() === 'PROJ 01');
+
+    // --- la schermata ---
+    const schede = () => js(`[...document.querySelectorAll('#proj-griglia .proj-scheda')].map((s) => ({ n: s.dataset.numero, testo: s.textContent, live: s.classList.contains('in-live'), aperta: s.classList.contains('aperta') }))`);
+    await js(`document.getElementById('proj').click()`);
+    await aspetta(0.5);
+    let sc = await schede();
+    controlla('il tasto PROJ apre la schermata: PROJ 01 e «+ nuovo PROJ»', !(await js(`document.getElementById('proj-schermata').hidden`)) && sc.length === 2 && sc[1].n === 'nuovo', JSON.stringify(sc));
+    controlla('PROJ 01: «aperto», 2 brani, numero bianco (il live è fermo)', sc[0].aperta && /aperto/.test(sc[0].testo) && /2 brani/.test(sc[0].testo) && !sc[0].live, JSON.stringify(sc[0]));
+    await js(`document.getElementById('proj-schermata').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    controlla('esc torna alla postazione', await js(`document.getElementById('proj-schermata').hidden`));
+    // una clip di notte va live: il numero diventa verde
+    await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(notte)})`);
+    await aspetta(0.5);
+    await js(`cutxProva.cue.scegliSezione(0); document.getElementById('go-live').click()`);
+    await aspetta(3);
+    controlla('la clip è live', (await live()).livelli?.some((l) => l.nome === 'basso'), JSON.stringify((await live()).livelli?.map((l) => l.nome)));
+    await js(`document.getElementById('proj').click()`);
+    await aspetta(0.5);
+    sc = await schede();
+    controlla('col live che suona da PROJ 01 il suo numero è verde', sc[0].live, JSON.stringify(sc[0]));
+    controlla('e la schermata dice che il live suona', /il live suona/.test(await js(`document.getElementById('proj-avviso').textContent`)));
+    // nuovo PROJ col live che suona: il primo invio chiede conferma, il secondo crea
+    const invio = `(() => { const i = document.querySelector('.proj-nuovo .proj-sottotitolo'); i.value = 'compleanno di prova'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`;
+    await js(invio);
+    await aspetta(0.5);
+    controlla('nuovo PROJ col live che suona: prima chiede conferma', /premi di nuovo/.test(await js(`document.getElementById('proj-avviso').textContent`)) && !existsSync(p2));
+    await js(invio);
+    await aspetta(1.5);
+    controlla('al secondo invio nasce PROJ 02 e si apre', existsSync(p2) && (await js(`document.getElementById('proj-schermata').hidden`)) && (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 02 · compleanno di prova', await js(`document.getElementById('proj-nome').textContent`));
+    controlla('PROJ 02 nasce con il kit di PROJ 01 e la libreria vuota', (await leggi(path.join(p2, 'kit.cutx'))) === prima['kit.cutx'] && (await js('window.cutx.libreria()')).length === 0);
+    controlla('il live continua a suonare', (await live()).livelli?.some((l) => l.nome === 'basso'));
+    // --- altri PROJ ---
+    await js(`cutxProva.browser.vai('libreria')`);
+    await aspetta(0.3);
+    await js(`document.querySelector('.proj-altro')?.click()`);
+    await aspetta(0.8);
+    const brani = await js(`[...document.querySelectorAll('.proj-brano .nome')].map((n) => n.textContent)`);
+    controlla('in libreria «altri PROJ» mostra PROJ 01 e i suoi brani', (await js(`document.querySelector('.proj-altro .nome')?.textContent`))?.startsWith('PROJ 01') && brani.includes('notte') && brani.includes('alba'), JSON.stringify(brani));
+    await js(`[...document.querySelectorAll('.proj-brano')].find((r) => r.querySelector('.nome').textContent === 'notte').querySelector('button').click()`);
+    await aspetta(0.8);
+    const copiato = await leggi(path.join(p2, 'libreria', 'notte.cutx'));
+    controlla('«copia» porta notte in PROJ 02 con «// viene da PROJ 01 · notte»', copiato?.includes('// viene da PROJ 01 · notte') && copiato.includes('note("c2 c2 eb2 g2")'), copiato?.slice(0, 120));
+    controlla('e la libreria di PROJ 02 lo mostra', (await js('window.cutx.libreria()')).some((b) => b.file === 'notte.cutx'));
+    // le clip di alba: → kit
+    await js(`[...document.querySelectorAll('.proj-brano')].find((r) => r.querySelector('.nome').textContent === 'alba').click()`);
+    await aspetta(0.8);
+    const clip = () => js(`[...document.querySelectorAll('.proj-clip')].map((r) => ({ nome: r.querySelector('.nome').textContent, tasti: [...r.querySelectorAll('button')].map((b) => b.textContent) }))`);
+    controlla('aprendo alba si vedono le sue clip', (await clip()).map((c) => c.nome).join() === 'basso,pad', JSON.stringify(await clip()));
+    await js(`cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraBrano(true); cutxProva.browser.mostra()`);
+    controlla('senza brano aperto nel CUE c\'è solo «→ kit»', (await clip())[1]?.tasti.join() === '→ kit', JSON.stringify(await clip()));
+    await js(`[...document.querySelectorAll('.proj-clip')].find((r) => r.querySelector('.nome').textContent === 'pad').querySelector('button').click()`);
+    await aspetta(0.8);
+    const kit2 = await leggi(path.join(p2, 'kit.cutx'));
+    controlla('→ kit: la clip pad entra nel kit di PROJ 02, con «viene da PROJ 01 · alba»', kit2?.includes('// @clip pad\n// viene da PROJ 01 · alba\nnote("e3")') && kit2.startsWith(prima['kit.cutx'].trim()), kit2);
+    // → brano: nel brano aperto nel CUE
+    await js(`cutxProva.cue.apri('notte.cutx')`);
+    await aspetta(0.8);
+    await js(`cutxProva.browser.mostra()`);
+    await js(`[...document.querySelectorAll('.proj-clip')].find((r) => r.querySelector('.nome').textContent === 'basso').querySelectorAll('button')[0].click()`);
+    await aspetta(0.5);
+    const sezioni = await js('cutxProva.cue.brano?.modello.sezioni.map((s) => s.nome)');
+    controlla('→ brano: la clip basso va in fondo al brano aperto (nome libero «basso 2»)', JSON.stringify(sezioni) === JSON.stringify(['basso', 'pad', 'basso 2']), JSON.stringify(sezioni));
+    controlla('e porta la riga «viene da»', (await js('cutxProva.cue.brano.modello.sezioni[2].corpo[0]')) === '// viene da PROJ 01 · alba');
+    // --- sottotitolo e cambio PROJ ---
+    await js(`document.getElementById('proj').click()`);
+    await aspetta(0.5);
+    await js(`(() => { const i = document.querySelector('.proj-scheda[data-numero="1"] .proj-sottotitolo'); i.value = 'serata di prova'; i.dispatchEvent(new Event('change')); })()`);
+    await aspetta(0.5);
+    controlla('il sottotitolo si scrive sulla scheda e va in proj.json', JSON.parse((await leggi(path.join(p1, 'proj.json'))) ?? '{}').sottotitolo === 'serata di prova');
+    await js(`cutxProva.fermaTutto()`);
+    await aspetta(1.5);
+    await js(`cutxProva.schermataProj.mostra({ aperto: 2, ultimo: 2 })`);
+    // un clic vero col mouse (premi, tieni, rilascia): il pulsante non deve saltare in alto mentre è premuto (con l'effetto «tasto premuto» saltava e il clic andava a vuoto)
+    const centro = () => js(`(() => { const r = document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2), r.top]; })()`);
+    const [bx, by, alto0] = await centro();
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'mouseMove', x: bx, y: by });
+    wc.sendInputEvent({ type: 'mouseDown', x: bx, y: by, button: 'left', clickCount: 1 });
+    await aspetta(0.4);
+    const [, , alto1] = await centro();
+    wc.sendInputEvent({ type: 'mouseUp', x: bx, y: by, button: 'left', clickCount: 1 });
+    await aspetta(1);
+    controlla('tenendo premuto «apri» il pulsante non salta', Math.abs(alto1 - alto0) < 0.5, `${alto0} → ${alto1}`);
+    if (!(await js(`document.getElementById('proj-schermata').hidden`))) await js(`document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').click()`);
+    await aspetta(1);
+    controlla('a live fermo «apri» cambia PROJ subito', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01 · serata di prova' && (await js(`document.getElementById('proj-schermata').hidden`)));
+    controlla('stash.json ricorda l\'ultimo PROJ', JSON.parse((await leggi(path.join(tmp, 'stash.json'))) ?? '{}').proj?.ultimo === 1);
+    // --- l'interruttore ---
+    await js(`cutxProva.imp.disegna()`);
+    controlla('nelle impostazioni c\'è «riapri l\'ultimo PROJ»', /riapri l'ultimo PROJ/.test(await js(`document.getElementById('imp-proj-riapri').textContent`)));
+  } finally {
+    await js(`cutxProva.fermaTutto(); cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraLinguette(); cutxProva.schermataProj.radice.hidden = true`).catch(() => {});
+    stash._percorsoPerProva(vero);
+    await js('cutxProva.ricaricaStash()').catch(() => {});
+    await aspetta(1);
+    await rm(tmp, { recursive: true, force: true });
+  }
+  return ok;
+}
+
+// --- l'onda LED sotto la batteria (5.1): una clip «· drum» live col volume generale a zero (l'orecchio del livello sta prima del master:
+// misura il suono vero, ma dalle casse non esce niente). Card del LIVE: onda e non note, puntini accesi, clic → note e ritorno.
+// Proiettore: onda grande, e l'interruttore «onda sotto la batteria» la spegne.
+async function provaOnda({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  // quanti puntini verdi accesi ci sono nel canvas dell'onda (pixel col verde marcio pieno)
+  const accesi = (dove) => `(() => { const cv = ${dove}; if (!cv || !cv.width) return -1; const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 170 && d[i] > 130 && d[i + 2] < 110) n++; return n; })()`;
+  const carta = (nome) => `[...cutxProva.pila.carte.values()].find((c) => c.livello.nome === '${nome}')`;
+  const brano = '// @brano onde\n// @bpm 120\nsetcpm(120/4)\n// @clip colpi · drum\ns("square*4").decay(.08).sustain(0).gain(.5)\n// @clip basso\nnote("c2 eb2").s("sine").gain(.3)\n';
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+    await aspetta(1.5);
+    await js(`cutxProva.cue.apriModello('onde.cutx', ${JSON.stringify(brano)})`);
+    await aspetta(0.5);
+    // prima solo «basso» (melodica, nessun beat live): senza il segno · drum resta con le note, anche se è il primo livello che suona
+    await js(`cutxProva.cue.scegliSezione(1); document.getElementById('go-live').click()`);
+    await aspetta(3);
+    const solo = (await live()).livelli ?? [];
+    controlla('senza beat, una clip melodica da sola NON è batteria (resta con le note)', solo.length === 1 && solo[0].nome === 'basso' && solo[0].batteria === false, JSON.stringify(solo.map((x) => [x.nome, x.batteria])));
+    controlla('e la sua card ha le note, nessuna onda, e il motore non manda picchi', !(await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)) && (await js('cutxProva.pila.onde.size')) === 0 && !(await js('cutxProva.pila.vuoleOnde()')), JSON.stringify(await js(`[${await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)}, cutxProva.pila.onde.size, cutxProva.pila.vuoleOnde()]`)));
+    await js(`cutxProva.cue.scegliSezione(0); document.getElementById('go-live').click()`);
+    await aspetta(3.5);
+    const l = (await live()).livelli ?? [];
+    controlla('nel live «colpi» (· drum) è batteria, «basso» no', l.find((x) => x.nome === 'colpi')?.batteria === true && l.find((x) => x.nome === 'basso')?.batteria === false, JSON.stringify(l.map((x) => [x.nome, x.batteria])));
+    controlla('col volume generale a zero dalle casse non esce niente', (await live()).master === 0, String((await live()).master));
+    const ids = await js(`[...cutxProva.pila.onde.keys()].map((id) => cutxProva.pila.carte.get(id)?.livello.nome)`);
+    controlla('la postazione riceve i picchi solo della batteria', JSON.stringify(ids) === '["colpi"]', JSON.stringify(ids));
+    controlla('la card di «colpi» ha l\'onda, quella di «basso» le note', (await js(`${carta('colpi')}?.striscia.radice.classList.contains('onda')`)) && !(await js(`${carta('basso')}?.striscia.radice.classList.contains('onda')`)));
+    const n = await js(accesi(`${carta('colpi')}?.striscia.note`));
+    controlla('sotto «colpi» ci sono puntini accesi (il suono vero, anche a master zero)', n > 20, String(n));
+    await js(`${carta('colpi')}.striscia.radice.click()`);
+    await aspetta(0.3);
+    controlla('un clic sulla striscia torna alle note', !(await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`)));
+    // il proiettore segue il clic di ogni card
+    if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+    await aspetta(2.5);
+    const ondeProiettore = () => chiedi(finestre.uscita, `document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`);
+    controlla('il proiettore segue il clic: card rimessa a note, sul proiettore niente onda', (await ondeProiettore()) === 0);
+    await aspetta(1);
+    controlla('nessuna card mostra l\'onda: la postazione non la richiede più al motore', (await js('cutxProva.pila.vuoleOnde()')) === false);
+    await js(`${carta('colpi')}.striscia.radice.click()`);
+    await aspetta(0.3);
+    controlla('un altro clic rimette l\'onda', await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`));
+    await aspetta(1);
+    controlla('e il proiettore la rimette', (await ondeProiettore()) === 1);
+    await js(`${carta('basso')}.striscia.radice.click()`);
+    await aspetta(0.3);
+    controlla('sulla clip melodica il clic non cambia niente (restano le note)', !(await js(`${carta('basso')}.striscia.radice.classList.contains('onda')`)));
+    // il proiettore
+    if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+    await aspetta(3);
+    const u = (c) => chiedi(finestre.uscita, c);
+    controlla('sul proiettore una sola onda (sotto «colpi»)', (await u(`document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`)) === 1);
+    const nu = await u(accesi(`document.querySelector('.striscia-viva.onda canvas')`));
+    controlla('e ha i puntini accesi', nu > 50, String(nu));
+    const alta = await u(`document.querySelector('.striscia-viva.onda')?.offsetHeight ?? 0`);
+    controlla('ed è grande (più alta della striscia delle note)', alta > (await u(`document.querySelector('.striscia-viva:not(.onda)')?.offsetHeight ?? 0`)) * 2, String(alta));
+    // le foto, per guardarle (Scrivania → cutx-schermate → onda)
+    const cartellaFoto = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'onda');
+    await mkdir(cartellaFoto, { recursive: true });
+    await writeFile(path.join(cartellaFoto, 'vera-postazione.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await writeFile(path.join(cartellaFoto, 'vera-proiettore.png'), (await finestre.uscita.webContents.capturePage()).toPNG());
+    const prima = (await js('window.cutx.preferenze()')).testiPubblico ?? {};
+    await js(`window.cutx.salvaPreferenze({ testiPubblico: { ...${JSON.stringify(prima)}, onda: { acceso: false } } })`);
+    await aspetta(1);
+    controlla('«onda sotto la batteria» spenta: sul proiettore tornano le note', (await u(`document.querySelectorAll('.striscia-viva.onda:not([hidden])').length`)) === 0);
+    controlla('e anche sulla postazione niente onda (l\'interruttore generale comanda tutto)', !(await js(`${carta('colpi')}.striscia.radice.classList.contains('onda')`)) && (await js('cutxProva.pila.vuoleOnde()')) === false);
+    await js(`window.cutx.salvaPreferenze({ testiPubblico: ${JSON.stringify(prima)} })`);
+    await aspetta(0.5);
+    await js(`cutxProva.imp.disegna()`);
+    controlla('l\'interruttore è nelle impostazioni del proiettore', /onda sotto la batteria/.test(await js(`document.body.textContent`)));
+  } finally {
+    await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+    await js('window.cutx.uscitaAperta().then((a) => a && window.cutx.uscitaOnOff())').catch(() => {});
+    await aspetta(1);
+  }
+  return ok;
+}
+
+// --- le mani (sperimentale): un video di una mano che sale e scende al posto della webcam (~/Progetti/cutx-prova-mani/mano.mjpeg,
+// o CUTX_VIDEO_MANO). La finestra «mani» è un processo a parte: qui si controlla che riconosca la mano, quanto pesa, e che da spenta sparisca.
+async function provaMani({ finestre, scrivi }) {
+  const video = process.env.CUTX_VIDEO_MANO || path.join(os.homedir(), 'Progetti', 'cutx-prova-mani', 'mano.mjpeg');
+  if (!existsSync(video)) {
+    scrivi(`SALTATA mani: manca il video di prova (${video}) · da mano.mov: ffmpeg -i mano.mov -vf scale=640:-2,fps=30 -an -c:v mjpeg -f mjpeg mano.mjpeg`);
+    return true;
+  }
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const cpu = () => {
+    const pid = finestre.mani && !finestre.mani.isDestroyed() ? finestre.mani.webContents.getOSProcessId() : 0;
+    return app.getAppMetrics().find((m) => m.pid === pid)?.cpu.percentCPUUsage ?? 0;
+  };
+  // Il collegamento al live: tasto M, la riga «mano» sul filtro, il fader che cede il posto, la mano persa che torna aperta.
+  async function collegamento() {
+    const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+    const mano = (g) => g.map((r) => /^all\(x => x\.lpf\((\d+)\)(?:\.lpq\(\d+\))?\) \/\/ mano$/.exec(r)?.[1]).find(Boolean);
+    const faderRiga = 'all(x => x.lpf(900))';
+    await js(`cutxProva.globaleDelController('fader', ${JSON.stringify(faderRiga)})`);
+    await aspetta(0.6);
+    controlla('prima delle mani: nel live c\'è la riga del fader', (await live()).globali.includes(faderRiga));
+    await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', bubbles: true }))`);
+    await aspetta(0.5);
+    controlla('il tasto M accende le mani (finestra «mani» viva, finestrella visibile)', !!finestre.mani && !(await js(`document.getElementById('mani-finestra').hidden`)));
+    const serie = [];
+    const t0 = Date.now();
+    let faderVisto = false;
+    let manoPrima = null;
+    while (Date.now() - t0 < 46000) {
+      const g = (await live()).globali ?? [];
+      const f = await js(`(() => { const f = cutxProva.maniControllo(); return [f.riga !== null, f.fase, f.valori[0], !!cutxProva.maniClient.ultimaMano?.visibile]; })()`);
+      const hz = mano(g);
+      if (hz && manoPrima === null) manoPrima = Date.now() - t0;
+      if (hz && g.includes(faderRiga)) faderVisto = true;
+      serie.push({ t: Date.now() - t0, hz: hz ? Number(hz) : null, controlla: f[0], fase: f[1], vista: f[3] });
+      await aspetta(0.25);
+    }
+    const hzs = serie.filter((x) => x.hz !== null).map((x) => x.hz);
+    scrivi(`INFO  mani: la riga «mano» è apparsa dopo ${manoPrima} ms · filtro da ${Math.min(...hzs)} a ${Math.max(...hzs)} Hz · ${serie.length} letture`);
+    controlla('la mano scrive la riga all(x => x.lpf(…)) // mano nel live', hzs.length > 20 && manoPrima !== null, String(hzs.length));
+    controlla('mano bassa = filtro chiuso, mano alta = aperto (da meno di 1500 a più di 6000 Hz)', Math.min(...hzs) < 1500 && Math.max(...hzs) > 6000, `${Math.min(...hzs)}–${Math.max(...hzs)}`);
+    controlla('mentre la mano comanda, la riga del fader non è nel live (comanda uno solo)', !faderVisto);
+    // quante volte è cambiata la riga: mai più di ~16 al secondo
+    let cambi = 0;
+    for (let i = 1; i < serie.length; i++) if (serie[i].hz !== serie[i - 1].hz) cambi++;
+    controlla('la riga non cambia troppo spesso (letture a 4 al secondo: ci stanno tutte)', cambi <= serie.length, `${cambi}/${serie.length}`);
+    // mano persa: il valore resta fermo i primi 2 s, poi sale piano verso aperto senza tornare indietro; dopo ~7 s non comanda più
+    let ok1 = true;
+    let tratti = 0;
+    let lunghi = 0;
+    for (let i = 0; i < serie.length; i++) {
+      if (serie[i].vista || serie[i].hz === null) continue;
+      let j = i;
+      while (j + 1 < serie.length && !serie[j + 1].vista) j++;
+      const lunghezza = serie[j].t - serie[i].t;
+      if (lunghezza >= 3000) {
+        tratti++;
+        const tratto = serie.slice(i, j + 1).filter((x) => x.hz !== null);
+        const fermo = tratto.filter((x) => x.t - serie[i].t > 600 && x.t - serie[i].t < 1700).map((x) => x.hz);
+        const tenuto = fermo.length > 1 && fermo.every((h) => h === fermo[0]);
+        const dopo = tratto.filter((x) => x.t - serie[i].t > 2400).map((x) => x.hz);
+        let scende = false;
+        for (let k = 1; k < dopo.length; k++) if (dopo[k] < dopo[k - 1]) scende = true;
+        const fine = serie[j];
+        scrivi(`INFO  mani: tratto senza mano ${(lunghezza / 1000).toFixed(1)} s · valore ${tratto[0].hz} → ${tratto.at(-1).hz} Hz · fermo i primi 2 s: ${tenuto} · ${scende ? 'SCENDE' : 'sale'} · comanda ancora alla fine: ${fine.controlla}`);
+        if (!tenuto || scende) ok1 = false;
+        if (lunghezza >= 7500) {
+          lunghi++;
+          if (fine.controlla) ok1 = false; // dopo ~7 secondi senza mano (2 fermo + 2 cicli) non deve più comandare niente
+        }
+      }
+      i = j;
+    }
+    scrivi(`INFO  mani: ${tratti} tratti senza mano (${lunghi} lunghi)`);
+    const cambiFase = [];
+    for (let i = 0; i < serie.length; i++) if (i === 0 || serie[i].fase !== serie[i - 1].fase) cambiFase.push(`${(serie[i].t / 1000).toFixed(1)}s ${serie[i].fase}${serie[i].vista ? '' : '(senza mano)'}`);
+    scrivi(`INFO  mani: fasi del controllo nel video: ${cambiFase.join(' → ')}`);
+    controlla('mano persa: il valore resta fermo 2 s, poi risale verso aperto senza tornare indietro', ok1 && tratti >= 1, `${tratti} tratti`);
+    // ⇧M: il modo dopo (FILTRO → SPAZIO → CTX → FILTRO), si riparte da neutro e la riga del vecchio modo sparisce
+    const modo = () => js('cutxProva.maniControllo().modoId');
+    const maniModoTasto = () => js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'M', shiftKey: true, bubbles: true }))`);
+    controlla('si parte dal modo FILTRO', (await modo()) === 'filtro');
+    const sequenza = [];
+    for (let i = 0; i < 3; i++) {
+      await maniModoTasto();
+      await aspetta(0.6);
+      sequenza.push(await modo());
+    }
+    controlla('⇧M passa SPAZIO → CTX → FILTRO', sequenza.join(',') === 'spazio,ctx,filtro', sequenza.join(','));
+    controlla('cambiando modo la riga «mano» del vecchio modo non c\'è più', !mano((await live()).globali ?? []));
+    await js(`document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', bubbles: true }))`);
+    await aspetta(1.5);
+    const dopo = (await live()).globali ?? [];
+    controlla('con M spenta: la riga «mano» è sparita e torna quella del fader', !mano(dopo) && dopo.includes(faderRiga), JSON.stringify(dopo));
+    controlla('e la finestrella è nascosta, la finestra «mani» chiusa', (await js(`document.getElementById('mani-finestra').hidden`)) && (!finestre.mani || finestre.mani.isDestroyed()));
+    // su un livello scelto: righe di coda di quel livello (non la riga globale), a fine gesto la coda torna com'era
+    {
+      const attivo = async () => (await live()).livelli.filter((l) => l.a === null).at(-1);
+      await js(`cutxProva.fermaTutto(); cutxProva.valuta('live', 'setcpm(240/4)\\ns("sine*2").gain(.0001)')`);
+      await aspetta(1.5);
+      const r = await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice: 's("sine*16").gain(.0001)', nome: 'cima', provenienza: 'prova', cicli: 1 })})`);
+      await aspetta(2.5);
+      const id = r.livello;
+      await js(`cutxProva.motori.live.manda({ tipo: 'coda', livello: ${id}, imposta: ['.lpf(1200)'] })`);
+      await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5, ambito: 'livello' } })`);
+      await aspetta(0.5);
+      await js(`cutxProva.pila.seleziona(${id})`);
+      await js(`cutxProva.scriviMano({ controlla: true, modo: 'filtro', riga: 'all(x => x.lpf(900).lpq(6)) // mano', voci: ['.lpf(900)', '.lpq(6)'] })`);
+      await aspetta(0.8);
+      let l = await attivo();
+      controlla('sul livello scelto: le voci vanno nella coda di quel livello', l?.coda?.includes('.lpf(900)') && l.coda.includes('.lpq(6)'), JSON.stringify(l?.coda));
+      controlla('e non c\'è la riga globale «mano»', !mano((await live()).globali ?? []));
+      await js(`cutxProva.scriviMano({ controlla: true, modo: 'filtro', riga: 'all(x => x.lpf(500)) // mano', voci: ['.lpf(500)'] })`);
+      await aspetta(0.6);
+      l = await attivo();
+      controlla('una voce che si spegne (la risonanza a zero) toglie la sua riga', l?.coda?.includes('.lpf(500)') && !l.coda.some((c) => c.startsWith('.lpq')), JSON.stringify(l?.coda));
+      await js(`cutxProva.scriviMano({ controlla: false, modo: 'filtro', riga: null, voci: [] })`);
+      await aspetta(0.8);
+      l = await attivo();
+      controlla('a fine gesto la coda torna com\'era (.lpf(1200) di prima, niente .lpq)', l?.coda?.length === 1 && l.coda[0] === '.lpf(1200)', JSON.stringify(l?.coda));
+      await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5, ambito: 'tutto' } })`);
+      await js(`cutxProva.fermaTutto()`);
+    }
+    await js(`cutxProva.globaleDelController('fader', null)`);
+    // le impostazioni: la sezione MANI, e la sensibilità arriva al filtro
+    await js(`cutxProva.imp.disegna()`);
+    controlla('nelle impostazioni c\'è la sezione MANI: pronte all\'avvio, modo, su cosa agisce, aggancio, camera, sensibilità', await js(`!!document.getElementById('imp-mani-camera') && !!document.getElementById('imp-mani-sensibilita') && /MANI/.test(document.getElementById('imp-titolo-mani').textContent) && /pronte all'avvio/.test(document.getElementById('imp-mani').textContent) && !!document.getElementById('imp-mani-modo') && !!document.getElementById('imp-mani-ambito') && !!document.getElementById('imp-mani-aggancio')`));
+    await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.9 } })`);
+    await aspetta(0.5);
+    controlla('la sensibilità cambiata nelle impostazioni arriva al filtro', (await js('cutxProva.maniControllo().sensibilita')) === 0.9);
+    await js(`window.cutx.salvaPreferenze({ mani: { acceso: false, camera: '', sensibilita: 0.5 } })`);
+  }
+
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+    // la prova si affianca all'app (richiama le sue funzioni), non le sostituisce
+    await js(`window.__mani = []; (() => { const c = cutxProva.maniClient; window.__app = { m: c.suMano, i: c.suImmagine }; c.suMano = (m) => { window.__app.m(m); const p = m.mani?.[0]; window.__mani.push(p ? Math.round([0, 5, 9, 13, 17].reduce((s, i) => s + p[i][1], 0) / 5 * 1000) / 1000 : null); }; })(); cutxProva.accendiMani()`);
+    await aspetta(6); // la camera, il modello, il Wasm
+    const st = await js('cutxProva.maniClient.stato');
+    controlla('la finestra «mani» è un processo a parte, nascosto', !!finestre.mani && !finestre.mani.isVisible() && finestre.mani.webContents.getOSProcessId() !== finestre.live.webContents.getOSProcessId());
+    controlla('la camera e il modello si aprono (nessun errore)', !st.errore && st.fps > 0, JSON.stringify(st));
+    const campioniCpu = [];
+    const campioniPs = []; // la stessa misura fatta da macOS (ps): %CPU di un core, mediata sulla vita del processo per l'ultimo secondo
+    const pidMani = finestre.mani.webContents.getOSProcessId();
+    for (let i = 0; i < 20; i++) {
+      await aspetta(2);
+      campioniCpu.push(cpu());
+      try {
+        const top = execFileSync('top', ['-l', '2', '-s', '1', '-pid', String(pidMani), '-stats', 'cpu'], { encoding: 'utf8' }).trim().split('\n').pop();
+        campioniPs.push(Number.parseFloat(top));
+      } catch {}
+    }
+    const pidGpu = app.getAppMetrics().find((m) => m.type === 'GPU')?.pid;
+    let gpuTop = -1;
+    try {
+      gpuTop = Number.parseFloat(execFileSync('top', ['-l', '2', '-s', '1', '-pid', String(pidGpu), '-stats', 'cpu'], { encoding: 'utf8' }).trim().split('\n').pop());
+    } catch {}
+    scrivi(`INFO  mani: il processo grafico (condiviso con tutta l'app) sta al ${gpuTop.toFixed(1)}% di un core`);
+    const mediaPs = campioniPs.length ? campioniPs.reduce((a, b) => a + b, 0) / campioniPs.length : -1;
+    scrivi(`INFO  mani: CPU secondo Electron ${(campioniCpu.reduce((a, b) => a + b, 0) / campioniCpu.length).toFixed(1)}% · secondo top ${mediaPs.toFixed(1)}%`);
+    const stato = await js('cutxProva.maniClient.stato');
+    const y = await js('window.__mani');
+    const viste = y.filter((v) => v !== null);
+    controlla('riconosce a 12–35 fotogrammi al secondo', stato.fps >= 12 && stato.fps <= 35, JSON.stringify(stato));
+    controlla('ogni fotogramma costa meno di 40 ms (il budget a 24 al secondo)', stato.ms > 0 && stato.ms < 40, `${stato.ms.toFixed(1)} ms`);
+    const media = Math.max(campioniCpu.reduce((a, b) => a + b, 0) / campioniCpu.length, mediaPs); // si tiene la misura più alta
+    scrivi(`INFO  mani: processo a parte, CPU media ${media.toFixed(1)}% (di un core) · ${stato.fps} fps · ${stato.ms.toFixed(1)} ms a fotogramma · ${y.length} misure`);
+    controlla('la finestra «mani» pesa meno del 60% di un core', media < 60, `${media.toFixed(1)}%`);
+    controlla('vede la mano per buona parte del video (> 40%)', viste.length > y.length * 0.4, `${viste.length}/${y.length}`);
+    const alto = Math.min(...viste);
+    const basso = Math.max(...viste);
+    controlla('la mano sale e scende: altezze molto diverse', basso - alto > 0.3, `da ${alto} a ${basso}`);
+    let giu = 0;
+    let piuLunga = 0;
+    for (const v of y) {
+      giu = v === null ? giu + 1 : 0;
+      piuLunga = Math.max(piuLunga, giu);
+    }
+    controlla('vede anche quando la mano esce dall\'inquadratura (un tratto senza mano)', piuLunga > stato.fps * 1.5, `${piuLunga} misure di fila`);
+    const immagine = await js(`new Promise((r) => { const c = cutxProva.maniClient; c.suImmagine = (b) => { window.__app.i(b); r(b.byteLength); }; setTimeout(() => r(0), 3000); })`);
+    await js(`(() => { const c = cutxProva.maniClient; c.suMano = window.__app.m; c.suImmagine = window.__app.i; })()`);
+    controlla('arriva anche l\'immagine piccola della camera (JPEG)', immagine > 500 && immagine < 60000, String(immagine));
+    await js('cutxProva.spegniMani()');
+    await aspetta(1.5);
+    await collegamento();
+    controlla('spenta: la finestra non esiste più (camera chiusa, niente pesa)', !finestre.mani || finestre.mani.isDestroyed(), String(!!finestre.mani));
+    controlla('e dal processo principale risulta chiusa', (await js('window.cutx.mani.aperta()')) === false);
+  } finally {
+    await js(`cutxProva.spegniMani(); cutxProva.globaleDelController('fader', null); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+  }
+  return ok;
+}
+
+// --- strumento: registra i punti delle mani del video di prova (CUTX_VIDEO_MANO) in CUTX_MANI_DUMP, per i test dei gesti (test/mani-video.test.js) ---
+async function provaManiDump({ finestre, scrivi }) {
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const fuori = process.env.CUTX_MANI_DUMP;
+  const secondi = Number(process.env.CUTX_MANI_DUMP_S) || 55;
+  if (!fuori) {
+    scrivi('ERRORE manca CUTX_MANI_DUMP (il file dove scrivere i punti)');
+    return false;
+  }
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  await js(`window.__dump = []; (() => { const c = cutxProva.maniClient; const orig = c.suMano; window.__t0 = null; c.suMano = (m) => { orig(m); const t = performance.now(); window.__t0 ??= t; window.__dump.push([Math.round(t - window.__t0), Math.round(m.ar * 1000) / 1000, (m.mani ?? []).map((h) => h.map(([x, y]) => [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]))]); }; })(); cutxProva.accendiMani()`);
+  await aspetta(secondi);
+  const dump = await js('window.__dump');
+  await js('cutxProva.spegniMani()');
+  await writeFile(fuori, JSON.stringify(dump));
+  scrivi(`OK    ${dump.length} fotogrammi in ${fuori}`);
+  return dump.length > secondi * 10;
+}
+
+// --- la scheda DRUM del SYNTH: griglia a passi ↔ codice, cuffia, → CUE (npm run prova:parte -- drum) ---
+async function provaDrum({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const wc = finestre.controllo.webContents;
+  const codiceDrum = () => js(`document.querySelector('.drum-pre').value`);
+  const stato = () => js(`cutxProva.synth.drum.stato`);
+  const centro = (r, i) => js(`(() => { const c = document.querySelector('.drum-passo[data-r="${r}"][data-i="${i}"]').getBoundingClientRect(); return [Math.round(c.left + c.width / 2), Math.round(c.top + c.height / 2)]; })()`);
+  const mouse = (tipo, x, y, modificatori = []) => wc.sendInputEvent({ type: tipo, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1, modifiers: modificatori });
+  const clic = async (r, i) => {
+    const [x, y] = await centro(r, i);
+    mouse('mouseMove', x, y);
+    mouse('mouseDown', x, y);
+    await aspetta(0.1);
+    mouse('mouseUp', x, y);
+    await aspetta(0.25);
+  };
+  await js(`cutxProva.fermaTutto(); window.cutx.salvaPreferenze({ drumUltimo: null }); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  // parte sempre dalla batteria di partenza (la griglia salvata da una corsa precedente si ricarica all'avvio dell'app)
+  await js(`cutxProva.synth.drum.stato = cutxProva.synth.drum.stato; cutxProva.synth.drum.apri('stack(\\n  s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~"),\\n  s("~ ~ ~ ~ sd ~ ~ ~ ~ ~ ~ ~ sd ~ ~ ~").gain("~ ~ ~ ~ .8 ~ ~ ~ ~ ~ ~ ~ .8 ~ ~ ~"),\\n  s("~ ~ hh ~ ~ ~ hh ~ ~ ~ hh ~ ~ ~ hh ~").gain("~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~")\\n)', 'drum'); cutxProva.synth.drum.storia = []`);
+  await js(`document.getElementById('vista-synth-btn').click()`);
+  await aspetta(0.5);
+  await js(`[...document.querySelectorAll('.synth-sinistra .synth-schede button')].find((b) => b.textContent === 'drum').click()`);
+  await aspetta(0.4);
+
+  // --- la scheda ---
+  controlla('la scheda «drum» sta accanto a «suono» e «note» e apre la griglia al posto delle manopole', (await js(`document.querySelector('.synth').classList.contains('modo-drum') && !!document.querySelector('.drum-vista').offsetParent && !document.querySelector('.synth-pannello').offsetParent`)) === true);
+  controlla('si apre con una batteria di partenza: bd, sd, hh su 16 passi', (await js(`[...document.querySelectorAll('.drum-riga')].map((r) => r.querySelector('.drum-suono').value + ':' + r.querySelectorAll('.drum-passo').length).join()`)) === 'bd:16,sd:16,hh:16');
+  let codice = await codiceDrum();
+  controlla('e il codice è uno stack leggibile', codice.startsWith('stack(') && codice.includes('s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~")'), codice);
+  controlla('niente manopole del synth, ma i suoni dello stash e di Strudel nel menu', (await js(`!!document.querySelector('.drum-suono optgroup[label="Strudel"]') && [...document.querySelector('.drum-suono').options].some((o) => o.value === 'cp')`)) === true);
+
+  // le foto, per guardarla (Scrivania → cutx-schermate → drum): una batteria con velocity diverse e una riga che non si legge
+  {
+    const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'drum');
+    await mkdir(cartella, { recursive: true });
+    const partenzaCodice = await codiceDrum();
+    await js(`cutxProva.synth.drum.apri('// @drum\\nstack(\\n  s("bd ~ ~ ~ bd ~ ~ bd ~ ~ bd ~ ~ ~ ~ ~").gain(".9 ~ ~ ~ .8 ~ ~ .6 ~ ~ 1 ~ ~ ~ ~ ~"),\\n  s("~ ~ ~ ~ sd ~ ~ ~ ~ ~ ~ ~ sd ~ ~ sd").gain("~ ~ ~ ~ 1 ~ ~ ~ ~ ~ ~ ~ .9 ~ ~ .4"),\\n  s("hh ~ hh ~ hh ~ hh ~ hh ~ hh ~ hh ~ hh ~").gain(".9 ~ .5 ~ .8 ~ .5 ~ .9 ~ .5 ~ .8 ~ .5 ~"),\\n  s("~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ oh ~").gain("~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ .7 ~"),\\n  s("cp*2 ~ ~ ~").lpf(900)\\n)', 'batteria')`);
+    await aspetta(0.6);
+    await writeFile(path.join(cartella, 'drum-griglia.png'), (await finestre.controllo.webContents.capturePage()).toPNG());
+    await js(`cutxProva.synth.drum.apri(${JSON.stringify(partenzaCodice)}, 'drum')`);
+    await aspetta(0.3);
+    scrivi(`INFO  foto in ${cartella}`);
+  }
+
+  // --- il mouse ---
+  await clic(0, 1);
+  controlla('un clic su un passo spento lo accende (velocity di serie .8) e il codice lo scrive', (await stato()).righe[0].vel[1] === 0.8 && (await codiceDrum()).includes('s("bd bd ~ ~ bd'));
+  await clic(0, 1);
+  controlla('un secondo clic lo spegne', (await stato()).righe[0].vel[1] === 0 && (await codiceDrum()).includes('s("bd ~ ~ ~ bd'));
+  const [x2, y2] = await centro(0, 2);
+  mouse('mouseMove', x2, y2);
+  mouse('mouseDown', x2, y2);
+  await aspetta(0.1);
+  mouse('mouseMove', x2, y2 - 10, ['leftButtonDown']);
+  await aspetta(0.1);
+  mouse('mouseMove', x2, y2 - 20, ['leftButtonDown']);
+  await aspetta(0.1);
+  mouse('mouseUp', x2, y2 - 20);
+  await aspetta(0.3);
+  const v = (await stato()).righe[0].vel[2];
+  controlla('trascinando in su la velocity sale (e resta acceso, non si spegne a fine gesto)', v > 0.95 && v <= 1, String(v));
+  const [x3, y3] = await centro(0, 2);
+  mouse('mouseMove', x3, y3);
+  mouse('mouseDown', x3, y3);
+  await aspetta(0.1);
+  mouse('mouseMove', x3, y3 + 25, ['leftButtonDown']);
+  await aspetta(0.1);
+  mouse('mouseUp', x3, y3 + 25);
+  await aspetta(0.3);
+  const basso = (await stato()).righe[0].vel[2];
+  controlla('trascinando in giù scende', basso < v - 0.2 && basso >= 0.05, String(basso));
+  controlla('il codice porta la velocity in .gain(…)', /\.gain\("[^"]*~ ~ ~ ~ \.[0-9]+ ~/.test((await codiceDrum()).split('\n')[1] ?? '') || (await codiceDrum()).includes(`.${String(basso).split('.')[1]}`), await codiceDrum());
+  controlla('⌘Z annulla un gesto alla volta (il trascinamento intero)', (await js(`cutxProva.synth.annulla()`)) === true && (await stato()).righe[0].vel[2] === v);
+
+  // --- il codice, nei due versi ---
+  await js(`(() => { const t = document.querySelector('.drum-pre'); t.focus(); t.value = 'stack(\\n  s("cp ~ ~ ~ cp ~ ~ ~ cp ~ ~ ~ cp ~ ~ ~").gain(".5 ~ ~ ~ .5 ~ ~ ~ .5 ~ ~ ~ .5 ~ ~ ~"),\\n  s("hh*8")\\n)'; t.dispatchEvent(new Event('input')); })()`);
+  await aspetta(0.7);
+  controlla('il codice scritto a mano muove la griglia: la riga «cp» si legge', (await js(`[...document.querySelectorAll('.drum-riga')].map((r) => r.classList.contains('testo') ? 'testo' : r.querySelector('.drum-suono').value).join()`)) === 'cp,testo');
+  controlla('la riga che non si legge (hh*8) resta nel testo, con un avviso', (await js(`document.querySelector('.drum-avviso').textContent`)).includes('riga 2') && (await js(`document.querySelector('.drum-riga.testo .drum-testo').textContent`)) === 's("hh*8")');
+  await js(`document.querySelector('.drum-pre').dispatchEvent(new FocusEvent('blur'))`);
+  await aspetta(0.3);
+  controlla('rimessa in ordine dalla griglia, quella riga non si perde mai', (await codiceDrum()).includes('s("hh*8")') && (await codiceDrum()).startsWith('stack('), await codiceDrum());
+  await js(`(() => { const t = document.querySelector('.drum-pre'); t.focus(); t.value = 'note("c3")'; t.dispatchEvent(new Event('input')); })()`);
+  await aspetta(0.7);
+  controlla('un testo che non è una griglia non cambia niente e dice l\'errore', (await js(`document.querySelector('.drum-avviso').textContent`)).startsWith('codice:') && (await js(`document.querySelectorAll('.drum-riga').length`)) === 2);
+  await js(`document.querySelector('.drum-pre').dispatchEvent(new FocusEvent('blur'))`);
+
+  // --- righe, passi e cicli ---
+  await js(`cutxProva.synth.drum.apri('// @drum\\nstack(\\n  s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~ .8 ~ ~ ~")\\n)', 'prova')`);
+  await aspetta(0.3);
+  await js(`(() => { const s = document.querySelector('.drum-aggiungi'); s.value = 'sd'; s.dispatchEvent(new Event('change')); })()`);
+  await aspetta(0.2);
+  controlla('«+ suono» aggiunge una riga spenta', (await js(`document.querySelectorAll('.drum-riga').length`)) === 2 && (await stato()).righe[1].vel.every((x) => x === 0));
+  controlla('una riga tutta spenta non perde il suo suono nel codice', (await codiceDrum()).includes('// sd'), await codiceDrum());
+  await js(`(() => { const s = document.querySelectorAll('.drum-barra select')[1]; s.value = '2'; s.dispatchEvent(new Event('change')); })()`);
+  await aspetta(0.3);
+  controlla('2 cicli: 32 celle per riga e .slow(2) nel codice', (await js(`document.querySelectorAll('.drum-riga')[0].querySelectorAll('.drum-passo').length`)) === 32 && (await codiceDrum()).endsWith(').slow(2)'));
+  await js(`(() => { const s = document.querySelectorAll('.drum-barra select')[0]; s.value = '32'; s.dispatchEvent(new Event('change')); })()`);
+  await aspetta(0.3);
+  controlla('32 passi × 2 cicli: 64 celle', (await js(`document.querySelectorAll('.drum-riga')[0].querySelectorAll('.drum-passo').length`)) === 64);
+  await js(`cutxProva.synth.annulla(); cutxProva.synth.annulla()`);
+  await aspetta(0.2);
+  controlla('⌘Z rimette passi e cicli di prima', (await stato()).passi === 16 && (await stato()).cicli === 1);
+  await js(`document.querySelector('.drum-riga .drum-togli').click()`);
+  await aspetta(0.2);
+  controlla('il × toglie la riga', (await js(`document.querySelectorAll('.drum-riga').length`)) === 1);
+
+  // --- la cuffia: parte a velocity bassissima (quasi muta) e la testina corre ---
+  await js(`cutxProva.synth.drum.apri('// @drum\\nstack(\\n  s("bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~").gain(".05 ~ ~ ~ .05 ~ ~ ~ .05 ~ ~ ~ .05 ~ ~ ~")\\n)', 'drum prova')`);
+  await aspetta(0.3);
+  await js(`document.querySelector('.drum-play').click()`);
+  await aspetta(1.5);
+  controlla('▶ cuffia suona la griglia (a tempo col live)', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await js(`document.querySelector('.drum-play').classList.contains('on')`)) === true);
+  const colonne = new Set();
+  for (let i = 0; i < 12; i++) {
+    const c = await js(`[...document.querySelectorAll('.drum-passo.ora')].map((e) => e.dataset.i).join()`);
+    if (c) colonne.add(c);
+    await aspetta(0.2);
+  }
+  controlla('la testina corre sulle colonne mentre suona', colonne.size >= 3, JSON.stringify([...colonne]));
+  await js(`cutxProva.synth.drum.stato.righe.length`); // il giro continua mentre si modifica
+  await clic(0, 2);
+  await aspetta(0.6);
+  controlla('toccando un passo mentre suona, la cuffia riparte col codice nuovo senza fermarsi', (await js(`cutxProva.synth.opz.suonaOra()`)) === true && (await codiceDrum()).includes('s("bd ~ bd ~ bd'), await codiceDrum());
+  await js(`document.querySelector('.drum-play').click()`);
+  await aspetta(0.5);
+  controlla('un altro clic ferma la cuffia e la testina sparisce', (await js(`cutxProva.synth.opz.suonaOra()`)) === false && (await js(`document.querySelectorAll('.drum-passo.ora').length`)) === 0);
+
+  // --- → CUE: la clip finisce nel brano con «· drum» e la riga // @drum ---
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\ns("sine*2").gain(.0001)\n';
+  await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}, 'attivo')`);
+  await aspetta(0.5);
+  await js(`document.querySelector('.drum-nome').value = 'colpi'; document.querySelector('.drum-nome').dispatchEvent(new Event('input'))`);
+  await js(`cutxProva.synth.drum.aggiornaDestinazioni(); document.querySelector('.drum-barra select:last-of-type').value = 'attivo'; document.querySelector('.drum-barra .acid').click()`);
+  await aspetta(0.4);
+  controlla('→ CUE: la clip è in fondo al brano attivo, segnata «· drum»', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).riga`)) === '// @clip colpi · drum', String(await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).riga`)));
+  controlla('e comincia con la riga // @drum, poi lo stack', (await js(`cutxProva.cue.slot.attivo.modello.sezioni.at(-1).corpo.slice(0, 2).join('|')`)) === '// @drum|stack(');
+  controlla('la clip si rilegge identica dalla griglia', (await js(`(() => { const c = cutxProva.cue.slot.attivo.modello.sezioni.at(-1).corpo.join('\\n'); return cutxProva.synth.drum.apri(c, 'colpi') === null; })()`)) === true);
+
+  // il pulsante sulla card della clip DRUM la riapre nella scheda DRUM (sulle altre clip non c'è)
+  await js(`document.getElementById('vista-live').click()`);
+  await aspetta(0.4);
+  await js(`cutxProva.cue.cambiaLinguetta('attivo'); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(0.6);
+  const apri = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [c.querySelector('.nome')?.textContent ?? c.textContent.slice(0, 12), [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'drum' && !b.hidden)]))`);
+  controlla('sulla card della clip DRUM c\'è «drum», su quella a mano no', /colpi[^\]]*true/.test(apri) && !/basso[^\]]*true/.test(apri), apri);
+  await js(`cutxProva.synth.drum.nomeEl.value = 'altro'; cutxProva.synth.drum.nome = 'altro'; [...document.querySelectorAll('#carte .card.sezione')].find((c) => c.textContent.includes('colpi')).querySelectorAll('.card-testa button').forEach((b) => { if (b.textContent.trim() === 'drum' && !b.hidden) b.click(); })`);
+  await aspetta(0.6);
+  controlla('«drum» sulla card riapre la clip nella scheda DRUM', (await js(`cutxProva.vista`)) === 'synth' && (await js(`document.querySelector('.synth').classList.contains('modo-drum')`)) === true && (await js(`cutxProva.synth.drum.nome`)) === 'colpi', `${await js(`cutxProva.vista`)} ${await js(`cutxProva.synth.drum.nome`)}`);
+  await js(`document.getElementById('vista-live').click()`);
+
+  // --- si ricorda l'ultima griglia ---
+  await aspetta(1.2);
+  controlla('l\'ultima griglia si salva nelle preferenze', (await js(`window.cutx.preferenze().then((p) => !!p.drumUltimo?.codice?.startsWith('stack('))`)) === true);
+  await js(`document.getElementById('vista-synth-btn').click()`);
+  await aspetta(0.3);
+  await js(`[...document.querySelectorAll('.drum-schede button')].find((b) => b.textContent === 'suono').click()`);
+  await aspetta(0.3);
+  controlla('tornando a «suono» ricompaiono le manopole', (await js(`!document.querySelector('.synth').classList.contains('modo-drum') && !!document.querySelector('.synth-pannello').offsetParent`)) === true);
+  await js(`cutxProva.fermaTutto(); cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.mostraLinguette(); document.getElementById('vista-live').click(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+  return ok;
+}
+
+// --- la mano sul proiettore: lo scheletro in alto al centro (punti finti, niente camera) + le foto per guardare dimensione e posizione ---
+async function provaManoProiettore({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const u = (codice) => chiedi(finestre.uscita, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
+  if (!(await js('window.cutx.uscitaAperta()'))) await js('window.cutx.uscitaOnOff()');
+  for (let i = 0; i < 40 && !finestre.uscita; i++) await aspetta(0.25);
+  await aspetta(1.5);
+  // tre livelli muti (gain bassissimo) per avere il codice dietro la mano
+  await js(`cutxProva.valuta('live', 'setcpm(120/4)\ns("sine*2").gain(.0001)')`);
+  await aspetta(1);
+  const codici = [
+    ['colpi', 's("bd*4, ~ sd ~ sd, hh*8").bank("RolandTR909").gain(.0001)'],
+    ['basso', 'note("c2 [~ eb2] g1 bb1").s("sawtooth").lpf(380).gain(.0001)'],
+    ['arpa', 'note("<c4 eb4 g4 bb4>*8").s("triangle").delay(.3).gain(.0001)'],
+  ];
+  for (const [nome, codice] of codici) {
+    await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1 })})`);
+    await aspetta(1.5);
+  }
+  await aspetta(2);
+  // una mano finta di 21 punti, nell'inquadratura della camera (x grezza, non a specchio): aperta o a pugno
+  const manoFinta = `((cx, cy, s, forma) => {
+    // basi delle dita (indice, medio, anulare, mignolo), la direzione a ventaglio (gradi dalla verticale) e la lunghezza dei tre pezzi
+    const dita = { 5: [-0.45, -0.95, -12, [0.36, 0.24, 0.2]], 9: [0, -1, 0, [0.42, 0.27, 0.21]], 13: [0.4, -0.95, 10, [0.38, 0.25, 0.2]], 17: [0.75, -0.85, 22, [0.3, 0.19, 0.16]] };
+    const l = new Array(21);
+    l[0] = [0, 0];
+    for (const [i, [bx, by, gradi, seg]] of Object.entries(dita)) {
+      l[i] = [bx, by];
+      let [x, y] = [bx, by];
+      const a = (gradi * Math.PI) / 180;
+      seg.forEach((lung, k) => {
+        const piega = forma === 'aperta' ? 0 : (k + 1) * 55;
+        const ang = a + (piega * Math.PI) / 180 * (gradi >= 0 ? 1 : -1) * 0.2;
+        const dy = forma === 'aperta' ? -Math.cos(ang) : k === 0 ? -0.5 : 0.7; // il pugno: le dita si ripiegano sul palmo
+        x += Math.sin(ang) * lung * (forma === 'aperta' ? 1 : 0.3);
+        y += dy * lung;
+        l[Number(i) + k + 1] = [x, y];
+      });
+    }
+    l[1] = [-0.3, -0.18]; l[2] = [-0.58, -0.36]; l[3] = [-0.78, -0.5];
+    l[4] = forma === 'aperta' ? [-0.98, -0.66] : [-0.42, -0.62];
+    return l.map((p) => [cx + p[0] * s, cy + 0.5 * s + p[1] * s]);
+  })`;
+  const manda = (o) => {
+    if (o.punti === null) return js(`cutxProva.portaUscita().postMessage({ tipo: 'mano', punti: null })`);
+    const { cx = 0.5, cy = 0.5, s = 0.28, forma = 'aperta', ...resto } = o;
+    const msg = { tipo: 'mano', testo: '820 Hz · 6', ar: 1.333, zona: null, progresso: 1, ...resto };
+    return js(`cutxProva.portaUscita().postMessage(Object.assign(${JSON.stringify(msg)}, { punti: ${manoFinta}(${cx}, ${cy}, ${s}, ${JSON.stringify(forma)}) }))`);
+  };
+  const visibile = async () => u(`(() => { const m = document.getElementById('mano'); return m.classList.contains('dentro') && getComputedStyle(m).opacity > 0.5; })()`);
+  controlla('la mano non c\'è finché la camera non la vede', !(await visibile()));
+  controlla('e l\'insegna è accesa', Number(await u(`getComputedStyle(document.querySelector('.insegna'), '::after').opacity`)) < 0.1);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.7);
+  controlla('quando la mano entra compare sul proiettore', await visibile());
+  controlla('i valori sono attaccati alla mano (disegnati sotto di lei), senza nome di modo', (await u(`document.getElementById('mano').dataset.valore`)) === '820 Hz · 6' && (await u(`document.getElementById('mano').textContent.trim()`)) === '');
+  const pos = await u(`(() => { const r = document.getElementById('mano').getBoundingClientRect(); const a = document.querySelector('.angolo').getBoundingClientRect(); const c = document.getElementById('livelli').getBoundingClientRect(); const sovrappone = !(r.right <= c.left || r.left >= c.right || r.bottom <= c.top || r.top >= c.bottom); return { dentroAngolo: r.left >= a.left - 2 && r.right <= a.right + 2 && r.top >= a.top - 2 && r.bottom <= a.bottom + 2, aDestra: (r.left + r.right) / 2 / innerWidth, sovrappone, riquadro: getComputedStyle(document.getElementById('mano-canvas')).borderTopWidth }; })()`);
+  controlla('sta a destra, nell\'angolo dell\'insegna, e non copre il codice', pos.dentroAngolo && pos.aDestra > 0.55 && !pos.sovrappone, JSON.stringify(pos));
+  controlla('senza riquadro', pos.riquadro === '0px', JSON.stringify(pos));
+  controlla('mentre la mano si vede l\'insegna e il gatto si spengono', Number(await u(`getComputedStyle(document.querySelector('.insegna'), '::after').opacity`)) > 0.8 && Number(await u(`getComputedStyle(document.querySelector('.gatto-posto')).opacity`)) < 0.5);
+  const pixel = await u(`(() => { const c = document.getElementById('mano-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let v = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 40) v++; return v; })()`);
+  controlla('lo scheletro è disegnato (punti e linee, non un\'immagine)', pixel > 200, String(pixel));
+  const dati = await js(`JSON.stringify({ punti: ${manoFinta}(.5,.5,.28,'aperta') }).length`);
+  controlla('al proiettore arrivano solo i punti (pochi byte, mai l\'immagine)', dati > 100 && dati < 1500, String(dati));
+  // il bordo: la mano non si taglia mai. Al margine si ferma, e se è enorme (vicina alla camera) si rimpicciolisce per starci tutta
+  const sulBordo = () => u(`(() => { const c = document.getElementById('mano-canvas'); const g = c.getContext('2d'); const w = c.width, h = c.height; const lati = [g.getImageData(0, 0, w, 3), g.getImageData(0, h - 3, w, 3), g.getImageData(0, 0, 3, h), g.getImageData(w - 3, 0, 3, h)]; return lati.reduce((n, im) => n + im.data.filter((v, i) => i % 4 === 3 && v > 6).length, 0); })()`);
+  const pienezza = () => u(`(() => { const c = document.getElementById('mano-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let v = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 40) v++; return v; })()`);
+  for (const [nome, o] of [['a destra, oltre il bordo', { cx: 1.08, cy: 0.5 }], ['in basso, oltre il bordo', { cx: 0.5, cy: 1.1 }], ['in alto a sinistra, oltre il bordo', { cx: -0.05, cy: -0.02 }]]) {
+    await manda({ fase: 'agganciata', s: 0.3, ...o });
+    await aspetta(0.5);
+    controlla(`la mano ${nome}: si ferma al bordo, non si taglia`, (await sulBordo()) === 0 && (await pienezza()) > 200, `${await sulBordo()} pixel sul bordo`);
+  }
+  await manda({ fase: 'agganciata', s: 1.4, cx: 0.5, cy: 0.6 });
+  await aspetta(0.5);
+  controlla('la mano enorme (molto vicina alla camera) si rimpicciolisce per starci tutta', (await sulBordo()) === 0 && (await pienezza()) > 200, `${await sulBordo()} pixel sul bordo`);
+  await manda({ fase: 'agganciata', s: 1.4, cx: 0.5, cy: 0.6 });
+  await aspetta(0.2);
+  await js(`0`);
+  // le foto: tre grandezze/posizioni, poi gli stati
+  const cartella = path.join(os.homedir(), 'Desktop', 'cutx-schermate', 'mano');
+  await mkdir(cartella, { recursive: true });
+  const foto = async (nome) => writeFile(path.join(cartella, `${nome}.png`), (await finestre.uscita.webContents.capturePage()).toPNG());
+  const stile = (css) => u(`document.getElementById('mano').style.cssText = ${JSON.stringify(css)}; document.getElementById('mano-canvas').style.cssText = ''`);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.45, s: 0.3 });
+  await aspetta(0.6);
+  await foto('A-agganciata');
+  await manda({ fase: 'agganciata', cx: 0.62, cy: 0.7, s: 0.34, testo: '3100 Hz · 12' });
+  await aspetta(0.6);
+  await foto('B-agganciata-mano-bassa-e-vicina');
+  await manda({ fase: 'libera', progresso: 0.55, testo: '', cx: 0.4, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('C-prima-dell-aggancio');
+  await manda({ fase: 'bloccata', cx: 0.5, cy: 0.5, s: 0.3, forma: 'pugno', testo: '2900 Hz' });
+  await aspetta(0.6);
+  await foto('D-bloccata-pugno');
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.45, s: 0.3, zona: { x: 0.25, y: 0.1, w: 0.5, h: 0.75 } });
+  await aspetta(0.6);
+  await foto('E-con-la-zona-disegnata');
+  await manda({ fase: 'agganciata', cx: 1.08, cy: 0.5, s: 0.3 });
+  await aspetta(0.6);
+  await foto('F-al-bordo-a-destra');
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.6, s: 1.4 });
+  await aspetta(0.6);
+  await foto('G-molto-vicina-alla-camera');
+  scrivi(`INFO  foto in ${cartella}`);
+  // esce: si dissolve
+  await manda({ punti: null });
+  await aspetta(1.2);
+  controlla('quando la mano esce sparisce dissolvendo', !(await visibile()) && Number(await u(`getComputedStyle(document.getElementById('mano')).opacity`)) < 0.2);
+  // l'interruttore nei testi per il pubblico: spento, la mano non si vede mai
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { mano: { acceso: false } } })`);
+  await aspetta(1);
+  await manda({ fase: 'agganciata', cx: 0.5, cy: 0.5, s: 0.3 });
+  await aspetta(0.7);
+  controlla('con l\'interruttore «la mano sul proiettore» spento non si vede', !(await visibile()));
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { mano: { acceso: true } } })`);
+  await aspetta(0.5);
+  await manda({ punti: null });
+  controlla('l\'interruttore è tra i testi per il pubblico, acceso di serie', await js(`(async () => { await cutxProva.imp.disegna(); return /la mano sul proiettore/.test(document.body.textContent); })()`));
+  await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 1 })`).catch(() => {});
+  return ok;
+}
+
 // --- il CUE a due linguette: una foto (solo uno screenshot: npx electron . --prova=cue-aspetto) ---
 async function provaCueAspetto({ finestre, scrivi }) {
   const js = (codice) => chiedi(finestre.controllo, codice);
   await js(`cutxProva.fermaTutto()`);
   const radice = stash.radice();
-  const leggiBrano = async (f) => readFile(path.join(radice, 'libreria', f), 'utf8');
+  const leggiBrano = async (f) => readFile(path.join(stash.cartellaProj(), 'libreria', f), 'utf8');
   const uno = await leggiBrano('brano_1.cutx');
   const due = (await leggiBrano('mayia.cutx').catch(() => uno));
   await js(`cutxProva.cue.apriModello('brano_1.cutx', ${JSON.stringify(uno)}, 'attivo')`);
@@ -4535,7 +5321,8 @@ async function provaStriscia({ finestre, scrivi }) {
   controlla('le note vere del ciclo arrivano (8 note, con altezze diverse)', melodia.length === 8 && new Set(melodia.map((e) => e[2])).size >= 5, JSON.stringify(melodia.slice(0, 4)));
   const batt = await eventi('batteria');
   controlla('le batterie sono tacche (classi grave/media/acuta, non note)', batt.length >= 8 && batt.every((e) => e[2] < 0) && new Set(batt.map((e) => e[2])).size === 3, JSON.stringify([...new Set(batt.map((e) => e[2]))]));
-  const alte = await js(`[...document.querySelectorAll('#livelli .card.livello .striscia-viva')].map((s) => Math.round(s.getBoundingClientRect().height))`);
+  // sotto la batteria (beat, clip · drum) c'è l'onda LED, più alta (44 px); le altre strisce restano basse
+  const alte = await js(`[...document.querySelectorAll('#livelli .card.livello .striscia-viva:not(.onda)')].map((s) => Math.round(s.getBoundingClientRect().height))`);
   controlla('la striscia è bassa (26 px)', alte.length >= 7 && alte.every((h) => h >= 24 && h <= 30), JSON.stringify(alte));
   controlla('il misuratore dice i dB del suono vero, su una riga', /^−\d+ dB$/.test(await testoMisura('melodia')), await testoMisura('melodia'));
   controlla('un livello senza suono (gain bassissimo): SILENZIO', (await testoMisura('muto')) === 'SILENZIO' && (await testoMisura('batteria')) === 'SILENZIO', JSON.stringify([await testoMisura('muto'), await testoMisura('batteria')]));
@@ -4558,7 +5345,7 @@ async function provaStriscia({ finestre, scrivi }) {
   await aspetta(2);
   const p1 = await proiettore();
   controlla('proiettore: accendendo il misuratore compare, con i dB', p1.misuratori >= 5 && /dB|SILENZIO|TROPPO|MUTO/.test(p1.testo ?? ''), JSON.stringify(p1));
-  await js(`window.cutx.salvaPreferenze({ testiPubblico: { striscia: { acceso: false } } })`);
+  await js(`window.cutx.salvaPreferenze({ testiPubblico: { striscia: { acceso: false }, onda: { acceso: false } } })`); // l'onda sotto la batteria ha il suo interruttore
   await aspetta(1);
   controlla('proiettore: spenta nei testi per il pubblico, sparisce', (await proiettore()).strisce === 0);
   await js(`window.cutx.salvaPreferenze({ testiPubblico: {} })`);
@@ -5177,7 +5964,7 @@ async function provaTesti({ finestre, scrivi }) {
   await aspetta(1);
   controlla('anteprima: il conto alla rovescia col mio testo', /fra \d cicl[oi]/.test(await js(`${doc}.getElementById('scorri').textContent`)), await js(`${doc}.getElementById('scorri').textContent`));
   const righeTesti = await js(`document.querySelectorAll('#imp-testi .imp-riga').length`);
-  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 19, String(righeTesti));
+  controlla('impostazioni: una riga per ogni voce (e avvisi/errori «mai»)', righeTesti === 20, String(righeTesti));
   await js(`document.querySelector('#imp-testi [data-voce="bpm"] button.piccolo').click()`);
   await aspetta(0.8);
   controlla('ripristina riporta la voce al predefinito', (await js(`window.cutx.preferenze().then((p) => JSON.stringify(p.testiPubblico?.bpm ?? null))`)) === 'null');
@@ -5216,7 +6003,13 @@ async function provaFinestra({ finestre, scrivi }) {
     wc.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
     await aspetta(1.5);
   };
-  controlla('all\'avvio l\'uscita non è aperta', (await aperta()) === false && !finestre.uscita);
+  controlla('all\'avvio l\'uscita non è aperta', !uscitaApertaAllAvvio);
+  // nel giro lungo una prova prima può averla lasciata aperta: si parte da chiusa
+  if (await aperta()) {
+    await js('window.cutx.uscitaOnOff()');
+    await aspetta(1.5);
+  }
+  controlla('si parte con l\'uscita chiusa', (await aperta()) === false);
   const preferenze = await js('window.cutx.preferenze()');
   controlla('«apri all\'avvio» è spento di default', preferenze.uscitaApriAvvio === false, JSON.stringify(preferenze.uscitaApriAvvio));
   const chiuso = await bottone();
@@ -5750,8 +6543,9 @@ async function provaStrudel({ finestre, scrivi }) {
   const live = (codice) => chiedi(finestre.live, codice);
   const cartella = process.env.CUTX_SUONI_PROVA;
   if (!cartella) {
-    controlla('cartella dei suoni data (CUTX_SUONI_PROVA)', false);
-    return false;
+    // senza la cartella scaricata la prova non si può fare: la salto (si lancia con node scripts/prova-suoni-strudel.mjs)
+    scrivi('SALTATA strudel: manca CUTX_SUONI_PROVA · si lancia con node scripts/prova-suoni-strudel.mjs');
+    return true;
   }
   try {
     if (process.env.CUTX_PROVA_OFFLINE === '1') {

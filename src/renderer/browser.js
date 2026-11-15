@@ -29,7 +29,8 @@ function tasto(etichetta, titolo, fa, classe = '') {
 
 export class Browser {
   // azioni: { suoni(), haStash(), libreria(), branoAperto(), prova(codice, chiave), ferma(), inAscolto(),
-  //           inserisci(testo), apriBrano(file) }
+  //           inserisci(testo), apriBrano(file),
+  //           altriProj(), braniDi(numero), clipDi(numero, file), copiaBrano(numero, file), copiaClip(numero, file, clip, dove), branoInCue() }
   constructor({ elenco, cerca, schede }, azioni) {
     this.elenco = elenco;
     this.cerca = cerca;
@@ -41,6 +42,9 @@ export class Browser {
     this.inPartenza = null; // la chiave di quello che sta partendo (si cerca la durata del file)
     this.progetti = null; // progetti Ableton trovati (null = non ancora cercati)
     this.infoProgetti = new Map(); // percorso → { bpm, tracce, … } | { errore }
+    this.projAperti = new Set(); // «altri PROJ»: i PROJ aperti nell'elenco
+    this.braniAltri = new Map(); // numero → brani di quel PROJ (letti quando lo apro)
+    this.clipAperte = new Map(); // «numero/file» → clip di quel brano (aperto per vederle)
     this.schede = schede;
     cerca.addEventListener('input', () => this.mostra());
     for (const b of schede) b.onclick = () => this.vai(b.dataset.scheda);
@@ -170,7 +174,7 @@ export class Browser {
   mostraLibreria() {
     this.gruppo('brani');
     const brani = this.azioni.libreria().filter((b) => !this.filtro || `${b.nome} ${b.file}`.toLowerCase().includes(this.filtro));
-    if (!brani.length) return this.vuoto(!this.azioni.haStash() ? 'nessuno stash: sceglilo in alto' : this.filtro ? 'nessun brano con questo nome' : 'nessun brano: ⌘S salva il CUE');
+    if (!brani.length) this.vuoto(!this.azioni.haStash() ? 'nessuno stash: sceglilo in alto' : this.filtro ? 'nessun brano con questo nome' : 'nessun brano: ⌘S salva il CUE');
     const aperto = this.azioni.branoAperto();
     for (const b of brani) {
       const riga = crea('div', 'voce cliccabile brano');
@@ -179,6 +183,53 @@ export class Browser {
       riga.append(crea('span', 'nome', b.nome), crea('span', 'lbl', `${b.sezioni}§${b.bpm ? ` · ${b.bpm}` : ''}`));
       riga.onclick = () => this.azioni.apriBrano(b.file);
       this.elenco.append(riga);
+    }
+    this.mostraAltriProj();
+  }
+
+  // «altri PROJ»: i brani degli altri progetti, da copiare in quello aperto (interi, o una clip alla volta).
+  mostraAltriProj() {
+    const altri = this.azioni.altriProj?.() ?? [];
+    if (!altri.length) return;
+    const T = it.proj;
+    this.gruppo(T.altri);
+    for (const p of altri) {
+      const aperto = this.projAperti.has(p.numero);
+      const riga = crea('div', 'voce cliccabile proj-altro');
+      riga.dataset.aperto = aperto ? '1' : '0';
+      riga.append(crea('span', 'nome', `PROJ ${String(p.numero).padStart(2, '0')}${p.sottotitolo ? ` · ${p.sottotitolo}` : ''}`), crea('span', 'lbl', String(p.brani)));
+      riga.onclick = async () => {
+        if (aperto) this.projAperti.delete(p.numero);
+        else {
+          this.projAperti.add(p.numero);
+          this.braniAltri.set(p.numero, await this.azioni.braniDi(p.numero));
+        }
+        this.mostra();
+      };
+      this.elenco.append(riga);
+      if (!aperto) continue;
+      const brani = (this.braniAltri.get(p.numero) ?? []).filter((b) => !this.filtro || `${b.nome} ${b.file}`.toLowerCase().includes(this.filtro));
+      if (!brani.length) this.vuoto(T.nessunBrano);
+      for (const b of brani) {
+        const chiave = `${p.numero}/${b.file}`;
+        const clip = this.clipAperte.get(chiave);
+        const rb = crea('div', 'voce cliccabile variante proj-brano');
+        rb.dataset.aperto = clip ? '1' : '0';
+        rb.append(crea('span', 'nome', b.nome), crea('span', 'lbl', `${b.sezioni}§`), tasto(T.copia, 'proj-copia-brano', () => this.azioni.copiaBrano(p.numero, b.file)));
+        rb.onclick = async () => {
+          if (clip) this.clipAperte.delete(chiave);
+          else this.clipAperte.set(chiave, await this.azioni.clipDi(p.numero, b.file));
+          this.mostra();
+        };
+        this.elenco.append(rb);
+        for (const c of clip ?? []) {
+          const rc = crea('div', 'voce variante proj-clip');
+          rc.append(crea('span', 'nome', c.nome), crea('span', 'lbl', ''));
+          if (this.azioni.branoInCue()) rc.append(tasto(T.nelBrano, 'proj-copia-clip', () => this.azioni.copiaClip(p.numero, b, c, 'brano')));
+          rc.append(tasto(T.nelKit, 'proj-copia-clip', () => this.azioni.copiaClip(p.numero, b, c, 'kit')));
+          this.elenco.append(rc);
+        }
+      }
     }
   }
 

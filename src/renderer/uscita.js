@@ -8,6 +8,8 @@ import { attivi, riempi } from './evidenzia.js';
 import { righeScorrevoli, righeVisibili } from './coda.js';
 import { StatoMisura, testoMisura } from './striscia.js';
 import { creaStriscia, disegnaNote, muoviTestina } from './striscia-vista.js';
+import { MemoriaOnda, disegnaLed } from './onda-led.js';
+import { ManoUscita } from './mani-uscita.js';
 import { convertiIntervalli, filtraCodice, riempi as riempiTesto, risolvi as risolviTesti, testoEtichetta } from './testi-pubblico.js';
 import { avviaInsegna } from './insegna.js';
 import { AZIONI, corrisponde, effettive } from './scorciatoie.js';
@@ -48,11 +50,21 @@ let portaLive = null;
 const chiediOnda = () => !ANTEPRIMA && portaLive?.postMessage({ tipo: 'onda', on: sfondo.modo === 'oscilloscopio' });
 // il misuratore sul proiettore è spento di default: il live manda le misure solo se lo accendo
 let misureChieste = null;
+let ondeChieste = null;
 const chiediMisure = () => {
   const on = !!testi.misuratore.acceso && testi.striscia.acceso;
   if (!ANTEPRIMA && on !== misureChieste) portaLive?.postMessage({ tipo: 'misure-uscita', on });
   misureChieste = on;
+  // l'onda LED sotto la batteria: il live manda i picchi solo se l'interruttore è acceso
+  const onde = !!testi.onda?.acceso;
+  if (!ANTEPRIMA && onde !== ondeChieste) portaLive?.postMessage({ tipo: 'onde-uscita', on: onde });
+  ondeChieste = onde;
 };
+// la mano (sperimentale): arriva solo lo scheletro dall'interfaccia; se l'interruttore dei testi è spento non si vede mai
+const manoUscita = new ManoUscita({ radice: $('mano'), canvas: $('mano-canvas'), u: () => innerWidth / 1440 });
+const ondeU = new Map(); // id del livello batteria → MemoriaOnda
+let ondaInNote = new Set(); // i livelli batteria che dalla postazione ho rimesso a note (clic sulla striscia della card)
+let caricoOnde = 0;
 
 window.addEventListener('message', (e) => {
   const con = e.data?.porta;
@@ -60,6 +72,9 @@ window.addEventListener('message', (e) => {
   if (con === 'live') {
     portaLive = e.ports[0];
     chiediOnda();
+    misureChieste = null; // un live nuovo (riavviato): gli si richiede tutto
+    ondeChieste = null;
+    chiediMisure();
   }
   e.ports[0].onmessage = ({ data }) => {
     if (data.tipo === 'onda') sfondo.suOnda(data.dati);
@@ -68,15 +83,24 @@ window.addEventListener('message', (e) => {
       livelli = data.livelli;
       // memoria: quello che ricordavo dei livelli usciti si butta (in una serata lunga ne passano centinaia)
       const vivi = new Set(livelli.map((l) => l.id));
-      for (const ricordi of [strisceU, misureU, statiU, inizioUscita]) for (const id of ricordi.keys()) if (!vivi.has(id)) ricordi.delete(id);
+      for (const ricordi of [strisceU, misureU, statiU, inizioUscita, ondeU]) for (const id of ricordi.keys()) if (!vivi.has(id)) ricordi.delete(id);
     }
     else if (data.tipo === 'bozze') bozze = data;
     else if (data.tipo === 'globali') righeGlobali = data.righe;
+    else if (data.tipo === 'mano') manoUscita.aggiorna(testi.mano?.acceso === false ? null : data)
     else if (data.tipo === 'scritta') scritta = { testo: data.testo, quando: performance.now() };
     else if (data.tipo === 'brano') branoEntra = { nome: data.nome, quando: performance.now() };
     else if (data.tipo === 'strisce') {
       // si tengono solo il ciclo di adesso e quello prima (prima restava una chiave per ogni ciclo suonato)
       for (const [id, ev] of Object.entries(data.livelli)) strisceU.set(Number(id), { [data.ciclo - 1]: strisceU.get(Number(id))?.[data.ciclo - 1], [data.ciclo]: ev });
+    } else if (data.tipo === 'onda-note') {
+      ondaInNote = new Set(data.nomi ?? []);
+    } else if (data.tipo === 'onde') {
+      caricoOnde = data.carico ?? 0;
+      for (const [id, picchi] of Object.entries(data.livelli)) {
+        if (!ondeU.has(Number(id))) ondeU.set(Number(id), new MemoriaOnda());
+        ondeU.get(Number(id)).aggiungi(data.ciclo, data.passo, picchi);
+      }
     } else if (data.tipo === 'misure') {
       for (const [id, pk] of Object.entries(data.livelli)) misureU.set(Number(id), { pk, quando: performance.now() });
     }
@@ -180,14 +204,28 @@ function vistaCodice(codice, inizio = 0) {
 // La striscia sotto il codice: le note vere del ciclo (sempre, se accesa nei testi per il pubblico) e, solo se acceso, il misuratore.
 function mostraStriscia(b, l, a, ciclo, firma, chiave, epoca) {
   const s = b.striscia;
-  const visibile = testi.striscia.acceso && !a.arriva;
+  const onda = !!l.batteria && !!testi.onda?.acceso && !ondaInNote.has(l.nome); // sotto la batteria l'onda LED al posto delle note (se non l'ho rimessa a note)
+  const visibile = (testi.striscia.acceso || onda) && !a.arriva;
   s.radice.hidden = !visibile;
-  firma.push(`${chiave}|s${visibile ? 1 : 0}`);
+  s.radice.classList.toggle('onda', onda);
+  firma.push(`${chiave}|s${visibile ? 1 : 0}${onda ? 'o' : ''}`);
   if (!visibile) return;
   const e = strisceU.get(l.id);
   const intero = Math.floor(ciclo);
-  disegnaNote(s, e?.[intero] ?? e?.[intero - 1] ?? []);
-  muoviTestina(s, ciclo - intero);
+  if (onda) {
+    // il proiettore rallenta solo dopo la postazione: 30 fotogrammi, 15 se il motore è molto carico
+    const ora = performance.now();
+    if (ora - (b.ultimaOnda ?? 0) >= (caricoOnde >= 2 ? 66 : 33) - 4) {
+      b.ultimaOnda = ora;
+      disegnaLed(s.note, ondeU.get(l.id), ciclo, Math.max(6, s.note.clientHeight / 13));
+    }
+    s.disegno = null;
+    s.firma = '';
+    s.testina.style.transform = `translateX(${((ciclo - intero) * 100).toFixed(2)}%)`;
+  } else {
+    disegnaNote(s, e?.[intero] ?? e?.[intero - 1] ?? []);
+    muoviTestina(s, ciclo - intero);
+  }
   s.misura.hidden = !testi.misuratore.acceso;
   if (!testi.misuratore.acceso) return;
   const m = misureU.get(l.id);
@@ -227,6 +265,7 @@ function mostraTag(b, testo) {
 }
 
 function disegna() {
+  if (testi.mano?.acceso === false && manoUscita.radice.classList.contains('dentro')) manoUscita.aggiorna(null); // interruttore spento mentre la mano si vede
   if (!mappa) return;
   const epoca = performance.timeOrigin + performance.now();
   const ciclo = cicloDi(mappa, epoca);

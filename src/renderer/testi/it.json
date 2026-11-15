@@ -3,7 +3,11 @@
   "aiuto": {
     "stash": {
       "nome": "stash",
-      "testo": "La cartella del set: suoni, libreria dei brani, video. Di solito sta sull'SSD."
+      "testo": "La cartella di tutto: suoni, video e i PROJ. Di solito sta sull'SSD."
+    },
+    "proj": {
+      "nome": "PROJ",
+      "testo": "Il progetto aperto: i suoi brani, il suo set e il suo kit. I suoni sono di tutti. Clic per cambiarlo o farne uno nuovo."
     },
     "cuffia-pausa": {
       "nome": "pausa cuffia",
@@ -347,6 +351,19 @@
     "roll-velocity": {
       "nome": "velocity",
       "testo": "Sotto le note: una barra per ogni punto in cui parte una nota (le note di un accordo ne hanno una sola). Clicca o trascina nella striscia per cambiarla: in alto è la velocity piena (non si scrive), più in basso è più piano. Nel codice diventa .velocity(\"…\") dopo le note. Se la barra è fra le note scelte le cambi tutte."
+    },
+    "proj-copia-brano": {
+      "nome": "copia il brano",
+      "testo": "Copia il brano nel PROJ aperto, con una riga «// viene da PROJ … · nome». L'originale non si tocca."
+    },
+    "proj-copia-clip": {
+      "nome": "copia la clip",
+      "testo": "→ brano: in fondo al brano aperto nel CUE (la linguetta che guardi). → kit: nel kit del PROJ aperto. Con una riga «// viene da…»."
+    },
+    "mani": {
+      "nome": "mani (sperimentale)",
+      "testo": "La webcam vede la mano: più in alto = filtro passa-basso più aperto su tutto il live, più in basso = più chiuso. Se la mano sparisce il filtro torna aperto in 2 cicli. M accende e spegne (da spento la camera è chiusa). Solo sul tuo schermo: sul proiettore non va niente.",
+      "azione": "mani"
     }
   },
   "impostazioni": {
@@ -561,7 +578,8 @@
     },
     "schede": {
       "suono": "suono",
-      "note": "note"
+      "note": "note",
+      "drum": "drum"
     },
     "note": {
       "lunghezza": "lunghezza",
@@ -692,5 +710,120 @@
     "entraTra": "entra tra {n} cicli",
     "senzaBeat": "«{nome}» va live senza il BEAT · per la base: go live sulla card BEAT",
     "vuota": "«{nome}» è vuota: niente da mandare live"
+  },
+  "proj": {
+    "titolo": "PROJ",
+    "nessuno": "PROJ –",
+    "aperto": "aperto",
+    "ultimo": "ultimo",
+    "apri": "apri",
+    "torna": "torna",
+    "apriComunque": "apri comunque",
+    "nuovo": "+ nuovo PROJ",
+    "chiudi": "esc",
+    "brano": "brano",
+    "brani": "brani",
+    "sottotitoloVuoto": "scrivi cos'è",
+    "sottotitoloNuovo": "cos'è (si cambia dopo)",
+    "kitDa": "kit da",
+    "kitVuoto": "kit vuoto",
+    "liveSuona": "il live suona: cambiare PROJ non lo ferma",
+    "confermaLive": "il live suona e continua: cambiano libreria, set e kit · premi di nuovo per confermare",
+    "riapri": {
+      "nome": "riapri l'ultimo PROJ",
+      "testo": "all'avvio si apre da solo l'ultimo PROJ usato, senza la schermata dei PROJ. Si cambia sempre dal tasto PROJ in alto."
+    },
+    "altri": "altri PROJ",
+    "nessunBrano": "nessun brano",
+    "copia": "copia",
+    "nelBrano": "→ brano",
+    "nelKit": "→ kit",
+    "copiato": "copiato in libreria: {file}",
+    "clipNelBrano": "clip «{nome}» in fondo al brano · ⌘S per salvarlo",
+    "clipNelKit": "clip «{nome}» nel kit"
+  },
+  "mani": {
+    "titolo": "MANI · sperimentale",
+    "acceso": "MANO ON",
+    "nessunaMano": "niente mano",
+    "errore": "camera",
+    "fotogrammi": "fps",
+    "avvisoAcceso": "mani accese: tieni la mano aperta e ferma verso la camera per agganciarla · pugno = blocca · ⇧M cambia modo · M per spegnere",
+    "avvisoSpento": "mani spente: la camera è chiusa",
+    "avvisoCaduta": "le mani si sono fermate ({motivo}): camera chiusa, il filtro è tornato com'era",
+    "serie": {
+      "nome": "mani pronte all'avvio",
+      "testo": "la camera parte da sola con l'app, così la mano è già riconosciuta quando serve (ci vogliono ~7 secondi). Spento di serie: il tasto M le accende e spegne."
+    },
+    "camera": {
+      "nome": "camera",
+      "testo": "quale webcam usare. Da spenta la camera è chiusa del tutto e non pesa niente."
+    },
+    "cameraPredefinita": "predefinita di macOS",
+    "sensibilita": {
+      "nome": "sensibilità",
+      "testo": "quanta strada deve fare la mano: bassa = serve tutta l'inquadratura, alta = basta meno della metà."
+    },
+    "cosaFa": "Tieni la mano aperta e ferma verso la camera: un anello si riempie e compare AGGANCIATA. Da lì il valore resta dov'è e la mano lo sposta (altezza e destra-sinistra, o apertura delle dita). Pugno = blocca. Se la camera perde la mano il valore resta fermo 2 secondi, poi torna a neutro piano.",
+    "fasi": {
+      "nessuna": "niente mano",
+      "libera": "tieni la mano aperta e ferma",
+      "agganciata": "AGGANCIATA",
+      "persa": "mano persa · valore fermo",
+      "rilascio": "mano persa · torna a neutro",
+      "bloccata": "BLOCCATA · riaggancia aprendo la mano"
+    },
+    "avvisoModo": "mani · modo {modo}",
+    "zonaAiuto": "La zona: trascina sull'immagine per disegnarla (conta solo la mano dentro, la più grande); doppio clic = tutta l'inquadratura.",
+    "modo": {
+      "nome": "modo di partenza",
+      "testo": "FILTRO: altezza = taglio, destra-sinistra = risonanza · SPAZIO: altezza = riverbero, dita aperte = eco · CTX: altezza = crush, destra-sinistra = distorsione. ⇧M passa al modo dopo."
+    },
+    "ambito": {
+      "nome": "su cosa agisce",
+      "testo": "tutto il live (una riga «mano» globale) o il livello che hai scelto (righe nella sua coda, che a fine gesto tornano com'erano). Senza livello scelto vale tutto il live.",
+      "tutto": "su tutto il live",
+      "livello": "sul livello scelto"
+    },
+    "aggancio": {
+      "nome": "durata dell'aggancio",
+      "testo": "quanto tenere la mano aperta e ferma verso la camera prima che comandi. Più basso = più pronta, ma una mano che passa può agganciare."
+    },
+    "dueMani": {
+      "nome": "riconosci fino a 2 mani",
+      "testo": "serve a ignorare le mani degli altri: conta la più grande dentro la zona. Spento riconosce una mano sola e pesa meno (~20 punti di un core in meno)."
+    }
+  },
+  "drum": {
+    "nome": "Nome della clip",
+    "play": "▶ cuffia",
+    "cue": "→ CUE",
+    "destinazione": "Destinazione",
+    "passi": "passi",
+    "cicli": "cicli",
+    "nuovaRiga": "+ suono",
+    "sceltaSuono": "scegli un suono",
+    "gruppoStash": "stash",
+    "gruppoStrudel": "Strudel",
+    "gruppoAltro": "altro",
+    "togli": "togli la riga",
+    "codice": "codice",
+    "testoRiga": "non si legge: resta nel testo",
+    "titoloPasso": "clic = accende o spegne · trascina su e giù = velocity",
+    "msg": {
+      "riga": "riga {n}: non si legge, resta nel testo",
+      "errore": "codice: {errore}",
+      "codiceNonParte": "errore: {errore}",
+      "mandata": "clip «{nome}» → {dove} (· drum)",
+      "mandataNonSalvata": "clip «{nome}» → {dove} (· drum, da salvare con ⌘S)",
+      "formato": "{passi} passi × {cicli} cicli: {n} passi persi (⌘Z per tornare)",
+      "righeMax": "al massimo {n} righe",
+      "vuota": "nessuna riga: aggiungi un suono",
+      "aperta": "aperta «{nome}»",
+      "apriNonDrum": "questa clip non viene dalla scheda DRUM"
+    },
+    "apri": "drum",
+    "apriTitolo": "Apri questa clip nella scheda DRUM",
+    "ciclo": "ciclo"
   }
 }

@@ -24,22 +24,33 @@ const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton,neon,tempo,solidita,uscita' : null);
 const SCHERMATE = process.argv.find((a) => a.startsWith('--schermate='))?.slice('--schermate='.length); // giro di tutti i pannelli a più dimensioni
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
+const FOTO_PROJ = process.argv.find((a) => a.startsWith('--foto-proj='))?.slice('--foto-proj='.length); // foto della schermata dei PROJ
 const SALTINO = process.argv.includes('--saltino'); // misura del saltino al salvataggio
 const SFONDO = process.argv.find((a) => a.startsWith('--sfondo='))?.slice('--sfondo='.length); // foto dello sfondo del proiettore
 const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('--chiusura='.length); // prova: si apre e si chiude in un certo modo
 
 // OGNI flag di prova, foto o misura gira con dati a parte (CUTX-prova, CUTX-chiusura), accanto a una CUTX eventualmente aperta e senza
 // toccarne le preferenze vere. Un flag nuovo si aggiunge QUI: se la cartella dati non è quella separata l'app non parte (guardia sotto).
-const PER_PROVE = !!(PROVA || FOTO || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
+const PER_PROVE = !!(PROVA || FOTO || FOTO_PROJ || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
 // Prova «senza rete» (scripts/prova-suoni-strudel.mjs --senza-rete): l'app di prova non risolve nessun indirizzo (solo localhost), il resto del Mac resta in rete.
 if (PER_PROVE && process.env.CUTX_PROVA_SENZA_RETE === '1') app.commandLine.appendSwitch('host-resolver-rules', 'MAP * ~NOTFOUND, EXCLUDE localhost');
+// Le mani: la prova automatica usa un video di una mano al posto della webcam (Chromium sa leggere un file come finta camera).
+// Il file è un .mjpeg (o .y4m): da mano.mov si fa con ffmpeg (vedi docs/MANI.md). Senza il file la prova «mani» si salta.
+const VIDEO_MANO = process.env.CUTX_VIDEO_MANO || path.join(app.getPath('home'), 'Progetti', 'cutx-prova-mani', 'mano.mjpeg');
+if (PROVA && PROVA.split(',').some((p) => p === 'mani' || p === 'mani-dump') && existsSync(VIDEO_MANO)) {
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+  app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+  app.commandLine.appendSwitch('use-file-for-fake-video-capture', VIDEO_MANO);
+}
+// Due sessioni di lavoro non devono usare gli stessi dati di prova: CUTX_PROVA_NOME=altro dà dati (CUTX-prova-altro) e, se serve, CUTX_PROVA_STASH uno stash di prova a parte.
 if (PER_PROVE) {
-  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : 'CUTX-prova');
+  const nome = (process.env.CUTX_PROVA_NOME || '').replace(/[^\w-]/g, '');
+  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : `CUTX-prova${nome ? `-${nome}` : ''}`);
   app.setPath('userData', dati);
   const impostazioni = path.join(dati, 'impostazioni.json');
   if (!existsSync(impostazioni)) {
     mkdirSync(dati, { recursive: true });
-    writeFileSync(impostazioni, JSON.stringify({ stash: path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test') }));
+    writeFileSync(impostazioni, JSON.stringify({ stash: process.env.CUTX_PROVA_STASH || path.join(app.getPath('home'), 'Progetti', 'cutx-stash-test') }));
   }
 }
 
@@ -108,7 +119,7 @@ const arrotonda1 = (x) => Math.round(x * 10) / 10;
 function cpuProcessi() {
   const processi = new Map(app.getAppMetrics().map((m) => [m.pid, m.cpu.percentCPUUsage]));
   const out = { totale: arrotonda1([...processi.values()].reduce((a, b) => a + b, 0)) };
-  for (const ruolo of ['controllo', 'live', 'cuffia', 'uscita']) {
+  for (const ruolo of ['controllo', 'live', 'cuffia', 'uscita', 'mani']) {
     const pid = finestre[ruolo] && !finestre[ruolo].isDestroyed() ? finestre[ruolo].webContents.getOSProcessId() : 0;
     if (processi.has(pid)) out[ruolo] = arrotonda1(processi.get(pid));
   }
@@ -191,14 +202,15 @@ function inoltraConsole(wc, nome) {
 
 // Tre finestre, tre processi: controllo (l'interfaccia), live e cuffia (motori nascosti).
 // Più, quando è aperta, l'uscita: quello che vede il pubblico.
-const finestre = { controllo: null, live: null, cuffia: null, uscita: null };
-const pronte = { controllo: false, live: false, cuffia: false, uscita: false };
+const finestre = { controllo: null, live: null, cuffia: null, uscita: null, mani: null };
+const pronte = { controllo: false, live: false, cuffia: false, uscita: false, mani: false };
 const COPPIE = [
   ['controllo', 'live'],
   ['controllo', 'cuffia'],
   ['live', 'cuffia'],
   ['live', 'uscita'],
   ['controllo', 'uscita'],
+  ['controllo', 'mani'],
 ];
 
 // Collega una finestra appena (ri)caricata alle altre con canali diretti, senza passare da qui.
@@ -288,6 +300,45 @@ function riavviaMotore(ruolo) {
   if (viva(vecchia)) vecchia.destroy();
   setTimeout(() => creaMotore(ruolo), 300);
 }
+
+// --- le mani (sperimentale) ---
+// Una finestra nascosta in un processo suo, solo finché il riconoscimento è acceso: da spento non esiste e la camera è chiusa.
+// Se si blocca o crasha la si chiude e si avvisa l'interfaccia (il filtro torna al fader): i motori audio non la sentono.
+function creaMani() {
+  if (chiudendo || viva(finestre.mani)) return;
+  pronte.mani = false;
+  const finestra = new BrowserWindow({ show: false, webPreferences });
+  finestre.mani = finestra;
+  const attuale = seguiCaricamento('mani', finestra);
+  const chiudi = (motivo) => {
+    if (!attuale()) return;
+    ev('avviso', 'mani', motivo);
+    chiudiMani();
+    if (viva(finestre.controllo)) finestre.controllo.webContents.send('mani:chiusa', motivo);
+  };
+  finestra.webContents.on('render-process-gone', (_e, d) => chiudi(`processo terminato (${d.reason})`));
+  finestra.on('unresponsive', () => chiudi('bloccata'));
+  finestra.on('closed', () => {
+    if (finestre.mani === finestra) finestre.mani = null;
+    pronte.mani = false;
+  });
+  finestra.loadURL(`${ORIGINE}/mani.html`);
+}
+function chiudiMani() {
+  const f = finestre.mani;
+  finestre.mani = null;
+  pronte.mani = false;
+  if (viva(f)) f.destroy(); // la camera si chiude con lei
+}
+ipcMain.handle('mani:accendi', () => {
+  creaMani();
+  return true;
+});
+ipcMain.handle('mani:spegni', () => {
+  chiudiMani();
+  return true;
+});
+ipcMain.handle('mani:aperta', () => viva(finestre.mani));
 
 // --- la finestra di uscita ---
 // Una finestra normale: la sposto dove voglio, ⌃⌘F la mette a schermo intero sullo schermo in cui
@@ -426,13 +477,32 @@ ipcMain.handle('suoni:durata', async (_e, rel) => {
     return null;
   }
 });
-ipcMain.handle('libreria:elenco', () => stash.elencoLibreria());
+ipcMain.handle('libreria:elenco', (_e, numero) => stash.elencoLibreria(numero));
+// I PROJ. All'avvio: se uno è già aperto (l'interfaccia è ripartita) resta quello; se le impostazioni lo chiedono (o è una prova)
+// si riapre l'ultimo; altrimenti l'interfaccia mostra la schermata dei PROJ.
+ipcMain.handle('proj:avvio', async () => {
+  const stato = await stash.stato();
+  if (!stato.config) return { schermata: false, proj: null }; // niente stash: prima si sceglie quello
+  if (stato.proj.aperto) return { schermata: false, proj: stato.proj };
+  if (PER_PROVE && !process.argv.includes('--schermata-proj')) {
+    const elenco = await stash.elencoProj();
+    if (!elenco.length) return { schermata: false, proj: await stash.nuovoProj('prova') };
+    return { schermata: false, proj: await stash.apriProj(stato.proj.ultimo ?? elenco.at(-1).numero) };
+  }
+  if (preferenze.leggi().riapriUltimoProj && stato.proj.ultimo) return { schermata: false, proj: await stash.apriProj(stato.proj.ultimo) };
+  return { schermata: true, proj: stato.proj };
+});
+ipcMain.handle('proj:elenco', () => stash.elencoProj());
+ipcMain.handle('proj:apri', (_e, numero) => stash.apriProj(numero));
+ipcMain.handle('proj:nuovo', (_e, sottotitolo) => stash.nuovoProj(sottotitolo));
+ipcMain.handle('proj:rinomina', (_e, numero, sottotitolo) => stash.rinominaProj(numero, sottotitolo));
+ipcMain.handle('proj:copia-brano', (_e, da, file) => stash.copiaBranoDa(da, file));
 ipcMain.handle('colpi:leggi', () => stash.leggiColpi());
 ipcMain.handle('set:leggi', () => stash.leggiSet());
 ipcMain.handle('set:scrivi', (_e, testo) => stash.scriviSet(testo));
 ipcMain.handle('kit:leggi', () => stash.leggiKit());
 ipcMain.handle('kit:scrivi', (_e, testo) => stash.scriviKit(testo));
-ipcMain.handle('libreria:leggi', (_e, nome) => stash.leggiBrano(nome));
+ipcMain.handle('libreria:leggi', (_e, nome, numero) => stash.leggiBrano(nome, numero));
 ipcMain.handle('libreria:scrivi', (_e, nome, testo, opzioni) => stash.scriviBrano(nome, testo, opzioni));
 ipcMain.handle('preferenze:leggi', () => preferenze.leggi());
 // Gli eventi delle finestre per la MOVIOLA arrivano a pacchetti, senza risposta; la cartella delle prove si apre dalle impostazioni.
@@ -706,6 +776,13 @@ app.whenReady().then(async () => {
   if (preferenze.leggi().uscitaApriAvvio === true) creaUscita();
   // le prove stanno a parte e non entrano nel pacchetto: si caricano solo se le chiedi
   if (PROVA) import('./prova.js').then((m) => m.prova({ finestre, cartellaLog: CARTELLA_LOG(), parti: PROVA.split(',') })).then((ok) => app.exit(ok ? 0 : 1));
+  if (FOTO_PROJ)
+    import('./prova.js')
+      .then(async (m) => {
+        await new Promise((r) => setTimeout(r, 4000));
+        await m.fotoProj(finestre, FOTO_PROJ);
+      })
+      .then(() => app.exit(0));
   if (FOTO) import('./prova.js').then((m) => m.foto({ finestre, file: FOTO })).then(() => app.exit(0));
   if (SALTINO) import('./prova.js').then((m) => m.saltino({ finestre })).then(() => app.exit(0));
   if (SFONDO) import('./prova.js').then((m) => m.sfondo({ finestre, cartella: path.resolve(SFONDO) })).then((ok) => app.exit(ok ? 0 : 1));

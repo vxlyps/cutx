@@ -30,6 +30,8 @@ export const AZIONI = [
   { id: 'uscitaIntera', nome: 'apri / chiudi l\'uscita', predefinita: 'Ctrl+Meta+KeyF' },
   { id: 'annullaSet', nome: 'annulla l\'ultima azione sul set (fuori dagli editor)', predefinita: 'Meta+KeyZ', soloFuori: true },
   { id: 'rifaiSet', nome: 'rifai l\'azione annullata (fuori dagli editor)', predefinita: 'Shift+Meta+KeyZ', soloFuori: true },
+  { id: 'mani', nome: 'mani on / off (sperimentale: la mano comanda filtro, spazio o CTX)', predefinita: 'KeyM', soloFuori: true },
+  { id: 'maniModo', nome: 'mani: modo dopo (FILTRO → SPAZIO → CTX)', predefinita: 'Shift+KeyM', soloFuori: true },
   { id: 'vistaLive', nome: 'vista LIVE (CUE e LIVE)', predefinita: 'Meta+Digit1' },
   { id: 'vistaSynth', nome: 'vista SYNTH', predefinita: 'Meta+Digit2' },
   { id: 'sfondo', nome: 'sfondo del proiettore (niente, note, oscilloscopio)', predefinita: 'Ctrl+Meta+KeyB' },

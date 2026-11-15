@@ -267,6 +267,53 @@ body {
 }
 
 /* la scritta grande di quello che tocco sul controller (se l'ho acceso nei testi per il pubblico) */
+/* la mano (mani-uscita.js): lo scheletro a destra, nell'angolo dove stanno l'insegna e il gatto (che si spengono finché la mano si vede),
+   senza riquadro, con i valori piccoli attaccati sotto la mano (disegnati nel canvas). L'angolo non è mai coperto dal codice: la mano non lo copre. */
+.mano-pubblico {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: stretch;
+  justify-self: stretch;
+  position: relative;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.7s ease-out;
+  pointer-events: none;
+}
+.mano-pubblico.dentro {
+  opacity: 1;
+  transition-duration: 0.25s;
+}
+.mano-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+.insegna {
+  position: relative;
+}
+.insegna::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: var(--fondo);
+  opacity: 0;
+  transition: opacity 0.5s ease-out;
+  pointer-events: none;
+}
+.gatto-posto {
+  transition: opacity 0.5s ease-out;
+}
+/* l'insegna ha già le sue animazioni (il ronzio su opacità e luminosità): si spegne con un velo dello stesso colore dello sfondo */
+.angolo.mano-dentro .insegna::after {
+  opacity: 0.92;
+}
+.angolo.mano-dentro .gatto-posto {
+  opacity: 0.15;
+}
+
 .scritta {
   position: absolute;
   left: 50%;
@@ -370,4 +417,16 @@ body {
 .livello.globale .codice {
   color: var(--marcio);
   text-shadow: 0 0 calc(10 * var(--u)) rgba(159, 194, 58, 0.4);
+}
+
+/* l'onda LED sotto la batteria (onda-led.js): grande, i puntini fanno da sé il fondo */
+.striscia-viva.onda {
+  height: calc(120 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+.striscia-viva.onda .sv-note {
+  border: none;
+}
+.striscia-viva.onda .sv-testina {
+  opacity: 0.35;
 }

@@ -434,6 +434,8 @@ test('le righe globali: si leggono e si applicano a un pattern, una dopo l\'altr
   assert.equal(leggiGlobale('all(x => x.lpf(1920))'), 'x.lpf(1920)');
   assert.equal(leggiGlobale('all(x => x.delay(.5).delayfeedback(.5))'), 'x.delay(.5).delayfeedback(.5)');
   assert.equal(leggiGlobale('// break'), null);
+  assert.equal(leggiGlobale('all(x => x.lpf(1234)) // mano'), 'x.lpf(1234)'); // la riga delle mani porta il suo segno
+  assert.equal(leggiGlobale('all(x => x.lpf(1234).room(.2)) // mano'), 'x.lpf(1234).room(.2)');
   const log = [];
   const p = { queryArc: () => [], lpf: (v) => (log.push(`lpf${v}`), p), hpf: (v) => (log.push(`hpf${v}`), p) };
   assert.ok(applicaGlobali(p, ['all(x => x.lpf(900))', 'all(x => x.hpf(100))', '// niente']).pattern);

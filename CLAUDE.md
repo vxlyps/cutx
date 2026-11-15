@@ -14,6 +14,7 @@ App per Mac di live coding musicale basata su Strudel, usata come un CDJ. Proget
 - Non fidarsi della memoria su Strudel/Electron/Web Audio: leggere `node_modules`, docs ufficiali, sorgente https://codeberg.org/uzu/strudel.
 - Se un'idea è cattiva o impossibile, dirlo subito con un'alternativa.
 - Stash di prova: `~/Progetti/cutx-stash-test` (fuori dal repo).
+- **Volume giù SEMPRE prima di lanciare l'app in prova** (regola di Valerio, 15/11/2026): qualsiasi lancio che accende i motori (prove, `--foto`, `--foto-proj`, `--schermate`, `--sfondo`, ogni flag) parte solo dopo aver abbassato il volume del Mac. Nessuna eccezione, nemmeno per una foto.
 - **Mai prove a volume pieno.** Prima di ogni prova che può suonare: leggo il volume del Mac e lo salvo, lo abbasso al 20% (`osascript -e 'set volume output volume 20'`) e azzero il master del live. A fine prova rimetto il volume com'era (anche se la prova fallisce) e lo dico.
 - **Prove, foto e script di screenshot girano SEMPRE con una cartella dati separata** (`CUTX-prova`, `CUTX-chiusura`), mai con le preferenze vere di Valerio (`~/Library/Application Support/CUTX`). Ogni nuovo flag di prova (`--prova`, `--foto`, `--schermate`, `--sfondo`, `--chiusura`, …) va in `PER_PROVE` in `main.js`. Prima di lanciare uno script nuovo, controllare che quel flag ci sia.
 
@@ -101,7 +102,7 @@ Io (Claude) sono il capo progetto: decido architettura, approccio, priorità. Co
 - Lo storico fase per fase sta in `docs/STATO.md`: non si carica, si cerca con grep.
 
 ## Stato (riassunto; il dettaglio è in `docs/STATO.md`)
-- Versione **0.5.0-beta.5** (14/11/2026), release «CUTX_05» su GitHub (novità in `CHANGELOG.md`, prove e cose da guardare coi cavi in `docs/PROVE-BETA5.md`), `.dmg` arm64 senza firma, icona gatto. Pacchetto: `npm run pacchetto`; `build.files` deve elencare ogni file importato da main.js e dal worker (`test/pacchetto.test.js` lo controlla; la beta 4 era partita senza `categorie.js`).
+- Versione **0.5.1-beta** (15/11/2026), release «CUTX_05_1» su GitHub (novità in `CHANGELOG.md` e `docs/NOVITA-5.1.md`, prove e cose da guardare coi cavi in `docs/PROVE-5.1.md`), `.dmg` arm64 senza firma, icona gatto. Nuovi nella 5.1: PROJ, scheda DRUM, onda LED, mani (M e ⇧M). Il resto del DRUM, il controller a ruoli e l'arpeggio sono nella 5.2 (`docs/PROSSIMI.md`). Le prove si fanno una alla volta (`scripts/prova-libera.mjs`; due sessioni: `CUTX_PROVA_NOME`). Pacchetto: `npm run pacchetto`; `build.files` deve elencare ogni file importato da main.js e dal worker (`test/pacchetto.test.js` lo controlla; la beta 4 era partita senza `categorie.js`).
 - MOVIOLA (scatola nera delle prove, SEGNA, `analizza-prova`): come si usa in `docs/MOVIOLA.md`.
 - Fatti: postazione a tre colonne, CUE e LIVE a livelli, brani `.cutx`, stash, Ableton, proiettore, controller X-Touch (LIVE e SYNTH), SYNTH con pianoroll (selezione, matita, passi, velocity, griglie, scale, codice incollato). Specifica del SYNTH: `docs/SYNTH.md`.
 - Da fare, in ordine: MOD trascinabili, ARPEGGIO e CAOS, tastiera MIDI (MiniLab 3) e suoni salvati; poi SHOW (col controller sempre sul LIVE), RECOVER, SIDECHAIN/DUCK, transizioni; poi ASSIST; spostare le parole in `testi/it.json`. Elenco: `docs/PROSSIMI.md`.

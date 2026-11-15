@@ -19,7 +19,8 @@
   min-width: 0;
 }
 
-.synth-barra {
+.synth-barra,
+.drum-barra {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -28,7 +29,8 @@
   flex-wrap: wrap;
 }
 
-.synth-barra .sep {
+.synth-barra .sep,
+.drum-barra .sep {
   width: 1px;
   height: 22px;
   background: var(--linea);
@@ -36,7 +38,9 @@
 }
 
 .synth-nome,
-.synth-select {
+.synth-select,
+.drum-nome,
+.drum-select {
   height: 32px;
   background: var(--pannello);
   color: var(--testo);
@@ -47,7 +51,8 @@
   padding: 0 8px;
 }
 
-.synth-nome {
+.synth-nome,
+.drum-nome {
   width: 180px;
   font-family: var(--stencil);
   font-size: 18px;
@@ -57,7 +62,8 @@
   color: var(--avviso);
 }
 
-.synth-corpo {
+.synth-corpo,
+.drum-corpo {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -231,7 +237,8 @@
 }
 
 /* il pannello del codice */
-.synth-codice {
+.synth-codice,
+.drum-lato {
   width: 440px;
   flex-shrink: 0;
   border-left: 1px solid var(--linea);
@@ -242,7 +249,8 @@
   overflow-y: auto;
 }
 
-.synth-pre {
+.synth-pre,
+.drum-pre {
   resize: none;
   min-height: 190px;
   width: 100%;
@@ -258,7 +266,8 @@
   color: var(--testo);
 }
 
-.synth-avviso {
+.synth-avviso,
+.drum-avviso {
   color: var(--avviso);
   font-size: 12px;
   min-height: 1.4em;
@@ -299,12 +308,14 @@
   accent-color: var(--testo);
 }
 
-.synth-pre:focus {
+.synth-pre:focus,
+.drum-pre:focus {
   outline: none;
   border-color: var(--secondario);
 }
 
-.synth-pre.errore {
+.synth-pre.errore,
+.drum-pre.errore {
   border-color: var(--avviso);
 }
 
@@ -333,7 +344,8 @@
   flex-direction: column;
 }
 
-.synth-schede {
+.synth-schede,
+.drum-schede {
   display: flex;
   gap: 4px;
   padding: 10px 14px 0;

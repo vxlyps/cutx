@@ -5,6 +5,7 @@ import it from './testi/it.json';
 import { AZIONI, caps, comboCifra, comboDa, conflitto, effettive, eRiservata } from './scorciatoie.js';
 import { creaEditor } from './editor.js';
 import { MODI, modoValido } from './sfondo.js';
+import { MODI as MANI_MODI } from './mani-modi.js';
 import { PREDEFINITI, SEGNAPOSTO, risolvi as risolviTesti } from './testi-pubblico.js';
 import { Anteprima } from './anteprima.js';
 import { OPZIONI, norma } from './scrittura.js';
@@ -257,6 +258,8 @@ export class Impostazioni {
       voce('coda', 'coda', 'le righe .lpf(…), .fast(…) sotto il codice e il volume', { testo: false }),
       voce('globale', 'righe globali', 'le righe all(x => …) scritte dal fader e dai colpi «su tutto», in fondo ai livelli', { testo: false }),
       voce('striscia', 'striscia delle note', 'sotto ogni livello: le note vere del ciclo e la testina che scorre', { testo: false }),
+      voce('onda', 'onda sotto la batteria', 'sotto il beat e le clip · drum: i puntini LED del suono vero, grandi, al posto delle note', { testo: false }),
+      voce('mano', 'la mano sul proiettore', 'quando le mani sono accese: lo scheletro della mia mano (mai l\'immagine della camera), il modo e il valore, in alto al centro', { testo: false }),
       voce('misuratore', 'misuratore del suono', 'a destra della striscia: il suono vero del livello in dB (spento di default)', { testo: false }),
       voce('commenti', 'commenti // nel codice', 'acceso: il pubblico legge anche le righe di commento', { testo: false }),
       voce('preambolo', 'preambolo del brano', 'acceso: si vedono le righe sopra la sezione (setcpm del brano…). Spento: solo sul mio schermo. Un setcpm scritto dal vivo si vede sempre', { testo: false }),
@@ -328,6 +331,8 @@ export class Impostazioni {
     riga.append(testo, scelta);
     $('imp-proiezione').append(riga);
     gruppo('imp-paracadute', [it.impostazioni.paracadute]);
+    $('imp-proj-riapri').replaceChildren(rigaInterruttore(it.proj.riapri, !!this.dati.preferenze().riapriUltimoProj, (x) => this.dati.salvaPreferenze({ riapriUltimoProj: x })));
+    this.disegnaMani();
     this.disegnaMoviola();
     this.disegnaScorciatoie();
     this.disegnaAbleton();
@@ -403,6 +408,96 @@ export class Impostazioni {
   }
 
   // --- scorciatoie ---
+
+  // Le mani (sperimentale): accese di serie o no, quale camera, la sensibilità. Il tasto M (tra le scorciatoie) le accende e spegne.
+  disegnaMani() {
+    const m = it.mani;
+    $('imp-titolo-mani').textContent = m.titolo;
+    const p = { acceso: false, camera: '', sensibilita: 0.5, modo: 'filtro', ambito: 'tutto', aggancioMs: 500, numMani: 2, ...this.dati.preferenze().mani };
+    const salva = (parziale) => this.dati.salvaPreferenze({ mani: { ...p, ...this.dati.preferenze().mani, ...parziale } });
+    // una riga con una tendina (modo di partenza, su cosa agisce)
+    const tendina = (id, testi, valori, scelto, cambia) => {
+      const riga = crea('div', 'imp-riga');
+      const t = crea('div', 'imp-testo');
+      t.append(crea('span', '', testi.nome), crea('span', 'imp-nota', testi.testo));
+      const sel = crea('select');
+      sel.id = id;
+      for (const [v, nome] of valori) sel.append(new Option(nome, v));
+      sel.value = scelto;
+      sel.onchange = () => cambia(sel.value);
+      riga.append(t, sel);
+      return riga;
+    };
+    const modo = tendina('imp-mani-modo', m.modo, Object.entries(MANI_MODI).map(([id, x]) => [id, x.nome]), p.modo, (v) => salva({ modo: v }));
+    const ambito = tendina('imp-mani-ambito', m.ambito, [['tutto', m.ambito.tutto], ['livello', m.ambito.livello]], p.ambito, (v) => salva({ ambito: v }));
+    const aggancio = crea('div', 'imp-riga');
+    const ta = crea('div', 'imp-testo');
+    ta.append(crea('span', '', m.aggancio.nome), crea('span', 'imp-nota', m.aggancio.testo));
+    const ca = crea('div', 'imp-controlli');
+    const ia = crea('input');
+    ia.id = 'imp-mani-aggancio';
+    ia.type = 'range';
+    ia.min = 300;
+    ia.max = 1500;
+    ia.step = 50;
+    ia.value = p.aggancioMs;
+    const va = crea('span', 'lbl', `${(p.aggancioMs / 1000).toFixed(2)} s`);
+    let timerA = null;
+    ia.oninput = () => {
+      va.textContent = `${(Number(ia.value) / 1000).toFixed(2)} s`;
+      clearTimeout(timerA);
+      timerA = setTimeout(() => salva({ aggancioMs: Number(ia.value) }), 150);
+    };
+    ca.append(ia, va);
+    aggancio.append(ta, ca);
+    const camera = crea('div', 'imp-riga');
+    const t = crea('div', 'imp-testo');
+    t.append(crea('span', '', m.camera.nome), crea('span', 'imp-nota', m.camera.testo));
+    const scelta = crea('select');
+    scelta.id = 'imp-mani-camera';
+    scelta.append(new Option(m.cameraPredefinita, ''));
+    // i nomi delle camere si vedono solo dopo che la camera è stata usata almeno una volta: finché mancano, «camera 1, 2…»
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      .then((lista) => {
+        lista.filter((d) => d.kind === 'videoinput').forEach((d, i) => scelta.append(new Option(d.label || `camera ${i + 1}`, d.deviceId)));
+        if (p.camera && ![...scelta.options].some((o) => o.value === p.camera)) scelta.append(new Option(`${p.camera.slice(0, 8)}… (non collegata)`, p.camera));
+        scelta.value = p.camera;
+      })
+      .catch(() => {});
+    scelta.onchange = () => salva({ camera: scelta.value });
+    camera.append(t, scelta);
+    const sens = crea('div', 'imp-riga');
+    const ts = crea('div', 'imp-testo');
+    ts.append(crea('span', '', m.sensibilita.nome), crea('span', 'imp-nota', m.sensibilita.testo));
+    const comandi = crea('div', 'imp-controlli');
+    const i = crea('input');
+    i.id = 'imp-mani-sensibilita';
+    i.type = 'range';
+    i.min = 0;
+    i.max = 1;
+    i.step = 0.05;
+    i.value = p.sensibilita;
+    const valore = crea('span', 'lbl', `${Math.round(p.sensibilita * 100)}%`);
+    let timer = null;
+    i.oninput = () => {
+      valore.textContent = `${Math.round(Number(i.value) * 100)}%`;
+      clearTimeout(timer);
+      timer = setTimeout(() => salva({ sensibilita: Number(i.value) }), 150);
+    };
+    comandi.append(i, valore);
+    sens.append(ts, comandi);
+    $('imp-mani').replaceChildren(
+      rigaInterruttore(m.serie, !!p.acceso, (x) => salva({ acceso: x })),
+      modo,
+      ambito,
+      aggancio,
+      rigaInterruttore(m.dueMani, p.numMani !== 1, (x) => salva({ numMani: x ? 2 : 1 })),
+      camera,
+      sens,
+      crea('p', 'secondario a-capo', m.cosaFa),
+    );
+  }
 
   // La MOVIOLA: interruttore, il tasto SEGNA del controller (quello della tastiera sta tra le scorciatoie), la cartella delle prove.
   disegnaMoviola() {

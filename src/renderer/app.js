@@ -4,8 +4,16 @@
 import { SuoniVista } from './suoni-vista.js';
 import { Cue } from './cue.js';
 import { VistaSynth } from './synth-vista.js';
+import { tipoApribile } from './apri-clip.js';
 import { codice as codiceSynth, leggiRiga as leggiRigaSynth } from './synth-codice.js';
 import it from './testi/it.json';
+import { SchermataProj, etichettaProj } from './proj-vista.js';
+import { ManiClient } from './mani-client.js';
+import { ManiVista } from './mani-vista.js';
+import { ControlloMano } from './mani-controllo.js';
+import { scegliMano, ZONA_TUTTA } from './mani-gesto.js';
+import { MODI as MANI_MODI, modoDopo as maniModoDopo, modoValido as maniModoValido } from './mani-modi.js';
+import { risolvi as risolviTestiPubblico } from './testi-pubblico.js';
 import { iniziale as synthIniziale, pulisci as synthPulisci } from './synth-modello.js';
 import { Serata } from './set-vista.js';
 import * as P from './passaggio.js';
@@ -131,7 +139,7 @@ try {
   const bozza = localStorage.getItem(CHIAVE_BOZZA);
   if (ricaricata && bozza && bozza !== CODICE_INIZIALE) {
     cue.libero.codice = bozza;
-    cue.avviso("l'interfaccia è ripartita: ho ripreso il testo del CUE");
+    cue.avviso("l'interfaccia è ripartita: ho ripreso il testo del CUE", { persistente: true });
   }
 } catch {
   // idem
@@ -260,7 +268,9 @@ async function goLive(pezzo = null) {
   // una scena del beat: se il beat suona già, la coda e il volume dei suoi livelli restano com'erano (le manopole contano)
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
-  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome, provenienza: p.provenienza, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
+  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
   if (!r.errore) entraTraUsato();
   // una clip di un brano che ha un beat, e nessun beat suona né sta arrivando: la base non parte da sola, lo dico (e la card BEAT lampeggia)
@@ -739,10 +749,18 @@ const synth = new VistaSynth($('vista-synth'), {
   ],
   mandaCue: (dove, nome, testo, categoria) => (dove === 'kit' ? serata.aggiungiClipKit(nome, testo, categoria) : cue.aggiungiClip(dove, nome, testo, categoria)),
   salva: (contenuto) => window.cutx.salvaPreferenze({ synthUltimo: contenuto }),
+  // la scheda DRUM: quali suoni ci sono nello stash, e dove salva la sua ultima griglia
+  suoniStash: () => suoni,
+  salvaDrum: (contenuto) => window.cutx.salvaPreferenze({ drumUltimo: contenuto }),
 });
 
 // «apri nel synth» sulla card di una clip fatta dal synth: il pannello riparte da quella clip.
 function apriNelSynth(codice, nome) {
+  if (tipoApribile(codice) === 'drum') {
+    const errore = synth.apriDrum(codice, nome);
+    if (errore) return cue.avviso(errore);
+    return mostraVista('synth');
+  }
   const stato = leggiRigaSynth(codice);
   if (!stato) return cue.avviso(it.synth.msg.apriNonSynth);
   synth.apri(stato, nome);
@@ -839,6 +857,8 @@ const FA = {
   fraseDaCapo,
   paracadute: paracaduteDoppio,
   uscitaIntera: () => window.cutx.uscitaSchermoIntero(),
+  mani: () => alternaMani(),
+  maniModo: () => cambiaModoMani(),
   sfondo: () => window.cutx.salvaPreferenze({ sfondoProiettore: modoDopo(modoValido(preferenze.sfondoProiettore)) }),
 };
 
@@ -858,6 +878,7 @@ window.addEventListener(
     for (const a of AZIONI) {
       const r = corrisponde(e, a, mappa[a.id]);
       if (!r) continue;
+      if (schermataProj.visibile && !SEMPRE_DEL_LIVE.has(a.id)) continue; // sulla schermata dei PROJ restano solo i tasti che proteggono il live
       if (scrivendo && (a.soloFuori || scriveTesto(mappa[a.id]))) continue;
       e.preventDefault();
       e.stopPropagation();
@@ -936,10 +957,54 @@ async function apriStash(stato) {
     ? nomi.map((n) => `${n} (${suoni[n].length})`).join(' · ')
     : 'nessun suono: metti dei WAV in suoni/<nome>/';
   $('offset-cuffia').value = config.offsetCuffiaMs ?? 0;
+  // il PROJ: riaperto da solo (impostazione, o l'interfaccia è ripartita) oppure si sceglie dalla schermata
+  const avvio = haStash ? await window.cutx.proj.avvio() : { schermata: false, proj: null };
+  mostraProj(avvio.proj);
   await aggiornaLibreria();
   await caricaSerata(stato);
   await aggiornaElenchi();
+  if (avvio.schermata && !schermataProj.visibile) await schermataProj.mostra({ ultimo: avvio.proj?.ultimo });
+  else if (!haStash) schermataProj.chiudi();
 }
+
+// --- i PROJ ---
+
+let projAperto = null; // { numero, sottotitolo, … } o null
+let projUltimo = null;
+const projDelLivello = new Map(); // nome del livello live → numero del PROJ da cui è partito
+const projInLive = () => new Set(pila.livelli.map((l) => projDelLivello.get(l.nome)).filter(Boolean));
+const SEMPRE_DEL_LIVE = new Set(['paracadute', 'fermaTutto', 'togli', 'muto']);
+function mostraProj(info) {
+  projAperto = info?.aperto ?? null;
+  projUltimo = info?.ultimo ?? null;
+  $('proj-nome').textContent = etichettaProj(projAperto);
+  $('proj').disabled = !haStash;
+}
+// Un altro PROJ: libreria, set e kit nuovi. A live fermo il CUE si svuota; col live che suona (confermato) il CUE resta com'è.
+async function cambiatoProj(info) {
+  mostraProj(info);
+  if (!pila.livelli.length && !cue.slot.attivo?.sporco && !cue.slot.prossimo?.sporco) {
+    cue.slot = { attivo: null, prossimo: null };
+    cue.mostraLinguette();
+    cue.mostraBrano?.(true);
+  }
+  await aggiornaLibreria();
+  await caricaSerata({ percorso: percorsoStash });
+  window.cutx.logEvento('info', 'proj', `aperto ${etichettaProj(projAperto)}`);
+}
+const schermataProj = new SchermataProj({
+  elenco: () => window.cutx.proj.elenco(),
+  apri: async (n) => cambiatoProj(await window.cutx.proj.apri(n)),
+  nuovo: async (sottotitolo) => {
+    const info = await window.cutx.proj.nuovo(sottotitolo);
+    await cambiatoProj(info);
+    return info;
+  },
+  rinomina: async (n, sottotitolo) => mostraProj(await window.cutx.proj.rinomina(n, sottotitolo)),
+  liveSuona: () => pila.livelli.length > 0,
+  projInLive,
+});
+$('proj').onclick = () => haStash && schermataProj.mostra({ aperto: projAperto?.numero ?? null, ultimo: projUltimo });
 
 // --- impostazioni e help ---
 
@@ -1050,6 +1115,12 @@ browser = new Browser(
     durataSuono,
     inserisci: (testo) => cue.inserisci(testo),
     apriBrano: (file) => cue.apri(file),
+    altriProj: () => altriProj,
+    braniDi: (n) => window.cutx.libreria(n),
+    clipDi: async (n, file) => B.leggi(await window.cutx.leggiBrano(file, n)).sezioni.map((x) => ({ nome: x.nome, info: x.info, corpo: x.corpo })),
+    copiaBrano: (n, file) => copiaBranoDaProj(n, file),
+    copiaClip: (n, brano, clip, dove) => copiaClipDaProj(n, brano, clip, dove),
+    branoInCue: () => cue.modo === 'brano' && !!cue.brano,
     disegnaSet: (el, filtro) => serata.disegna(el, filtro),
     rileggiSet: () => serata.carica(),
     cartelleAbleton: () => preferenze.cartelleAbleton ?? [],
@@ -1105,8 +1176,9 @@ async function caricaProssimoDopo(file) {
 async function caricaSerata(stato) {
   await serata.carica();
   mostraBrowser();
-  if (!stato?.percorso || setAvviato === stato.percorso || cue.slot.attivo || cue.slot.prossimo) return;
-  setAvviato = stato.percorso;
+  const chiave = `${stato?.percorso}|${projAperto?.numero}`; // il brano che apre il set: una volta per stash e PROJ
+  if (!stato?.percorso || !projAperto || setAvviato === chiave || cue.slot.attivo || cue.slot.prossimo) return;
+  setAvviato = chiave;
   const primo = serata.primo();
   if (primo && libreria.some((b) => b.file === primo)) await cue.apri(primo, 'prossimo', { fuoco: false });
 }
@@ -1120,7 +1192,30 @@ function mostraBrowser() {
 
 async function aggiornaLibreria() {
   libreria = await window.cutx.libreria();
+  altriProj = haStash ? (await window.cutx.proj.elenco()).filter((p) => p.numero !== projAperto?.numero) : [];
   mostraBrowser();
+}
+let altriProj = []; // i PROJ non aperti, per «altri PROJ» in libreria
+
+// Da «altri PROJ»: un brano intero nella libreria del PROJ aperto, o una clip nel brano del CUE (o nel kit). Sempre con «// viene da…».
+async function copiaBranoDaProj(n, file) {
+  try {
+    const r = await window.cutx.proj.copiaBrano(n, file);
+    await aggiornaLibreria();
+    cue.avviso(it.proj.copiato.replace('{file}', r.file));
+  } catch (e) {
+    cue.avviso(String(e.message ?? e));
+  }
+}
+async function copiaClipDaProj(n, brano, clip, dove) {
+  const viene = `// viene da PROJ ${String(n).padStart(2, '0')} · ${brano.nome}`;
+  const corpo = [viene, ...clip.corpo.filter((r) => r !== viene)].join('\n');
+  if (dove === 'brano' && cue.modo === 'brano' && cue.brano && !cue.aggiungiClip(cue.linguetta, clip.nome, corpo, clip.info ?? {})) return cue.avviso(it.proj.clipNelBrano.replace('{nome}', clip.nome));
+  const kit = (await window.cutx.leggiKit().catch(() => null)) ?? '';
+  await window.cutx.scriviKit(`${kit.replace(/\s+$/, '')}${kit.trim() ? '\n' : ''}${B.rigaSezione(clip.nome, clip.info)}\n${corpo.replace(/\s+$/, '')}\n`);
+  await serata.carica();
+  mostraBrowser();
+  cue.avviso(it.proj.clipNelKit.replace('{nome}', clip.nome));
 }
 
 // --- uscite (provvisorie, nelle impostazioni) ---
@@ -1292,10 +1387,184 @@ function mostraImpostazioni() {
 // Verso la finestra di uscita passano solo le bozze: quello che sto scrivendo nel LIVE.
 let portaUscita = null;
 let ultimeBozze = { livelli: {}, jam: null };
+// --- le mani (sperimentale) ---
+// La finestra «mani» (processo a parte) vede le mani; qui la mia mano (la più grande, dentro la zona) viene agganciata da mani-controllo.js
+// e comanda un modo (FILTRO, SPAZIO, CTX), scritto come riga globale segnata «mano» (all(x => …) // mano). Nel modo FILTRO, finché la
+// mano comanda, il fader non scrive la sua riga (la ricorda e la rimette quando la mano smette): al filtro comanda uno solo.
+// Da spenta la camera è chiusa del tutto.
+const maniPref = () => ({ acceso: false, camera: '', sensibilita: 0.5, modo: 'filtro', ambito: 'tutto', aggancioMs: 500, numMani: 2, ...preferenze.mani });
+const cicloMsMani = () => (mappa?.cps ? 1000 / mappa.cps : 2000);
+const salvaZonaMani = (zona) => {
+  window.cutx.salvaPreferenze({ mani: { ...maniPref(), zona } });
+  maniControllo.zona = zona ?? ZONA_TUTTA;
+  maniVista.mostraZona(zona);
+};
+const maniVista = new ManiVista($('mani-finestra'), { suZona: salvaZonaMani });
+const nuovoControlloMani = () => {
+  const p = maniPref();
+  return new ControlloMano({ modo: p.modo, sensibilita: p.sensibilita, aggancioMs: p.aggancioMs, zona: p.zona ?? ZONA_TUTTA, cicloMs: cicloMsMani });
+};
+let maniControllo = nuovoControlloMani();
+let maniControlla = false; // la riga «mano» è nel live
+let maniCedeFader = false; // …e la riga del fader è messa da parte (solo nel modo FILTRO)
+let faderRiga = null; // l'ultima riga globale del fader
+let ultimaMano = { visibile: false };
+let ultimaManoOra = 0;
+const maniClient = new ManiClient({
+  suMano: (m) => {
+    const scelta = scegliMano(m.mani ?? [], maniControllo.zona, m.ar);
+    ultimaMano = { visibile: !!scelta, punti: scelta?.punti, ar: m.ar };
+    ultimaManoOra = performance.now();
+    maniVista.suMano({ visibile: !!scelta, punti: scelta?.punti });
+    if (ultimoControlloMani) mandaManoUscita(ultimoControlloMani, !!scelta); // i punti al proiettore appena li vede la camera
+  },
+  suImmagine: (jpeg) => maniVista.immagine(jpeg),
+  suStato: (s) => maniVista.stato(s),
+  suChiusa: (motivo) => {
+    fermaControlloMani();
+    maniVista.mostra(false);
+    cue.avviso(it.mani.avvisoCaduta.replace('{motivo}', motivo), { persistente: true });
+    window.cutx.logEvento('avviso', 'mani', `finestra chiusa: ${motivo}`);
+  },
+});
+// Dove va l'effetto: su tutto il live (riga globale «mano») o sul livello scelto (righe di coda di quel livello, come le manopole del
+// controller). Il livello si sceglie quando l'effetto compare; senza livello scelto vale «su tutto». A fine gesto la coda torna com'era.
+let maniLivello = null; // { id, prima: Map(chiave → voce di prima | null), scritte: Set(chiavi) }
+const chiaveVoce = (v) => leggiVoce(v)?.chiave;
+function ripristinaVoceLivello(chiave) {
+  const l = maniLivello;
+  if (!l || !livelloVivo(l.id)) return;
+  const prima = l.prima.get(chiave);
+  live.manda({ tipo: 'coda', livello: l.id, ...(prima ? { imposta: [prima] } : { togli: [chiave] }), origine: 'manopola' });
+}
+function scriviVociLivello(voci) {
+  const l = maniLivello;
+  if (!livelloVivo(l.id)) return;
+  const attuali = new Set(voci.map(chiaveVoce));
+  for (const chiave of [...l.scritte]) {
+    if (attuali.has(chiave)) continue;
+    ripristinaVoceLivello(chiave); // una voce che si è spenta (a zero): torna quella di prima
+    l.scritte.delete(chiave);
+  }
+  for (const v of voci) {
+    const chiave = chiaveVoce(v);
+    if (!l.prima.has(chiave)) l.prima.set(chiave, (livelloVivo(l.id).coda ?? []).find((c) => chiaveVoce(c) === chiave) ?? null);
+    l.scritte.add(chiave);
+    live.manda({ tipo: 'coda', livello: l.id, imposta: [v], origine: 'manopola' });
+  }
+}
+function scriviMano(r) {
+  if (r.controlla) {
+    if (!maniControlla) {
+      maniControlla = true;
+      maniLivello = maniPref().ambito === 'livello' && livelloVivo(pila.selezionato) ? { id: pila.selezionato, prima: new Map(), scritte: new Set() } : null;
+      maniCedeFader = !maniLivello && r.modo === 'filtro';
+      if (maniCedeFader && faderRiga) live.manda({ tipo: 'globale', chiave: 'fader', riga: null });
+    }
+    if (maniLivello) scriviVociLivello(r.voci);
+    else live.manda({ tipo: 'globale', chiave: 'mano', riga: r.riga });
+  } else if (maniControlla) {
+    maniControlla = false;
+    if (maniLivello) {
+      for (const chiave of maniLivello.scritte) ripristinaVoceLivello(chiave);
+      maniLivello = null;
+    } else live.manda({ tipo: 'globale', chiave: 'mano', riga: null });
+    if (maniCedeFader && faderRiga) live.manda({ tipo: 'globale', chiave: 'fader', riga: faderRiga });
+    maniCedeFader = false;
+  }
+}
+// La mano sul proiettore: solo i punti (leggeri, ~30 volte al secondo), mai l'immagine. Se l'interruttore nei testi per il pubblico è
+// spento, o la mano è uscita, non va niente (al proiettore arriva un «null» una volta sola, così si dissolve).
+let manoMandata = false;
+let manoUltimoInvio = 0;
+function mandaManoUscita(r, visibile) {
+  if (!portaUscita) return;
+  const on = visibile && maniClient.acceso && !!ultimaMano.punti && risolviTestiPubblico(preferenze).mano.acceso;
+  if (on) {
+    const ora = performance.now();
+    if (ora - manoUltimoInvio < 33) return; // ~30 al secondo: quanto la camera
+    manoUltimoInvio = ora;
+    manoMandata = true;
+    portaUscita.postMessage({
+      tipo: 'mano',
+      punti: ultimaMano.punti.map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]),
+      ar: Math.round((ultimaMano.ar ?? 4 / 3) * 1000) / 1000,
+      zona: maniControllo.zona === ZONA_TUTTA ? null : { x: 1 - (maniControllo.zona.x + maniControllo.zona.w), y: maniControllo.zona.y, w: maniControllo.zona.w, h: maniControllo.zona.h }, // la zona è a specchio, i punti no
+      fase: r.fase,
+      progresso: Math.round(r.progresso * 100) / 100,
+      testo: r.breve, // solo i numeri: sul proiettore non c'è il nome del modo
+      valori: r.valori.map((v) => Math.round(v * 100) / 100),
+    });
+  } else if (manoMandata) {
+    manoMandata = false;
+    portaUscita.postMessage({ tipo: 'mano', punti: null });
+  }
+}
+let ultimoControlloMani = null;
+const mostraControlloMani = (r) => {
+  ultimoControlloMani = r;
+  const vede = ultimaMano.visibile && performance.now() - ultimaManoOra < 400;
+  maniVista.controllo(r, vede);
+  mandaManoUscita(r, vede);
+};
+function fermaControlloMani() {
+  const r = maniControllo.ferma();
+  scriviMano(r);
+  mostraControlloMani(r);
+}
+// Il controllo gira a passo suo: se la finestra «mani» non manda più niente la mano conta come persa (mai un valore fermo a metà).
+setInterval(() => {
+  if (!maniClient.acceso) return;
+  if (maniLivello && !livelloVivo(maniLivello.id)) fermaControlloMani(); // il livello è stato tolto: niente più da comandare
+  const ora = performance.now();
+  const fresca = ora - ultimaManoOra < 400;
+  const r = maniControllo.aggiorna({ mano: fresca && ultimaMano.visibile ? { punti: ultimaMano.punti, ar: ultimaMano.ar } : null, ora });
+  mostraControlloMani(r);
+  if (r.cambia) scriviMano(r);
+}, 40);
+async function accendiMani() {
+  if (maniClient.acceso || !haStash) return;
+  const p = maniPref();
+  maniControllo = nuovoControlloMani();
+  ultimaMano = { visibile: false };
+  ultimaManoOra = 0;
+  maniVista.mostra(true);
+  maniVista.mostraZona(p.zona ?? null);
+  mostraControlloMani(maniControllo.ferma());
+  await maniClient.accendi({ camera: p.camera, fps: 'normale', anteprima: true, numMani: p.numMani });
+  cue.avviso(it.mani.avvisoAcceso);
+}
+async function spegniMani() {
+  if (!maniClient.acceso) return;
+  fermaControlloMani();
+  maniVista.mostra(false);
+  await maniClient.spegni();
+  mandaManoUscita(null, false); // il proiettore dissolve la mano
+  cue.avviso(it.mani.avvisoSpento);
+}
+const alternaMani = () => (maniClient.acceso ? spegniMani() : accendiMani());
+// ⇧M: il modo dopo (FILTRO → SPAZIO → CTX). Si riparte da neutro e va riagganciata la mano.
+function cambiaModoMani(id) {
+  if (!maniClient.acceso) return;
+  const r = maniControllo.cambiaModo(id ?? maniModoDopo(maniControllo.modoId));
+  if (r.cambia) scriviMano(r);
+  mostraControlloMani(r);
+  cue.avviso(it.mani.avvisoModo.replace('{modo}', r.nomeModo));
+}
+// Le righe globali del controller (fader, colpi «su tutto»). Quella del fader aspetta mentre la mano comanda il filtro.
+function globaleDelController(chiave, riga, griglia = 0, taglio = null) {
+  if (chiave === 'fader') {
+    faderRiga = riga ?? null;
+    if (maniControlla && maniCedeFader) return;
+  }
+  live.manda({ tipo: 'globale', chiave, riga, griglia, taglio });
+}
+const mandaOndaNote = () => portaUscita?.postMessage({ tipo: 'onda-note', nomi: [...pila.inNote] }); // i livelli batteria che ho rimesso a note
 window.addEventListener('message', (e) => {
   if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
   portaUscita = e.ports[0];
   portaUscita.postMessage({ tipo: 'bozze', ...ultimeBozze });
+  mandaOndaNote();
 });
 
 function mostraUscita(aperta) {
@@ -1306,6 +1575,8 @@ function mostraUscita(aperta) {
 // Il LIVE: la pila dei livelli, dallo stato del motore live, e il jam in fondo.
 let volumePrima = null; // { id, v }: il volume com'era all'inizio del trascinamento
 const pila = new Pila($('livelli'), $('jam'), {
+  ondaGenerale: () => risolviTestiPubblico(preferenze).onda.acceso,
+  ondaCambiata: () => mandaOndaNote(),
   apriNelSynth: (codice, nome) => apriNelSynth(codice, nome),
   togli: (id) => togliLivello(id),
   salvaLivello: (id) => live.manda({ tipo: 'salva-livello', livello: id }),
@@ -1527,6 +1798,7 @@ for (const m of [live, cuffia]) {
     }
     else if (msg.tipo === 'globali') mostraGlobali(msg.righe);
     else if (msg.tipo === 'strisce') pila.suStrisce(msg);
+    else if (msg.tipo === 'onde') pila.suOnde(msg);
     else if (msg.tipo === 'misure') pila.suMisure(msg, performance.now(), mappa?.cps ? 1000 / mappa.cps : 2000);
     else if (msg.tipo === 'suoni-mancanti' && !inTest) {
       // un campione che non c'è nello stash non suona: lo si dice, non resta silenzio
@@ -1551,7 +1823,18 @@ function registraMessaggio(motore, msg) {
   } else if (msg.tipo === 'guardiano') moviola.scrivi('live', 'guardiano', msg);
 }
 
+// L'onda LED: al motore si dice se la postazione la sta mostrando (altrimenti non legge niente). Si ricontrolla due volte al secondo.
+let ondeChieste = null;
+setInterval(() => {
+  const on = preferenze.striscia !== false && pila.vuoleOnde();
+  if (on === ondeChieste) return;
+  ondeChieste = on;
+  live.manda({ tipo: 'onde-controllo', on });
+}, 500);
+
 live.suCollegato = () => {
+  ondeChieste = null; // un live rinato non sa niente: si richiede
+  maniControllo.riscrivi(); // e la riga delle mani (se comanda) si riscrive al primo passo
   live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (masterLive !== null) live.manda({ tipo: 'master', volume: masterLive }); // e con il volume generale di prima (altrimenti tornerebbe al massimo)
@@ -1663,6 +1946,18 @@ globalThis.cutxProva = {
   accendiInsegna: () => insegna.sfarfalla(),
   spegniLettera: () => insegna.spegniLettera(),
   fermaInsegna: () => insegna.ferma(),
+  maniClient,
+  maniVista,
+  maniControllo: () => maniControllo,
+  scriviMano,
+  portaUscita: () => portaUscita,
+  cambiaModoMani,
+  alternaMani,
+  accendiMani,
+  spegniMani,
+  faderRigaMani: () => ({ faderRiga, maniControlla, maniCedeFader, maniLivello: maniLivello ? { id: maniLivello.id, scritte: [...maniLivello.scritte] } : null }),
+  globaleDelController,
+  schermataProj,
   libreria: () => libreria,
   provaInCuffia,
   suoniStash: () => suoni,
@@ -1784,7 +2079,7 @@ const controllerMidi = new Controller({
   },
   // il fader: righe globali all(x => …), il break e il riser (un livello di rumore che entra subito)
   faderEffetto: () => preferenze.controller?.fader, // una stringa (le versioni vecchie avevano { A, B }: non vale più, torna il filtro)
-  globale: (chiave, riga, griglia = 0, taglio = null) => live.manda({ tipo: 'globale', chiave, riga, griglia, taglio }),
+  globale: (chiave, riga, griglia = 0, taglio = null) => globaleDelController(chiave, riga, griglia, taglio),
   // i colpi: righe di coda e livelli temporanei, sulla griglia scelta nelle impostazioni (1/4 o 1/8)
   colpiGriglia: () => preferenze.colpiGriglia ?? 0.25,
   stopTorna: () => preferenze.stopTorna ?? 'battuta',
@@ -1876,11 +2171,16 @@ function applicaPreferenze(p) {
   if (!synthCaricato) {
     synthCaricato = true;
     synth.carica(p.synthUltimo); // il SYNTH riparte dall'ultimo suono
+    synth.drum.carica(p.drumUltimo); // e la scheda DRUM dall'ultima griglia
   }
   controllerMidi.ricaricaTabella();
   if (p.striscia !== strisciaPrima) live.manda({ tipo: 'strisce-on', on: p.striscia !== false });
   if (p.dissolvenzaEntrata !== dissPrima) scegliDiss(p.dissolvenzaEntrata ?? 0); // il valore delle impostazioni è anche quello del CUE
   pila.scritturaAMacchina = p.scritturaAMacchina !== false;
+  maniControllo.sensibilita = maniPref().sensibilita; // sensibilità e durata dell'aggancio si cambiano anche mentre la mano comanda
+  maniControllo.aggancioMs = maniPref().aggancioMs;
+  maniControllo.zona = maniPref().zona ?? ZONA_TUTTA;
+  maniVista.mostraZona(maniPref().zona ?? null);
   $('paracadute').hidden = p.paracadute === false;
   moviola.imposta(!!p.moviola);
   live.manda({ tipo: 'moviola', on: !!p.moviola });
@@ -1912,3 +2212,6 @@ suoniVista = new SuoniVista({
   logEvento: (livello, testo) => window.cutx.logEvento(livello, 'suoni', testo),
 });
 await suoniVista.inizia();
+
+// Le mani accese di serie (sperimentale): partono dopo lo stash e il resto. Spento di fabbrica.
+if (maniPref().acceso) accendiMani();

@@ -1,0 +1,6 @@
+hand_landmarker.task è il modello «Hand Landmarker» di Google MediaPipe (float16, versione 1), licenza Apache 2.0:
+https://www.apache.org/licenses/LICENSE-2.0
+Origine: https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+Scheda del modello: https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker
+Il Wasm viene dal pacchetto npm @mediapipe/tasks-vision (Apache 2.0), copiato in dist/mani a ogni build (vite.config.js).
+Il riconoscimento gira tutto in locale: niente immagini lasciano il Mac.
