@@ -55,6 +55,8 @@ const SIMULA_FUOCO = `(() => {
   };
 })()`;
 
+let uscitaApertaAllAvvio = false;
+
 async function primoPiano(finestre) {
   // (niente `app.focus()`: non si ruba il fuoco a quello che l'utente sta usando; basta la simulazione nella pagina)
   const f = finestre.controllo;
@@ -82,6 +84,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   scrivi(`processi: controllo ${pid('controllo')} · live ${pid('live')} · cuffia ${pid('cuffia')}`);
   await aspetta(2);
   await primoPiano(finestre);
+  uscitaApertaAllAvvio = !!finestre.uscita && !finestre.uscita.isDestroyed(); // per «finestra», che nel giro lungo gira dopo altre prove
   let ok = true;
   if (parti.includes('robustezza')) await (async () => {
     await chiedi(finestre.controllo, `cutxProva.avviaTest(${JSON.stringify(CODICE)})`);
@@ -4225,6 +4228,8 @@ async function provaLinguette({ finestre, scrivi }) {
   const tasto3 = await js(`cutxProva.controllerMidi.tab.tasti[2]`);
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
+  // nel giro lungo le prove prima lasciano brani nelle linguette: si parte da vuote
+  await js(`cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.cambiaLinguetta('prossimo'); cutxProva.cue.mostraLinguette()`);
   const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
   const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*4").gain(.0001)\n// @clip basso\nnote("a1 a1 c2 e2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
   const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
@@ -5216,7 +5221,13 @@ async function provaFinestra({ finestre, scrivi }) {
     wc.sendInputEvent({ type: 'keyUp', keyCode: tasto, modifiers: modificatori });
     await aspetta(1.5);
   };
-  controlla('all\'avvio l\'uscita non è aperta', (await aperta()) === false && !finestre.uscita);
+  controlla('all\'avvio l\'uscita non è aperta', !uscitaApertaAllAvvio);
+  // nel giro lungo una prova prima può averla lasciata aperta: si parte da chiusa
+  if (await aperta()) {
+    await js('window.cutx.uscitaOnOff()');
+    await aspetta(1.5);
+  }
+  controlla('si parte con l\'uscita chiusa', (await aperta()) === false);
   const preferenze = await js('window.cutx.preferenze()');
   controlla('«apri all\'avvio» è spento di default', preferenze.uscitaApriAvvio === false, JSON.stringify(preferenze.uscitaApriAvvio));
   const chiuso = await bottone();
@@ -5750,8 +5761,9 @@ async function provaStrudel({ finestre, scrivi }) {
   const live = (codice) => chiedi(finestre.live, codice);
   const cartella = process.env.CUTX_SUONI_PROVA;
   if (!cartella) {
-    controlla('cartella dei suoni data (CUTX_SUONI_PROVA)', false);
-    return false;
+    // senza la cartella scaricata la prova non si può fare: la salto (si lancia con node scripts/prova-suoni-strudel.mjs)
+    scrivi('SALTATA strudel: manca CUTX_SUONI_PROVA · si lancia con node scripts/prova-suoni-strudel.mjs');
+    return true;
   }
   try {
     if (process.env.CUTX_PROVA_OFFLINE === '1') {

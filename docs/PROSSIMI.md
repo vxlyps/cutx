@@ -51,7 +51,9 @@ Una griglia a passi per la batteria, stile FL Studio, come scheda a sé «DRUM»
 - **Come si scrive**: la parte «griglia ↔ codice» è un modulo isolato con i suoi test puri (adatta a Codex); la vista e gli agganci a cuffia/REC/→ CUE a parte.
 - Dopo: la versione **a fette** per i break (vedi sopra).
 
-## 5.1: rossi noti delle prove automatiche (dalla beta 5)
+## 5.1: rossi noti delle prove automatiche (dalla beta 5) · RISOLTI il 15/11/2026
+
+Solidita: il controllo dei suoni cancellava ogni avviso, ora solo il suo. Strudel: senza `CUTX_SUONI_PROVA` è «SALTATA» (si lancia con `scripts/prova-suoni-strudel.mjs`). Linguette e finestra: partono da uno stato noto (linguette vuote, uscita chiusa).
 
 1. `solidita`: dopo un crash dell'interfaccia il testo del CUE viene ripreso ma la scritta «ho ripreso il testo del CUE» non si vede (c'era già a fine fase 2 del check-up).
 2. `strudel`: vuole una cartella di suoni (`CUTX_SUONI_PROVA`) che nel giro completo non viene data.
