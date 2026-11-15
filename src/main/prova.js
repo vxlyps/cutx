@@ -3173,6 +3173,36 @@ async function provaStrumento({ finestre, scrivi }) {
   const colpi = (await messaggi()).filter((m) => m.includes('drum-colpo'));
   controlla('un pad manda il colpo di quella riga alla cuffia', colpi.some((m) => m.includes('s(\\"bd\\")')), colpi.join(' | '));
   controlla('il tasto 8 non è il paracadute nel DRUM', (await js('cutxProva.controllerMidi.paracaduteTenuto')) !== true);
+  // tasti del Mac nella batteria e REC (serve un tempo dal live)
+  await midi(0x90, await layer('B'), 127); // fuori dalla batteria...
+  await midi(0x90, await layer('A'), 127); // ...e dentro di nuovo: sequencer
+  const premi = async (tasto) => {
+    const wc = finestre.controllo.webContents;
+    wc.sendInputEvent({ type: 'keyDown', keyCode: tasto });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: tasto });
+    await aspetta(0.3);
+  };
+  await js('window.__msg.length = 0; document.activeElement?.blur?.()');
+  await premi('A');
+  controlla('un tasto del Mac nella batteria suona la prima riga in cuffia', (await messaggi()).some((m) => m.includes('drum-colpo') && m.includes('s(\\"bd\\")')), (await messaggi()).join(' | '));
+  await js(`cutxProva.scriviCue('note("c2 g2").s("sine").gain(.0001)')`);
+  await finestre.controllo.webContents.executeJavaScript('cutxProva.goLive()');
+  await aspetta(1.5);
+  await js(`cutxProva.synth.drum.carica({ codice: 'stack(\\n  s("~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~") // bd\\n)', nome: 'prova' })`); // la griglia con la riga bd, senza passi
+  await js(`document.querySelector('.drum-rec').click()`);
+  let registrando = false;
+  for (let i = 0; i < 80 && !registrando; i++) {
+    await aspetta(0.2);
+    registrando = await js(`document.querySelector('.drum-rec').classList.contains('registra')`);
+  }
+  controlla('REC: dopo il conteggio si registra', registrando);
+  if (registrando) await premi('A');
+  let finito = false;
+  for (let i = 0; i < 80 && !finito; i++) {
+    await aspetta(0.2);
+    finito = !(await js(`!!cutxProva.synth.drum.rec`));
+  }
+  controlla('REC: finito il giro il colpo è un passo della griglia', finito && (await js(`cutxProva.synth.drum.stato.righe[0].vel.some((v) => v > 0)`)) === true, await js(`document.querySelector('.drum-avviso').textContent`));
   // CASSE: acceso manda l'ordine alla cuffia; uscendo dal SYNTH si spegne da solo
   await js(`window.__msg.length = 0; document.querySelector('.synth-casse').click()`);
   await aspetta(0.5);

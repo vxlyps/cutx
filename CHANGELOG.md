@@ -1,5 +1,11 @@
 # Novità di CUTX
 
+## Dopo la 0.5.1-beta.2 (non ancora in una release)
+
+### DRUM: tasti del Mac e REC
+- **Una riga per tasto**: A S D F G H J K suonano le prime otto righe, Q W E R T Y U I le altre otto (la lettera è scritta accanto alla riga). Suonano in cuffia.
+- **REC** nella barra della scheda DRUM: una battuta di conteggio con il click, poi un giro (quanti cicli ha la griglia) a tempo col live. I colpi (tasti del Mac e pad dell'X-Touch) diventano passi, al più vicino; i passi già accesi restano. Un altro clic ferma; ⌘Z annulla tutto il giro.
+
 ## 0.5.1-beta.2 «CUTX_05_1_2» (15/11/2026)
 
 L'X-Touch Mini diventa uno **strumento** nel SYNTH, più l'interruttore **CASSE**. Come provarlo: `docs/NOVITA-5.1.2.md`.

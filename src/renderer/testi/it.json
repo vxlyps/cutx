@@ -332,6 +332,10 @@
       "nome": "CASSE",
       "testo": "Il suono del SYNTH (▶, tasti, piano e pad dell'X-Touch) esce dalle casse invece che dalla cuffia. Si somma a quello che sta suonando il live. Si spegne da solo quando esci dal SYNTH."
     },
+    "drum-rec": {
+      "nome": "REC",
+      "testo": "Registra i colpi che suoni (tasti del Mac A S D F G H J K per le prime otto righe, Q W E R T Y U I per le altre; pad dell'X-Touch), a tempo col live: una battuta di conteggio, poi un giro (quanti cicli ha la griglia). I colpi diventano passi, al più vicino; i passi che ci sono già restano. Un altro clic ferma; ⌘Z annulla."
+    },
     "synth-rec": {
       "nome": "REC",
       "testo": "Registra le note che suoni, a tempo col live: una battuta di conteggio, poi un giro (1, 2, 4 o 8 cicli come nel pianoroll), quantizzato al 1/16. Con le note già scritte aggiunge; con lo schema di prova (arpeggio, nota tenuta) parte da vuoto. Un altro clic ferma."
@@ -802,6 +806,8 @@
   "drum": {
     "nome": "Nome della clip",
     "play": "▶ cuffia",
+    "rec": "REC",
+    "tastoRiga": "tasto del Mac che suona questa riga",
     "cue": "→ CUE",
     "destinazione": "Destinazione",
     "passi": "passi",
@@ -823,6 +829,9 @@
       "mandataNonSalvata": "clip «{nome}» → {dove} (· drum, da salvare con ⌘S)",
       "formato": "{passi} passi × {cicli} cicli: {n} passi persi (⌘Z per tornare)",
       "righeMax": "al massimo {n} righe",
+      "nessunTempo": "nessun tempo dal live",
+      "recAnnullato": "REC annullato",
+      "registrati": "registrati {n} passi",
       "vuota": "nessuna riga: aggiungi un suono",
       "aperta": "aperta «{nome}»",
       "apriNonDrum": "questa clip non viene dalla scheda DRUM"

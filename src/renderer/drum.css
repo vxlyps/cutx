@@ -156,3 +156,12 @@
   outline: 1px solid var(--bordo);
   outline-offset: 3px;
 }
+
+.drum-tasto {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--spento);
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}

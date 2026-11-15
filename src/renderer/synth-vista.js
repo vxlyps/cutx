@@ -449,7 +449,7 @@ export class VistaSynth {
         if (!e.repeat) this.drum.suonaOFerma();
         return true;
       }
-      return false;
+      return this.drum.tastoGiu(e); // una riga per tasto
     }
     if (e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) return false;
     // con «passi» acceso: Spazio = pausa, ⌫ = indietro, ←→ muovono il cursore
@@ -479,7 +479,7 @@ export class VistaSynth {
   }
 
   tastoSu(e) {
-    if (this.scheda === 'drum') return e.code === 'Space' && !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target));
+    if (this.scheda === 'drum') return (e.code === 'Space' && !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target))) || this.drum.tastoSu(e);
     if (e.code === 'Space') return !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)); // niente clic sul pulsante col fuoco
     const n = this.tenuti.get(e.code);
     if (n === undefined) return false;

@@ -2,6 +2,8 @@
 // spegne, trascinando su e giù cambia la velocity. Quello che si fa diventa codice vero (drum-codice.js) che si legge anche dal
 // pannello del codice, nei due versi. Qui non suona niente da sola: la cuffia la comanda app.js, attraverso le funzioni di `opz`.
 import { CICLI, PASSI, RIGHE_MAX, VEL_DI_SERIE, VEL_MIN, aggiungiRiga, cambiaSuono, clip, codice, impostaPasso, iniziale, leggiCodice, passiPersi, ridimensiona, slot, togliRiga } from './drum-codice.js';
+import { RegistratoreDrum } from './drum-rec.js';
+import { inCampoDiTesto } from './synth-tastiera.js';
 import it from './testi/it.json';
 
 const T = it.drum;
@@ -12,6 +14,10 @@ const crea = (tag, classe, testo) => {
   if (testo !== undefined) el.textContent = testo;
   return el;
 };
+
+// I tasti del Mac: una riga per tasto (la fila centrale per le prime otto, quella sopra per le altre otto)
+export const TASTI_RIGHE = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI'];
+const LETTERA = (code) => code.replace('Key', '');
 
 // I suoni di Strudel che si trovano sempre (nello stash vanno i WAV: i nomi arrivano da opz.suoniStash)
 export const SUONI_STRUDEL = ['bd', 'sd', 'hh', 'oh', 'cp', 'rim', 'lt', 'mt', 'ht', 'cb', 'cr', 'rd'];
@@ -57,6 +63,9 @@ export class VistaDrum {
     this.firmaDest = '';
     this.rigaScelta = -1; // la riga scelta dal controller (evidenziata)
     this.timerManopola = null; // un giro di manopola è un passo solo di ⌘Z
+    this.rec = null; // il REC in corso (drum-rec.js)
+    this.timerRec = null;
+    this.battitoClick = null;
     this.costruisci();
     this.disegna();
   }
@@ -86,6 +95,9 @@ export class VistaDrum {
     this.playEl.append(crea('i', '', '⌘↵'));
     this.playEl.dataset.aiuto = 'drum-play';
     this.playEl.onclick = () => this.suonaOFerma();
+    this.recEl = crea('button', 'key drum-rec synth-rec', T.rec);
+    this.recEl.dataset.aiuto = 'drum-rec';
+    this.recEl.onclick = () => this.avviaRec();
     this.passiEl = this.selezione(PASSI.map((n) => [n, `${n} ${T.passi}`]), T.passi, (v) => this.formato(Number(v), this.stato.cicli));
     this.cicliEl = this.selezione(CICLI.map((n) => [n, `${n} ${n === 1 ? T.ciclo : T.cicli}`]), T.cicli, (v) => this.formato(this.stato.passi, Number(v)));
     this.passiEl.dataset.aiuto = this.cicliEl.dataset.aiuto = 'drum-formato';
@@ -94,7 +106,7 @@ export class VistaDrum {
     this.cueEl = crea('button', 'key acid', T.cue);
     this.cueEl.dataset.aiuto = 'drum-cue';
     this.cueEl.onclick = () => this.mandaCue();
-    barra.append(schede, crea('span', 'sep'), this.nomeEl, this.playEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.destinazioneEl, this.cueEl);
+    barra.append(schede, crea('span', 'sep'), this.nomeEl, this.playEl, this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.destinazioneEl, this.cueEl);
 
     this.grigliaEl = crea('div', 'drum-griglia');
     this.grigliaEl.dataset.aiuto = 'drum-griglia';
@@ -358,7 +370,10 @@ export class VistaDrum {
       this.avviata = true;
       this.timerTestina = setInterval(() => this.testina(), 40);
       this.aggiorna();
-    } else this.mettiTestina(-1);
+    } else {
+      this.mettiTestina(-1);
+      this.fermaRec(true); // lasciando la batteria il REC si annulla
+    }
   }
 
   aggiorna() {
@@ -453,13 +468,80 @@ export class VistaDrum {
     const dopo = elenco[Math.max(0, Math.min(elenco.length - 1, (i < 0 ? 0 : i + Math.sign(verso))))];
     if (!dopo || dopo === riga.suono) return;
     this.gestoControllo(() => this.imponi(cambiaSuono(this.stato, r, dopo, '')));
-    this.colpo(r, VEL_DI_SERIE); // si sente il suono nuovo
+    this.colpo(r, VEL_DI_SERIE, false); // si sente il suono nuovo (e non si registra)
   }
 
-  // Un colpo in cuffia con il suono della riga (i pad).
-  colpo(r, vel) {
+  // Un tasto del Mac giù nella batteria: una riga per tasto. Ritorna true se era uno dei nostri (da non lasciare al resto dell'app).
+  tastoGiu(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) return false;
+    const r = TASTI_RIGHE.indexOf(e.code);
+    if (r < 0) return false;
+    if (!e.repeat) this.colpo(r, VEL_DI_SERIE);
+    return true;
+  }
+
+  tastoSu(e) {
+    return !(e.metaKey || e.ctrlKey || e.altKey || inCampoDiTesto(e.target)) && TASTI_RIGHE.includes(e.code);
+  }
+
+  // REC: un ciclo di conteggio (con il click), poi i colpi diventano passi. Un altro clic: durante il conteggio annulla, durante la registrazione ferma e tiene.
+  avviaRec() {
+    if (this.rec) return this.fermaRec(this.rec.fase() !== 'registra');
+    if (this.opz.ciclo?.() == null) return this.avviso(T.msg.nessunTempo);
+    if (!this.stato.righe.some((r) => r.tipo === 'griglia')) return this.avviso(T.msg.vuota);
+    this.rec = new RegistratoreDrum({ ciclo: () => this.opz.ciclo(), cicli: this.stato.cicli, passi: slot(this.stato) });
+    this.battitoClick = null;
+    this.timerRec = setInterval(() => this.tickRec(), 20);
+    this.avviso('');
+    this.tickRec();
+  }
+
+  tickRec() {
+    const r = this.rec;
+    if (!r) return;
+    const c = this.opz.ciclo?.();
+    if (c == null) return this.fermaRec(true);
+    const fase = r.fase(c);
+    if (fase === 'fine') return this.fermaRec(false);
+    if (fase === 'conta') {
+      const b = Math.floor(c * 4);
+      if (b !== this.battitoClick) {
+        this.battitoClick = b;
+        this.opz.click?.(b % 4 === 0);
+      }
+    }
+    this.recEl.classList.toggle('conta', fase !== 'registra');
+    this.recEl.classList.toggle('registra', fase === 'registra');
+    this.recEl.firstChild.textContent = fase === 'registra' ? '● REC' : String(r.conto(c) ?? '');
+  }
+
+  fermaRec(annulla) {
+    const r = this.rec;
+    if (!r) return;
+    clearInterval(this.timerRec);
+    this.rec = null;
+    this.recEl.classList.remove('conta', 'registra');
+    this.recEl.firstChild.textContent = T.rec;
+    if (annulla) return this.avviso(T.msg.recAnnullato);
+    const passi = r.passiDaAccendere();
+    if (r.passi !== slot(this.stato)) return this.avviso(T.msg.recAnnullato); // il formato è cambiato mentre registravo
+    // i colpi si sommano ai passi che ci sono già (mai si spegne niente); un passo solo di ⌘Z
+    this.passo(() => {
+      let s = this.stato;
+      for (const p of passi) {
+        const riga = s.righe[p.riga];
+        if (riga?.tipo === 'griglia') s = impostaPasso(s, p.riga, p.passo, Math.max(riga.vel[p.passo] || 0, p.vel));
+      }
+      this.imponi(s);
+    });
+    this.avviso(formatta(T.msg.registrati, { n: passi.length }));
+  }
+
+  // Un colpo in cuffia con il suono della riga (i pad e i tasti del Mac); durante il REC diventa anche un passo.
+  colpo(r, vel, registra = true) {
     const riga = this.stato.righe[r];
     if (riga?.tipo !== 'griglia') return;
+    if (registra) this.rec?.colpo(r, vel);
     this.opz.colpo?.(`s("${riga.suono}")${riga.banco ? `.bank("${riga.banco}")` : ''}`, vel);
   }
 
@@ -526,7 +608,9 @@ export class VistaDrum {
       togli.title = T.togli;
       togli.setAttribute('aria-label', T.togli);
       togli.onclick = () => this.passo(() => this.imponi(togliRiga(this.stato, r)));
-      capo.append(sel, togli);
+      const lettera = TASTI_RIGHE[r] ? crea('span', 'drum-tasto', LETTERA(TASTI_RIGHE[r])) : null;
+      if (lettera) lettera.title = T.tastoRiga;
+      capo.append(...(lettera ? [lettera] : []), sel, togli);
       const passi = crea('div', 'drum-passi');
       passi.style.setProperty('--n', String(n));
       const celle = [];
