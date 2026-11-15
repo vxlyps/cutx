@@ -75,12 +75,13 @@ export const DISPETTI = [
 
 // La durata sulla griglia: da mezzo secondo a 2 secondi (dentro i limiti del dispetto), in multipli della griglia scelta, mai meno di un sedicesimo.
 // cps = cicli al secondo. Ritorna { g, cicli }.
-export function durata(def, cps, caso = Math.random) {
+// maxSecondi: di serie 2; solo il finale HACK li allunga (fino a 4).
+export function durata(def, cps, caso = Math.random, maxSecondi = 2) {
   const g = def.griglie[Math.floor(caso() * def.griglie.length)];
-  const secondi = tra(def.dur[0] + caso() * (def.dur[1] - def.dur[0]), 0.5, 2);
+  const secondi = tra(def.dur[0] + caso() * (def.dur[1] - def.dur[0]) * (maxSecondi / 2), 0.5, maxSecondi);
   const cicli = secondi * cps;
   let n = Math.max(1, Math.round(cicli / g));
-  while (n * g / cps > 2 && n > 1) n--; // mai più di 2 secondi
+  while (n * g / cps > maxSecondi && n > 1) n--; // mai più del massimo
   return { g, cicli: Math.max(SEDICESIMO, n * g) };
 }
 
@@ -108,7 +109,8 @@ export function creaDispetti({ caso = Math.random } = {}) {
     // Un tocco della cimice su un livello: parte un dispetto, o niente. Ritorna il piano o null.
     // livello: { id, nome, codice, coda, a, da, muto } · prefs: preferenze.cimice · pattern(codice) → pattern già valutato o null
     // limiterDb: la riduzione del limiter (dB, anche negativa) · inModifica(nome) → sto scrivendo in quella card · forza: salta il caso (prove)
-    proponi({ livello, ciclo, cps, prefs, pattern, limiterDb = 0, inModifica = () => false, forza = false }) {
+    // occupato(idLivello, chiave) → un altro dispetto sta già usando quella riga su quel livello (nel finale HACK ce ne sono più insieme)
+    proponi({ livello, ciclo, cps, prefs, pattern, limiterDb = 0, inModifica = () => false, forza = false, maxSecondi = 2, occupato = () => false }) {
       if (!prefs?.dispetti) return no('spenti');
       if (attivo) return no('uno-alla-volta');
       if (!(cps > 0)) return no('senza-tempo');
@@ -122,12 +124,13 @@ export function creaDispetti({ caso = Math.random } = {}) {
       if (!base) return no('pattern-non-pronto');
       const ordine = [...DISPETTI].sort(() => caso() - 0.5);
       for (const def of ordine) {
+        if (def.chiavi.some((k) => occupato(livello.id, k))) continue;
         const righe = costruisci(def, livello, caso);
         if (!righe) continue;
         // prima di applicare: la riga deve compilare e dare un pattern che si interroga
         const prova = applicaCoda(base, righe.reduce(imposta, livello.coda ?? []));
         if (prova.errore) continue;
-        const { g, cicli } = durata(def, cps, caso);
+        const { g, cicli } = durata(def, cps, caso, maxSecondi);
         const inizio = Math.ceil((ciclo + 0.004) / g - 1e-9) * g;
         const fine = inizio + cicli;
         attivo = {

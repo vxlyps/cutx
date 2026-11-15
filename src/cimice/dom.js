@@ -4,6 +4,19 @@
 const MASSIMO_PAROLE = 1500;
 const PAROLA = /[\p{L}\p{N}_#$]+/gu;
 
+// Il colore di fondo vero dietro un riquadro: il primo antenato con uno sfondo non trasparente (serve a «coprire» una parola mangiata).
+function sfondoDi(el) {
+  for (let e = el; e; e = e.parentElement) {
+    const c = getComputedStyle(e).backgroundColor;
+    const m = /rgba?\(([^)]+)\)/.exec(c);
+    if (m) {
+      const v = m[1].split(',').map((x) => parseFloat(x));
+      if (v.length < 4 || v[3] > 0.5) return c;
+    }
+  }
+  return '#050604';
+}
+
 // radici: elementi con il testo del codice (contenuto di un editor CodeMirror, riquadro di una card live).
 // note: selettore degli elementi che il programma ha già segnato come "suona adesso".
 export function creaLettore({ radici, note }) {
@@ -16,6 +29,7 @@ export function creaLettore({ radici, note }) {
     const range = document.createRange();
     for (const radice of elenco()) {
       const font = getComputedStyle(radice).font;
+      const sfondo = sfondoDi(radice);
       const camminatore = document.createTreeWalker(radice, NodeFilter.SHOW_TEXT);
       for (let nodo = camminatore.nextNode(); nodo; nodo = camminatore.nextNode()) {
         const testo = nodo.nodeValue;
@@ -27,7 +41,7 @@ export function creaLettore({ radici, note }) {
           range.setEnd(nodo, m.index + m[0].length);
           const r = range.getClientRects()[0];
           if (!r || r.width < 1 || r.right < 0 || r.left > lar || r.bottom < 0 || r.top > alt) continue;
-          fuori.push({ x: r.left, y: r.top, w: r.width, h: r.height, testo: m[0], font, salta: false, radice });
+          fuori.push({ x: r.left, y: r.top, w: r.width, h: r.height, testo: m[0], font, salta: false, radice, sfondo });
           if (fuori.length >= MASSIMO_PAROLE) return fuori;
         }
       }

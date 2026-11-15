@@ -118,6 +118,7 @@ window.addEventListener('message', (e) => {
     }
     else if (data.tipo === 'preferenze' && ANTEPRIMA) applica(data.p);
     else if (data.tipo === 'dispetto') cimice?.dispetto(data);
+    else if (data.tipo === 'hack') hackUscita(data);
   };
   if (con === 'controllo') { bozze = { livelli: {}, jam: null }; portaControllo = e.ports[0]; }
 });
@@ -287,6 +288,11 @@ function disegna() {
   const lunghezza = preferenze.lunghezzaFrase ?? 16;
   sfondo.disegna(ciclo, livelli);
   cimice?.tic(ciclo);
+  if (nero) {
+    // il nero resta finché il live è vuoto; se rientra un livello, il set è ripartito
+    if (!livelli.length) neroVistoVuoto = true;
+    else if (neroVistoVuoto) { nero = false; document.body.classList.remove('hack-nero'); }
+  }
   // la scritta grande del controller: solo se è accesa, e per un attimo
   const visibile = testi.controller.acceso && scritta && performance.now() - scritta.quando < 1800;
   const brano = testi.brano.acceso && branoEntra && performance.now() - branoEntra.quando < 4000;
@@ -617,6 +623,17 @@ globalThis.cutxScrittura = () => {
     arrivi: mappa ? livelli.filter((l) => l.da !== null && cicloDi(mappa, epoca) < l.da).map((l) => ({ id: l.id, nome: l.nome, fine: epocaDi(mappa, l.da) })) : [],
   };
 };
+// Il finale HACK: più cimici, il codice mangiato, e alla fine schermo nero con la sola insegna (finché non rientra un livello o lo fermo).
+let nero = false;
+let neroVistoVuoto = false;
+function hackUscita(m) {
+  cimice?.hack(m);
+  if (m.fase === 'nero') {
+    nero = true;
+    neroVistoVuoto = false;
+  } else if (nero && m.fase !== 'nero') nero = false;
+  document.body.classList.toggle('hack-nero', nero);
+}
 globalThis.cutxCimice = () => cimice;
 globalThis.cutxCimiceTocca = (nome) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome }); // per le prove
 globalThis.cutxUscita = () => ({ livelli: [...blocchi.keys()], testo: $('livelli').innerText, frase: $('frase').textContent, scala: disposizione.scala });

@@ -126,6 +126,43 @@ export async function provaCimice({ finestre, scrivi, chiedi, aspetta }) {
   await pref(true);
   await aspetta(1);
   controlla('riaccesa torna', !!(await u('cutxCimice().acceso')));
+
+  // --- il finale HACK: prima fermato a metà (tutto com'era), poi fino in fondo (schermo nero, set chiuso) ---
+  await js('cutxProva.fermaTutto()');
+  await aspetta(1);
+  for (const [nome, codice] of codici) {
+    await js(`cutxProva.motori.live.richiesta(${JSON.stringify({ tipo: 'entra', codice, nome, provenienza: 'prova', cicli: 1 })})`);
+    await aspetta(1.2);
+  }
+  await aspetta(3);
+  const volumi = async () => Object.fromEntries((await stato()).livelli.filter((x) => x.a === null).map((x) => [x.nome, x.volume]));
+  const cueTesto = () => js(`[...document.querySelectorAll('.colonna.cue .cm-content')].map((e) => e.textContent).join('|')`);
+  const vPrima = await volumi();
+  const cuePrima = await cueTesto();
+  const avviaHack = (ms) => js(`cutxProva.hack().avvia({ durataMs: ${ms}, ciclo: cutxProva.cicloAdesso(), ms: performance.now() })`);
+  controlla('HACK: parte (c\'è live da chiudere)', (await avviaHack(16000)) === true);
+  await aspetta(9.5); // circa il 60%: il caos
+  controlla('HACK: l\'editor di lavoro ha il codice mangiato (solo un disegno sopra)', (await js('cutxProva.mangiaLavoro().attivo')) === true);
+  controlla('HACK: il testo dell\'editor non è cambiato', (await cueTesto()) === cuePrima && (await testoLavoro()).length > 0);
+  controlla('HACK: sul proiettore la cimice si è moltiplicata', Number(await u('cutxCimice().nFiglie')) >= 2, `${await u('cutxCimice().nFiglie')}`);
+  const vMetà = await volumi();
+  controlla('HACK: i volumi scendono e non salgono mai', Object.keys(vPrima).every((k) => (vMetà[k] ?? 0) <= vPrima[k] + 1e-6) && Object.keys(vPrima).some((k) => (vMetà[k] ?? 0) < vPrima[k] - 0.02), JSON.stringify([vPrima, vMetà]));
+  await js('cutxProva.hack().ferma(cutxProva.cicloAdesso(), "prova")');
+  await aspetta(1.5);
+  const vDopo = await volumi();
+  controlla('HACK fermato: i volumi tornano com\'erano', Object.keys(vPrima).every((k) => Math.abs((vDopo[k] ?? 0) - vPrima[k]) < 0.02), JSON.stringify(vDopo));
+  controlla('HACK fermato: l\'editor è com\'era (niente disegno sopra, stesso testo) e il proiettore normale', (await js('cutxProva.mangiaLavoro().attivo')) === false && (await cueTesto()) === cuePrima && (await u(`document.body.classList.contains('hack-nero')`)) === false);
+  controlla('HACK fermato: le code dei livelli sono pulite', (await stato()).livelli.filter((x) => x.a === null).every((x) => !x.coda?.length));
+
+  // fino in fondo
+  controlla('HACK: riparte', (await avviaHack(14000)) === true);
+  await aspetta(16.5);
+  controlla('HACK finito: il set si è chiuso da solo (live vuoto)', (await stato()).livelli.filter((x) => x.a === null).length === 0);
+  controlla('HACK finito: sul proiettore schermo nero con SOLO la scritta TECNOLOGIA CANAGLIA', (await u(`(() => {
+    const vis = (s) => [...document.querySelectorAll(s)].some((e) => getComputedStyle(e).display !== 'none');
+    return document.body.classList.contains('hack-nero') && vis('#insegna') && !vis('.livelli') && !vis('.testa') && !vis('.gatto-posto') && !vis('canvas') && document.getElementById('insegna').textContent.trim() === 'TECNOLOGIA CANAGLIA';
+  })()`)) === true);
+  controlla('HACK finito: l\'editor di lavoro è tornato com\'era (testo del CUE identico, niente disegno sopra)', (await js('cutxProva.mangiaLavoro().attivo')) === false && (await cueTesto()) === cuePrima);
   await js('cutxProva.fermaTutto()');
   return ok;
 }

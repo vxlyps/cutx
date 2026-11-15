@@ -1,4 +1,8 @@
-# CIMICE · FINALE «HACK» (piano, nessun codice ancora)
+# CIMICE · FINALE «HACK» (fatto: decisioni di Valerio incluse)
+
+**Decisioni:** tasti ⌥⌘⇧H due volte (⌥⌘H è «Nascondi altre app» su Mac) o il bottone HACK nella barra del LIVE (due clic); ultima immagine = schermo nero con SOLO «TECNOLOGIA CANAGLIA»; il codice «mangiato» è un disegno sopra, visibile anche nel proprio editor (CUE e card), e alla fine o col paracadute l'editor è com'era. Niente X-Touch. Codice: `src/cimice/hack.js` (curva, pura), `hack-app.js` (esecuzione), `mangia.js` (disegno del codice mangiato), `aggancio.js` (cimici in più sul proiettore), `uscita.css` (`body.hack-nero`). Prova: `npm run prova:parte -- cimice` (parte HACK, con master a zero).
+
+---
 
 Il modo in cui si chiude il live set: la cimice si prende il codice e obbliga a chiudere. Tutto succede solo in memoria: i file `.cutx` non si toccano mai.
 

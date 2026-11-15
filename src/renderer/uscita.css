@@ -430,3 +430,31 @@ body {
 .striscia-viva.onda .sv-testina {
   opacity: 0.35;
 }
+
+/* Il finale HACK: la cimice ha mangiato tutto. Schermo nero, solo la scritta. */
+body.hack-nero {
+  background: #000 !important;
+}
+body.hack-nero .testa,
+body.hack-nero .livelli,
+body.hack-nero .battute,
+body.hack-nero .gatto-posto,
+body.hack-nero .frase,
+body.hack-nero .mano-pubblico,
+body.hack-nero .scritta,
+body.hack-nero #sfondo,
+body.hack-nero canvas {
+  display: none !important;
+}
+body.hack-nero .angolo {
+  position: fixed !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+}
+body.hack-nero .insegna,
+body.hack-nero.senza-insegna .insegna {
+  display: block !important;
+  margin: 0 !important;
+  font-size: calc(64 * var(--u)) !important;
+}

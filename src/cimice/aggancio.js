@@ -3,6 +3,7 @@
 import { creaCimice, OPZIONI } from './cimice.js';
 import { creaLettore } from './dom.js';
 import { creaSensore, eBasso } from './sensore.js';
+import { creaMangia } from './mangia.js';
 import { patternDi } from '../renderer/evidenzia.js';
 import { statoBeat, suona } from '../renderer/stato-live.js';
 
@@ -29,13 +30,20 @@ function misuraLivello(l, ciclo) {
 
 // preferenze(): le impostazioni CIMICE · livelli(): i livelli del live · fader(): quanto è chiuso il fader (0..1) o null
 // livelloDi(radice) → nome del livello a cui appartiene quel riquadro di codice · suTocco(nome) → avvisa l'interfaccia di lavoro (i dispetti)
-export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suTocco = null }) {
+export function creaAggancio({ preferenze: leggiPreferenze, livelli, fader, livelloDi = null, suTocco = null }) {
+  // la firma non si spegne: qualunque `senzaFirma` scritto nelle preferenze si butta
+  const preferenze = () => { const { senzaFirma, ...p } = leggiPreferenze() ?? {}; return p; };
   const lettore = creaLettore({ radici: RADICI, note: NOTE });
   const sensore = creaSensore();
   let cimice = null;
   let ultimoK = null;
   let impronta = '';
   let ultima = null; // l'ultima lettura del sensore (per le prove)
+  // Il finale HACK (messaggi dall'interfaccia di lavoro): più cimici, codice mangiato, poi lo schermo nero.
+  let hackAttivo = false;
+  let mangiaF = 0;
+  let figlie = [];
+  const mangia = creaMangia({ radici: RADICI, frazioneDi: () => mangiaF });
 
   const sporca = () => cimice?.ricalcola();
   const ascolta = () => {
@@ -47,8 +55,12 @@ export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suT
     removeEventListener('resize', sporca);
   };
 
+  function chiudiFiglie() { for (const f of figlie) f.spegni(); figlie = []; }
+
   function spegni() {
     smetti();
+    chiudiFiglie();
+    mangia.ferma();
     cimice?.spegni();
     cimice = null;
     ultimoK = null;
@@ -58,7 +70,7 @@ export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suT
   function ricarica() {
     try {
       const pref = { ...OPZIONI, ...preferenze() };
-      if (!pref.acceso) { spegni(); return; }
+      if (!pref.acceso && !hackAttivo) { spegni(); return; }
       if (!cimice) {
         cimice = creaCimice({
           contenitore: document.body, leggiParole: () => lettore.parole(), opzioni: { ...pref, fisso: true },
@@ -71,6 +83,33 @@ export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suT
         ultimoK = null;
       }
       cimice.imposta(pref);
+    } catch { spegni(); }
+  }
+
+  // Dall'interfaccia di lavoro: { fase: 'on' | 'stop' | 'nero', cimici, mangia }.
+  function hack(msg) {
+    try {
+      if (msg.fase === 'on') {
+        hackAttivo = true;
+        ricarica(); // la cimice c'è anche se nelle impostazioni è spenta: l'HACK l'ho voluto io
+        if (!cimice) return;
+        mangiaF = msg.mangia ?? 0;
+        if (mangiaF > 0) mangia.avvia();
+        const pref = { ...OPZIONI, ...preferenze() };
+        while (figlie.length < (msg.cimici ?? 1) - 1) {
+          const f = creaCimice({ contenitore: document.body, leggiParole: () => lettore.parole(), opzioni: { ...pref, acceso: true, fisso: true, senzaFirma: true, folle: true, scala: (pref.scala || 1) * 0.7 } });
+          f.avvia();
+          f.evoca();
+          figlie.push(f);
+        }
+      } else {
+        hackAttivo = false;
+        mangiaF = 0;
+        mangia.ferma();
+        chiudiFiglie();
+        if (msg.fase === 'nero') spegni(); // lo schermo nero: niente cimice
+        else ricarica(); // fermato: com'era (la cimice resta solo se è accesa nelle impostazioni)
+      }
     } catch { spegni(); }
   }
 
@@ -102,13 +141,19 @@ export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suT
       const ora = performance.now();
       const f = fader?.();
       if (typeof f === 'number') sensore.campionaFader(f, ora);
-      if (cimice.presente) {
+      if (cimice.presente || figlie.length) {
         const ip = lettore.impronta();
-        if (ip !== impronta) { impronta = ip; cimice.ricalcola(); }
-        cimice.segna(lettore.rettangoliNote());
+        if (ip !== impronta) { impronta = ip; cimice.ricalcola(); for (const f of figlie) f.ricalcola(); }
+        const note = lettore.rettangoliNote();
+        cimice.segna(note);
+        for (const f of figlie) f.segna(note);
       }
       cimice.passo(k);
-      if (k % 16 === 0 && !salto) {
+      for (const f of figlie) f.passo(k);
+      if (hackAttivo) {
+        // nel finale la cimice è sempre impazzita
+        if (k % 16 === 0) { cimice.battuta({ drop: true }); for (const f of figlie) f.battuta({ drop: true }); }
+      } else if (k % 16 === 0 && !salto) {
         const lettura = leggiLive(ciclo);
         const esito = sensore.battuta({ ...lettura, sensibilita: preferenze()?.sensibilitaDrop ?? OPZIONI.sensibilitaDrop });
         ultima = { ...lettura, ...esito };
@@ -120,5 +165,5 @@ export function creaAggancio({ preferenze, livelli, fader, livelloDi = null, suT
   // Il messaggio dell'interfaccia: un dispetto è partito (o finito).
   function dispetto(msg) { if (msg?.attivo) cimice?.reagisci(); }
 
-  return { ricarica, tic, spegni, dispetto, get acceso() { return !!cimice; }, get interno() { return cimice; }, get ultima() { return ultima; } };
+  return { ricarica, tic, spegni, dispetto, hack, get acceso() { return !!cimice; }, get interno() { return cimice; }, get nFiglie() { return figlie.length; }, get ultima() { return ultima; } };
 }

@@ -163,7 +163,7 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
     if (bug && !m.parole.some((p) => p.vis && !p.salta)) congeda(); // schermata senza codice
     if (bug) {
       bug.age++;
-      aggiornaFirma(bug, caso);
+      if (!opz.senzaFirma) aggiornaFirma(bug, caso); // solo le cimici «figlie» del finale HACK non la portano; mai dalle impostazioni
       if (bug.state === 'walk' && folleBattute <= 0 && bug.age >= 2 && bug.age < bug.maxBars - 1 && caso() < 0.2) { congeda(); bug.blink = true; }
       if (bug.age >= bug.maxBars && folleBattute <= 0) congeda();
     }

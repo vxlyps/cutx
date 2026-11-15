@@ -894,6 +894,10 @@
     "dispettiFrequenza": {
       "nome": "quanto spesso i dispetti",
       "testo": "a ogni nota toccata: di rado, ogni tanto o spesso (con una pausa tra l'uno e l'altro)"
+    },
+    "hackMinuti": {
+      "nome": "finale HACK · durata",
+      "testo": "quanto dura il finale in cui la cimice si prende il set e lo chiude (bottone HACK o ⌥⌘⇧H due volte): da 1 a 3 minuti, di serie 2. Solo in memoria: i file del set non si toccano; il paracadute lo ferma e rimette tutto."
     }
   }
 }
