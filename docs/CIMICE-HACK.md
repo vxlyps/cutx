@@ -39,3 +39,6 @@ Propongo: schermo nero, **una sola cimice grande al centro**, ferma, col nucleo 
 
 ## Da decidere
 1. Combinazione di tasti (⌥⌘H due volte?). 2. L'ultima immagine va bene? 3. Il «mangiare» solo visivo (consigliato) o anche vero sul testo dei livelli (richiederebbe un giro di valutazione tutto suo: lo escluderei).
+
+
+**Chiusura (16/11/2026):** a fine curva il suono si ferma subito, poi 4,5 s di silenzio con le cimici sul codice mangiato (le code di eco e riverbero muoiono), poi le cimici se ne vanno (`fase: 'vanno'`, 3 s), e solo dopo lo schermo nero con TECNOLOGIA CANAGLIA. Un nuovo HACK o uno stop annulla l'attesa.

@@ -107,6 +107,9 @@ test('HACK: non parte se non c\'è niente live', () => {
 
 test('HACK: dura quanto scelto, i volumi non salgono mai, alla fine chiude il set e manda lo schermo nero', () => {
   const { env, out, livelli } = mondo(3);
+  const timer = [];
+  env.imposta = (f, ms) => timer.push([f, ms]);
+  env.togliTimer = () => {};
   const app = creaHackApp(env);
   assert.equal(app.avvia({ minuti: 1, ciclo: 0, ms: 1000 }), true);
   const cime = [];
@@ -116,6 +119,14 @@ test('HACK: dura quanto scelto, i volumi non salgono mai, alla fine chiude il se
     cime.push(out.proj.at(-1)?.cimici);
   }
   assert.equal(out.fermato, 1, 'il set si chiude da solo');
+  // il suono è fermo ma lo schermo non è ancora nero: prima il silenzio, poi le cimici vanno, poi la scritta
+  assert.notEqual(out.proj.at(-1).fase, 'nero');
+  assert.equal(app.inChiusura, true);
+  const [vanno, nero] = timer.slice(-2); // gli ultimi due: quelli della chiusura
+  assert.ok(vanno[1] >= 4000 && nero[1] > vanno[1], 'prima un silenzio, poi le cimici, poi il nero');
+  vanno[0]();
+  assert.equal(out.proj.at(-1).fase, 'vanno');
+  nero[0]();
   assert.equal(out.proj.at(-1).fase, 'nero');
   assert.equal(app.attivo, false);
   assert.ok(out.proj.some((m) => m.fase === 'on' && m.cimici >= 8), 'le cimici si moltiplicano');

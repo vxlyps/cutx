@@ -158,6 +158,8 @@ export async function provaCimice({ finestre, scrivi, chiedi, aspetta }) {
   controlla('HACK: riparte', (await avviaHack(14000)) === true);
   await aspetta(16.5);
   controlla('HACK finito: il set si è chiuso da solo (live vuoto)', (await stato()).livelli.filter((x) => x.a === null).length === 0);
+  controlla('HACK finito: lo schermo non è ancora nero (prima il silenzio e le cimici che se ne vanno)', (await u(`document.body.classList.contains('hack-nero')`)) === false);
+  await aspetta(8.5);
   controlla('HACK finito: sul proiettore schermo nero con SOLO la scritta TECNOLOGIA CANAGLIA', (await u(`(() => {
     const vis = (s) => [...document.querySelectorAll(s)].some((e) => getComputedStyle(e).display !== 'none');
     return document.body.classList.contains('hack-nero') && vis('#insegna') && !vis('.livelli') && !vis('.testa') && !vis('.gatto-posto') && !vis('canvas') && document.getElementById('insegna').textContent.trim() === 'TECNOLOGIA CANAGLIA';

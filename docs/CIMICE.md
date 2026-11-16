@@ -18,6 +18,10 @@ Una creatura di linee e nodi che cammina sul codice **sul proiettore** (la fines
 ## Impostazioni (sezione CIMICE · sul proiettore)
 Attiva, quanto spesso (di rado / ogni tanto / spesso) con pausa minima e probabilità, quante battute resta (min-max), impazzisce sul drop e per quante battute, sensibilità del drop, grandezza, velocità degli scatti, lampi rossi, corrompe le parole, schermo che trema. Salvate come le altre in `preferenze.cimice`.
 
+## Dispetti: intensità e crescita (16/11/2026)
+- **Intensità** (slider, di serie 60%) e **crescita nel set** (di serie 45 min; 0 = sempre uguale): la forza dei dispetti parte al 35% dello slider e sale al 100% in `crescita` minuti di set live (`forzaDispetti` in `dispetti.js`). Più forza = più probabili, pausa più corta, filtro più chiuso, eco/stanza/sporco più marcati, durata fino a 3 s.
+- Quando la cimice entra, il primo tocco fa sempre un dispetto (forza mai sotto 0.6, salvo slider a zero).
+
 ## Limiti noti
 - Il «tremito» sposta solo il disegno della cimice, non le finestre.
 - La grandezza si adatta da sola alla grandezza del testo (sul proiettore il codice è enorme).

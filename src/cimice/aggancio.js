@@ -86,7 +86,7 @@ export function creaAggancio({ preferenze: leggiPreferenze, livelli, fader, live
     } catch { spegni(); }
   }
 
-  // Dall'interfaccia di lavoro: { fase: 'on' | 'stop' | 'nero', cimici, mangia }.
+  // Dall'interfaccia di lavoro: { fase: 'on' | 'vanno' | 'stop' | 'nero', cimici, mangia }.
   function hack(msg) {
     try {
       if (msg.fase === 'on') {
@@ -102,6 +102,10 @@ export function creaAggancio({ preferenze: leggiPreferenze, livelli, fader, live
           f.evoca();
           figlie.push(f);
         }
+      } else if (msg.fase === 'vanno') {
+        // il suono è finito: le cimici se ne vanno di corsa dal bordo (il codice resta mangiato fino al nero)
+        cimice?.congeda();
+        for (const f of figlie) f.congeda();
       } else {
         hackAttivo = false;
         mangiaF = 0;

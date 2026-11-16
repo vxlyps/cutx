@@ -11,8 +11,16 @@ export function creaHackApp(env) {
   const caso = env.caso ?? Math.random;
   const vivi = () => (env.livelli() ?? []).filter((l) => l.a === null && l.nome !== 'paracadute');
   const finta = { passi: [], registra() {} };
+  // La chiusura dopo la fine: prima il silenzio vero (le code di eco e riverbero muoiono, le cimici restano sul codice mangiato),
+  // poi le cimici se ne vanno, e solo allora TECNOLOGIA CANAGLIA su nero. Se in mezzo parte un altro HACK o un stop, tutto si annulla.
+  const imposta = env.imposta ?? ((f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; });
+  const togliTimer = env.togliTimer ?? ((t) => clearTimeout(t));
+  const attese = env.attese ?? { silenzioMs: 4500, vannoMs: 3000 };
+  let chiusura = [];
+  const annullaChiusura = () => { for (const t of chiusura) togliTimer(t); chiusura = []; };
 
   function ferma(ciclo, motivo = 'stop') {
+    annullaChiusura();
     if (!s) return false;
     for (const slot of s.slot) slot.fermaTutti(ciclo, motivo);
     // i volumi tornano com'erano (sono innocui e immediati)
@@ -25,11 +33,13 @@ export function creaHackApp(env) {
 
   return {
     get attivo() { return !!s; },
+    get inChiusura() { return chiusura.length > 0; },
     get stato() { return s ? { f: s.ultimoF, mangia: s.mangia, usciti: s.usciti } : null; },
 
     // minuti: 1–3. Ritorna false (e dice perché) se non può partire.
     avvia({ minuti = 2, ciclo, ms, durataMs = null }) { // durataMs: solo per le prove
       if (s) return false;
+      annullaChiusura();
       const lista = vivi();
       if (!lista.length) { env.avviso('HACK: non c\'è niente live da chiudere'); return false; }
       const condiviso = new Set();
@@ -103,7 +113,11 @@ export function creaHackApp(env) {
       env.scrivi('hack-fine', {});
       s = null;
       env.fermaTutto();
-      env.alProiettore({ tipo: 'hack', fase: 'nero' });
+      // il suono è fermo ma il proiettore resta com'è (codice mangiato, cimici): poi vanno via, poi lo schermo nero con la scritta
+      chiusura = [
+        imposta(() => env.alProiettore({ tipo: 'hack', fase: 'vanno' }), attese.silenzioMs),
+        imposta(() => { chiusura = []; env.alProiettore({ tipo: 'hack', fase: 'nero' }); }, attese.silenzioMs + attese.vannoMs),
+      ];
     },
   };
 }
