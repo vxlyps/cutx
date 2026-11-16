@@ -98,7 +98,7 @@
 }
 
 .synth-arp {
-  grid-column: span 5;
+  grid-column: span 12;
 }
 
 @media (max-width: 1100px) {

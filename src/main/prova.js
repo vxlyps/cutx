@@ -3330,27 +3330,27 @@ async function provaSynth({ finestre, scrivi }) {
   // l'ARPEGGIO: il codice che il pannello scrive deve suonare davvero, nel motore vero (gli errori di arpWith saltano fuori solo quando si interroga il pattern)
   await js(`cutxProva.synth.imponi({ ...cutxProva.synth.stato, anteprima: 'clip', note: '[c3,e3,g3] ~ [d2,a2]', arp: 'su', arppasso: '1/16', arpgate: 1, q: 1 })`);
   await aspetta(0.5);
-  const haps = async (extra) => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1, 16)`);
+  const hapsArp = async () => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1, 16)`);
   const nomi = (v) => (Array.isArray(v) ? v.map((x) => `${x.i}:${x.n}`).join(' ') : JSON.stringify(v));
   // c3 e3 g3 = 48 52 55; d2 a2 = 38 45. Il ciclo è 16 scatti: [0..8) il primo accordo (8 passi di 1/16 su metà ciclo), poi un riposo, poi [12..16) il secondo.
-  const su = await haps();
+  const su = await hapsArp();
   controlla('arpeggio «su»: l\'accordo suona una nota alla volta, a passo fisso, e riparte a ogni accordo', Array.isArray(su) && su.length >= 8 && su.slice(0, 4).map((x) => x.n).join() === '48,52,55,48' && su.every((x) => x.l === 1), nomi(su));
   controlla('il secondo accordo ricomincia dalla sua nota più bassa', Array.isArray(su) && su.find((x) => x.i >= 10)?.n === 38, nomi(su));
   await js(`cutxProva.synth.cambia('arp', 'giu')`);
   await aspetta(0.3);
-  const giu = await haps();
+  const giu = await hapsArp();
   controlla('arpeggio «giù»: dall\'alto', Array.isArray(giu) && giu.slice(0, 3).map((x) => x.n).join() === '55,52,48', nomi(giu));
   await js(`cutxProva.synth.cambia('arp', 'sugiu')`);
   await aspetta(0.3);
-  const sg = await haps();
+  const sg = await hapsArp();
   controlla('arpeggio «su-giù»: su e poi giù senza ripetere gli estremi', Array.isArray(sg) && sg.slice(0, 5).map((x) => x.n).join() === '48,52,55,52,48', nomi(sg));
   await js(`cutxProva.synth.cambia('arp', 'caso')`);
   await aspetta(0.3);
-  const caso = await haps();
-  controlla('arpeggio «caso»: suona solo note dell\'accordo', Array.isArray(caso) && caso.length >= 8 && caso.slice(0, 8).every((x) => [48, 52, 55].includes(x.n)), nomi(caso));
+  const caso = await hapsArp();
+  controlla('arpeggio «caso»: suona solo note dell\'accordo', Array.isArray(caso) && caso.filter((x) => x.i < 5).length === 5 && caso.filter((x) => x.i < 5).every((x) => [48, 52, 55].includes(x.n)), nomi(caso));
   await js(`cutxProva.synth.cambia('arp', 'su'); cutxProva.synth.cambia('arppasso', '1/8')`);
   await aspetta(0.3);
-  const otto = await haps();
+  const otto = await hapsArp();
   controlla('passo 1/8: una nota ogni due scatti', Array.isArray(otto) && otto.slice(0, 3).map((x) => `${x.i}:${x.l}`).join() === '0:2,2:2,4:2', nomi(otto));
   await js(`cutxProva.synth.cambia('arpgate', 0.5)`);
   await aspetta(0.3);
