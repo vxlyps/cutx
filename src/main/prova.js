@@ -3256,7 +3256,37 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('il tasto SYNTH è acceso', (await js(`document.getElementById('vista-synth-btn').classList.contains('on')`)) === true);
   const quante = await js(`document.querySelectorAll('.synth-pannello .ctl').length`);
   controlla('il pannello ha tutte le manopole', quante >= 40, String(quante));
-  controlla('sei gruppi: oscillatore, filtro, ampiezza, drive, space, arpeggio', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|drive|space|arpeggio');
+  // la barra e le schede stanno negli stessi posti in tutte e tre le schede (suono, note, drum); foto se c'è CUTX_FOTO_DIR
+  {
+    const posti = () => js(`(() => { const x = (s) => { const e = [...document.querySelectorAll(s)].find((e) => e.getClientRects().length); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }; return { nome: x('.synth-nome, .drum-nome'), cuffia: x('.synth-barra .key:not(.piccolo), .drum-barra .drum-play'), rec: x('.synth-rec, .drum-rec'), suono: x('.synth-schede .key, .drum-schede .key') }; })()`);
+    const foto = async (nome) => {
+      if (!process.env.CUTX_FOTO_DIR) return;
+      await mkdir(process.env.CUTX_FOTO_DIR, { recursive: true });
+      await writeFile(path.join(process.env.CUTX_FOTO_DIR, `${nome}.png`), (await finestre.controllo.webContents.capturePage()).toPNG());
+    };
+    const pp = {};
+    const misuraOriginale = finestre.controllo.getContentSize(); // la finestra di prova è stretta e la barra va a capo: si misura a una larghezza vera (2000×1000)
+    finestre.controllo.setContentSize(2000, 1000);
+    await aspetta(0.6);
+    for (const [id, n] of [['suono', 1], ['note', 2], ['drum', 3]]) {
+      await clic(`.synth-schede .key:nth-child(${n}), .drum-schede .key:nth-child(${n})`);
+      await aspetta(0.5);
+      pp[id] = await posti();
+      await foto(`synth-${id}`);
+    }
+    await clic('.drum-schede .key:nth-child(1)');
+    await aspetta(0.4);
+    finestre.controllo.setContentSize(misuraOriginale[0], misuraOriginale[1]);
+    await aspetta(0.4);
+    await js(`cutxProva.synth.cambia('forma', 'square')`);
+    await aspetta(0.5);
+    const disegnati = await js(`[...document.querySelectorAll('.specchietto-canvas')].map((c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; })`);
+    controlla('lo specchietto disegna la forma d\'onda e la curva del filtro', Array.isArray(disegnati) && disegnati.length === 2 && disegnati.every((n) => n > 200), JSON.stringify(disegnati));
+    await foto('synth-suono-specchietto');
+    await js(`cutxProva.synth.cambia('forma', 'sawtooth')`);
+    controlla('nome, cuffia, REC e schede stanno negli stessi punti in suono, note e drum', JSON.stringify(pp.suono) === JSON.stringify(pp.note) && JSON.stringify(pp.note) === JSON.stringify(pp.drum), JSON.stringify(pp));
+  }
+  controlla('sette gruppi: oscillatore, filtro, ampiezza, drive, space, mod, arpeggio', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|drive|space|mod|arpeggio');
   controlla('il codice del suono init è visibile e leggibile', (await codiceSynth()).includes('.s("sawtooth")') && (await codiceSynth()).includes('.lpf(2400)'), await codiceSynth());
   controlla('niente frasi sotto il codice', (await js(`document.querySelectorAll('.synth-codice .secondario').length`)) === 0);
   controlla('le etichette delle manopole stanno su una riga', (await js(`[...document.querySelectorAll('.ctl-nome')].every((e) => e.getBoundingClientRect().height < 14)`)) === true);
@@ -3391,7 +3421,7 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.cambia('cutoff', 900)`);
   await js(`document.querySelector('[data-aiuto="synth-clear"]').click()`);
   await aspetta(0.3);
-  controlla('CLEAR: il suono torna quello di partenza e il pianoroll è vuoto', (await stato('cutoff')) === 2400 && (await stato('arp')) === '' && (await js(`cutxProva.synth.roll.eventi.length`)) === 0);
+  controlla('CLEAR: il suono torna quello di partenza e il pianoroll è vuoto', (await stato('cutoff')) === 2400 && (await stato('arp')) === '' && (await js(`cutxProva.synth.roll.eventi.length`)) === 0 && (await codiceSynth()).startsWith('note("~")'), await codiceSynth());
   controlla('i tasti non si spostano al clic: .key:active non tocca margine né bordo', (await js(`[...document.styleSheets].flatMap((f) => [...f.cssRules]).filter((r) => r.selectorText?.includes('.key:active')).every((r) => !r.style.marginTop && !r.style.borderBottomWidth)`)) === true && JSON.stringify(await xy()) === JSON.stringify(primaClear));
   await js(`cutxProva.synth.imponi({ ...cutxProva.synth.stato, anteprima: 'arpeggio', note: 'c3 eb3 g3 bb3', arpgate: 1, q: 12 })`);
   await aspetta(0.3);
@@ -3451,7 +3481,7 @@ async function provaSynth({ finestre, scrivi }) {
   };
   await js(`cutxProva.synth.roll.pulisci()`);
   await aspetta(0.3);
-  controlla('«pulisci» (o il pianoroll vuoto di partenza): il testo è ~', (await js(`document.querySelector('.roll-mini-testo').value`)) === '~');
+  controlla('«clear notes» anche col pianoroll vuoto di partenza: il testo è ~ e il codice non ha più le note di prova', (await js(`document.querySelector('.roll-mini-testo').value`)) === '~' && (await stato('anteprima')) === 'clip' && (await codiceSynth()).startsWith('note("~")'), await codiceSynth());
   controlla('all\'inizio lo strumento è la selezione', (await js(`cutxProva.synth.roll.strumento`)) === 'seleziona');
   await clicca(0, 48);
   controlla('con il pianoroll vuoto un solo clic mette la prima nota', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());

@@ -117,7 +117,7 @@ export class PianoRoll {
     this.passiEl = crea('button', 'key piccolo', T.passi);
     this.passiEl.dataset.aiuto = 'roll-passi';
     this.passiEl.onclick = () => this.passiAttiva(!this.passi);
-    barra.append(this.matitaEl, this.passiEl, this.cicliEl, campo(T.griglia, this.grigliaEl, 'roll-griglia'), campo(T.lunghezza, this.lunghezzaEl, 'roll-lunghezza'), campo(T.scala, this.scalaEl, 'roll-scala'), this.radiceEl, campo(T.accordo, this.accordoEl, 'roll-accordo'), su, giu, pulisci);
+    barra.append(this.matitaEl, this.passiEl, this.cicliEl, campo(T.griglia, this.grigliaEl, 'roll-griglia'), campo(T.lunghezza, this.lunghezzaEl, 'roll-lunghezza'), campo(T.scala, this.scalaEl, 'roll-scala'), campo('\u00a0', this.radiceEl), campo(T.accordo, this.accordoEl, 'roll-accordo'), su, giu, pulisci);
 
     // la stessa cosa in mini-notazione: si modifica l'una o l'altra e restano allineate
     const riga = crea('div', 'roll-mini');
@@ -510,7 +510,8 @@ export class PianoRoll {
   }
 
   pulisci() {
-    if (!this.editabile || !this.eventi.length) return;
+    if (!this.editabile) return;
+    if (!this.eventi.length) return this.opz.vuoto?.(); // niente note nel pianoroll: la vista toglie anche le note di prova dal codice
     this.applica([], []);
   }
 

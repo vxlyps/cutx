@@ -16,14 +16,14 @@
 }
 
 .drum-schede {
-  padding: 0;
+  padding: 0 0 4px; /* dentro la colonna sinistra, che ha già il suo margine: stesso punto delle schede del synth */
 }
 
 .drum-sinistra {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  padding: 14px;
+  padding: 10px 14px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;

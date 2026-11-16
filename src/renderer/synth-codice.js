@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { ARP_ACCENTI, ARP_EVOLVE, ARP_MODI, ARP_OGNI, ARP_ORDINI, ARP_PASSI, ARP_RETRIG, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
+import { MOD_DEST, MOD_FORME, MOD_RATE, ARP_ACCENTI, ARP_EVOLVE, ARP_MODI, ARP_OGNI, ARP_ORDINI, ARP_PASSI, ARP_RETRIG, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
 import { velValida } from './synth-note.js';
 
 export const MARCA = '// @synth';
@@ -104,6 +104,43 @@ export function rigaArp(s, quale) {
 }
 // L'ordine conta: PULSE e RETRIG prima di swing e umanizza (che spostano le note nel tempo).
 export const righeArp = (s) => ['mask', 'ply', 'evolve', 'chance', 'jump', 'swing', 'acc', 'late', 'vel'].map((q) => rigaArp(s, q)).filter(Boolean);
+// --- MOD: due LFO ---
+// L'LFO muove il parametro intorno al valore che ha: una riga in più, dopo le altre, che il motore legge per ultima e quindi vince.
+// Il cutoff si muove a ottave (×2 elevato a 3 volte la profondità), gli altri in linea retta (profondità × tutto il campo, diviso due).
+const funzioneMod = (dest, tipo) => (dest === 'cutoff' ? tipo : dest === 'q' ? `${tipo.slice(0, 2)}q` : dest);
+function estremiMod(dest, v, d) {
+  const p = parametro(dest);
+  if (dest === 'cutoff') return [Math.max(p.min, Math.round(v * 2 ** (-3 * d))), Math.min(p.max, Math.round(v * 2 ** (3 * d)))];
+  const mezzo = (d * (p.max - p.min)) / 2;
+  const f = 10 ** (p.dec ?? 2);
+  return [Math.max(p.min, Math.round((v - mezzo) * f) / f), Math.min(p.max, Math.round((v + mezzo) * f) / f)];
+}
+export function rigaMod(s, n) {
+  const dest = s[`mod${n}dest`];
+  if (!dest || !MOD_DEST.includes(dest)) return null;
+  const [lo, hi] = estremiMod(dest, s[dest], s[`mod${n}depth`]);
+  if (!(hi > lo)) return null;
+  return `.${funzioneMod(dest, s.tipo)}(${s[`mod${n}forma`]}.range(${num(lo)}, ${num(hi)}).slow(${s[`mod${n}rate`]}))`;
+}
+const MOD_RE = /^\.(\w+)\((\w+)\.range\((-?[\d.]+), (-?[\d.]+)\)\.slow\(([\d.]+)\)\)$/;
+// Una riga di codice → { mod{n}dest, … } se è proprio una di quelle che il pannello scrive (e c'è uno slot libero), altrimenti null.
+function leggiMod(testo, s) {
+  const m = MOD_RE.exec(String(testo).replace(/\s+/g, ' ').trim());
+  if (!m) return null;
+  const [, fn, forma, lo, hi, rate] = m;
+  const dest = MOD_DEST.slice(1).find((d) => funzioneMod(d, s.tipo) === fn);
+  const n = !s.mod1dest ? 1 : !s.mod2dest ? 2 : 0;
+  if (!dest || !n || !MOD_FORME.includes(forma) || !MOD_RATE.includes(rate) || (n === 2 && s.mod1dest === dest)) return null;
+  const p = parametro(dest);
+  const d0 = dest === 'cutoff' ? Math.log2(Number(hi) / Number(lo)) / 6 : (Number(hi) - Number(lo)) / (p.max - p.min);
+  for (const d of [d0, d0 - 0.01, d0 + 0.01]) {
+    const depth = pulisciValore(parametro(`mod${n}depth`), d);
+    const nuovo = { [`mod${n}dest`]: dest, [`mod${n}forma`]: forma, [`mod${n}rate`]: rate, [`mod${n}depth`]: depth };
+    if (rigaMod({ ...s, ...nuovo }, n) === testo.replace(/\s+/g, ' ').trim()) return nuovo;
+  }
+  return null;
+}
+
 const spazi = (x) => String(x).replace(/\s+/g, ' ').trim();
 // Il contrario: la chiamata scritta → { modo, passo, ott } se è proprio una di quelle del pannello, altrimenti null.
 export function leggiArp(args) {
@@ -190,6 +227,13 @@ export function codice(stato) {
   riga(s.tremolo > 0 && mio('tremolo') && `.tremolosync(${s.tremolo})`, s.tremolo > 0 && scrivi('tremolodepth') && `.tremolodepth(${num(s.tremolodepth)})`);
   riga(s.delay > 0 && mio('delay') && `.delay(${num(s.delay)})`, s.delay > 0 && scrivi('delaysync') && `.delaysync(${s.delaysync})`, s.delay > 0 && scrivi('delayfeedback') && `.delayfeedback(${num(s.delayfeedback)})`);
   riga(s.room > 0 && mio('room') && `.room(${num(s.room)})`, s.room > 0 && scrivi('roomsize') && `.roomsize(${num(s.roomsize)})`);
+  // MOD: l'LFO è una riga in più, dopo tutto il resto (vince su quella del parametro); non se il codice a mano comanda già quel parametro
+  for (const n of [1, 2]) {
+    const dest = s[`mod${n}dest`];
+    if (!dest || !mio(dest) || (n === 2 && s.mod1dest === dest) || (dest === 'fm' && rumore)) continue;
+    const l = rigaMod(s, n);
+    if (l) r.push(`  ${l}`);
+  }
   for (const m of s.mano ?? []) r.push(`  ${m.trim()}`); // le chiamate scritte a mano, com'erano, in fondo (l'ultimo valore vince)
   return r.join('\n');
 }
@@ -358,16 +402,22 @@ export function leggiCodice(testo, base = iniziale()) {
     return true;
   };
   // chi scrive due volte la stessa cosa (.lpf(400).lpf(900)): vale l'ultima, la prima era già scavalcata. (add e trans invece si sommano.)
-  const ultimo = new Map(chiamate.map((c, i) => [c.nome, i]));
+  // (le righe degli LFO hanno lo stesso nome della chiamata che scavalcano, ma non la sostituiscono: sono una cosa a parte)
+  const eMod = (c) => MOD_RE.test(spazi(c.testo));
+  const ultimo = new Map(chiamate.map((c, i) => [c, i]).filter(([c]) => !eMod(c)).map(([c, i]) => [c.nome, i]));
   const sovrascrivibile = (n) =>
     n === 's' || n === 'unison' || n in NUMERICHE || FILTRI.includes(n) || /^(lp|hp|bp)q$/.test(n) || n === 'ftype' || n === 'vowel' || n === 'delaysync' || /^(lp|hp|bp)(env|attack|decay|sustain|release)$/.test(n);
   for (const [indice, c] of chiamate.entries()) {
     const n = c.nome;
-    if (sovrascrivibile(n) && ultimo.get(n) !== indice) continue;
+    if (sovrascrivibile(n) && !eMod(c) && ultimo.get(n) !== indice) continue;
     const v = numero(c.args);
     const str = stringa(c.args);
     let preso = false;
-    if (n === 's' && str && FORME.includes(str) && str === s.forma && !visti.has('s')) preso = true;
+    const lfo = leggiMod(c.testo, s);
+    if (lfo) {
+      Object.assign(s, lfo);
+      preso = true;
+    } else if (n === 's' && str && FORME.includes(str) && str === s.forma && !visti.has('s')) preso = true;
     else if (n === 'unison' && v !== null && s.forma === 'supersaw' && !visti.has(n)) preso = dai('voci', v, c.testo);
     else if (n in NUMERICHE && v !== null && !visti.has(n)) {
       const k = NUMERICHE[n];

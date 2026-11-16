@@ -577,3 +577,48 @@ test('arpeggio POLY, ORDER, EVOLVE, CHANCE, JUMP e le velocità nuove: si scrivo
   }
   assert.ok(codice({ ...base, arp: 'caso', arppoly: 5 }).includes('rand.segment'), 'il caso non ha il giro');
 });
+
+test('MOD: due LFO sono righe dopo tutto il resto, tornano uguali dal codice, e non sono nel MUTATE', () => {
+  const base = { ...iniziale(), anteprima: 'clip', note: 'c3 e3', cutoff: 2400 };
+  const s = { ...base, mod1dest: 'cutoff', mod1forma: 'sine', mod1rate: '2', mod1depth: 0.5, mod2dest: 'pan', mod2forma: 'perlin', mod2rate: '0.25', mod2depth: 0.4 };
+  const c = codice(s);
+  const righe = c.split('\n');
+  assert.equal(righe.at(-2), '  .lpf(sine.range(849, 6788).slow(2))', c);
+  assert.equal(righe.at(-1), '  .pan(perlin.range(.3, .7).slow(0.25))', c);
+  const r = leggiCodice(c);
+  assert.deepEqual(r.mano, [], c);
+  for (const k of ['mod1dest', 'mod1forma', 'mod1rate', 'mod1depth', 'mod2dest', 'mod2forma', 'mod2rate', 'mod2depth']) assert.equal(r.stato[k], s[k], k);
+  assert.equal(codice(r.stato), c, 'riscritto uguale');
+  assert.ok(!codice({ ...base, mod1dest: 'fm', mod1depth: 0.5, forma: 'white' }).includes('.fm('), 'FM sul rumore non si scrive');
+  const m = mutate({ ...s }, 1, () => 0.5);
+  assert.equal(m.mod1dest, 'cutoff', 'MUTATE non tocca gli LFO');
+  const a = leggiCodice('note("c3").s("sawtooth").lpf(sine.range(300, 900).slow(3)).room(.3)');
+  assert.ok(a.mano.length > 0 && a.stato.mod1dest === '', 'una riga che il pannello non scrive resta a mano');
+});
+
+test('specchietto: la forma d\'onda e la curva del filtro seguono le manopole', async () => {
+  const { puntiOnda, curvaFiltro } = await import('../src/renderer/synth-scope.js');
+  const s = { ...iniziale(), forma: 'sawtooth' };
+  const saw = puntiOnda(s, 100, 1);
+  assert.ok(saw[0] < -0.9 && saw[98] > 0.9 && saw.every((v, i) => i === 0 || v >= saw[i - 1] || saw[i - 1] > 0.9), 'un dente di sega sale');
+  const quadra = puntiOnda({ ...s, forma: 'square' }, 100, 1);
+  assert.ok(quadra.every((v) => v === 1 || v === -1));
+  const pulse = puntiOnda({ ...s, forma: 'pulse', pw: 0.25 }, 100, 1);
+  assert.equal(pulse.filter((v) => v === 1).length, 25, 'pw 0.25 = un quarto in alto');
+  const una = puntiOnda({ ...s, forma: 'supersaw', voci: 1 }, 64, 2);
+  const sette = puntiOnda({ ...s, forma: 'supersaw', voci: 7, detune: 0.3 }, 64, 2);
+  assert.notDeepEqual(una, sette, 'più voci cambiano la forma');
+  assert.ok(sette.every((v) => Math.abs(v) <= 1.0001));
+  assert.notDeepEqual(puntiOnda({ ...s, forma: 'sine', fm: 3 }, 64, 2), puntiOnda({ ...s, forma: 'sine', fm: 0 }, 64, 2), 'la FM cambia la forma');
+  const dura = puntiOnda({ ...s, forma: 'sine', crush: 3 }, 64, 1);
+  assert.ok(new Set(dura).size <= 9, 'il crush toglie livelli');
+  assert.deepEqual(puntiOnda({ ...s, forma: 'white' }, 32, 1), puntiOnda({ ...s, forma: 'white' }, 32, 1), 'il rumore non tremola tra un disegno e l\'altro');
+  const f = { ...s, tipo: 'lpf', cutoff: 1000, q: 1, ftype: '12db' };
+  const [basso, alto] = curvaFiltro(f, [100, 10000]);
+  assert.ok(basso > -1 && alto < -30, `passa-basso: ${basso} ${alto}`);
+  const [hBasso, hAlto] = curvaFiltro({ ...f, tipo: 'hpf' }, [100, 10000]);
+  assert.ok(hBasso < -30 && hAlto > -1);
+  const risonante = curvaFiltro({ ...f, q: 12 }, [1000])[0];
+  assert.ok(risonante > 15, 'la reso alza il picco sul cutoff');
+  assert.ok(curvaFiltro({ ...f, ftype: '24db' }, [10000])[0] < alto - 20, '24 dB cade più forte');
+});

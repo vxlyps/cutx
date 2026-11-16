@@ -3,6 +3,7 @@
 // Qui non suona niente da sola: la cuffia la comanda app.js, attraverso le funzioni di `opz`.
 import { COSTO_AVVISO, COSTO_MAX, GRUPPI, PARAMETRI, aPosizione, attivo, costo, daPosizione, imposta, iniziale, mutate, noteValide, pulisci, pulisciValore } from './synth-modello.js';
 import { CATEGORIE } from './categorie.js';
+import { Specchietto } from './synth-scope.js';
 import { PianoRoll } from './synth-roll.js';
 import { VistaDrum } from './drum-vista.js';
 import { conCicli, eventiDaMini, leggiScala, miniDaEventi, notaInGrado, scalaDelCiclo, velDaEventi, velocitaPerNote } from './synth-note.js';
@@ -18,6 +19,15 @@ export const formatta = (modello, vars = {}) => String(modello).replace(/\{(\w+)
 
 const PASSO_FINE = 0.002; // per pixel di trascinamento con ⇧
 const PASSO = 0.006; // per pixel
+const RIGHE_ARP = [
+  ['arp', 'arppasso'],
+  ['arpott', 'arpordine', 'arpretrig', 'arpacc', 'arpevolve', 'arpogni'],
+  ['arpgate', 'arppoly', 'arppulse', 'arprot', 'arpchance', 'arpjump', 'arpswing', 'arpumano'],
+];
+const RIGHE_MOD = [
+  ['mod1dest', 'mod1forma', 'mod1rate', 'mod1depth'],
+  ['mod2dest', 'mod2forma', 'mod2rate', 'mod2depth'],
+];
 const PX_STEP = 7; // valori a step (interi): un valore ogni tot pixel di trascinamento
 const PX_STEP_FINE = 20;
 const STORIA_MAX = 100;
@@ -91,7 +101,7 @@ export class VistaSynth {
     this.nomeEl.oninput = () => (this.nome = this.nomeEl.value);
 
     this.playEl = this.tasto(T.barra.play, '⌘↵', () => this.suonaOFerma(), 'synth-play');
-    this.casseEl = crea('button', 'key synth-casse', T.barra.casse);
+    this.casseEl = crea('button', 'key synth-casse synth-casse-tasto', T.barra.casse);
     this.casseEl.dataset.aiuto = 'synth-casse';
     this.casseEl.setAttribute('aria-pressed', 'false');
     this.casseEl.onclick = () => this.impostaCasse(!this.casse);
@@ -130,7 +140,7 @@ export class VistaSynth {
     this.quantoEl.setAttribute('aria-label', T.barra.quanto);
     this.quantoEl.oninput = () => (this.quanto = Number(this.quantoEl.value));
     this.quantoEl.onchange = () => this.salvaSoon();
-    this.categoriaEl = crea('select', 'synth-select');
+    this.categoriaEl = crea('select', 'synth-select synth-tipo');
     this.categoriaEl.setAttribute('aria-label', T.barra.categoria);
     this.categoriaEl.dataset.aiuto = 'synth-categoria';
     for (const [id, nome] of Object.entries(T.categorie)) this.categoriaEl.append(new Option(nome, id));
@@ -156,9 +166,13 @@ export class VistaSynth {
     for (const g of GRUPPI) {
       const sez = crea('section', `synth-gruppo synth-${g.id}`);
       sez.append(crea('h2', 'lbl', T.gruppi[g.id]));
-      const griglia = crea('div', 'synth-griglia');
-      for (const p of PARAMETRI.filter((x) => x.g === g.id)) griglia.append(this.controllo(p));
-      sez.append(griglia);
+      // l'arpeggio ha tante cose: tre righe in ordine (modo e velocità · disegno · manopole), ogni riga allineata in alto
+      const righe = g.id === 'arp' ? RIGHE_ARP : g.id === 'mod' ? RIGHE_MOD : [null];
+      for (const chiavi of righe) {
+        const griglia = crea('div', 'synth-griglia');
+        for (const p of PARAMETRI.filter((x) => x.g === g.id && (!chiavi || chiavi.includes(x.k)))) griglia.append(this.controllo(p));
+        sez.append(griglia);
+      }
       pannello.append(sez);
     }
 
@@ -185,6 +199,7 @@ export class VistaSynth {
     this.manoEl = crea('p', 'synth-mano');
     this.manoEl.dataset.aiuto = 'synth-mano';
     lato.append(this.codiceEl, this.manoEl, this.avvisoEl);
+    this.scope = new Specchietto(lato); // forma d'onda e curva del filtro, ridisegnate a ogni manopola
 
     // a sinistra due schede: il suono (manopole) e le note (pianoroll)
     const sinistra = crea('div', 'synth-sinistra');
@@ -202,6 +217,7 @@ export class VistaSynth {
       cambia: (eventi, cicli, gesto) => this.cambiaNote(eventi, cicli, gesto),
       fineGesto: () => (this.inGesto = false),
       testo: (testoMini, fine) => this.daMini(testoMini, fine),
+      vuoto: () => this.stato.anteprima !== 'clip' && this.passo(() => this.imponi({ ...this.stato, anteprima: 'clip', note: '~' })),
       nota: (n) => this.provaNota(n),
       ciclo: () => this.opz.ciclo?.() ?? null,
       avviso: (chiave, vars) => this.avviso(formatta(T.note[chiave], vars)),
@@ -343,6 +359,7 @@ export class VistaSynth {
   // La vista si apre o si chiude: aperta, la cuffia riceve il suono dei tasti; chiusa, le note e il REC si fermano.
   attiva(on) {
     this.attiva_ = on;
+    if (on) setTimeout(() => this.scope && ((this.scope.chiave = ''), this.scope.disegna(this.stato)), 0); // la vista è appena comparsa: lo specchietto ha ora una misura
     this.drum.attiva(on && this.scheda === 'drum');
     if (on) this.inviaSuono();
     else {
@@ -814,7 +831,7 @@ export class VistaSynth {
 
   // CLEAR: tutto da capo, suono e note (il suono torna quello di partenza, il pianoroll è vuoto). ⌘Z lo riporta com'era.
   pulisciTutto() {
-    this.passo(() => this.imponi({ ...iniziale() }));
+    this.passo(() => this.imponi({ ...iniziale(), anteprima: 'clip', note: '~' })); // niente note, nemmeno quelle di prova: il play è muto finché non scrivi o suoni
   }
 
   mutate() {
@@ -899,6 +916,7 @@ export class VistaSynth {
     }
     this.disegnaNote(s);
     this.disegnaOttava();
+    this.scope?.disegna(s);
     const nomiMano = new Set(s.mano.map((m) => /^\.(\w+)/.exec(m)?.[1]));
     this.manoEl.textContent = s.mano.length || s.testa ? `${T.msg.aMano}: ${[s.testa, ...s.mano].filter(Boolean).join(' ')}` : '';
     this.manoEl.hidden = !this.manoEl.textContent;

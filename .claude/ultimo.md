@@ -1,6 +1,6 @@
 # Ultimo stato - 16/11/2026
-Fatto: tasti che non si spostano al clic (`.key:active` solo più scuro); valori a step con pochi valori (octaves 1-5, voci, ottava) = fila di tasti; interi lunghi (poly, pulse…) trascinano un valore ogni 7 px, rotellina un valore a scatto; tasto CLEAR nella barra del SYNTH (suono + note da capo, ⌘Z annulla). Prima: arpeggio completo (POLY, ORDER, EVOLVE, CHANCE, JUMP, rate fino a 1/64 e terzine), pianoroll vuoto con un clic.
-Funziona: test puri 42 ok, prova synth 310 ok, 0 falliti.
-Non fatto: ascolto di Valerio; eco/filtro/glide dell'arpeggio; arpeggio da tasti tenuti (serve MiniLab); MOD trascinabili; mappa controller.
-File toccati: stile.css, synth-vista.js, synth-codice.js, synth-modello.js, testi/it.json, src/main/prova.js, test/synth.test.js.
-Prossimo passo: Valerio prova (tasti fermi, octaves a tasti, clear); poi MOD trascinabili.
+Fatto: barra e schede del SYNTH e del DRUM negli stessi punti; riga del pianoroll allineata; arpeggio su 3 righe; CLEAR e clear notes svuotano anche il codice (note("~")); gruppo MOD (2 LFO: target, wave, bars, depth, riga `.lpf(sine.range(a, b).slow(n))`); specchietto forma d'onda + curva filtro (synth-scope.js).
+Funziona: test puri 44 ok, prova synth+drum 346 ok, 0 falliti, LFO verificato su Strudel vero.
+Non fatto: ascolto/occhio di Valerio; glide e OSC2 (non nativi in Strudel); suoni salvati (le clip già lo sono); controller per MOD; foto del gruppo MOD/ARPEGGIO (sotto il bordo).
+File toccati: synth-codice.js, synth-modello.js, synth-vista.js, synth-roll.js, synth-scope.js (nuovo), drum-vista.js, synth.css, drum.css, stile.css, testi/it.json, prova.js, test/synth.test.js.
+Prossimo passo: Valerio guarda la barra ferma tra le schede, MOD e specchietto; poi MOD sul controller e tastiera MIDI.

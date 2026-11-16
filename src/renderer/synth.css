@@ -97,7 +97,8 @@
   grid-column: span 12;
 }
 
-.synth-arp {
+.synth-arp,
+.synth-mod {
   grid-column: span 12;
 }
 
@@ -490,4 +491,73 @@
 .synth-casse.acceso {
   border-color: var(--avviso);
   color: var(--avviso);
+}
+
+/* i posti fissi della barra: nome, tipo, cuffia, casse, REC stanno nello stesso punto nel SYNTH e nel DRUM */
+.synth-tipo,
+.synth-posto-tipo {
+  width: 76px;
+  flex: 0 0 auto;
+}
+.synth-casse-tasto,
+.synth-posto-casse {
+  width: 72px;
+  flex: 0 0 auto;
+  justify-content: center;
+}
+.synth-posto {
+  display: inline-block;
+  height: 1px;
+  visibility: hidden;
+}
+
+/* arpeggio: tre righe, una sotto l'altra, separate da un po' d'aria */
+.synth-arp .synth-griglia + .synth-griglia {
+  margin-top: 12px;
+}
+.synth-arp .ctl[data-k='arp'] .ctl-scelte,
+.synth-arp .ctl[data-k='arpordine'] .ctl-scelte {
+  max-width: 300px;
+}
+.synth-arp .ctl[data-k='arpevolve'] .ctl-scelte {
+  max-width: 230px;
+}
+
+/* la barra del pianoroll: tutto alla stessa altezza, sul fondo (il margine di «label» alzava i campi con l'etichetta) */
+.roll-barra {
+  align-items: flex-end;
+}
+.roll-campo {
+  margin: 0;
+}
+.roll-barra .key.piccolo,
+.roll-barra .synth-select {
+  height: 32px;
+}
+
+.synth-mod .synth-griglia + .synth-griglia {
+  margin-top: 12px;
+}
+.synth-mod .ctl[data-k$='dest'] .ctl-scelte {
+  max-width: 330px;
+}
+
+/* lo specchietto: forma d'onda e curva del filtro, sotto il codice */
+.synth-specchietto {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.specchietto-blocco {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.specchietto-canvas {
+  display: block;
+  width: 100%;
+  height: 110px;
+  background: var(--pannello);
+  border: 1px solid var(--linea);
 }

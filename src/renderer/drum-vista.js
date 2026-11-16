@@ -110,7 +110,10 @@ export class VistaDrum {
     this.aggiornaEl.dataset.aiuto = 'drum-aggiorna';
     this.aggiornaEl.hidden = true;
     this.aggiornaEl.onclick = () => this.aggiornaClip();
-    barra.append(schede, crea('span', 'sep'), this.nomeEl, this.playEl, this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.aggiornaEl, this.destinazioneEl, this.cueEl);
+    // la barra ha gli stessi posti di quella del SYNTH (nome, tipo, cuffia, casse, REC): chi cambia scheda non vede muoversi niente.
+    // «tipo» e «casse» qui non servono: restano due posti vuoti della stessa larghezza.
+    const vuoto = (classe) => Object.assign(crea('span', `synth-posto ${classe}`), { ariaHidden: 'true' });
+    barra.append(this.nomeEl, vuoto('synth-posto-tipo'), this.playEl, vuoto('synth-posto-casse'), this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.aggiornaEl, this.destinazioneEl, this.cueEl);
 
     this.grigliaEl = crea('div', 'drum-griglia');
     this.grigliaEl.dataset.aiuto = 'drum-griglia';
@@ -125,7 +128,7 @@ export class VistaDrum {
       this.passo(() => this.imponi(aggiungiRiga(this.stato, v)));
     };
     const sinistra = crea('div', 'drum-sinistra');
-    sinistra.append(this.grigliaEl, this.aggiungiEl);
+    sinistra.append(schede, this.grigliaEl, this.aggiungiEl); // le schede stanno in cima alla colonna sinistra, come nel synth
 
     const lato = crea('aside', 'drum-lato');
     lato.append(crea('h2', 'lbl', T.codice));

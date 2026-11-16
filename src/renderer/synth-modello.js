@@ -14,6 +14,9 @@ export const VOCALI = ['', 'a', 'e', 'i', 'o', 'u']; // '' = niente
 export const DIVISIONI = ['1/16', '1/8', '3/16', '1/4', '3/8', '1/2']; // del ciclo (una battuta in 4/4): delaysync
 export const ANTEPRIME = ['arpeggio', 'tenuta', 'clip'];
 export const NOTE_ANTEPRIMA = { tenuta: 'c3', arpeggio: 'c3 eb3 g3 bb3', accordo: '[c3,eb3,g3,bb3]' }; // accordo: lo schema «arpeggio corto» quando l'ARPEGGIO è acceso
+export const MOD_DEST = ['', 'cutoff', 'q', 'pan', 'gain', 'fm', 'shape', 'room', 'delay']; // cosa muove un LFO ('' = spento)
+export const MOD_FORME = ['sine', 'tri', 'saw', 'square', 'perlin']; // perlin = a caso ma dolce
+export const MOD_RATE = ['0.25', '0.5', '1', '2', '4', '8', '16']; // quante battute dura un giro dell'LFO
 export const ARP_MODI = ['', 'su', 'giu', 'sugiu', 'caso', 'converge', 'diverge', 'pinky', 'thumb', 'ordine']; // '' = spento: le note suonano com'è scritto
 export const ARP_ACCENTI = ['', '2', '3', '4']; // un accento ogni 2, 3 o 4 note ('' = niente)
 export const ARP_ORDINI = ['0 2 1 3', '0 2 3 1', '0 1 0 2', '0 3 1 3', '0 0 1 2', '2 0 1 3', '0 1 2 1']; // ORDER: in che ordine suonano le note dell'accordo (0 = la più bassa)
@@ -75,6 +78,13 @@ export const PARAMETRI = [
   { k: 'phaserdepth', g: 'space', tipo: 'num', min: 0, max: 1, def: 0.75, dec: 2, se: (s) => s.phaser > 0 },
   { k: 'tremolo', g: 'space', tipo: 'int', min: 0, max: 16, def: 0 },
   { k: 'tremolodepth', g: 'space', tipo: 'num', min: 0, max: 1, def: 0.5, dec: 2, se: (s) => s.tremolo > 0 },
+  // MOD: due LFO. Ognuno muove un parametro intorno al suo valore: la riga di codice è `.lpf(sine.range(600, 9600).slow(2))`
+  ...[1, 2].flatMap((n) => [
+    { k: `mod${n}dest`, g: 'mod', tipo: 'scelta', scelte: MOD_DEST, def: '' },
+    { k: `mod${n}forma`, g: 'mod', tipo: 'scelta', scelte: MOD_FORME, def: 'sine', se: (s) => s[`mod${n}dest`] !== '' },
+    { k: `mod${n}rate`, g: 'mod', tipo: 'scelta', scelte: MOD_RATE, def: '2', se: (s) => s[`mod${n}dest`] !== '' },
+    { k: `mod${n}depth`, g: 'mod', tipo: 'num', min: 0.05, max: 1, def: 0.5, dec: 2, se: (s) => s[`mod${n}dest`] !== '' },
+  ]),
   // ARPEGGIO: gli accordi delle note della clip suonati una nota alla volta, a passo fisso, ripartendo a ogni accordo
   { k: 'arp', g: 'arp', tipo: 'scelta', scelte: ARP_MODI, def: '' },
   { k: 'arppasso', g: 'arp', tipo: 'scelta', scelte: ARP_PASSI, def: '1/16', se: (s) => s.arp !== '' },
@@ -100,6 +110,7 @@ export const GRUPPI = [
   { id: 'amp' },
   { id: 'drive' },
   { id: 'space' },
+  { id: 'mod' },
   { id: 'arp' },
 ];
 
@@ -342,7 +353,7 @@ export function mutate(s, quanto, rng = Math.random, categoria = s.categoria ?? 
   const nuovo = sorprendi(rng, s, categoria);
   const out = { ...s };
   for (const p of PARAMETRI) {
-    if (p.k === 'gain' || p.g === 'arp') continue; // l'arpeggio non si muta: è una scelta musicale, non un colore del suono
+    if (p.k === 'gain' || p.g === 'arp' || p.g === 'mod') continue; // l'arpeggio non si muta: è una scelta musicale, non un colore del suono
     if (p.tipo === 'scelta' || p.tipo === 'bool') {
       if (rng() < q) out[p.k] = nuovo[p.k];
     } else {
