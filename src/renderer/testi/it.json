@@ -512,7 +512,11 @@
       "roomsize": "size",
       "arp": "modo",
       "arppasso": "passo",
-      "arpgate": "gate"
+      "arpgate": "gate",
+      "arpott": "ottave",
+      "arpswing": "swing",
+      "arpacc": "accenti",
+      "arpumano": "umanizza"
     },
     "scelte": {
       "sawtooth": "saw",

@@ -507,3 +507,32 @@ test('mutate e sorprendi non toccano l\'arpeggio', () => {
   }
   assert.equal(sorprendi(seme(3), s).arp, 'sugiu');
 });
+
+test('arpeggio: ottave, swing, accenti e umanizza si scrivono dopo .arpWith e tornano uguali dal codice', () => {
+  const base = { ...iniziale(), anteprima: 'clip', note: '[c3,eb3,g3] ~ [d3,f3]', arp: 'su', arppasso: '1/16' };
+  // niente di nuovo acceso: il codice è quello di prima
+  const c0 = codice(base);
+  assert.ok(!/swingBy|\.mul\(|\n\s*\.late\(|flatMap/.test(c0), c0);
+  const s = { ...base, arpott: 2, arpswing: 0.2, arpacc: '4', arpumano: 0.5, arpgate: 0.5 };
+  const c = codice(s);
+  const righe = c.split('\n');
+  assert.ok(righe[1].includes('flatMap') && righe[1].includes('+ o'), righe[1]);
+  assert.equal(righe[2], '  .swingBy(.2, 8)');
+  assert.equal(righe[3], '  .mul(velocity(run(16).fmap(i => i % 4 ? .55 : 1)))');
+  assert.equal(righe[4], '  .late(rand.range(0, .005).segment(16))');
+  assert.equal(righe[5], '  .mul(velocity(rand.range(.8, 1)))');
+  assert.equal(righe[6], '  .clip(.5)');
+  const r = leggiCodice(c);
+  assert.deepEqual([r.stato.arp, r.stato.arpott, r.stato.arpswing, r.stato.arpacc, r.stato.arpumano, r.stato.arpgate], ['su', 2, 0.2, '4', 0.5, 0.5], c);
+  assert.deepEqual(r.mano, [], 'niente resta a mano');
+  assert.equal(codice(r.stato), c, 'riscritto è identico');
+  // passo 1/8: lo swing parte da 4 fette
+  assert.ok(codice({ ...base, arppasso: '1/8', arpswing: 0.3 }).includes('.swingBy(.3, 4)'));
+  // un swing ritoccato a mano resta a mano
+  const m = leggiCodice(c.replace('.swingBy(.2, 8)', '.swingBy(.2, 3)'));
+  assert.equal(m.stato.arpswing, 0);
+  assert.ok(m.mano.some((x) => x.startsWith('.swingBy(.2, 3')));
+  // con le note in gradi di scala le ottave non si scrivono; spento l'arpeggio spariscono tutte
+  assert.ok(!codice({ ...base, arpott: 3, scala: 'A2:minor', note: '0 2 4' }).includes('flatMap'));
+  assert.ok(!/swingBy|flatMap|rand/.test(codice({ ...s, arp: '' })));
+});

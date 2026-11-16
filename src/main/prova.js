@@ -3352,6 +3352,27 @@ async function provaSynth({ finestre, scrivi }) {
   await aspetta(0.3);
   const otto = await hapsArp();
   controlla('passo 1/8: una nota ogni due scatti', Array.isArray(otto) && otto.slice(0, 3).map((x) => `${x.i}:${x.l}`).join() === '0:2,2:2,4:2', nomi(otto));
+  // ottave, swing, accenti, umanizza: il codice del pannello suona davvero come dice
+  const hapsArpV = async () => chiedi(finestre.cuffia, `globalThis.cutxHaps(${JSON.stringify(await codiceSynth())}, 0, 1, 16, true)`);
+  await js(`cutxProva.synth.cambia('arppasso', '1/16'); cutxProva.synth.cambia('arpott', 2)`);
+  await aspetta(0.3);
+  const ott2 = await hapsArp();
+  controlla('arpeggio a 2 ottave: l\'accordo sale di un\'ottava e poi ricomincia', Array.isArray(ott2) && ott2.slice(0, 6).map((x) => x.n).join() === '48,52,55,60,64,67', nomi(ott2));
+  await js(`cutxProva.synth.cambia('arpott', 1); cutxProva.synth.cambia('arpswing', 0.2)`);
+  await aspetta(0.3);
+  const sw = await hapsArp();
+  controlla('swing .2: le note dispari arrivano un po\' dopo (di .2 passi)', Array.isArray(sw) && sw.slice(0, 6).map((x) => x.i).join() === '0,1.2,2,3.2,4,5.2', nomi(sw));
+  await js(`cutxProva.synth.cambia('arpswing', 0); cutxProva.synth.cambia('arpacc', '4')`);
+  await aspetta(0.3);
+  const ac = await hapsArpV();
+  controlla('accenti ogni 4: la prima nota piena, le altre più piano', Array.isArray(ac) && ac.slice(0, 6).map((x) => x.v ?? 1).join() === '1,0.55,0.55,0.55,1,0.55', JSON.stringify(ac?.slice?.(0, 6)));
+  await js(`cutxProva.synth.cambia('arpacc', ''); cutxProva.synth.cambia('arpumano', 0.5)`);
+  await aspetta(0.3);
+  const um = await hapsArpV();
+  const vs = Array.isArray(um) ? um.slice(0, 6).map((x) => x.v ?? 1) : [];
+  controlla('umanizza: forza e tempo variano di poco, senza uscire dai limiti', vs.length === 6 && vs.every((v) => v >= 0.79 && v <= 1) && new Set(vs).size > 1 && um.slice(0, 6).every((x) => x.i - Math.round(x.i) >= -0.001 && x.i - Math.round(x.i) <= 0.09) && um.slice(0, 6).some((x) => Math.abs(x.i - Math.round(x.i)) > 0.002), JSON.stringify(um?.slice?.(0, 6)));
+  await js(`cutxProva.synth.cambia('arpumano', 0)`);
+  await aspetta(0.3);
   await js(`cutxProva.synth.cambia('arpgate', 0.5)`);
   await aspetta(0.3);
   controlla('il gate scrive .clip(.5) e il codice è quello del pannello', (await codiceSynth()).includes('.clip(.5)') && (await codiceSynth()).indexOf('.arpWith') < (await codiceSynth()).indexOf('.s("sawtooth")'));

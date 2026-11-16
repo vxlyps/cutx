@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { ARP_MODI, ARP_PASSI, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
+import { ARP_ACCENTI, ARP_MODI, ARP_PASSI, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
 import { velValida } from './synth-note.js';
 
 export const MARCA = '// @synth';
@@ -54,17 +54,35 @@ export const conArp = (s) => {
 // La chiamata dell'arpeggio, su una riga (se la si ritocca a mano resta com'è, a mano). `run(n)` conta i passi del ciclo; `late` li fa ripartire dall'inizio
 // di ogni accordo; `h` sono le note dell'accordo, dalla più bassa alla più alta (il pianoroll le scrive in quell'ordine).
 export const ARP_PASSI_CICLO = { '1/4': 4, '1/8': 8, '1/16': 16 };
-export function chiamataArp(modo, passo) {
+export function chiamataArp(modo, passo, ott = 1) {
   const n = ARP_PASSI_CICLO[passo] ?? 16;
-  if (modo === 'caso') return `.arpWith(h => rand.segment(${n}).fmap(r => h[Math.floor(r * h.length)]))`;
-  const nota = { su: 'h[i % h.length]', giu: 'h.at(-1 - i % h.length)', sugiu: 'h[h.length - 1 - Math.abs(h.length - 1 - i % Math.max(2 * h.length - 2, 1))]' }[modo];
-  return `.arpWith(h => run(${n}).late(h[0].whole.begin).fmap(i => ${nota}))`;
+  const l = ott > 1 ? 't' : 'h'; // con più ottave `t` è l'accordo ripetuto, ogni giro un'ottava più su
+  let corpo;
+  if (modo === 'caso') corpo = `rand.segment(${n}).fmap(r => ${l}[Math.floor(r * ${l}.length)])`;
+  else {
+    const nota = { su: `${l}[i % ${l}.length]`, giu: `${l}.at(-1 - i % ${l}.length)`, sugiu: `${l}[${l}.length - 1 - Math.abs(${l}.length - 1 - i % Math.max(2 * ${l}.length - 2, 1))]` }[modo];
+    corpo = `run(${n}).late(h[0].whole.begin).fmap(i => ${nota})`;
+  }
+  if (ott <= 1) return `.arpWith(h => ${corpo})`;
+  const scatti = [0, 12, 24].slice(0, ott).join(', ');
+  return `.arpWith(h => { const t = [${scatti}].flatMap(o => h.map(x => x.withValue(v => ({ ...v, note: noteToMidi(v.note) + o })))); return ${corpo}; })`;
+}
+// Le righe che l'arpeggio aggiunge dopo `.arpWith`, una per riga (se le si ritocca a mano restano a mano): swing, accenti, umanizza (tempo e forza).
+// `swingBy(x, n)` ritarda la seconda metà di ogni fetta; con n = passi del ciclo / 2 sono i passi pari a restare indietro.
+const ACCENTO = 0.55;
+export function righeArp(s) {
+  const n = ARP_PASSI_CICLO[s.arppasso] ?? 16;
+  const r = [];
+  if (s.arpswing > 0) r.push(`.swingBy(${num(s.arpswing)}, ${n / 2})`);
+  if (s.arpacc) r.push(`.mul(velocity(run(${n}).fmap(i => i % ${s.arpacc} ? ${num(ACCENTO)} : 1)))`);
+  if (s.arpumano > 0) r.push(`.late(rand.range(0, ${num(s.arpumano * 0.01)}).segment(${n}))`, `.mul(velocity(rand.range(${num(Math.round((1 - 0.4 * s.arpumano) * 100) / 100)}, 1)))`);
+  return r;
 }
 const spazi = (x) => String(x).replace(/\s+/g, ' ').trim();
-// Il contrario: la chiamata scritta → { modo, passo } se è proprio una di quelle del pannello, altrimenti null.
+// Il contrario: la chiamata scritta → { modo, passo, ott } se è proprio una di quelle del pannello, altrimenti null.
 export function leggiArp(args) {
   const a = spazi(`.arpWith(${args})`);
-  for (const modo of ARP_MODI.slice(1)) for (const passo of ARP_PASSI) if (a === spazi(chiamataArp(modo, passo))) return { modo, passo };
+  for (const modo of ARP_MODI.slice(1)) for (const passo of ARP_PASSI) for (const ott of [1, 2, 3]) if (a === spazi(chiamataArp(modo, passo, ott))) return { modo, passo, ott };
   return null;
 }
 
@@ -83,7 +101,8 @@ export function codice(stato) {
   if (conVelocity(s)) r.push(`  .velocity("${s.vel}")`);
   // l'arpeggio sta subito dopo le note: prima di .trans e .add, che sovrappongono voci e farebbero un accordo di ogni nota
   if (conArp(s)) {
-    r.push(`  ${chiamataArp(s.arp, s.arppasso)}`);
+    r.push(`  ${chiamataArp(s.arp, s.arppasso, inGradi(s) ? 1 : s.arpott)}`);
+    for (const x of righeArp(s)) r.push(`  ${x}`);
     if (s.arpgate < 1 && !nomiManoDi(s).has('clip')) r.push(`  .clip(${num(s.arpgate)})`);
   }
 
@@ -350,7 +369,23 @@ export function leggiCodice(testo, base = iniziale()) {
       const a = leggiArp(c.args);
       s.arp = a.modo;
       s.arppasso = a.passo;
+      s.arpott = a.ott;
       preso = true;
+    } else if (s.arp && (n === 'swingBy' || n === 'mul' || n === 'late')) {
+      // le righe dell'arpeggio: si prendono solo se sono proprio quelle che il pannello scriverebbe
+      const t = spazi(c.testo);
+      let m;
+      if (n === 'swingBy' && (m = /^\.swingBy\(([\d.]+),/.exec(t)) && !s.arpswing) {
+        const x = pulisciValore(parametro('arpswing'), Number(m[1]));
+        if (x > 0 && righeArp({ ...s, arpswing: x, arpacc: '', arpumano: 0 })[0] === t) (s.arpswing = x), (preso = true);
+      } else if (n === 'late' && (m = /^\.late\(rand\.range\(0, ([\d.]+)\)\.segment\(\d+\)\)$/.exec(t)) && !s.arpumano) {
+        const x = pulisciValore(parametro('arpumano'), Number(m[1]) / 0.01);
+        if (x > 0 && righeArp({ ...s, arpswing: 0, arpacc: '', arpumano: x })[0] === t) (s.arpumano = x), (preso = true);
+      } else if (n === 'mul') {
+        const accento = ARP_ACCENTI.slice(1).find((k) => righeArp({ ...s, arpswing: 0, arpacc: k, arpumano: 0 })[0] === t);
+        if (accento && !s.arpacc) (s.arpacc = accento), (preso = true);
+        else if (s.arpumano > 0 && righeArp({ ...s, arpswing: 0, arpacc: '' })[1] === t) preso = true;
+      }
     } else if (n === 'clip' && !visti.has(n) && s.arp && v !== null && v >= 0.1 && v < 1) {
       s.arpgate = pulisciValore(parametro('arpgate'), v);
       preso = true;

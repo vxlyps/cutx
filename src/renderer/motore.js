@@ -1491,7 +1491,7 @@ globalThis.cutxStato = stato;
 globalThis.cutxHaps = async (codice, da, a, g = 16, vel = false) => {
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
-  return c.pattern.queryArc(da, a).map((h) => ({ i: +(h.whole.begin.valueOf() * g).toFixed(3), l: +((h.whole.end.valueOf() - h.whole.begin.valueOf()) * g).toFixed(3), n: typeof h.value.note === 'number' ? h.value.note : noteToMidi(h.value.note), ...(vel && h.value.velocity !== undefined && h.value.velocity !== 1 ? { v: Math.round(h.value.velocity * 100) / 100 } : {}) }));
+  return c.pattern.queryArc(da, a).filter((h) => h.hasOnset()).map((h) => ({ i: +(h.whole.begin.valueOf() * g).toFixed(3), l: +((h.whole.end.valueOf() - h.whole.begin.valueOf()) * g).toFixed(3), n: typeof h.value.note === 'number' ? h.value.note : noteToMidi(h.value.note), ...(vel && h.value.velocity !== undefined && h.value.velocity !== 1 ? { v: Math.round(h.value.velocity * 100) / 100 } : {}) }));
 };
 // Per le prove: azzera i massimi e i conti della sentinella, così si misura una fase alla volta.
 globalThis.cutxAzzeraMisure = () => {
