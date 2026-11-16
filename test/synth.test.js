@@ -536,3 +536,19 @@ test('arpeggio: ottave, swing, accenti e umanizza si scrivono dopo .arpWith e to
   assert.ok(!codice({ ...base, arpott: 3, scala: 'A2:minor', note: '0 2 4' }).includes('flatMap'));
   assert.ok(!/swingBy|flatMap|rand/.test(codice({ ...s, arp: '' })));
 });
+
+test('arpeggio PULSE e RETRIG: righe dopo arpWith, tornano uguali dal codice; PULSE ≥ passi non scrive', () => {
+  const base = { ...iniziale(), anteprima: 'clip', note: '[c3,eb3,g3]', arp: 'converge', arppasso: '1/16' };
+  const s = { ...base, arppulse: 5, arprot: 2, arpretrig: '3', arpswing: 0.2, arpacc: '4', arpumano: 0.5 };
+  const c = codice(s);
+  const righe = c.split('\n');
+  assert.equal(righe[2], '  .mask("1(5,16,2)")');
+  assert.equal(righe[3], '  .ply("1 1 1 3 1 1 1 3 1 1 1 3 1 1 1 3")');
+  assert.ok(righe[4].startsWith('  .swingBy('), righe[4]);
+  const r = leggiCodice(c);
+  assert.deepEqual(r.mano, [], c);
+  assert.deepEqual([r.stato.arppulse, r.stato.arprot, r.stato.arpretrig, r.stato.arp], [5, 2, '3', 'converge']);
+  assert.equal(codice(r.stato), c, 'riscritto uguale');
+  assert.ok(!codice({ ...base, arppulse: 16 }).includes('.mask('), 'PULSE pieno non si scrive');
+  assert.ok(!codice({ ...base, arppulse: 3, arppasso: '1/4' }).includes('.mask(') === false, 'PULSE 3 su 4 sì');
+});

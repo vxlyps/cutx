@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { ARP_ACCENTI, ARP_MODI, ARP_PASSI, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
+import { ARP_ACCENTI, ARP_MODI, ARP_PASSI, ARP_RETRIG, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
 import { velValida } from './synth-note.js';
 
 export const MARCA = '// @synth';
@@ -60,7 +60,17 @@ export function chiamataArp(modo, passo, ott = 1) {
   let corpo;
   if (modo === 'caso') corpo = `rand.segment(${n}).fmap(r => ${l}[Math.floor(r * ${l}.length)])`;
   else {
-    const nota = { su: `${l}[i % ${l}.length]`, giu: `${l}.at(-1 - i % ${l}.length)`, sugiu: `${l}[${l}.length - 1 - Math.abs(${l}.length - 1 - i % Math.max(2 * ${l}.length - 2, 1))]` }[modo];
+    const L = `${l}.length`;
+    const dalFuori = (k) => `(k => k % 2 ? ${L} - (k + 1) / 2 : k / 2)(${k})`; // 0, ultima, 1, penultima…: dai bordi verso il centro
+    const nota = {
+      su: `${l}[i % ${L}]`,
+      giu: `${l}.at(-1 - i % ${L})`,
+      sugiu: `${l}[${L} - 1 - Math.abs(${L} - 1 - i % Math.max(2 * ${L} - 2, 1))]`,
+      converge: `${l}[${dalFuori(`i % ${L}`)}]`,
+      diverge: `${l}[${dalFuori(`${L} - 1 - i % ${L}`)}]`,
+      pinky: `${l}[i % 2 ? ${L} - 1 : i / 2 % Math.max(${L} - 1, 1)]`, // la nota più alta torna a ogni secondo passo
+      thumb: `${l}[i % 2 ? Math.min(${L} - 1, 1 + (i - 1) / 2 % Math.max(${L} - 1, 1)) : 0]`, // la più bassa torna a ogni secondo passo
+    }[modo];
     corpo = `run(${n}).late(h[0].whole.begin).fmap(i => ${nota})`;
   }
   if (ott <= 1) return `.arpWith(h => ${corpo})`;
@@ -70,14 +80,22 @@ export function chiamataArp(modo, passo, ott = 1) {
 // Le righe che l'arpeggio aggiunge dopo `.arpWith`, una per riga (se le si ritocca a mano restano a mano): swing, accenti, umanizza (tempo e forza).
 // `swingBy(x, n)` ritarda la seconda metà di ogni fetta; con n = passi del ciclo / 2 sono i passi pari a restare indietro.
 const ACCENTO = 0.55;
-export function righeArp(s) {
+export function rigaArp(s, quale) {
   const n = ARP_PASSI_CICLO[s.arppasso] ?? 16;
-  const r = [];
-  if (s.arpswing > 0) r.push(`.swingBy(${num(s.arpswing)}, ${n / 2})`);
-  if (s.arpacc) r.push(`.mul(velocity(run(${n}).fmap(i => i % ${s.arpacc} ? ${num(ACCENTO)} : 1)))`);
-  if (s.arpumano > 0) r.push(`.late(rand.range(0, ${num(s.arpumano * 0.01)}).segment(${n}))`, `.mul(velocity(rand.range(${num(Math.round((1 - 0.4 * s.arpumano) * 100) / 100)}, 1)))`);
-  return r;
+  switch (quale) {
+    // PULSE: `1(k,n,rot)` è il ritmo euclideo; `mask` tiene solo le note sui suoi colpi (tutte se k non è minore dei passi)
+    case 'mask': return s.arppulse > 0 && s.arppulse < n ? `.mask("1(${s.arppulse},${n}${s.arprot % n ? `,${s.arprot % n}` : ''})")` : null;
+    // RETRIG: ogni 4 passi, l'ultimo si ripete in raffica
+    case 'ply': return s.arpretrig ? `.ply("${Array.from({ length: n }, (_, i) => (i % 4 === 3 ? s.arpretrig : 1)).join(' ')}")` : null;
+    case 'swing': return s.arpswing > 0 ? `.swingBy(${num(s.arpswing)}, ${n / 2})` : null;
+    case 'acc': return s.arpacc ? `.mul(velocity(run(${n}).fmap(i => i % ${s.arpacc} ? ${num(ACCENTO)} : 1)))` : null;
+    case 'late': return s.arpumano > 0 ? `.late(rand.range(0, ${num(s.arpumano * 0.01)}).segment(${n}))` : null;
+    case 'vel': return s.arpumano > 0 ? `.mul(velocity(rand.range(${num(Math.round((1 - 0.4 * s.arpumano) * 100) / 100)}, 1)))` : null;
+  }
+  return null;
 }
+// L'ordine conta: PULSE e RETRIG prima di swing e umanizza (che spostano le note nel tempo).
+export const righeArp = (s) => ['mask', 'ply', 'swing', 'acc', 'late', 'vel'].map((q) => rigaArp(s, q)).filter(Boolean);
 const spazi = (x) => String(x).replace(/\s+/g, ' ').trim();
 // Il contrario: la chiamata scritta → { modo, passo, ott } se è proprio una di quelle del pannello, altrimenti null.
 export function leggiArp(args) {
@@ -371,20 +389,27 @@ export function leggiCodice(testo, base = iniziale()) {
       s.arppasso = a.passo;
       s.arpott = a.ott;
       preso = true;
-    } else if (s.arp && (n === 'swingBy' || n === 'mul' || n === 'late')) {
+    } else if (s.arp && (n === 'swingBy' || n === 'mul' || n === 'late' || n === 'mask' || n === 'ply')) {
       // le righe dell'arpeggio: si prendono solo se sono proprio quelle che il pannello scriverebbe
       const t = spazi(c.testo);
       let m;
       if (n === 'swingBy' && (m = /^\.swingBy\(([\d.]+),/.exec(t)) && !s.arpswing) {
         const x = pulisciValore(parametro('arpswing'), Number(m[1]));
-        if (x > 0 && righeArp({ ...s, arpswing: x, arpacc: '', arpumano: 0 })[0] === t) (s.arpswing = x), (preso = true);
+        if (x > 0 && rigaArp({ ...s, arpswing: x }, 'swing') === t) (s.arpswing = x), (preso = true);
       } else if (n === 'late' && (m = /^\.late\(rand\.range\(0, ([\d.]+)\)\.segment\(\d+\)\)$/.exec(t)) && !s.arpumano) {
         const x = pulisciValore(parametro('arpumano'), Number(m[1]) / 0.01);
-        if (x > 0 && righeArp({ ...s, arpswing: 0, arpacc: '', arpumano: x })[0] === t) (s.arpumano = x), (preso = true);
+        if (x > 0 && rigaArp({ ...s, arpumano: x }, 'late') === t) (s.arpumano = x), (preso = true);
       } else if (n === 'mul') {
-        const accento = ARP_ACCENTI.slice(1).find((k) => righeArp({ ...s, arpswing: 0, arpacc: k, arpumano: 0 })[0] === t);
+        const accento = ARP_ACCENTI.slice(1).find((k) => rigaArp({ ...s, arpacc: k }, 'acc') === t);
         if (accento && !s.arpacc) (s.arpacc = accento), (preso = true);
-        else if (s.arpumano > 0 && righeArp({ ...s, arpswing: 0, arpacc: '' })[1] === t) preso = true;
+        else if (s.arpumano > 0 && rigaArp(s, 'vel') === t) preso = true;
+      } else if (n === 'mask' && (m = /^\.mask\("1\((\d+),(\d+)(?:,(\d+))?\)"\)$/.exec(t)) && !s.arppulse) {
+        const k = pulisciValore(parametro('arppulse'), Number(m[1]));
+        const rot = pulisciValore(parametro('arprot'), Number(m[3] ?? 0));
+        if (k > 0 && rigaArp({ ...s, arppulse: k, arprot: rot }, 'mask') === t) (s.arppulse = k), (s.arprot = rot), (preso = true);
+      } else if (n === 'ply' && !s.arpretrig) {
+        const r = ARP_RETRIG.slice(1).find((k) => rigaArp({ ...s, arpretrig: k }, 'ply') === t);
+        if (r) (s.arpretrig = r), (preso = true);
       }
     } else if (n === 'clip' && !visti.has(n) && s.arp && v !== null && v >= 0.1 && v < 1) {
       s.arpgate = pulisciValore(parametro('arpgate'), v);

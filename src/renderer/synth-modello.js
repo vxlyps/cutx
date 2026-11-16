@@ -14,8 +14,9 @@ export const VOCALI = ['', 'a', 'e', 'i', 'o', 'u']; // '' = niente
 export const DIVISIONI = ['1/16', '1/8', '3/16', '1/4', '3/8', '1/2']; // del ciclo (una battuta in 4/4): delaysync
 export const ANTEPRIME = ['arpeggio', 'tenuta', 'clip'];
 export const NOTE_ANTEPRIMA = { tenuta: 'c3', arpeggio: 'c3 eb3 g3 bb3', accordo: '[c3,eb3,g3,bb3]' }; // accordo: lo schema «arpeggio corto» quando l'ARPEGGIO è acceso
-export const ARP_MODI = ['', 'su', 'giu', 'sugiu', 'caso']; // '' = spento: le note suonano com'è scritto
+export const ARP_MODI = ['', 'su', 'giu', 'sugiu', 'caso', 'converge', 'diverge', 'pinky', 'thumb']; // '' = spento: le note suonano com'è scritto
 export const ARP_ACCENTI = ['', '2', '3', '4']; // un accento ogni 2, 3 o 4 note ('' = niente)
+export const ARP_RETRIG = ['', '2', '3', '4']; // RETRIG: una nota ogni 4 si ripete in raffica 2, 3 o 4 volte
 export const ARP_PASSI = ['1/4', '1/8', '1/16']; // la durata di ogni nota dell'arpeggio (un ciclo = una battuta)
 
 // I tetti: il live non deve mai soffrire. Le voci in un colpo solo sono (unison del supersaw o layer) × (1 + sub).
@@ -77,6 +78,9 @@ export const PARAMETRI = [
   { k: 'arpgate', g: 'arp', tipo: 'num', min: 0.1, max: 1, def: 1, dec: 2, se: (s) => s.arp !== '' },
   { k: 'arpott', g: 'arp', tipo: 'int', min: 1, max: 3, def: 1, se: (s) => s.arp !== '' && !s.scala }, // quante ottave sale l'arpeggio (con le note in gradi di scala no)
   { k: 'arpswing', g: 'arp', tipo: 'num', min: 0, max: 0.5, def: 0, dec: 2, se: (s) => s.arp !== '' },
+  { k: 'arppulse', g: 'arp', tipo: 'int', min: 0, max: 16, def: 0, se: (s) => s.arp !== '' }, // PULSE: quante note suonano sui passi (ritmo euclideo), 0 = tutte
+  { k: 'arprot', g: 'arp', tipo: 'int', min: 0, max: 15, def: 0, se: (s) => s.arp !== '' && s.arppulse > 0 }, // ROTATE: sposta il ritmo di PULSE
+  { k: 'arpretrig', g: 'arp', tipo: 'scelta', scelte: ARP_RETRIG, def: '', se: (s) => s.arp !== '' },
   { k: 'arpacc', g: 'arp', tipo: 'scelta', scelte: ARP_ACCENTI, def: '', se: (s) => s.arp !== '' },
   { k: 'arpumano', g: 'arp', tipo: 'num', min: 0, max: 1, def: 0, dec: 2, se: (s) => s.arp !== '' }, // piccole variazioni di forza e di tempo
 ];
