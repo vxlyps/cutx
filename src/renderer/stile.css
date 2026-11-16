@@ -159,9 +159,9 @@ body {
   opacity: 0.45;
 }
 
+/* premuto: si scurisce, ma non si muove (prima il bordo e il margine cambiavano e il tasto saltava sotto il mouse) */
 .key:active:not(:disabled) {
-  border-bottom-width: 1px;
-  margin-top: 2px;
+  filter: brightness(0.8);
 }
 
 .key.piccolo {

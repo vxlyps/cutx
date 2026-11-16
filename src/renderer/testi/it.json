@@ -260,6 +260,10 @@
       "nome": "copia",
       "testo": "Copia lo slot acceso nell'altro."
     },
+    "synth-clear": {
+      "nome": "clear",
+      "testo": "Pulisce tutto: il suono torna quello di partenza e il pianoroll si svuota. ⌘Z lo annulla."
+    },
     "synth-init": {
       "nome": "init",
       "testo": "Riparti da zero: il suono torna quello di partenza. Le note restano. ⌘Z lo annulla."
@@ -551,6 +555,7 @@
       "nome": "Nome del suono",
       "play": "▶ cuffia",
       "init": "init",
+      "clear": "clear",
       "cue": "→ CUE",
       "aggiorna": "aggiorna «{nome}»",
       "aggiornaTitolo": "Riscrive la clip «{nome}» dov'è, nel CUE o nel kit. Il live non cambia: per sentirla live la rimandi tu.",
@@ -627,7 +632,7 @@
       "lunghezza": "lunghezza",
       "scala": "scala",
       "accordo": "accordo",
-      "pulisci": "pulisci",
+      "pulisci": "clear notes",
       "mini": "mini",
       "nessunaScala": "nessuna",
       "radici": [

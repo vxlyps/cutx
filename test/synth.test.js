@@ -557,6 +557,7 @@ test('arpeggio POLY, ORDER, EVOLVE, CHANCE, JUMP e le velocità nuove: si scrivo
   const base = { ...iniziale(), anteprima: 'clip', note: '[c3,eb3,g3,bb3]' };
   const casi = [
     { arp: 'su', arppoly: 5 },
+    { arp: 'giu', arpott: 5 },
     { arp: 'converge', arppoly: 3, arppasso: '1/16T' },
     { arp: 'ordine', arpordine: '0 1 0 2', arppasso: '1/32' },
     { arp: 'su', arpevolve: 'octave', arpogni: '8' },

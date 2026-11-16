@@ -77,7 +77,7 @@ export function chiamataArp(modo, passo, ott = 1, poly = 0, ordine = ARP_ORDINI[
     corpo = `run(${n}).late(h[0].whole.begin).fmap(${passi})`;
   }
   if (ott <= 1) return `.arpWith(h => ${corpo})`;
-  const scatti = [0, 12, 24].slice(0, ott).join(', ');
+  const scatti = [0, 12, 24, 36, 48].slice(0, ott).join(', ');
   return `.arpWith(h => { const t = [${scatti}].flatMap(o => h.map(x => x.withValue(v => ({ ...v, note: noteToMidi(v.note) + o })))); return ${corpo}; })`;
 }
 // Le righe che l'arpeggio aggiunge dopo `.arpWith`, una per riga (se le si ritocca a mano restano a mano): swing, accenti, umanizza (tempo e forza).
@@ -111,7 +111,7 @@ export function leggiArp(args) {
   for (const modo of ARP_MODI.slice(1)) {
     for (const ordine of modo === 'ordine' ? ARP_ORDINI : [ARP_ORDINI[0]]) {
       for (const poly of modo === 'caso' ? [0] : [0, ...Array.from({ length: 15 }, (_, k) => k + 2)]) {
-        for (const passo of ARP_PASSI) for (const ott of [1, 2, 3]) if (a === spazi(chiamataArp(modo, passo, ott, poly, ordine))) return { modo, passo, ott, poly, ordine };
+        for (const passo of ARP_PASSI) for (const ott of [1, 2, 3, 4, 5]) if (a === spazi(chiamataArp(modo, passo, ott, poly, ordine))) return { modo, passo, ott, poly, ordine };
       }
     }
   }

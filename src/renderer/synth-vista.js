@@ -18,6 +18,8 @@ export const formatta = (modello, vars = {}) => String(modello).replace(/\{(\w+)
 
 const PASSO_FINE = 0.002; // per pixel di trascinamento con ⇧
 const PASSO = 0.006; // per pixel
+const PX_STEP = 7; // valori a step (interi): un valore ogni tot pixel di trascinamento
+const PX_STEP_FINE = 20;
 const STORIA_MAX = 100;
 const PAUSA_ANTEPRIMA_MS = 90;
 const PAUSA_SALVA_MS = 800;
@@ -115,6 +117,8 @@ export class VistaSynth {
     this.copiaEl = this.tasto('', '', () => this.copiaInAltro(), 'synth-copia');
     this.copiaEl.dataset.aiuto = 'synth-copia';
     this.initEl = this.tasto(T.barra.init, '', () => this.riparti());
+    this.clearEl = this.tasto(T.barra.clear, '', () => this.pulisciTutto());
+    this.clearEl.dataset.aiuto = 'synth-clear';
     this.mutateEl = this.tasto(T.barra.mutate, '', () => this.mutate());
     this.mutateEl.dataset.aiuto = 'synth-mutate';
     this.quantoEl = crea('input', 'synth-quanto');
@@ -144,7 +148,7 @@ export class VistaSynth {
     this.avvisoEl = crea('span', 'synth-avviso');
     this.avvisoEl.setAttribute('role', 'status');
 
-    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.casseEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.aggiornaEl, this.destinazioneEl, this.cueEl);
+    barra.append(this.nomeEl, this.categoriaEl, this.playEl, this.casseEl, this.recEl, this.ottavaEl, this.anteprimaEl, crea('span', 'sep'), this.slotEl, this.copiaEl, this.initEl, this.clearEl, this.mutateEl, this.quantoEl, crea('span', 'spazio'), this.pesoEl, this.aggiornaEl, this.destinazioneEl, this.cueEl);
     for (const [el, chiave] of [[this.playEl, 'synth-play'], [this.initEl, 'synth-init'], [this.cueEl, 'synth-cue']]) el.dataset.aiuto = chiave;
 
     const corpo = crea('div', 'synth-corpo');
@@ -235,9 +239,12 @@ export class VistaSynth {
     el.dataset.k = p.k;
     el.append(crea('span', 'ctl-nome', T.parametri[p.k]));
     const c = { el, p };
-    if (p.tipo === 'scelta') {
+    // un valore a step con pochi valori (ottave, voci…) è una fila di tasti, come una scelta: un clic e ci sei
+    const valoriTasti = p.tipo === 'scelta' ? p.scelte : p.tipo === 'int' && p.max - p.min <= 7 ? Array.from({ length: p.max - p.min + 1 }, (_, k) => p.min + k) : null;
+    if (valoriTasti) {
+      if (p.tipo === 'int') el.classList.add('ctl-scelta');
       const fila = crea('div', 'ctl-scelte');
-      c.bottoni = p.scelte.map((v) => {
+      c.bottoni = valoriTasti.map((v) => {
         const b = crea('button', 'ctl-b', etichettaValore(p, v));
         b.type = 'button';
         b.onclick = () => this.passo(() => this.cambia(p.k, v));
@@ -275,7 +282,19 @@ export class VistaSynth {
       let y = e.clientY;
       let t = aPosizione(p, this.stato, this.stato[p.k]);
       this.inGesto = false;
+      let resto = 0;
       const muovi = (m) => {
+        if (p.tipo === 'int') {
+          // a step: un valore ogni PX_STEP pixel (⇧: più lento), senza dipendere da quanti valori ci sono
+          resto += (y - m.clientY) / (m.shiftKey ? PX_STEP_FINE : PX_STEP);
+          y = m.clientY;
+          const k = Math.trunc(resto);
+          if (k) {
+            resto -= k;
+            this.cambia(p.k, this.stato[p.k] + k);
+          }
+          return;
+        }
         t = Math.min(1, Math.max(0, t - (m.clientY - y) * (m.shiftKey ? PASSO_FINE : PASSO)));
         y = m.clientY;
         this.cambia(p.k, daPosizione(p, this.stato, t));
@@ -300,6 +319,7 @@ export class VistaSynth {
         if (!this.timerRuota) this.inGesto = false;
         clearTimeout(this.timerRuota);
         this.timerRuota = setTimeout(() => ((this.timerRuota = null), (this.inGesto = false)), 400);
+        if (p.tipo === 'int') return this.cambia(p.k, this.stato[p.k] - Math.sign(e.deltaY)); // un valore a ogni scatto
         const t = aPosizione(p, this.stato, this.stato[p.k]) - Math.sign(e.deltaY) * (e.shiftKey ? 0.005 : 0.02);
         this.cambia(p.k, daPosizione(p, this.stato, t));
       },
@@ -792,6 +812,11 @@ export class VistaSynth {
     });
   }
 
+  // CLEAR: tutto da capo, suono e note (il suono torna quello di partenza, il pianoroll è vuoto). ⌘Z lo riporta com'era.
+  pulisciTutto() {
+    this.passo(() => this.imponi({ ...iniziale() }));
+  }
+
   mutate() {
     this.passo(() => this.imponi(mutate(this.stato, this.quanto / 100, Math.random)));
   }
@@ -855,7 +880,7 @@ export class VistaSynth {
       const p = c.p;
       const v = s[k];
       c.el.classList.toggle('spenta', !attivo(p, s));
-      if (p.tipo === 'scelta') {
+      if (c.bottoni) {
         for (const [val, b] of c.bottoni) b.classList.toggle('on', val === v);
       } else if (p.tipo === 'bool') {
         c.interruttore.classList.toggle('on', !!v);

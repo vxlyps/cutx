@@ -3379,6 +3379,20 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.cambia('arp', '')`);
   await aspetta(0.3);
   controlla('spento: niente arpeggio nel codice', !(await codiceSynth()).includes('arpWith') && !(await codiceSynth()).includes('.clip('));
+  // i valori a step sono una fila di tasti (un clic e ci sei); CLEAR rimette tutto da capo; i tasti non si spostano al clic
+  await js(`cutxProva.synth.cambia('arp', 'su')`);
+  await aspetta(0.3);
+  controlla('ottave: cinque tasti, da 1 a 5', (await js(`document.querySelectorAll('.ctl[data-k="arpott"] .ctl-b').length`)) === 5);
+  await js(`document.querySelectorAll('.ctl[data-k="arpott"] .ctl-b')[3].click()`);
+  await aspetta(0.2);
+  controlla('un clic sul tasto «4» mette 4 ottave', (await stato('arpott')) === 4);
+  const xy = () => js(`(() => { const r = document.querySelector('[data-aiuto="synth-clear"]').getBoundingClientRect(); return [r.left, r.top]; })()`);
+  const primaClear = await xy();
+  await js(`cutxProva.synth.cambia('cutoff', 900)`);
+  await js(`document.querySelector('[data-aiuto="synth-clear"]').click()`);
+  await aspetta(0.3);
+  controlla('CLEAR: il suono torna quello di partenza e il pianoroll è vuoto', (await stato('cutoff')) === 2400 && (await stato('arp')) === '' && (await js(`cutxProva.synth.roll.eventi.length`)) === 0);
+  controlla('i tasti non si spostano al clic: .key:active non tocca margine né bordo', (await js(`[...document.styleSheets].flatMap((f) => [...f.cssRules]).filter((r) => r.selectorText?.includes('.key:active')).every((r) => !r.style.marginTop && !r.style.borderBottomWidth)`)) === true && JSON.stringify(await xy()) === JSON.stringify(primaClear));
   await js(`cutxProva.synth.imponi({ ...cutxProva.synth.stato, anteprima: 'arpeggio', note: 'c3 eb3 g3 bb3', arpgate: 1, q: 12 })`);
   await aspetta(0.3);
 

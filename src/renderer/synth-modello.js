@@ -79,7 +79,7 @@ export const PARAMETRI = [
   { k: 'arp', g: 'arp', tipo: 'scelta', scelte: ARP_MODI, def: '' },
   { k: 'arppasso', g: 'arp', tipo: 'scelta', scelte: ARP_PASSI, def: '1/16', se: (s) => s.arp !== '' },
   { k: 'arpgate', g: 'arp', tipo: 'num', min: 0.1, max: 1, def: 1, dec: 2, se: (s) => s.arp !== '' },
-  { k: 'arpott', g: 'arp', tipo: 'int', min: 1, max: 3, def: 1, se: (s) => s.arp !== '' && !s.scala }, // quante ottave sale l'arpeggio (con le note in gradi di scala no)
+  { k: 'arpott', g: 'arp', tipo: 'int', min: 1, max: 5, def: 1, se: (s) => s.arp !== '' && !s.scala }, // quante ottave sale l'arpeggio (con le note in gradi di scala no)
   { k: 'arppoly', g: 'arp', tipo: 'int', min: 0, max: 16, def: 0, se: (s) => s.arp !== '' && s.arp !== 'caso' }, // POLY: il giro dell'arpeggio dura tot passi invece della battuta, e si sfasa (0 = spento)
   { k: 'arpordine', g: 'arp', tipo: 'scelta', scelte: ARP_ORDINI, def: '0 2 1 3', se: (s) => s.arp === 'ordine' },
   { k: 'arpevolve', g: 'arp', tipo: 'scelta', scelte: ARP_EVOLVE, def: '', se: (s) => s.arp !== '' },
