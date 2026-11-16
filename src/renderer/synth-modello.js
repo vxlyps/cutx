@@ -14,10 +14,13 @@ export const VOCALI = ['', 'a', 'e', 'i', 'o', 'u']; // '' = niente
 export const DIVISIONI = ['1/16', '1/8', '3/16', '1/4', '3/8', '1/2']; // del ciclo (una battuta in 4/4): delaysync
 export const ANTEPRIME = ['arpeggio', 'tenuta', 'clip'];
 export const NOTE_ANTEPRIMA = { tenuta: 'c3', arpeggio: 'c3 eb3 g3 bb3', accordo: '[c3,eb3,g3,bb3]' }; // accordo: lo schema «arpeggio corto» quando l'ARPEGGIO è acceso
-export const ARP_MODI = ['', 'su', 'giu', 'sugiu', 'caso', 'converge', 'diverge', 'pinky', 'thumb']; // '' = spento: le note suonano com'è scritto
+export const ARP_MODI = ['', 'su', 'giu', 'sugiu', 'caso', 'converge', 'diverge', 'pinky', 'thumb', 'ordine']; // '' = spento: le note suonano com'è scritto
 export const ARP_ACCENTI = ['', '2', '3', '4']; // un accento ogni 2, 3 o 4 note ('' = niente)
+export const ARP_ORDINI = ['0 2 1 3', '0 2 3 1', '0 1 0 2', '0 3 1 3', '0 0 1 2', '2 0 1 3', '0 1 2 1']; // ORDER: in che ordine suonano le note dell'accordo (0 = la più bassa)
+export const ARP_EVOLVE = ['', 'fill', 'octave', 'break']; // EVOLVE: ogni tot battute raffica doppia, ottava sopra, o silenzio
+export const ARP_OGNI = ['2', '4', '8'];
 export const ARP_RETRIG = ['', '2', '3', '4']; // RETRIG: una nota ogni 4 si ripete in raffica 2, 3 o 4 volte
-export const ARP_PASSI = ['1/4', '1/8', '1/16']; // la durata di ogni nota dell'arpeggio (un ciclo = una battuta)
+export const ARP_PASSI = ['1/4', '1/8', '1/8T', '1/16', '1/16T', '1/32', '1/64']; // T = terzina; 1/32 e 1/64 sono il ronzio // la durata di ogni nota dell'arpeggio (un ciclo = una battuta)
 
 // I tetti: il live non deve mai soffrire. Le voci in un colpo solo sono (unison del supersaw o layer) × (1 + sub).
 export const LAYER_MAX = 5; // voci sovrapposte di un oscillatore normale
@@ -77,9 +80,15 @@ export const PARAMETRI = [
   { k: 'arppasso', g: 'arp', tipo: 'scelta', scelte: ARP_PASSI, def: '1/16', se: (s) => s.arp !== '' },
   { k: 'arpgate', g: 'arp', tipo: 'num', min: 0.1, max: 1, def: 1, dec: 2, se: (s) => s.arp !== '' },
   { k: 'arpott', g: 'arp', tipo: 'int', min: 1, max: 3, def: 1, se: (s) => s.arp !== '' && !s.scala }, // quante ottave sale l'arpeggio (con le note in gradi di scala no)
+  { k: 'arppoly', g: 'arp', tipo: 'int', min: 0, max: 16, def: 0, se: (s) => s.arp !== '' && s.arp !== 'caso' }, // POLY: il giro dell'arpeggio dura tot passi invece della battuta, e si sfasa (0 = spento)
+  { k: 'arpordine', g: 'arp', tipo: 'scelta', scelte: ARP_ORDINI, def: '0 2 1 3', se: (s) => s.arp === 'ordine' },
+  { k: 'arpevolve', g: 'arp', tipo: 'scelta', scelte: ARP_EVOLVE, def: '', se: (s) => s.arp !== '' },
+  { k: 'arpogni', g: 'arp', tipo: 'scelta', scelte: ARP_OGNI, def: '4', se: (s) => s.arp !== '' && s.arpevolve !== '' },
+  { k: 'arpchance', g: 'arp', tipo: 'num', min: 0.05, max: 1, def: 1, dec: 2, se: (s) => s.arp !== '' }, // CHANCE: la probabilità che ogni nota suoni
+  { k: 'arpjump', g: 'arp', tipo: 'num', min: 0, max: 1, def: 0, dec: 2, se: (s) => s.arp !== '' }, // JUMP: la probabilità che una nota salti un'ottava sopra
   { k: 'arpswing', g: 'arp', tipo: 'num', min: 0, max: 0.5, def: 0, dec: 2, se: (s) => s.arp !== '' },
-  { k: 'arppulse', g: 'arp', tipo: 'int', min: 0, max: 16, def: 0, se: (s) => s.arp !== '' }, // PULSE: quante note suonano sui passi (ritmo euclideo), 0 = tutte
-  { k: 'arprot', g: 'arp', tipo: 'int', min: 0, max: 15, def: 0, se: (s) => s.arp !== '' && s.arppulse > 0 }, // ROTATE: sposta il ritmo di PULSE
+  { k: 'arppulse', g: 'arp', tipo: 'int', min: 0, max: 32, def: 0, se: (s) => s.arp !== '' }, // PULSE: quante note suonano sui passi (ritmo euclideo), 0 = tutte
+  { k: 'arprot', g: 'arp', tipo: 'int', min: 0, max: 31, def: 0, se: (s) => s.arp !== '' && s.arppulse > 0 }, // ROTATE: sposta il ritmo di PULSE
   { k: 'arpretrig', g: 'arp', tipo: 'scelta', scelte: ARP_RETRIG, def: '', se: (s) => s.arp !== '' },
   { k: 'arpacc', g: 'arp', tipo: 'scelta', scelte: ARP_ACCENTI, def: '', se: (s) => s.arp !== '' },
   { k: 'arpumano', g: 'arp', tipo: 'num', min: 0, max: 1, def: 0, dec: 2, se: (s) => s.arp !== '' }, // piccole variazioni di forza e di tempo

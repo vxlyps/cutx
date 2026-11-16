@@ -543,7 +543,7 @@ test('arpeggio PULSE e RETRIG: righe dopo arpWith, tornano uguali dal codice; PU
   const c = codice(s);
   const righe = c.split('\n');
   assert.equal(righe[2], '  .mask("1(5,16,2)")');
-  assert.equal(righe[3], '  .ply("1 1 1 3 1 1 1 3 1 1 1 3 1 1 1 3")');
+  assert.equal(righe[3], '  .ply("[1 1 1 3]*4")');
   assert.ok(righe[4].startsWith('  .swingBy('), righe[4]);
   const r = leggiCodice(c);
   assert.deepEqual(r.mano, [], c);
@@ -551,4 +551,28 @@ test('arpeggio PULSE e RETRIG: righe dopo arpWith, tornano uguali dal codice; PU
   assert.equal(codice(r.stato), c, 'riscritto uguale');
   assert.ok(!codice({ ...base, arppulse: 16 }).includes('.mask('), 'PULSE pieno non si scrive');
   assert.ok(!codice({ ...base, arppulse: 3, arppasso: '1/4' }).includes('.mask(') === false, 'PULSE 3 su 4 sì');
+});
+
+test('arpeggio POLY, ORDER, EVOLVE, CHANCE, JUMP e le velocità nuove: si scrivono e tornano uguali dal codice', () => {
+  const base = { ...iniziale(), anteprima: 'clip', note: '[c3,eb3,g3,bb3]' };
+  const casi = [
+    { arp: 'su', arppoly: 5 },
+    { arp: 'converge', arppoly: 3, arppasso: '1/16T' },
+    { arp: 'ordine', arpordine: '0 1 0 2', arppasso: '1/32' },
+    { arp: 'su', arpevolve: 'octave', arpogni: '8' },
+    { arp: 'giu', arpevolve: 'fill', arpogni: '2', arppasso: '1/8T' },
+    { arp: 'su', arpevolve: 'break' },
+    { arp: 'su', arpchance: 0.7, arpjump: 0.25, arppasso: '1/64' },
+    { arp: 'su', arppulse: 20, arppasso: '1/32', arpretrig: '4' },
+    { arp: 'sugiu', arppoly: 7, arppulse: 5, arprot: 1, arpretrig: '2', arpevolve: 'fill', arpogni: '4', arpchance: 0.8, arpjump: 0.1, arpswing: 0.2, arpacc: '3', arpumano: 0.5, arpott: 2 },
+  ];
+  for (const extra of casi) {
+    const s = { ...base, ...extra };
+    const c = codice(s);
+    const r = leggiCodice(c);
+    assert.deepEqual(r.mano, [], c);
+    for (const k of Object.keys(extra)) assert.equal(r.stato[k], extra[k], `${k}: ${c}`);
+    assert.equal(codice(r.stato), c, 'riscritto uguale');
+  }
+  assert.ok(codice({ ...base, arp: 'caso', arppoly: 5 }).includes('rand.segment'), 'il caso non ha il giro');
 });

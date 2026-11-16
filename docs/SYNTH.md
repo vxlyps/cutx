@@ -100,7 +100,7 @@ Con ⌘2 l'X-Touch comanda il synth; impostazione «nel SYNTH: segue la vista / 
 Il gain non lo tocca mai MUTATE.
 
 ### Limiti noti
-- L'arpeggio, i MOD e il CAOS non ci sono ancora.
+- L'arpeggio c'è (gruppo ARPEGGIO: mode, rate fino a 1/64 e terzine, octaves, poly, order, pulse/rotate, retrig, evolve, chance, jump, swing, accent, humanize). Non c'è ancora l'arpeggio dal vivo da tasti tenuti (serve la tastiera MIDI). I MOD non ci sono ancora.
 - Il pianoroll non legge `? / | euclidei`, le quintine e i pattern che si ripetono ogni più di 8 cicli; il testo resta com'è.
 - La velocity vale per le note scritte nel pianoroll; i tasti suonati dal vivo hanno velocity fissa. La velocity scritta a mano come segnale (`sine.range`) resta «a mano».
 - Le scale: solo quelle elencate; la scala di Strudel va scritta con i due punti, senza spazi.

@@ -121,7 +121,11 @@ Il pulsante «synth» (o «drum») c'è su ogni clip che il pannello riscrive UG
 4. Poi, nell'ordine: CAOS (`degradeBy`, `sometimesBy`, seme), poi l'arpeggio dal vivo da tasti tenuti (con la tastiera MIDI).
 **Da sapere**: una nota singola con l'arpeggio acceso si ripete a ogni passo (comportamento voluto: passo fisso). Un `.arpWith` ritoccato a mano resta a mano. Le chiamate a mano su più righe oggi si perdono (`manoValida` vuole una riga sola): l'arpeggio è per questo scritto su una riga.
 
-## ARPEGGIO «che spacca» (16/11/2026, piano a 3 passi, nomi stile Ableton)
-1. **Il disegno — FATTO (codice, da ascoltare)**: modi CONVERGE, DIVERGE, PINKY, THUMB (`chiamataArp`); PULSE + ROTATE (`.mask("1(k,n,rot)")`, spento se k ≥ passi); RETRIG (`.ply("1 1 1 3 …")`, ogni 4 passi). Righe in `rigaArp()`, ordine: mask, ply, swing, accenti, umanizza. **Manca ORDER** (ordine scritto a mano, `0 2 1 3`: serve un campo testo).
-2. **Vita — da fare**: POLYMETER (giro di 5 o 7 passi sul beat da 16, si sfasa e ricombina), EVOLVE (ogni 2-4 battute cambia: ottava, filtro, buchi), CHANCE (note a caso con seme).
-3. **Suono — da fare**: eco a tempo più lunga sulle note forti, filtro che pulsa sugli accenti, glide.
+## ARPEGGIO «che spacca» (16/11/2026, FATTO, da ascoltare)
+Gruppo ARPEGGIO nel SYNTH, nomi stile Ableton. Righe in `rigaArp()` (`synth-codice.js`), ordine: mask, ply, every, degradeBy, sometimesBy, swing, accenti, umanizza.
+- **Modi**: up, down, up-down, random, CONVERGE, DIVERGE, PINKY, THUMB, ORDER (7 ordini già pronti, `ARP_ORDINI`).
+- **Rate**: 1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32, 1/64.
+- **POLY** (giro di 2-16 passi contati da sempre, non dalla battuta: si sfasa sul beat), **PULSE + ROTATE** (ritmo euclideo `.mask`), **RETRIG** (`.ply("[1 1 1 3]*n")`).
+- **EVOLVE** ogni 2/4/8 battute (`.every`): fill (raffica doppia), octave (+12), break (silenzio). **CHANCE** (`.degradeBy`) e **JUMP** (`.sometimesBy` +12).
+- **Pianoroll**: con lo schema di prova (arpeggio corto, nota tenuta) parte vuoto, e con il pianoroll vuoto basta un clic per la prima nota.
+- Verificato su Strudel vero fuori dall'app (script nel scratchpad della sessione, serve uno stub di `@kabelsalat/web`). Non c'è ancora: arpeggio dal vivo da tasti tenuti (serve la tastiera MIDI), mappa controller, eco a tempo/filtro che pulsa/glide (idee del passo 3, non fatte).

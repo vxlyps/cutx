@@ -3,7 +3,7 @@
 // c'è sempre, intero, perché in superdough un ADSR a metà riempie i buchi con valori che non sono quelli del pannello.
 // Modulo puro: lo provano i test. Ogni numero che entra nel codice passa da pulisci(): nessun testo libero tranne le note,
 // che hanno un elenco di caratteri ammessi.
-import { ARP_ACCENTI, ARP_MODI, ARP_PASSI, ARP_RETRIG, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
+import { ARP_ACCENTI, ARP_EVOLVE, ARP_MODI, ARP_OGNI, ARP_ORDINI, ARP_PASSI, ARP_RETRIG, DIVISIONI, FORME, NOTE_ANTEPRIMA, PENDENZE, UNISON_MAX, VOCALI, eRumore, iniziale, introValida, limiti, noteValide, parametro, pulisci, pulisciValore, scalaValida, spento, testaValida } from './synth-modello.js';
 import { velValida } from './synth-note.js';
 
 export const MARCA = '// @synth';
@@ -53,8 +53,8 @@ export const conArp = (s) => {
 
 // La chiamata dell'arpeggio, su una riga (se la si ritocca a mano resta com'è, a mano). `run(n)` conta i passi del ciclo; `late` li fa ripartire dall'inizio
 // di ogni accordo; `h` sono le note dell'accordo, dalla più bassa alla più alta (il pianoroll le scrive in quell'ordine).
-export const ARP_PASSI_CICLO = { '1/4': 4, '1/8': 8, '1/16': 16 };
-export function chiamataArp(modo, passo, ott = 1) {
+export const ARP_PASSI_CICLO = { '1/4': 4, '1/8': 8, '1/8T': 12, '1/16': 16, '1/16T': 24, '1/32': 32, '1/64': 64 };
+export function chiamataArp(modo, passo, ott = 1, poly = 0, ordine = ARP_ORDINI[0]) {
   const n = ARP_PASSI_CICLO[passo] ?? 16;
   const l = ott > 1 ? 't' : 'h'; // con più ottave `t` è l'accordo ripetuto, ogni giro un'ottava più su
   let corpo;
@@ -70,8 +70,11 @@ export function chiamataArp(modo, passo, ott = 1) {
       diverge: `${l}[${dalFuori(`${L} - 1 - i % ${L}`)}]`,
       pinky: `${l}[i % 2 ? ${L} - 1 : i / 2 % Math.max(${L} - 1, 1)]`, // la nota più alta torna a ogni secondo passo
       thumb: `${l}[i % 2 ? Math.min(${L} - 1, 1 + (i - 1) / 2 % Math.max(${L} - 1, 1)) : 0]`, // la più bassa torna a ogni secondo passo
+      ordine: `${l}[[${ordine.split(' ').join(', ')}][i % ${ordine.split(' ').length}] % ${L}]`,
     }[modo];
-    corpo = `run(${n}).late(h[0].whole.begin).fmap(i => ${nota})`;
+    // POLY: il passo è contato da sempre (non dalla battuta) e il giro dura `poly` passi: la battuta e il giro si sfasano
+    const passi = poly >= 2 ? `j => (i => ${nota})((j + Math.round(h[0].whole.begin * ${n})) % ${poly})` : `i => ${nota}`;
+    corpo = `run(${n}).late(h[0].whole.begin).fmap(${passi})`;
   }
   if (ott <= 1) return `.arpWith(h => ${corpo})`;
   const scatti = [0, 12, 24].slice(0, ott).join(', ');
@@ -86,7 +89,12 @@ export function rigaArp(s, quale) {
     // PULSE: `1(k,n,rot)` è il ritmo euclideo; `mask` tiene solo le note sui suoi colpi (tutte se k non è minore dei passi)
     case 'mask': return s.arppulse > 0 && s.arppulse < n ? `.mask("1(${s.arppulse},${n}${s.arprot % n ? `,${s.arprot % n}` : ''})")` : null;
     // RETRIG: ogni 4 passi, l'ultimo si ripete in raffica
-    case 'ply': return s.arpretrig ? `.ply("${Array.from({ length: n }, (_, i) => (i % 4 === 3 ? s.arpretrig : 1)).join(' ')}")` : null;
+    case 'ply': return s.arpretrig ? `.ply("[1 1 1 ${s.arpretrig}]*${n / 4}")` : null;
+    // EVOLVE: ogni tot battute una variazione (raffica doppia, ottava sopra, silenzio)
+    case 'evolve': return s.arpevolve ? `.every(${s.arpogni}, x => ${{ fill: 'x.ply(2)', octave: 'x.add(note(12))', break: 'silence' }[s.arpevolve]})` : null;
+    // CHANCE e JUMP: il caso, nota per nota
+    case 'chance': return s.arpchance < 1 ? `.degradeBy(${num(Math.round((1 - s.arpchance) * 100) / 100)})` : null;
+    case 'jump': return s.arpjump > 0 ? `.sometimesBy(${num(s.arpjump)}, x => x.add(note(12)))` : null;
     case 'swing': return s.arpswing > 0 ? `.swingBy(${num(s.arpswing)}, ${n / 2})` : null;
     case 'acc': return s.arpacc ? `.mul(velocity(run(${n}).fmap(i => i % ${s.arpacc} ? ${num(ACCENTO)} : 1)))` : null;
     case 'late': return s.arpumano > 0 ? `.late(rand.range(0, ${num(s.arpumano * 0.01)}).segment(${n}))` : null;
@@ -95,12 +103,18 @@ export function rigaArp(s, quale) {
   return null;
 }
 // L'ordine conta: PULSE e RETRIG prima di swing e umanizza (che spostano le note nel tempo).
-export const righeArp = (s) => ['mask', 'ply', 'swing', 'acc', 'late', 'vel'].map((q) => rigaArp(s, q)).filter(Boolean);
+export const righeArp = (s) => ['mask', 'ply', 'evolve', 'chance', 'jump', 'swing', 'acc', 'late', 'vel'].map((q) => rigaArp(s, q)).filter(Boolean);
 const spazi = (x) => String(x).replace(/\s+/g, ' ').trim();
 // Il contrario: la chiamata scritta → { modo, passo, ott } se è proprio una di quelle del pannello, altrimenti null.
 export function leggiArp(args) {
   const a = spazi(`.arpWith(${args})`);
-  for (const modo of ARP_MODI.slice(1)) for (const passo of ARP_PASSI) for (const ott of [1, 2, 3]) if (a === spazi(chiamataArp(modo, passo, ott))) return { modo, passo, ott };
+  for (const modo of ARP_MODI.slice(1)) {
+    for (const ordine of modo === 'ordine' ? ARP_ORDINI : [ARP_ORDINI[0]]) {
+      for (const poly of modo === 'caso' ? [0] : [0, ...Array.from({ length: 15 }, (_, k) => k + 2)]) {
+        for (const passo of ARP_PASSI) for (const ott of [1, 2, 3]) if (a === spazi(chiamataArp(modo, passo, ott, poly, ordine))) return { modo, passo, ott, poly, ordine };
+      }
+    }
+  }
   return null;
 }
 
@@ -119,7 +133,7 @@ export function codice(stato) {
   if (conVelocity(s)) r.push(`  .velocity("${s.vel}")`);
   // l'arpeggio sta subito dopo le note: prima di .trans e .add, che sovrappongono voci e farebbero un accordo di ogni nota
   if (conArp(s)) {
-    r.push(`  ${chiamataArp(s.arp, s.arppasso, inGradi(s) ? 1 : s.arpott)}`);
+    r.push(`  ${chiamataArp(s.arp, s.arppasso, inGradi(s) ? 1 : s.arpott, s.arppoly, s.arpordine)}`);
     for (const x of righeArp(s)) r.push(`  ${x}`);
     if (s.arpgate < 1 && !nomiManoDi(s).has('clip')) r.push(`  .clip(${num(s.arpgate)})`);
   }
@@ -388,8 +402,10 @@ export function leggiCodice(testo, base = iniziale()) {
       s.arp = a.modo;
       s.arppasso = a.passo;
       s.arpott = a.ott;
+      s.arppoly = a.poly;
+      s.arpordine = a.ordine;
       preso = true;
-    } else if (s.arp && (n === 'swingBy' || n === 'mul' || n === 'late' || n === 'mask' || n === 'ply')) {
+    } else if (s.arp && (n === 'swingBy' || n === 'mul' || n === 'late' || n === 'mask' || n === 'ply' || n === 'every' || n === 'degradeBy' || n === 'sometimesBy')) {
       // le righe dell'arpeggio: si prendono solo se sono proprio quelle che il pannello scriverebbe
       const t = spazi(c.testo);
       let m;
@@ -407,6 +423,16 @@ export function leggiCodice(testo, base = iniziale()) {
         const k = pulisciValore(parametro('arppulse'), Number(m[1]));
         const rot = pulisciValore(parametro('arprot'), Number(m[3] ?? 0));
         if (k > 0 && rigaArp({ ...s, arppulse: k, arprot: rot }, 'mask') === t) (s.arppulse = k), (s.arprot = rot), (preso = true);
+      } else if (n === 'every' && !s.arpevolve) {
+        const e = ARP_EVOLVE.slice(1).find((k) => ARP_OGNI.some((o) => rigaArp({ ...s, arpevolve: k, arpogni: o }, 'evolve') === t));
+        const o = e && ARP_OGNI.find((x) => rigaArp({ ...s, arpevolve: e, arpogni: x }, 'evolve') === t);
+        if (e) (s.arpevolve = e), (s.arpogni = o), (preso = true);
+      } else if (n === 'degradeBy' && (m = /^\.degradeBy\(([\d.]+)\)$/.exec(t)) && s.arpchance === 1) {
+        const x = pulisciValore(parametro('arpchance'), 1 - Number(m[1]));
+        if (x < 1 && rigaArp({ ...s, arpchance: x }, 'chance') === t) (s.arpchance = x), (preso = true);
+      } else if (n === 'sometimesBy' && (m = /^\.sometimesBy\(([\d.]+),/.exec(t)) && !s.arpjump) {
+        const x = pulisciValore(parametro('arpjump'), Number(m[1]));
+        if (x > 0 && rigaArp({ ...s, arpjump: x }, 'jump') === t) (s.arpjump = x), (preso = true);
       } else if (n === 'ply' && !s.arpretrig) {
         const r = ARP_RETRIG.slice(1).find((k) => rigaArp({ ...s, arpretrig: k }, 'ply') === t);
         if (r) (s.arpretrig = r), (preso = true);

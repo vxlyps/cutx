@@ -364,7 +364,7 @@ export class PianoRoll {
       this.opz.nota?.(h.n);
     } else {
       const ora = performance.now();
-      const doppio = this.vuoto && ora - this.vuoto.t < DOPPIO_MS && this.vuoto.passo === c.passo && this.vuoto.nota === c.nota;
+      const doppio = !this.eventi.length || (this.vuoto && ora - this.vuoto.t < DOPPIO_MS && this.vuoto.passo === c.passo && this.vuoto.nota === c.nota); // pianoroll vuoto: basta un clic per la prima nota
       this.vuoto = this.strumento === 'matita' ? null : { t: ora, passo: c.passo, nota: c.nota };
       if (this.strumento === 'matita') {
         // la matita nel vuoto: una nota per ogni «lunghezza» (a passi di quella lunghezza, a partire dal clic) lungo il trascinamento; l'altezza segue il mouse

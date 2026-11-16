@@ -3416,8 +3416,8 @@ async function provaSynth({ finestre, scrivi }) {
   await clic('.synth-schede .key:nth-child(2)');
   await aspetta(0.4);
   const rollEventi = () => js(`JSON.stringify(cutxProva.synth.roll.eventi)`);
-  controlla('la scheda «note» mostra il pianoroll e il testo mini', (await js(`!document.querySelector('.synth-note').hidden && document.querySelector('.synth-pannello').hidden`)) === true && (await js(`document.querySelector('.roll-mini-testo').value`)) === 'c3 eb3 g3 bb3');
-  controlla('le quattro note del suono di partenza sono nel pianoroll', (await js(`cutxProva.synth.roll.eventi.length`)) === 4);
+  controlla('la scheda «note» mostra il pianoroll e il testo mini', (await js(`!document.querySelector('.synth-note').hidden && document.querySelector('.synth-pannello').hidden`)) === true && (await js(`document.querySelector('.roll-mini-testo').value`)) === '~');
+  controlla('con lo schema di prova il pianoroll parte vuoto (le quattro note dell\'arpeggio corto non ci sono)', (await js(`cutxProva.synth.roll.eventi.length`)) === 0 && (await js(`cutxProva.synth.stato.anteprima`)) !== 'clip');
   const cella = (passo, nota) => js(`(() => { const r = cutxProva.synth.roll; const b = r.canvas.getBoundingClientRect(); return { x: b.left + 52 + (${passo} + 0.5) * r.larghezza, y: b.top + (r.alto - ${nota} + 0.5) * r.rigaH }; })()`);
   const clicca = async (passo, nota, ...mod) => {
     const p = await cella(passo, nota);
@@ -3437,12 +3437,14 @@ async function provaSynth({ finestre, scrivi }) {
   };
   await js(`cutxProva.synth.roll.pulisci()`);
   await aspetta(0.3);
-  controlla('«pulisci» toglie le note: il testo diventa ~', (await js(`document.querySelector('.roll-mini-testo').value`)) === '~' && (await js(`cutxProva.synth.stato.note`)) === '~');
+  controlla('«pulisci» (o il pianoroll vuoto di partenza): il testo è ~', (await js(`document.querySelector('.roll-mini-testo').value`)) === '~');
   controlla('all\'inizio lo strumento è la selezione', (await js(`cutxProva.synth.roll.strumento`)) === 'seleziona');
   await clicca(0, 48);
-  controlla('con la selezione un clic su una cella vuota non mette note', (await rollEventi()) === '[]');
+  controlla('con il pianoroll vuoto un solo clic mette la prima nota', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());
+  await clicca(8, 52);
+  controlla('con una nota già scritta, con la selezione un clic su una cella vuota non ne mette altre', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());
   {
-    const p = await cella(0, 48);
+    const p = await cella(8, 52);
     const wc = finestre.controllo.webContents;
     for (let k = 0; k < 2; k++) {
       wc.sendInputEvent({ type: 'mouseDown', x: Math.round(p.x), y: Math.round(p.y), button: 'left', clickCount: k + 1 });
@@ -3450,7 +3452,7 @@ async function provaSynth({ finestre, scrivi }) {
     }
     await aspetta(0.3);
   }
-  controlla('il doppio clic mette una nota', (await rollEventi()) === '[{"i":0,"l":4,"n":48}]', await rollEventi());
+  controlla('il doppio clic mette una nota', (await rollEventi()) === '[{"i":0,"l":4,"n":48},{"i":8,"l":4,"n":52}]', await rollEventi());
   await js(`cutxProva.synth.roll.pulisci()`);
   await premi('B');
   controlla('B passa alla matita', (await js(`cutxProva.synth.roll.strumento`)) === 'matita' && (await js(`document.querySelector('.roll-barra .key.on').textContent`)).includes('matita'));

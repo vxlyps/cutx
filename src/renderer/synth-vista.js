@@ -893,7 +893,7 @@ export class VistaSynth {
   }
 
   disegnaNote(s) {
-    const mini = noteEffettive(s);
+    const mini = s.anteprima === 'clip' ? noteEffettive(s) : '~'; // con lo schema di prova (arpeggio corto, nota tenuta) il pianoroll è vuoto: si parte da zero
     const chiave = `${s.testa}|${mini}|${inGradi(s) ? s.scala : ''}|${conVelocity(s) ? s.vel : ''}|${this.cicliScelti}|${this.grigliaScelta}`;
     if (chiave === this.chiaveNote) return;
     this.chiaveNote = chiave;

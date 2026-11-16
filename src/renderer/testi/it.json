@@ -514,6 +514,12 @@
       "arppasso": "rate",
       "arpgate": "gate",
       "arpott": "octaves",
+      "arppoly": "poly",
+      "arpordine": "order",
+      "arpevolve": "evolve",
+      "arpogni": "every",
+      "arpchance": "chance",
+      "arpjump": "jump",
       "arppulse": "pulse",
       "arprot": "rotate",
       "arpretrig": "retrig",
@@ -532,6 +538,8 @@
       "diverge": "diverge",
       "pinky": "pinky",
       "thumb": "thumb",
+      "ordine": "order",
+      "octave": "octave +1",
       "": "no"
     },
     "anteprime": {
