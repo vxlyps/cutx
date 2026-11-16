@@ -178,7 +178,11 @@ export function creaCimice({ contenitore, leggiParole, opzioni = {}, caso = Math
       suSedicesimo(m, bug, k, performance.now());
       if (suTocco && bug && bug.state !== 'exit' && ((k % 4) + 4) % 4 === 0) {
         const an = bug.ants.find((x) => x.tok && x.tok.hl > 0.5);
-        if (an) suTocco(an.tok);
+        if (an) {
+          const entra = bug.toccato !== true; // il primo tocco dopo l'entrata: deve sentirsi
+          bug.toccato = true;
+          suTocco(an.tok, entra);
+        }
       }
     } catch { spegni(); }
   }

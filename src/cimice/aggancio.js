@@ -74,7 +74,7 @@ export function creaAggancio({ preferenze: leggiPreferenze, livelli, fader, live
       if (!cimice) {
         cimice = creaCimice({
           contenitore: document.body, leggiParole: () => lettore.parole(), opzioni: { ...pref, fisso: true },
-          suTocco: (parola) => { const nome = livelloDi?.(parola.radice); if (nome) suTocco?.(nome); },
+          suTocco: (parola, entra) => { const nome = livelloDi?.(parola.radice); if (nome) suTocco?.(nome, entra === true); },
         });
         cimice.avvia();
         if (!cimice.acceso) { cimice = null; return; }

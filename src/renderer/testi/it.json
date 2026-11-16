@@ -925,6 +925,14 @@
       "nome": "quanto spesso i dispetti",
       "testo": "a ogni nota toccata: di rado, ogni tanto o spesso (con una pausa tra l'uno e l'altro)"
     },
+    "intensita": {
+      "nome": "dispetti · intensità",
+      "testo": "quanto si sentono i dispetti: a poco i ritocchi sono leggeri, al massimo il filtro si chiude davvero, l'eco e la stanza si sentono, il suono si sporca e durano di più. Quando la cimice entra fa sempre un dispetto che si sente."
+    },
+    "crescita": {
+      "nome": "dispetti · crescita nel set",
+      "testo": "più il set va avanti più la cimice pesa: parte al 35% dell'intensità e arriva al 100% dopo questi minuti (e interviene più spesso). A «sempre uguale» l'intensità non cambia col tempo."
+    },
     "hackMinuti": {
       "nome": "finale HACK · durata",
       "testo": "quanto dura il finale in cui la cimice si prende il set e lo chiude (bottone HACK o ⌥⌘⇧H due volte): da 1 a 3 minuti, di serie 2. Solo in memoria: i file del set non si toccano; il paracadute lo ferma e rimette tutto."

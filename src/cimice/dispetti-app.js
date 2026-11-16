@@ -5,6 +5,7 @@ import { creaDispetti } from './dispetti.js';
 
 // env: { livelli() → livelli live, prefs() → preferenze.cimice, manda(msg) → motore live, pattern(codice), limiterDb() → dB,
 //        inModifica(nome), cps() → cicli al secondo, cronologia (registra/passi), avviso(testo), scrivi(tipo, dati) → MOVIOLA,
+//        minutiSet() → da quanti minuti il set è live (la crescita),
 //        alProiettore(msg) → messaggio alla finestra dell'uscita, caso,
 //        condiviso: Set (righe già usate da altri dispetti insieme a questo, nel finale HACK) }
 export function creaDispettiApp(env) {
@@ -50,12 +51,12 @@ export function creaDispettiApp(env) {
 
     // La cimice ha toccato una nota di questo livello (dal proiettore). forza: solo per le prove.
     // senzaTraccia: nel finale HACK niente voce in cronologia e niente avviso (sarebbero decine)
-    suTocco({ livello: nome, ciclo, forza = false, maxSecondi = 2, senzaTraccia = false }) {
+    suTocco({ livello: nome, ciclo, forza = false, maxSecondi = 2, senzaTraccia = false, entra = false }) {
       try {
         const l = (env.livelli() ?? []).find((x) => x.nome === nome && x.a === null);
         if (!l) return null;
         const piano = d.proponi({
-          livello: l, ciclo, cps: env.cps(), prefs: env.prefs(), pattern: env.pattern, limiterDb: env.limiterDb(), inModifica: env.inModifica, forza, maxSecondi,
+          livello: l, ciclo, cps: env.cps(), prefs: env.prefs(), pattern: env.pattern, limiterDb: env.limiterDb(), inModifica: env.inModifica, forza, maxSecondi, entra, minuti: env.minutiSet?.() ?? 0,
           occupato: (id, k) => condiviso.has(`${id}:${k}`),
         });
         if (!piano) {
@@ -71,7 +72,7 @@ export function creaDispettiApp(env) {
         };
         env.cronologia.registra(voceCronologia);
         }
-        timerSicurezza = imposta(() => chiudi(ciclo, 'sicurezza', true), (maxSecondi + 1.5) * 1000);
+        timerSicurezza = imposta(() => chiudi(ciclo, 'sicurezza', true), (maxSecondi + 2.5) * 1000);
         env.scrivi('dispetto', { id: piano.id, livello: piano.livelloNome, righe: piano.righe, griglia: piano.g, cicli: piano.cicli });
         env.alProiettore({ tipo: 'dispetto', attivo: true, livello: piano.livelloNome, righe: piano.righe });
         if (!senzaTraccia) env.avviso(`dispetto: ${piano.nome} su «${piano.livelloNome}» · ${piano.righe.join(' ')}`);

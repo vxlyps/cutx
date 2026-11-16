@@ -42,7 +42,7 @@ const cimice = ANTEPRIMA ? null : creaAggancio({
   livelli: () => livelli,
   fader: () => chiusuraDaRighe(righeGlobali),
   livelloDi: (radice) => [...blocchi].find(([, b]) => b.codice === radice)?.[0] ?? null,
-  suTocco: (nome) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome }),
+  suTocco: (nome, entra) => portaControllo?.postMessage({ tipo: 'cimice-tocca', livello: nome, entra }),
 });
 let righeGlobali = []; // le righe globali del fader e dei colpi «su tutto»: all(x => x.lpf(1920))
 const strisceU = new Map(); // id del livello → { ciclo: eventi }: le note vere, dal motore live

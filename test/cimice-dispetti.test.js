@@ -20,11 +20,11 @@ test('ogni dispetto dà righe valide, dentro i limiti', () => {
       if (!righe) continue;
       for (const r of righe) assert.ok(leggiVoce(r), `${def.id}: ${r}`);
       const testo = righe.join(' ');
-      for (const [, n] of testo.matchAll(/\.lpf\((\d+)\)/g)) assert.ok(Number(n) >= 400 && Number(n) <= 3000, testo);
-      for (const [, n] of testo.matchAll(/\.lpq\(([\d.]+)\)/g)) assert.ok(Number(n) <= 7, testo);
-      for (const [, n] of testo.matchAll(/\.room\(([\d.]+)\)/g)) assert.ok(Number(n) <= 0.5, testo);
-      for (const [, n] of testo.matchAll(/\.crush\((\d+)\)/g)) assert.ok(Number(n) >= 8, testo);
-      for (const [, n] of testo.matchAll(/\.delayfeedback\(([\d.]+)\)/g)) assert.ok(Number(n) <= 0.45, testo);
+      for (const [, n] of testo.matchAll(/\.lpf\((\d+)\)/g)) assert.ok(Number(n) >= 250 && Number(n) <= 3000, testo);
+      for (const [, n] of testo.matchAll(/\.lpq\(([\d.]+)\)/g)) assert.ok(Number(n) <= 8, testo);
+      for (const [, n] of testo.matchAll(/\.room\(([\d.]+)\)/g)) assert.ok(Number(n) <= 0.8, testo);
+      for (const [, n] of testo.matchAll(/\.crush\((\d+)\)/g)) assert.ok(Number(n) >= 4, testo);
+      for (const [, n] of testo.matchAll(/\.delayfeedback\(([\d.]+)\)/g)) assert.ok(Number(n) <= 0.65, testo);
     }
   }
 });
@@ -37,7 +37,7 @@ test('mai più forte di prima: il tremolo parte dal gain che c\'è già', () => 
 
 test('un filtro già chiuso non si chiude ancora, mai si apre', () => {
   const def = DISPETTI.find((d) => d.id === 'filtro');
-  assert.equal(costruisci(def, livello({ codice: 'note("c2").lpf(380)' }), seme()), null);
+  assert.equal(costruisci(def, livello({ codice: 'note("c2").lpf(280)' }), seme()), null);
   for (let i = 0; i < 30; i++) assert.ok(Number(/\((\d+)\)/.exec(costruisci(def, livello({ codice: 'x.lpf(900)' }), seme(i + 1))[0])[1]) <= 900);
 });
 
@@ -180,4 +180,16 @@ test('frequenze: più spesso = più probabile e pausa più corta', () => {
   const f = FREQUENZE_DISPETTI;
   assert.ok(f.raro.probabilita < f.ogni_tanto.probabilita && f.ogni_tanto.probabilita < f.spesso.probabilita);
   assert.ok(f.raro.pausa > f.ogni_tanto.pausa && f.ogni_tanto.pausa > f.spesso.pausa);
+});
+
+test('intensità e crescita: più il set va avanti e più lo slider è alto, più si sente; quando entra mai sotto 0.6', async () => {
+  const { forzaDispetti } = await import('../src/cimice/dispetti.js');
+  assert.ok(forzaDispetti({ intensita: 0.8, crescita: 45 }, 0) < forzaDispetti({ intensita: 0.8, crescita: 45 }, 45));
+  assert.equal(forzaDispetti({ intensita: 0.8, crescita: 45 }, 90), 0.8);
+  assert.equal(forzaDispetti({ intensita: 0.8, crescita: 0 }, 0), 0.8); // crescita spenta: sempre uguale
+  assert.ok(forzaDispetti({ intensita: 0.8, crescita: 45 }, 0, true) >= 0.6);
+  assert.equal(forzaDispetti({ intensita: 0, crescita: 45 }, 10, true), 0); // slider a zero: niente
+  const def = DISPETTI.find((d) => d.id === 'filtro');
+  const medio = (k) => { const c = seme(5); let t = 0; for (let i = 0; i < 40; i++) t += Number(/\((\d+)\)/.exec(costruisci(def, livello(), c, k)[0])[1]); return t / 40; };
+  assert.ok(medio(1) < medio(0) - 500, 'al massimo il filtro si chiude molto di più');
 });

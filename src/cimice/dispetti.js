@@ -21,6 +21,16 @@ export const FREQUENZE_DISPETTI = {
 };
 
 const tra = (x, a, b) => Math.max(a, Math.min(b, x));
+// Quanto si sente (0…1): lo slider «intensità» e, se la crescita è accesa, quanto è avanti il set (da 35% a 100% dello slider
+// in `crescita` minuti: più il set va avanti, più la cimice pesa). Quando la cimice entra non va mai sotto 0.6: deve sentirsi.
+export function forzaDispetti(prefs, minuti = 0, entra = false) {
+  const intensita = tra(Number.isFinite(prefs?.intensita) ? prefs.intensita : 0.6, 0, 1);
+  const crescita = Number.isFinite(prefs?.crescita) ? prefs.crescita : 45;
+  const avanti = crescita > 0 ? tra(minuti / crescita, 0, 1) : 1;
+  const k = tra(intensita * (0.35 + 0.65 * avanti), 0, 1);
+  return entra ? Math.max(k, Math.min(0.6, 0.6 * (intensita > 0 ? 1 : 0))) : k;
+}
+
 const r2 = (x) => Math.round(x * 100) / 100;
 
 // Ogni dispetto: chiavi che tocca, durata in secondi [min, max] (sempre dentro 0.5–2), griglie possibili, e le righe di coda.
@@ -30,8 +40,8 @@ export const DISPETTI = [
     id: 'filtro', nome: 'filtro che si chiude', chiavi: ['lpf'], dur: [0.5, 1.5], griglie: [G8, G4],
     righe: (c) => {
       const cur = c.cur('lpf');
-      if (cur !== null && cur <= 450) return null; // già chiuso: niente da chiudere
-      return [`.lpf(${Math.round(tra(Math.min(cur ?? Infinity, c.rnd(600, 2000)), 400, 2500))})`];
+      if (cur !== null && cur <= 300) return null; // già chiuso: niente da chiudere
+      return [`.lpf(${Math.round(tra(Math.min(cur ?? Infinity, c.rnd(c.mix(1200, 300), c.mix(2200, 700))), 250, 2500))})`];
     },
   },
   {
@@ -39,23 +49,23 @@ export const DISPETTI = [
     righe: (c) => {
       const cur = c.cur('lpf');
       if (cur !== null && cur <= 600) return null;
-      const q = Math.min(c.cur('lpq') ?? 99, r2(c.rnd(4, 7))); // niente risonanze alte, niente fischi
-      return [`.lpf(${Math.round(tra(Math.min(cur ?? Infinity, c.rnd(700, 1600)), 500, 2500))})`, `.lpq(${q})`];
+      const q = Math.min(c.cur('lpq') ?? 99, r2(c.rnd(c.mix(3, 5), c.mix(5, 8)))); // niente risonanze alte, niente fischi
+      return [`.lpf(${Math.round(tra(Math.min(cur ?? Infinity, c.rnd(c.mix(1400, 400), c.mix(2000, 900))), 350, 2500))})`, `.lpq(${q})`];
     },
   },
   {
     id: 'eco', nome: 'eco', chiavi: ['delay', 'delaytime', 'delayfeedback'], dur: [0.5, 2], griglie: [G8, G4],
     righe: (c) => {
       if ((c.cur('delay') ?? 0) >= 0.25) return null; // ha già il suo eco
-      return [`.delay(${r2(c.rnd(0.25, 0.45))})`, '.delaytime(.375)', `.delayfeedback(${r2(c.rnd(0.3, 0.45))})`];
+      return [`.delay(${r2(c.rnd(c.mix(0.25, 0.45), c.mix(0.35, 0.6)))})`, '.delaytime(.375)', `.delayfeedback(${r2(c.rnd(c.mix(0.3, 0.5), c.mix(0.4, 0.65)))})`];
     },
   },
   {
     id: 'stanza', nome: 'stanza', chiavi: ['room', 'roomsize'], dur: [0.5, 2], griglie: [G8, G4],
-    righe: (c) => ((c.cur('room') ?? 0) >= 0.3 ? null : [`.room(${r2(c.rnd(0.3, 0.5))})`, `.roomsize(${Math.round(c.rnd(3, 5))})`]),
+    righe: (c) => ((c.cur('room') ?? 0) >= 0.3 ? null : [`.room(${r2(c.rnd(c.mix(0.3, 0.5), c.mix(0.45, 0.8)))})`, `.roomsize(${Math.round(c.rnd(c.mix(3, 5), c.mix(5, 8)))})`]),
   },
-  { id: 'sporco', nome: 'sporco', chiavi: ['crush'], dur: [0.5, 1.5], griglie: [G8, G4], righe: (c) => [`.crush(${c.pick([8, 9, 10])})`] },
-  { id: 'rotte', nome: 'note rotte', chiavi: ['degradeBy'], dur: [0.5, 2], griglie: [G16, G8, G4], righe: (c) => [`.degradeBy(${r2(c.rnd(0.2, 0.35))})`] },
+  { id: 'sporco', nome: 'sporco', chiavi: ['crush'], dur: [0.5, 1.5], griglie: [G8, G4], righe: (c) => [`.crush(${c.pick(c.k > 0.66 ? [4, 5, 6] : c.k > 0.33 ? [6, 7, 8] : [8, 9, 10])})`] },
+  { id: 'rotte', nome: 'note rotte', chiavi: ['degradeBy'], dur: [0.5, 2], griglie: [G16, G8, G4], righe: (c) => [`.degradeBy(${r2(c.rnd(c.mix(0.2, 0.4), c.mix(0.35, 0.65)))})`] },
   { id: 'buco', nome: 'buco', chiavi: ['mask'], dur: [0.5, 1], griglie: [G16, G8, G4], righe: (c) => [`.mask("${c.pick(['1 1 0 1', '1 0 1 1', '1 1 1 0'])}")`] },
   { id: 'scatti', nome: 'fuori tempo a scatti', chiavi: ['late'], dur: [0.5, 1.5], griglie: [G16, G8], righe: (c) => [`.late("${c.pick(['0 .0625 0 .125', '0 0 .125 .0625', '.0625 0 .125 0'])}")`] },
   { id: 'doppio', nome: 'doppio', chiavi: ['fast'], dur: [0.5, 1], griglie: [G16, G8, G4], righe: () => ['.fast(2)'] },
@@ -86,9 +96,9 @@ export function durata(def, cps, caso = Math.random, maxSecondi = 2) {
 }
 
 // Le righe di un dispetto per questo livello, o null.
-export function costruisci(def, livello, caso = Math.random) {
+export function costruisci(def, livello, caso = Math.random, k = 0.5) {
   const cur = (k) => valoreDi(livello.coda ?? [], k) ?? valoreLetterale(livello.codice ?? '', k);
-  const righe = def.righe({ cur, rnd: (a, b) => a + caso() * (b - a), pick: (arr) => arr[Math.floor(caso() * arr.length)] });
+  const righe = def.righe({ cur, k, mix: (a, b) => a + (b - a) * k, rnd: (a, b) => a + caso() * (b - a), pick: (arr) => arr[Math.floor(caso() * arr.length)] });
   if (!righe?.length || !righe.every((r) => leggiVoce(r))) return null;
   return righe;
 }
@@ -110,13 +120,14 @@ export function creaDispetti({ caso = Math.random } = {}) {
     // livello: { id, nome, codice, coda, a, da, muto } · prefs: preferenze.cimice · pattern(codice) → pattern già valutato o null
     // limiterDb: la riduzione del limiter (dB, anche negativa) · inModifica(nome) → sto scrivendo in quella card · forza: salta il caso (prove)
     // occupato(idLivello, chiave) → un altro dispetto sta già usando quella riga su quel livello (nel finale HACK ce ne sono più insieme)
-    proponi({ livello, ciclo, cps, prefs, pattern, limiterDb = 0, inModifica = () => false, forza = false, maxSecondi = 2, occupato = () => false }) {
+    proponi({ livello, ciclo, cps, prefs, pattern, limiterDb = 0, inModifica = () => false, forza = false, maxSecondi = 2, occupato = () => false, minuti = 0, entra = false }) {
       if (!prefs?.dispetti) return no('spenti');
       if (attivo) return no('uno-alla-volta');
       if (!(cps > 0)) return no('senza-tempo');
       const f = FREQUENZE_DISPETTI[prefs.dispettiFrequenza] ?? FREQUENZE_DISPETTI.ogni_tanto;
-      if (!forza && ciclo - ultimaFine < f.pausa) return no('pausa');
-      if (!forza && caso() >= f.probabilita) return no('caso');
+      const k = forzaDispetti(prefs, minuti, entra);
+      if (!forza && !entra && ciclo - ultimaFine < f.pausa * (1.6 - 1.2 * k)) return no('pausa');
+      if (!forza && !entra && caso() >= Math.min(0.9, f.probabilita * (0.4 + 2.2 * k))) return no('caso');
       if (Math.abs(limiterDb) > LIMITE_LIMITER_DB) return no('limiter');
       if (!eLivelloOk(livello, ciclo)) return no('livello-non-ok');
       if (inModifica(livello.nome)) return no('in-modifica');
@@ -125,12 +136,12 @@ export function creaDispetti({ caso = Math.random } = {}) {
       const ordine = [...DISPETTI].sort(() => caso() - 0.5);
       for (const def of ordine) {
         if (def.chiavi.some((k) => occupato(livello.id, k))) continue;
-        const righe = costruisci(def, livello, caso);
+        const righe = costruisci(def, livello, caso, k);
         if (!righe) continue;
         // prima di applicare: la riga deve compilare e dare un pattern che si interroga
         const prova = applicaCoda(base, righe.reduce(imposta, livello.coda ?? []));
         if (prova.errore) continue;
-        const { g, cicli } = durata(def, cps, caso, maxSecondi);
+        const { g, cicli } = durata(def, cps, caso, maxSecondi <= 2 ? 2 + k : maxSecondi); // più forte = anche più lungo (fino a 3 secondi)
         const inizio = Math.ceil((ciclo + 0.004) / g - 1e-9) * g;
         const fine = inizio + cicli;
         attivo = {

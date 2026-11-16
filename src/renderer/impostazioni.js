@@ -506,7 +506,7 @@ export class Impostazioni {
   disegnaCimice() {
     const c = it.cimice;
     $('imp-titolo-cimice').textContent = c.titolo;
-    const p = { acceso: true, cooldown: 8, probabilita: 0.5, durataMin: 4, durataMax: 8, folle: true, battuteFolle: 4, sensibilitaDrop: 0.5, scala: 1, velocita: 1, lampi: true, corrompe: true, trema: true, dispetti: false, dispettiFrequenza: 'ogni_tanto', hackMinuti: 2, ...this.dati.preferenze().cimice };
+    const p = { acceso: true, cooldown: 8, probabilita: 0.5, durataMin: 4, durataMax: 8, folle: true, battuteFolle: 4, sensibilitaDrop: 0.5, scala: 1, velocita: 1, lampi: true, corrompe: true, trema: true, dispetti: false, dispettiFrequenza: 'ogni_tanto', intensita: 0.6, crescita: 45, hackMinuti: 2, ...this.dati.preferenze().cimice };
     const salva = (parziale) => this.dati.salvaPreferenze({ cimice: { ...p, ...this.dati.preferenze().cimice, ...parziale } });
     const riga = (testi, controllo) => {
       const r = crea('div', 'imp-riga');
@@ -567,6 +567,8 @@ export class Impostazioni {
       rigaInterruttore(c.trema, p.trema !== false, (x) => salva({ trema: x })),
       rigaInterruttore(c.dispetti, p.dispetti === true, (x) => salva({ dispetti: x })),
       riga(c.dispettiFrequenza, selFreqDispetti),
+      riga(c.intensita, cursore('imp-cimice-intensita', 0, 1, 0.05, p.intensita, (n) => `${Math.round(n * 100)}%`, (n) => salva({ intensita: n }))),
+      riga(c.crescita, cursore('imp-cimice-crescita', 0, 90, 5, p.crescita, (n) => (n === 0 ? 'sempre uguale' : `${n} min`), (n) => salva({ crescita: n }))),
       riga(c.hackMinuti, cursore('imp-cimice-hack', 1, 3, 0.5, p.hackMinuti, (n) => `${n} min`, (n) => salva({ hackMinuti: n }))),
       crea('p', 'secondario a-capo', c.firma),
     );

@@ -101,7 +101,15 @@ let browser = null; // il browser a sinistra (più sotto): serve già al CUE che
 const cronologia = new Cronologia(20);
 // I DISPETTI della cimice (src/cimice/dispetti*.js): glitch brevi e veri, fatti con la coda dei livelli. Li decide e li esegue l'interfaccia di
 // lavoro; la cimice sul proiettore dice solo «ho toccato questo livello». Spenti di serie (impostazioni CIMICE).
+// da quanto il set è live (per la crescita dei dispetti): parte quando c'è qualcosa live, riparte da zero se il live si svuota
+let inizioSetMs = null;
+const minutiSet = () => {
+  if (!livelliLive.some((l) => l.a === null)) { inizioSetMs = null; return 0; }
+  inizioSetMs ??= performance.now();
+  return (performance.now() - inizioSetMs) / 60000;
+};
 const dispetti = creaDispettiApp({
+  minutiSet,
   livelli: () => livelliLive,
   prefs: () => preferenze.cimice,
   manda: (m) => live.manda(m),
@@ -1646,7 +1654,7 @@ window.addEventListener('message', (e) => {
   if (e.data?.porta !== 'uscita' || !e.ports[0]) return;
   portaUscita = e.ports[0];
   portaUscita.onmessage = ({ data }) => {
-    if (data.tipo === 'cimice-tocca') dispetti.suTocco({ livello: data.livello, ciclo: cicloAdesso() }); // la cimice ha toccato una nota: forse un dispetto
+    if (data.tipo === 'cimice-tocca') dispetti.suTocco({ livello: data.livello, ciclo: cicloAdesso(), entra: data.entra === true }); // la cimice ha toccato una nota: forse un dispetto
   };
   portaUscita.postMessage({ tipo: 'bozze', ...ultimeBozze });
   mandaOndaNote();
