@@ -4,6 +4,7 @@ import {
   COSTO_AVVISO, COSTO_MAX, LAYER_MAX, PARAMETRI, UNISON_MAX, aPosizione, attivo, costo, daPosizione, eCaro, imposta, iniziale, noteValide, parametro, pulisci, sorprendi,
 } from '../src/renderer/synth-modello.js';
 import { clip, codice, leggiRiga, rigaSynth, scarti } from '../src/renderer/synth-codice.js';
+import { ARP_MODI, ARP_PASSI } from '../src/renderer/synth-modello.js';
 
 // un generatore ripetibile
 const seme = (n) => () => ((n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -454,4 +455,55 @@ test('velocity: .velocity(\"…\") dopo le note, e il codice scritto a mano la l
   const g = leggiCodice('n("0 2")\n  .scale("C:major")\n  .velocity("1 .5")\n  .s("square")').stato;
   assert.equal(g.vel, '1 .5');
   assert.ok(codice(g).startsWith('n("0 2")\n  .scale("C:major")\n  .velocity("1 .5")'), codice(g));
+});
+
+test('arpeggio: subito dopo le note (prima di .add e .trans), ogni modo e passo torna uguale dal codice', () => {
+  const base = { ...iniziale(), anteprima: 'clip', note: '[c3,eb3,g3] ~ [d3,f3]', voci: 3, detune: 0.2, ottava: 1, arpgate: 0.5 };
+  for (const arp of ARP_MODI.slice(1)) {
+    for (const arppasso of ARP_PASSI) {
+      const s = { ...base, arp, arppasso };
+      const c = codice(s);
+      const righe = c.split('\n');
+      assert.equal(righe[0], 'note("[c3,eb3,g3] ~ [d3,f3]")');
+      assert.ok(righe[1].startsWith('  .arpWith(h => '), righe[1]);
+      assert.equal(righe[2], '  .clip(.5)');
+      assert.ok(c.indexOf('.arpWith') < c.indexOf('.trans(') && c.indexOf('.arpWith') < c.indexOf('.add('), 'l\'arpeggio viene prima delle voci sovrapposte');
+      const r = leggiCodice(c);
+      assert.deepEqual([r.stato.arp, r.stato.arppasso, r.stato.arpgate, r.stato.note], [arp, arppasso, 0.5, base.note], c);
+      assert.deepEqual(r.mano, []);
+      assert.equal(codice(r.stato), c, 'riscritto uguale');
+    }
+  }
+});
+
+test('arpeggio: spento non scrive niente; la nota tenuta dei tasti e l\'inizio a mano non lo hanno', () => {
+  const s = { ...iniziale(), anteprima: 'clip', note: '[c3,e3,g3]', arp: 'su' };
+  assert.ok(!codice({ ...s, arp: '' }).includes('arpWith'));
+  assert.ok(!codice({ ...s, anteprima: 'tenuta' }).includes('arpWith'));
+  assert.ok(!codice({ ...s, testa: 'note("c3 e3").fast(2)' }).includes('arpWith'));
+  assert.ok(!codice({ ...s, arpgate: 1 }).includes('.clip('), 'gate pieno non si scrive');
+  // lo schema di prova diventa un accordo, e la clip lo porta con sé
+  const p = { ...iniziale(), anteprima: 'arpeggio', arp: 'giu' };
+  assert.ok(codice(p).startsWith('note("[c3,eb3,g3,bb3]")\n  .arpWith('), codice(p));
+  assert.equal(leggiRiga(clip(p)).note, '[c3,eb3,g3,bb3]');
+  assert.equal(leggiRiga(clip(p)).arp, 'giu');
+});
+
+test('arpeggio: un .arp scritto a mano resta a mano, il pannello non ne aggiunge un secondo; un arpWith ritoccato resta com\'è', () => {
+  const a = leggiCodice('note("[c3,e3,g3]").arp("0 1 2").s("square")');
+  assert.equal(a.stato.arp, '');
+  assert.deepEqual(a.mano, ['.arp("0 1 2")']);
+  assert.ok(!codice({ ...a.stato, arp: 'su' }).includes('arpWith'), 'doppio arpeggio no');
+  const b = leggiCodice('note("[c3,e3,g3]").arpWith(h => h[0]).s("square")');
+  assert.equal(b.stato.arp, '');
+  assert.deepEqual(b.mano, ['.arpWith(h => h[0])']);
+});
+
+test('mutate e sorprendi non toccano l\'arpeggio', () => {
+  const s = { ...iniziale(), anteprima: 'clip', note: '[c3,e3,g3]', arp: 'sugiu', arppasso: '1/8', arpgate: 0.4 };
+  for (const quanto of [0.3, 1]) {
+    const m = mutate(s, quanto, seme(7));
+    assert.deepEqual([m.arp, m.arppasso, m.arpgate], ['sugiu', '1/8', 0.4]);
+  }
+  assert.equal(sorprendi(seme(3), s).arp, 'sugiu');
 });

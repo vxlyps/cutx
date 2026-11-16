@@ -97,6 +97,10 @@
   grid-column: span 12;
 }
 
+.synth-arp {
+  grid-column: span 5;
+}
+
 @media (max-width: 1100px) {
   .synth-gruppo {
     grid-column: span 12;
