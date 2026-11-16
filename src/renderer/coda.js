@@ -164,6 +164,18 @@ const GLOBALE = /^\s*all\(\s*x\s*=>\s*(x\.[\s\S]+?)\s*\)\s*;?\s*(?:\/\/[^\n]*)?$
 // L'espressione di una riga globale (x.lpf(1920)), o null se non è una riga globale.
 export const leggiGlobale = (riga) => GLOBALE.exec(String(riga))?.[1] ?? null;
 
+// Il filtro proprio di un livello (quello del codice o della coda) fa da tetto: una riga globale non lo apre mai oltre.
+// Un lpf globale più alto del suo diventa il suo (il beat dell'intro con lpf 500 resta a 500 anche a fader tutto aperto);
+// un hpf globale più basso del suo diventa il suo. Il resto della riga non cambia. Se il livello non ha filtro, non cambia niente.
+export function limitaGlobali(righe, codice, coda) {
+  const proprio = (k) => valoreDi(coda ?? [], k) ?? valoreLetterale(codice ?? '', k);
+  const lpf = proprio('lpf');
+  const hpf = proprio('hpf');
+  return (righe ?? []).map((r) => String(r)
+    .replace(new RegExp(`\\.lpf\\(\\s*${NUMERO}\\s*\\)`, 'g'), (m, n) => (Number.isFinite(lpf) && Number(n) > lpf ? `.lpf(${lpf})` : m))
+    .replace(new RegExp(`\\.hpf\\(\\s*${NUMERO}\\s*\\)`, 'g'), (m, n) => (Number.isFinite(hpf) && Number(n) < hpf ? `.hpf(${hpf})` : m)));
+}
+
 // { pattern } con tutte le righe globali messe sopra, oppure { errore } (e allora chi chiama tiene il pattern senza).
 export function applicaGlobali(pattern, righe) {
   const espressioni = (righe ?? []).map(leggiGlobale).filter(Boolean);

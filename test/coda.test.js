@@ -110,3 +110,12 @@ test('il cambio ritmico: prima solo il vecchio, da quel ciclo solo il nuovo', ()
   assert.deepEqual(p.queryArc(5, 6), [{ nome: 'n', a: 5, b: 6 }]);
   assert.deepEqual(p.queryArc(4.5, 5.5), [{ nome: 'v', a: 4.5, b: 5 }, { nome: 'n', a: 5, b: 5.5 }]);
 });
+
+test('limitaGlobali: il filtro proprio del livello fa da tetto alla riga globale', async () => {
+  const { limitaGlobali } = await import('../src/renderer/coda.js');
+  assert.deepEqual(limitaGlobali(['all(x => x.lpf(2000))'], 's("bd").lpf(500)', []), ['all(x => x.lpf(500))']);
+  assert.deepEqual(limitaGlobali(['all(x => x.lpf(300))'], 's("bd").lpf(500)', []), ['all(x => x.lpf(300))']);
+  assert.deepEqual(limitaGlobali(['all(x => x.lpf(2000))'], 's("bd")', []), ['all(x => x.lpf(2000))']);
+  assert.deepEqual(limitaGlobali(['all(x => x.lpf(2000))'], 's("bd").lpf(500)', ['.lpf(900)']), ['all(x => x.lpf(900))']);
+  assert.deepEqual(limitaGlobali(['all(x => x.hpf(100))'], 's("bd").hpf(400)', []), ['all(x => x.hpf(400))']);
+});

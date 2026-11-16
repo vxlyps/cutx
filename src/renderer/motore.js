@@ -6,7 +6,7 @@ import { eventiDaHap } from './striscia.js';
 import { eNomeBeat } from './nomi.js';
 import { CEILING, creaLimiter, microEntrata } from './limiter.js';
 import { CICLI_RAMPA, gradiniRampa } from './passaggio.js';
-import { applica as applicaCoda, applicaGlobali, commuta, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
+import { applica as applicaCoda, applicaGlobali, commuta, limitaGlobali, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, State, TimeSpan } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
 import {
@@ -371,7 +371,7 @@ function metteCoda(l) {
     l.codaErrore = r0.errore; // continua la versione di prima
     return;
   }
-  const r = globali.size ? applicaGlobali(r0.pattern, [...globali.values()]) : r0;
+  const r = globali.size ? applicaGlobali(r0.pattern, limitaGlobali([...globali.values()], l.codice, l.coda)) : r0;
   if (r.errore) {
     l.codaErrore = `riga globale: ${r.errore}`;
     return;
