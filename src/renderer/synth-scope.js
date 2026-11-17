@@ -30,16 +30,16 @@ const caso = (i) => {
 };
 
 // La forma d'onda: `n` campioni su `periodi` periodi. Oscillatore → FM → drive (shape, distort, crush, coarse), come l'ordine del motore.
-export function puntiOnda(s, n = 256, periodi = 2) {
+export function puntiOnda(s, n = 256, periodi = 2, fase0 = 0) {
   const rumore = ['white', 'pink', 'brown', 'crackle'].includes(s.forma);
   const out = new Array(n);
   const voci = s.forma === 'supersaw' ? Math.max(1, s.voci) : 1;
   let marrone = 0;
   for (let i = 0; i < n; i++) {
-    const fase = (i / n) * periodi;
+    const fase = (i / n) * periodi + fase0;
     let v;
     if (rumore) {
-      const r = caso(i) * 2 - 1;
+      const r = caso(i + Math.floor(fase0 * n / periodi)) * 2 - 1; // il rumore scorre come l'onda
       if (s.forma === 'white') v = r;
       else if (s.forma === 'pink') v = (r + (caso(i + 1000) * 2 - 1) + (caso(i + 2000) * 2 - 1)) / 3;
       else if (s.forma === 'brown') (marrone = Math.max(-1, Math.min(1, marrone + r * 0.15))), (v = marrone);
@@ -81,6 +81,41 @@ export function curvaFiltro(s, freqs, cutoff = s.cutoff) {
   });
 }
 
+// Un LFO di Strudel (0…1) al tempo `t` in cicli: sine, tri, saw, square, perlin (a caso ma dolce). Puro, si prova coi test.
+export function lfo(forma, t) {
+  const f = t - Math.floor(t);
+  switch (forma) {
+    case 'tri':
+      return 1 - Math.abs(2 * f - 1);
+    case 'saw':
+      return f;
+    case 'square':
+      return f < 0.5 ? 0 : 1;
+    case 'perlin': {
+      const a = caso(Math.floor(t));
+      const b = caso(Math.floor(t) + 1);
+      const u = f * f * (3 - 2 * f);
+      return a + (b - a) * u;
+    }
+    default:
+      return 0.5 - 0.5 * Math.cos(TAU * f); // sine di Strudel: 0…1
+  }
+}
+
+// Il cutoff adesso: il valore delle manopole mosso dagli LFO che lo guidano (come la riga `.lpf(sine.range(lo, hi).slow(n))`: l'ultimo vince).
+// `cicli` = il tempo in cicli del brano; `cutoff` il valore a riposo.
+export function cutoffAdesso(s, cicli) {
+  let c = s.cutoff;
+  for (const n of [1, 2]) {
+    if (s[`mod${n}dest`] !== 'cutoff') continue;
+    const d = s[`mod${n}depth`];
+    const lo = Math.max(F_MIN, Math.round(s.cutoff * 2 ** (-3 * d)));
+    const hi = Math.min(F_MAX, Math.round(s.cutoff * 2 ** (3 * d)));
+    c = lo + (hi - lo) * lfo(s[`mod${n}forma`], cicli / Number(s[`mod${n}rate`] || 1));
+  }
+  return c;
+}
+
 const F_MIN = 20;
 const F_MAX = 20000;
 const DB_MIN = -48;
@@ -94,6 +129,36 @@ export class Specchietto {
     this.filtro = this.canvas('filtro', 'filtro');
     contenitore.append(this.r);
     this.chiave = '';
+    this.s = null;
+    this.giro = 0; // l'animazione: parte quando la vista SYNTH è aperta, si ferma quando si chiude
+    this.t0 = 0;
+    this.ultimo = 0;
+  }
+
+  // L'onda scorre e il filtro segue gli LFO, a ~30 immagini al secondo e solo se si vede. `cicloSec`: quanto dura un ciclo del brano (il tempo vero lo dà il live).
+  anima(on, cicloSec = () => 2) {
+    this.cicloSec = cicloSec;
+    if (!on) {
+      cancelAnimationFrame(this.giro);
+      this.giro = 0;
+      return;
+    }
+    if (this.giro) return;
+    this.t0 = performance.now();
+    const passo = (ora) => {
+      this.giro = requestAnimationFrame(passo);
+      if (ora - this.ultimo < 33 || !this.s || !this.r.offsetWidth || document.hidden) return;
+      this.ultimo = ora;
+      this.frame(this.s, (ora - this.t0) / 1000);
+    };
+    this.giro = requestAnimationFrame(passo);
+  }
+
+  frame(s, t) {
+    const stile = getComputedStyle(this.r);
+    const col = { testo: stile.getPropertyValue('--testo').trim() || '#d9dccc', linea: stile.getPropertyValue('--linea').trim() || '#222', spento: stile.getPropertyValue('--spento').trim() || '#666' };
+    this.disegnaOnda(s, col, t);
+    this.disegnaFiltro(s, col, t);
   }
 
   canvas(classe, titolo) {
@@ -111,13 +176,12 @@ export class Specchietto {
 
   // Ridisegna (solo se qualcosa è cambiato). Colori dai token CSS: chiaro come le manopole, mai il verde del live.
   disegna(s) {
+    this.s = s;
+    if (this.giro) return; // l'animazione ridisegna da sola con l'ultimo stato
     const chiave = JSON.stringify([s.forma, s.voci, s.detune, s.fm, s.fmh, s.pw, s.shape, s.distort, s.crush, s.coarse, s.tipo, s.cutoff, s.q, s.ftype, s.mod1dest, s.mod1depth, s.mod2dest, s.mod2depth]);
     if (chiave === this.chiave || !this.r.offsetWidth) return; // nascosto: si ridisegna quando torna visibile
     this.chiave = chiave;
-    const stile = getComputedStyle(this.r);
-    const col = { testo: stile.getPropertyValue('--testo').trim() || '#d9dccc', linea: stile.getPropertyValue('--linea').trim() || '#222', spento: stile.getPropertyValue('--spento').trim() || '#666' };
-    this.disegnaOnda(s, col);
-    this.disegnaFiltro(s, col);
+    this.frame(s, 0);
   }
 
   pronto(c) {
@@ -131,7 +195,7 @@ export class Specchietto {
     return { g, w, h };
   }
 
-  disegnaOnda(s, col) {
+  disegnaOnda(s, col, t = 0) {
     const { g, w, h } = this.pronto(this.onda);
     g.strokeStyle = col.linea;
     g.lineWidth = 1;
@@ -139,7 +203,7 @@ export class Specchietto {
     g.moveTo(0, h / 2 + 0.5);
     g.lineTo(w, h / 2 + 0.5);
     g.stroke();
-    const p = puntiOnda(s, Math.max(64, Math.round(w)));
+    const p = puntiOnda(s, Math.max(64, Math.round(w)), 2, -t * 0.35); // la fase avanza: l'onda scorre piano verso destra
     g.strokeStyle = col.testo;
     g.lineWidth = 1.6;
     g.lineJoin = 'round';
@@ -153,7 +217,7 @@ export class Specchietto {
     g.stroke();
   }
 
-  disegnaFiltro(s, col) {
+  disegnaFiltro(s, col, t = 0) {
     const { g, w, h } = this.pronto(this.filtro);
     const y = (db) => h - 4 - ((Math.max(DB_MIN, Math.min(DB_MAX, db)) - DB_MIN) / (DB_MAX - DB_MIN)) * (h - 8);
     const x = (f) => (Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN)) * w;
@@ -188,6 +252,13 @@ export class Specchietto {
       traccia(Math.min(F_MAX, s.cutoff * 2 ** (3 * d)), col.spento, 1);
       g.globalAlpha = 1;
     }
-    traccia(s.cutoff, col.testo, 1.6);
+    // la curva viva: segue gli LFO nel tempo (un ciclo = `cicloSec` secondi); un punto sul cutoff di adesso
+    const adesso = cutoffAdesso(s, t / (this.cicloSec?.() || 2));
+    traccia(adesso, col.testo, 1.6);
+    const dbAdesso = curvaFiltro(s, [adesso], adesso)[0];
+    g.fillStyle = col.testo;
+    g.beginPath();
+    g.arc(x(adesso), y(dbAdesso), 3, 0, TAU);
+    g.fill();
   }
 }

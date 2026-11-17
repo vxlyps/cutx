@@ -610,6 +610,7 @@
       "aggiornataKit": "«{nome}» aggiornata nel kit · il live non è cambiato",
       "clipSparita": "la clip «{nome}» non c'è più: usa → CUE per farne una nuova",
       "apertaDalCodice": "letta dal codice: «aggiorna» la riscrive uguale",
+      "apertaLibera": "codice libero: il synth lo legge a modo suo e può cambiare il suono · per tenerlo usa → CUE come clip nuova (la clip originale non si tocca)",
       "apri": "synth",
       "aperta": "aperta «{nome}»",
       "apriTitolo": "Apri questa clip nel synth",

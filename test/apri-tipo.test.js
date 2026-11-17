@@ -6,7 +6,7 @@ import { tipoApribile } from '../src/renderer/apri-tipo.js';
 const GRIGLIA = 'stack(\n  s("bd ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~").gain("1 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~")\n)';
 
 test('vuote e strane non si riaprono', () => {
-  for (const t of ['', '   ', 'ciao', null, undefined]) assert.equal(tipoApribile(t), null, String(t));
+  for (const t of ['', '   ', null, undefined]) assert.equal(tipoApribile(t), null, String(t));
 });
 
 test('con la riga: drum e synth', () => {
@@ -28,7 +28,8 @@ test('scritta a mano: una griglia da batteria si riapre come drum', () => {
 });
 
 test('scritta a mano: quello che il pannello cambierebbe NON si riapre', () => {
-  assert.equal(tipoApribile('s("bd*4").gain(.5)'), null); // diventerebbe un triangle
-  assert.equal(tipoApribile('stack(s("bd ~ sd ~"), s("hh*8"))'), null); // nessuna riga si legge come griglia
-  assert.equal(tipoApribile('$: s("bd").euclid(3,8)'), null);
+  // si aprono lo stesso, ma come «libera»: niente «aggiorna», solo → CUE come clip nuova
+  assert.equal(tipoApribile('s("bd*4").gain(.5)'), 'libera'); // diventerebbe un triangle
+  assert.equal(tipoApribile('stack(s("bd ~ sd ~"), s("hh*8"))'), 'libera'); // nessuna riga si legge come griglia
+  assert.equal(tipoApribile('$: s("bd").euclid(3,8)'), 'libera');
 });

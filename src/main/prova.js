@@ -3258,7 +3258,7 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('il pannello ha tutte le manopole', quante >= 40, String(quante));
   // la barra e le schede stanno negli stessi posti in tutte e tre le schede (suono, note, drum); foto se c'è CUTX_FOTO_DIR
   {
-    const posti = () => js(`(() => { const x = (s) => { const e = [...document.querySelectorAll(s)].find((e) => e.getClientRects().length); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }; return { nome: x('.synth-nome, .drum-nome'), cuffia: x('.synth-barra .key:not(.piccolo), .drum-barra .drum-play'), rec: x('.synth-rec, .drum-rec'), suono: x('.synth-schede .key, .drum-schede .key') }; })()`);
+    const posti = () => js(`(() => { const x = (s) => { const e = [...document.querySelectorAll(s)].find((e) => e.getClientRects().length); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; }; return { nome: x('.synth-nome, .drum-nome'), cuffia: x('.synth-barra .key:not(.piccolo), .drum-barra .drum-play'), rec: x('.synth-rec, .drum-rec'), casse: x('.synth-casse'), suono: x('.synth-schede .key, .drum-schede .key') }; })()`);
     const foto = async (nome) => {
       if (!process.env.CUTX_FOTO_DIR) return;
       await mkdir(process.env.CUTX_FOTO_DIR, { recursive: true });
@@ -3284,6 +3284,31 @@ async function provaSynth({ finestre, scrivi }) {
     controlla('lo specchietto disegna la forma d\'onda e la curva del filtro', Array.isArray(disegnati) && disegnati.length === 2 && disegnati.every((n) => n > 200), JSON.stringify(disegnati));
     await foto('synth-suono-specchietto');
     await js(`cutxProva.synth.cambia('forma', 'sawtooth')`);
+    // CASSE c'è anche nel DRUM, ed è lo stesso interruttore del SYNTH
+    const messaggi = () => js('window.__msg.map((m) => JSON.stringify(m))');
+    await js(`(() => { window.__msg = []; const m = cutxProva.motori.cuffia; if (m.__spia) return; m.__spia = true; const o = m.manda.bind(m); m.manda = (x) => { window.__msg.push(x); return o(x); }; })()`);
+    await clic('.drum-schede .key:nth-child(3), .synth-schede .key:nth-child(3)');
+    await aspetta(0.4);
+    await js(`window.__msg.length = 0; [...document.querySelectorAll('.synth-casse')].find((e) => e.getClientRects().length).click()`);
+    await aspetta(0.3);
+    controlla('DRUM: CASSE acceso manda l\'ordine alla cuffia e il tasto si accende', (await messaggi()).some((m) => m.includes('"tipo":"casse"') && m.includes('"on":true')) && (await js(`[...document.querySelectorAll('.synth-casse')].find((e) => e.getClientRects().length).classList.contains('acceso')`)) === true);
+    await clic('.drum-schede .key:nth-child(1)');
+    await aspetta(0.4);
+    controlla('tornando al suono CASSE è ancora acceso (stesso interruttore)', (await js(`[...document.querySelectorAll('.synth-casse')].find((e) => e.getClientRects().length).classList.contains('acceso')`)) === true);
+    await js(`window.__msg.length = 0; [...document.querySelectorAll('.synth-casse')].find((e) => e.getClientRects().length).click()`);
+    await aspetta(0.3);
+    controlla('CASSE spento: la cuffia torna in cuffia', (await messaggi()).some((m) => m.includes('"tipo":"casse"') && m.includes('"on":false')));
+    // lo specchietto si muove: due istanti diversi, due disegni diversi
+    {
+      await js(`cutxProva.synth.cambia('mod1dest', 'cutoff')`);
+      await aspetta(0.3);
+      const firma = () => js(`[...document.querySelectorAll('.specchietto-canvas')].map((c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let h = 0; for (let i = 3; i < d.length; i += 4) h = (h * 31 + d[i]) | 0; return h; }).join('/')`);
+      const f1 = await firma();
+      await aspetta(0.7);
+      const f2 = await firma();
+      controlla('lo specchietto è animato (onda e filtro cambiano nel tempo)', f1 !== f2, `${f1} ${f2}`);
+      await js(`cutxProva.synth.cambia('mod1dest', '')`);
+    }
     controlla('nome, cuffia, REC e schede stanno negli stessi punti in suono, note e drum', JSON.stringify(pp.suono) === JSON.stringify(pp.note) && JSON.stringify(pp.note) === JSON.stringify(pp.drum), JSON.stringify(pp));
   }
   controlla('sette gruppi: oscillatore, filtro, ampiezza, drive, space, mod, arpeggio', (await js(`[...document.querySelectorAll('.synth-gruppo h2')].map((h) => h.textContent).join('|')`)) === 'oscillatore|filtro|ampiezza|drive|space|mod|arpeggio');
@@ -4356,7 +4381,7 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.cue.cambiaModo('brano')`);
   await aspetta(0.6);
   const bottoni = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)))`);
-  controlla('sulla card della clip del synth c\'è «synth», su quella scritta a mano no', bottoni === '[false,true,true,false]', bottoni);
+  controlla('«synth» c\'è su ogni card con del codice, anche su quella scritta a mano', bottoni === '[false,true,true,true]', bottoni);
   controlla('le clip sono raggruppate per tipo con i loro titoli (BASS, altre)', (await js(`[...document.querySelectorAll('#carte .gruppo-clip')].map((e) => e.textContent).join('|')`)) === 'BASS|altre');
   controlla('lo scorrimento del controller segue i gruppi (le bass prima, poi le senza tipo)', (await js(`cutxProva.cue.sezioniNav().join('|')`)) === 'bass test|bass test 2|drum', String(await js(`cutxProva.cue.sezioniNav().join('|')`)));
   await js(`cutxProva.synth.cambia('cutoff', 3000)`);
@@ -4966,7 +4991,7 @@ s("bd*4").gain(.0001)
     await aspetta(0.8);
     const visibili = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [c.querySelector('.nome')?.textContent, [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)]))`);
     controlla('«synth» c\'è sulla clip scritta a mano che il pannello riscrive uguale', visibili.includes('["1 basso",true]'), visibili);
-    controlla('«synth» non c\'è su s("bd*4"): il pannello la cambierebbe', visibili.includes('["2 batteria",false]'), visibili);
+    controlla('«synth» c\'è anche su s("bd*4") (codice libero)', visibili.includes('["2 batteria",true]'), visibili);
     await js(`[...document.querySelectorAll('#carte .card.sezione')].find((c) => c.querySelector('.nome')?.textContent === '1 basso').querySelector('.card-testa').querySelectorAll('button').forEach((b) => b.textContent.trim() === 'synth' && b.click())`);
     await aspetta(0.5);
     controlla('si apre il SYNTH con la clip letta dal codice', (await js('cutxProva.vista')) === 'synth' && (await js('cutxProva.synth.stato.cutoff')) === 400);
@@ -4982,6 +5007,12 @@ s("bd*4").gain(.0001)
     await js(`cutxProva.cue.togliClip(0)`);
     await js(`document.querySelector('.synth-aggiorna').click()`);
     controlla('se la clip non c\'è più lo dice e non scrive niente', (await js(`document.querySelector('.synth-avviso').textContent`)).includes('non c\'è più'));
+    // codice libero: si apre per lavorarci, ma senza «aggiorna» (il pannello la riscriverebbe diversa) e con l'avviso
+    await js(`cutxProva.mostraVista('live')`);
+    await js(`cutxProva.apriNelSynth('s("bd*4").gain(.5)', 'libera', { brano: 'x', nome: 'libera' })`);
+    await aspetta(0.5);
+    controlla('codice libero: si apre il SYNTH, senza «aggiorna», con l\'avviso', (await js('cutxProva.vista')) === 'synth' && (await js(`document.querySelector('.synth-aggiorna').hidden`)) === true && (await js(`document.querySelector('.synth-avviso').textContent`)).includes('codice libero'));
+    await js(`cutxProva.mostraVista('live')`);
   } finally {
     await js(`cutxProva.mostraVista('live'); cutxProva.cue.brano && (cutxProva.cue.brano.sporco = false); cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero')`).catch(() => {});
     await rm(path.join(cartella, file), { force: true });

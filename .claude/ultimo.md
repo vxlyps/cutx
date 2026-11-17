@@ -1,11 +1,6 @@
-# Ultimo stato - 16/11/2026
-Fatto: barra e schede del SYNTH e del DRUM negli stessi punti; riga del pianoroll allineata; arpeggio su 3 righe; CLEAR e clear notes svuotano anche il codice (note("~")); gruppo MOD (2 LFO: target, wave, bars, depth, riga `.lpf(sine.range(a, b).slow(n))`); specchietto forma d'onda + curva filtro (synth-scope.js).
-Funziona: test puri 44 ok, prova synth+drum 346 ok, 0 falliti, LFO verificato su Strudel vero.
-Non fatto: ascolto/occhio di Valerio; glide e OSC2 (non nativi in Strudel); suoni salvati (le clip già lo sono); controller per MOD; foto del gruppo MOD/ARPEGGIO (sotto il bordo).
-File toccati: synth-codice.js, synth-modello.js, synth-vista.js, synth-roll.js, synth-scope.js (nuovo), drum-vista.js, synth.css, drum.css, stile.css, testi/it.json, prova.js, test/synth.test.js.
-Prossimo passo: Valerio guarda la barra ferma tra le schede, MOD e specchietto; poi MOD sul controller e tastiera MIDI.
-
-## Da fare domani (16/11/2026, sera)
-1. **Tasto «synth» mancante**: `mostraApri(bottone, codice)` in `src/renderer/apri-clip.js` lo nasconde se `tipoApribile(codice)` è vuoto (di fatto solo clip con riga `// @synth` / `// @drum`). Valerio lo vuole su OGNI clip, nel CUE (`cue.js:820`) e nel LIVE (`pila.js:220`): codice scritto a mano, melodie, tutto. Il SYNTH sa già leggere il codice a mano (quello che non capisce resta «a mano»).
-2. **Specchietto animato**: la forma d'onda in `synth-scope.js` deve muoversi nel tempo (scorrere/fase che avanza, e vedere gli LFO muovere il filtro). Oggi è ferma.
-3. **Beta 5.4**: NON ancora fatta, solo dopo i punti 1 e 2 e una prova; poi release come le precedenti (`docs/NOVITA-*.md`).
+# Ultimo stato - 17/11/2026
+Fatto: tasto CASSE nella scheda DRUM (stesso interruttore del SYNTH); pulsante «synth» su OGNI clip (codice libero: si apre con avviso, senza «aggiorna», solo → CUE come clip nuova); specchietto animato (onda che scorre, filtro mosso dagli LFO a tempo col live). Beta 0.5.1-beta.4 «CUTX_05_1_4» pubblicata.
+Funziona: test puri 489/490; prove synth+drum 350 ok, aggiorna 9 ok (da sole).
+Non funziona: test `controller-synth` (le manopole MOD non hanno un posto sul controller: da fare). Giro lungo: 58 falli, in gran parte ambiente (MiniFuse scollegata) e interferenza nota aggiorna→synth (c'era già prima).
+File toccati: drum-vista.js, synth-vista.js, synth-scope.js, apri-tipo.js, app.js, testi/it.json, prova.js, test (apri-tipo, synth), CHANGELOG, docs/NOVITA-5.1.4.md, package.json/lock.
+Prossimo passo: Valerio prova la beta.4; poi MOD sul controller (mappa da approvare) e tastiera MIDI.

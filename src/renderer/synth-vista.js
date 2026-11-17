@@ -235,7 +235,7 @@ export class VistaSynth {
     this.specchioEl.hidden = true;
     // la scheda DRUM: una vista a sé dentro il SYNTH (griglia, codice, cuffia, → CUE suoi), che prende il posto della barra e del corpo
     this.drumEl = crea('div', 'drum-vista');
-    this.drum = new VistaDrum(this.drumEl, { ...this.opz, vaiA: (id) => this.mostraScheda(id) });
+    this.drum = new VistaDrum(this.drumEl, { ...this.opz, vaiA: (id) => this.mostraScheda(id), impostaCasse: (on) => this.impostaCasse(on), casseAcceso: () => this.casse });
     this.r.replaceChildren(barra, corpo, this.specchioEl, this.drumEl);
     this.scheda = 'suono';
     this.mostraScheda('suono');
@@ -361,6 +361,7 @@ export class VistaSynth {
     this.attiva_ = on;
     if (on) setTimeout(() => this.scope && ((this.scope.chiave = ''), this.scope.disegna(this.stato)), 0); // la vista è appena comparsa: lo specchietto ha ora una misura
     this.drum.attiva(on && this.scheda === 'drum');
+    this.scope?.anima(on, () => this.opz.cicloSec?.() ?? 2);
     if (on) this.inviaSuono();
     else {
       this.impostaCasse(false); // uscendo dal SYNTH il CUE non deve finire sulle casse
@@ -375,6 +376,7 @@ export class VistaSynth {
     this.casse = on;
     this.casseEl.classList.toggle('acceso', on);
     this.casseEl.setAttribute('aria-pressed', String(on));
+    this.drum?.mostraCasse(on);
     this.opz.casse?.(on);
   }
 
@@ -737,7 +739,7 @@ export class VistaSynth {
 
   // Un suono aperto da una clip: si riparte da lì, con lo schema «note della clip».
   // origine: da dove viene la clip (per «aggiorna»), o null. dalCodice: la clip era scritta a mano e il pannello l'ha letta.
-  apri(stato, nome, origine = null, dalCodice = false) {
+  apri(stato, nome, origine = null, dalCodice = false, libera = false) {
     this.aperta = { nome };
     this.mostraOrigine(origine);
     this.nome = nome || this.nome;
@@ -749,7 +751,7 @@ export class VistaSynth {
     this.scalaDelPianoroll = null;
     this.cicliScelti = 1;
     this.inGesto = false;
-    this.avviso(dalCodice ? T.msg.apertaDalCodice : '');
+    this.avviso(libera ? T.msg.apertaLibera : dalCodice ? T.msg.apertaDalCodice : '');
     this.cambiato();
   }
 

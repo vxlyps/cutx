@@ -622,3 +622,15 @@ test('specchietto: la forma d\'onda e la curva del filtro seguono le manopole', 
   assert.ok(risonante > 15, 'la reso alza il picco sul cutoff');
   assert.ok(curvaFiltro({ ...f, ftype: '24db' }, [10000])[0] < alto - 20, '24 dB cade più forte');
 });
+
+test('specchietto: gli LFO e il cutoff che si muove', async () => {
+  const { lfo, cutoffAdesso, puntiOnda } = await import('../src/renderer/synth-scope.js');
+  for (const f of ['sine', 'tri', 'saw', 'square', 'perlin']) for (const t of [0, 0.3, 0.77, 1.5]) assert.ok(lfo(f, t) >= 0 && lfo(f, t) <= 1, `${f} ${t}`);
+  assert.equal(lfo('saw', 0.25), 0.25);
+  assert.equal(lfo('tri', 0.5), 1);
+  const s = { cutoff: 1000, mod1dest: 'cutoff', mod1forma: 'saw', mod1rate: '2', mod1depth: 0.5, mod2dest: '' };
+  assert.equal(cutoffAdesso({ ...s, mod1dest: '' }, 1.3), 1000); // niente LFO: resta fermo
+  assert.ok(cutoffAdesso(s, 0) < 1000 && cutoffAdesso(s, 1.99) > 1000);
+  const base = { forma: 'sawtooth', voci: 1, detune: 0, fm: 0, fmh: 1, pw: 0.5, shape: 0, distort: 0, crush: 16, coarse: 1 };
+  assert.notDeepEqual(puntiOnda(base, 50, 2, 0), puntiOnda(base, 50, 2, 0.3)); // la fase avanza: l'onda scorre
+});

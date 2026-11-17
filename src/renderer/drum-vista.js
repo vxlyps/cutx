@@ -111,9 +111,13 @@ export class VistaDrum {
     this.aggiornaEl.hidden = true;
     this.aggiornaEl.onclick = () => this.aggiornaClip();
     // la barra ha gli stessi posti di quella del SYNTH (nome, tipo, cuffia, casse, REC): chi cambia scheda non vede muoversi niente.
-    // «tipo» e «casse» qui non servono: restano due posti vuoti della stessa larghezza.
+    // «tipo» qui non serve: resta un posto vuoto della stessa larghezza. CASSE è lo stesso del SYNTH (stato condiviso, lo tiene il SYNTH).
     const vuoto = (classe) => Object.assign(crea('span', `synth-posto ${classe}`), { ariaHidden: 'true' });
-    barra.append(this.nomeEl, vuoto('synth-posto-tipo'), this.playEl, vuoto('synth-posto-casse'), this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.aggiornaEl, this.destinazioneEl, this.cueEl);
+    this.casseEl = crea('button', 'key synth-casse synth-casse-tasto', it.synth.barra.casse);
+    this.casseEl.dataset.aiuto = 'synth-casse';
+    this.casseEl.setAttribute('aria-pressed', 'false');
+    this.casseEl.onclick = () => this.opz.impostaCasse?.(!this.opz.casseAcceso?.());
+    barra.append(this.nomeEl, vuoto('synth-posto-tipo'), this.playEl, this.casseEl, this.recEl, crea('span', 'sep'), this.passiEl, this.cicliEl, crea('span', 'spazio'), this.aggiornaEl, this.destinazioneEl, this.cueEl);
 
     this.grigliaEl = crea('div', 'drum-griglia');
     this.grigliaEl.dataset.aiuto = 'drum-griglia';
@@ -348,6 +352,12 @@ export class VistaDrum {
     if (this.opz.suonaOra()) this.opz.ferma();
     else this.suona();
     this.aggiorna();
+  }
+
+  // Il tasto CASSE segue lo stato del SYNTH (che lo spegne uscendo).
+  mostraCasse(on) {
+    this.casseEl.classList.toggle('acceso', on);
+    this.casseEl.setAttribute('aria-pressed', String(on));
   }
 
   provaInCuffia() {

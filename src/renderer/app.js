@@ -814,6 +814,7 @@ const synth = new VistaSynth($('vista-synth'), {
     return errore;
   },
   nota: (m) => cuffia.manda({ tipo: 'synth-nota', ...m }),
+  cicloSec: () => (mappa?.cps ? 1 / mappa.cps : 2), // quanto dura un ciclo: lo specchietto muove gli LFO a tempo col live
   casse: (on) => cuffia.manda({ tipo: 'casse', on }), // il suono del SYNTH sulle casse invece che in cuffia (solo il motore cuffia cambia uscita)
   colpo: (codice, vel) => cuffia.manda({ tipo: 'drum-colpo', codice, vel }), // un colpo di batteria (i pad dell'X-Touch)
   click: (accento) => cuffia.manda({ tipo: 'synth-click', accento }),
@@ -849,9 +850,11 @@ function apriNelSynth(codice, nome, origine = null) {
     if (errore) return cue.avviso(errore);
     return mostraVista('synth');
   }
-  const stato = tipo === 'mano' ? leggiCodiceSynth(codice).stato : leggiRigaSynth(codice);
+  const libera = tipo === 'libera';
+  const stato = tipo === 'mano' || libera ? leggiCodiceSynth(codice).stato : leggiRigaSynth(codice);
   if (!tipo || !stato) return cue.avviso(it.synth.msg.apriNonSynth);
-  synth.apri({ ...stato, anteprima: 'clip' }, nome, origine, tipo === 'mano');
+  // codice libero: il pannello non lo riscrive uguale, quindi senza origine (niente «aggiorna», solo → CUE come clip nuova)
+  synth.apri({ ...stato, anteprima: 'clip' }, nome, libera ? null : origine, tipo !== 'synth', libera);
   mostraVista('synth');
 }
 
@@ -1996,6 +1999,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  apriNelSynth,
   dispetti: () => dispetti,
   hack: () => hack,
   mangiaLavoro: () => mangiaLavoro,

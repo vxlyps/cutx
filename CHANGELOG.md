@@ -1,5 +1,16 @@
 # Novità di CUTX
 
+## 0.5.1-beta.4 «CUTX_05_1_4» (17/11/2026)
+
+ARPEGGIO e MOD nel SYNTH, specchietto animato, **CASSE nella scheda DRUM**, pulsante **synth su ogni clip**. Come provarli: `docs/NOVITA-5.1.4.md`.
+
+- **«synth» su ogni clip** (CUE e LIVE), anche scritta a mano. Se il pannello non la riscrive uguale si apre lo stesso, con un avviso, senza «aggiorna» (solo → CUE come clip nuova): la clip originale non si tocca.
+- **DRUM: tasto CASSE** (stesso interruttore del SYNTH): la griglia, i tasti e il REC suonano dalle casse.
+- **Specchietto animato**: la forma d'onda scorre, la curva del filtro segue gli LFO a tempo col live.
+- **ARPEGGIO** (modi, ottave, swing, accenti, POLY, CHANCE, JUMP, ROTATE, RETRIG, fino a 1/64 e terzine) e **MOD** (due LFO).
+- Barra e schede ferme tra suono, note e drum; CLEAR svuota anche il codice; ottave fino a 5.
+- Fader del filtro: il filtro del livello fa da tetto/pavimento. Cimice: intensità e crescita regolabili, HACK con scena finale.
+
 ## 0.5.1-beta.3 «CUTX_05_1_3» (15/11/2026)
 
 Nella scheda DRUM i tasti del Mac suonano le righe e c'è il REC; il pulsante **synth/drum** su ogni clip che si riscrive uguale; «→ CUE» anche come scena del beat. Come provarli: `docs/NOVITA-5.1.3.md`.
