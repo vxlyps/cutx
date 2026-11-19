@@ -56,12 +56,15 @@ if (PER_PROVE) {
 
 // CUTX dev (lo lancia il CUTX.command del Desktop con CUTX_DEV=1): gira accanto a quella installata dal .dmg, con nome, dati e
 // registro a parte, e nel titolo DEV più il commit. Dello stash prende solo il percorso della prima volta (si lavora sugli stessi suoni).
-const DEV = process.env.CUTX_DEV === '1' && !PER_PROVE;
-const TITOLO = DEV ? `CUTX DEV ${process.env.CUTX_COMMIT ?? ''}`.trim() : 'CUTX';
+// RAMO CANALI: qui è sempre così (anche senza CUTX_DEV), con nome e dati SOLO SUOI («CUTX canali», CUTX-canali): la beta installata e la sua
+// cartella dati (preferenze, calibrazione X-Touch, log) non si toccano mai. Prima di un eventuale merge in main questo va tolto.
+const CANALI = true;
+const DEV = (process.env.CUTX_DEV === '1' || CANALI) && !PER_PROVE;
+const TITOLO = DEV ? `CUTX ${CANALI ? 'CANALI' : 'DEV'} ${process.env.CUTX_COMMIT ?? ''}`.trim() : 'CUTX';
 if (DEV) {
   const vera = path.join(app.getPath('appData'), 'CUTX');
-  app.setName('CUTX dev');
-  const dati = path.join(app.getPath('appData'), 'CUTX-dev');
+  app.setName(CANALI ? 'CUTX canali' : 'CUTX dev');
+  const dati = path.join(app.getPath('appData'), CANALI ? 'CUTX-canali' : 'CUTX-dev');
   app.setPath('userData', dati);
   const impostazioni = path.join(dati, 'impostazioni.json');
   if (!existsSync(impostazioni) && existsSync(path.join(vera, 'impostazioni.json'))) {
