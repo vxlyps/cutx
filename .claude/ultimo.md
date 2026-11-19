@@ -11,10 +11,12 @@ REGIA→NANO · SCALPELLO→X-TOUCH · PENNA→tastiera · corsia→CH (CH1…CH
 - Il PROJ ha le sue definizioni in `canali.json` nella cartella del PROJ (se c'è vince; PROJ nuovo = predefinito). Si cambia solo a live fermo (acceso: sola lettura con scritta del perché).
 ## Da fare (fase 1 parte B, poi FERMARSI)
 1. FATTO: `categorie.js` esporta TIPI (8, per i CH) e CATEGORIE (6, SYNTH, = TIPI senza drum/perc); canali.js importa TIPI da lì. Test synth/canali/pacchetto verdi (63). RESTA per la pagina CANALI: l'ordine dei gruppi nel CUE (`gruppiClip`) deve seguire l'ordine dei CH (predefinito: drum, keys/arp, bass, lead, pad, perc, fx, senza tipo) e `categoriaDi` deve riconoscere perc/drum nel CUE; oggi `gruppiClip` usa ancora CATEGORIE.
-2. Motore: livello con campo CH + identità CH+nome; annulla di un'entrata; stato ricostruibile dal live (leggere motore.js `guadagnoDi`, app.js ~347/383/451, stato-live.js).
+2. FATTO motore: `entra` accetta `ch`, il livello lo tiene (`l.ch`), `descrivi` lo manda, il ripristino dopo riavvio lo rimanda. Identità = CH+nome (stessa clip in due CH = due livelli; stesso CH = sostituzione). «Annulla» = `togli` su un livello non ancora entrato: già c'era, chi doveva uscire per lui resta. Prova `entrata` con 3 controlli nuovi: 18 ok. Prove `livelli`+`robustezza`: 44 ok. Resta: la UI (passi 3-4) deve mandare `ch` da GO e ricostruire `canali` leggendo `ch` dai livelli del live (stato-live.js).
 3. Pagina CANALI nelle impostazioni (8 righe: nome libero, colore, tipi a spunte, una FREE, «torna al predefinito»; canali.json nel PROJ).
 4. Griglia LIVE col mouse (8 colonne × alternative del brano nel CUE; chiusura: suona, NEXT, countdown, fader «non letto», mute, vecchia). Pila (src/renderer/pila.js, 588 righe) è il LIVE di oggi.
 5. X-TOUCH con la mappa di oggi sui CH. Poi test + prova + rapporto (cosa funziona/no/rischia/cosa provare + tabella regola→file→test). Fermarsi.
 ## Fase 0 (piano B) ancora aperta
 Valerio configura il nano col KORG Kontrol Editor (LED External, tasti Momentary, un canale globale, Write Scene). Poi adattare `strumenti/midi-nano` (togliere la parte nativa) per verificare premuto 127/rilasciato 0 e luci comandate. Il nano NON risponde ai sysex (modo nativo scartato); si vede in macOS come ingresso «SLIDER/KNOB» e uscita «CTRL».
+## Note
+- `test/controller-synth.test.js` (1 test, manopole MOD) fallisce già prima del ramo: non è dei CH; da guardare nel lavoro MOD.
 ## Domande aperte a Valerio: nessuna.

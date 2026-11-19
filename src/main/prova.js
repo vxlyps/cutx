@@ -575,6 +575,23 @@ async function provaEntrata({ finestre, scrivi }) {
   const nuovo = dopo.livelli.find((l) => l.id === r2.livello);
   controlla('il vecchio non suona più dopo il confine, il nuovo sì', !dopo.livelli.some((l) => l.id === r1.livello) && nuovo?.primo === r2.da, JSON.stringify(dopo.livelli.map((l) => [l.id, l.primo, l.ultimo, l.a])));
 
+  // 3b. identità = CH + nome: stessa clip in due CH = due livelli; stesso CH = sostituzione
+  const entraCh = (ch, cicli = 1) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(60).gain(.0001)', nome: 'lineaCH', provenienza: 'prova', ch: ${JSON.stringify(ch)}, cicli: ${cicli}, scritto: true })`);
+  const c1 = await entraCh('CH1');
+  const c2 = await entraCh('CH2');
+  const stato3b = (await live()).livelli.filter((l) => l.nome === 'lineaCH');
+  controlla('stessa clip in due CH: due livelli, nessuno sostituisce l\'altro', c1.livello && c2.livello && stato3b.length === 2 && stato3b.every((l) => l.a === null) && new Set(stato3b.map((l) => l.ch)).size === 2, JSON.stringify(stato3b.map((l) => [l.id, l.ch, l.a])));
+  const c3 = await entraCh('CH2', 4); // lontano: resta in attesa abbastanza per annullarlo
+  const vecchioCh = await livello(c2.livello);
+  const restoCh1 = await livello(c1.livello);
+  controlla('stessa clip nello stesso CH: il vecchio esce dove entra il nuovo, l\'altro CH non si tocca', vecchioCh?.a === c3.da && restoCh1?.a === null, JSON.stringify([vecchioCh?.a, c3.da, restoCh1?.a]));
+  // annulla di un'entrata già mandata: togli prima che entri → non suona mai
+  await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${c3.livello} })`);
+  const annullato = (await live()).livelli.find((l) => l.id === c3.livello);
+  controlla('annulla: l\'entrata mandata e tolta prima del suo ciclo non resta, e il CH2 di prima continua', !annullato || annullato.a <= annullato.da, JSON.stringify(annullato && [annullato.da, annullato.a]));
+  const c2dopo = await livello(c2.livello);
+  controlla('annulla: chi doveva uscire per lui resta a suonare', c2dopo?.a === null, JSON.stringify(c2dopo?.a));
+
   // 4. codice sbagliato: il live non cambia, l'errore si vede nel CUE
   const primaErr = JSON.stringify((await live()).livelli.map((l) => l.id));
   const re = await goLive('// @sezione kick\ns("sine*2".gain(', 1);

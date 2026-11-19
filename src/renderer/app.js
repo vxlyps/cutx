@@ -1430,7 +1430,7 @@ async function ripristinaLive() {
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, beat: l.beat ?? null, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: l.ch ?? null, beat: l.beat ?? null, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
@@ -1999,6 +1999,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  richiestaLive: (m) => live.richiesta(m),
   apriNelSynth,
   dispetti: () => dispetti,
   hack: () => hack,

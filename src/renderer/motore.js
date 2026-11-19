@@ -488,12 +488,12 @@ function annullaIngresso(l, tieni) {
   l.scambiati = null;
 }
 
-// GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
+// GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome nello stesso CH lo sostituisce lì.
 // Un livello che ne sostituisce uno con lo stesso nome ne eredita il muto (ho solo cambiato il codice). Non il beat che cambia scena:
 // la scena nuova entra sempre sentita, anche se quella di prima era in muto.
 const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
 
-async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
+async function entra({ codice, nome, provenienza, ch = null, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
@@ -507,12 +507,13 @@ async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = fal
   // armare il drop: se un cambio di scena è in attesa, la clip entra insieme a lui
   if (Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
+  l.ch = ch ?? null; // il CH (CH1…CH8) in cui sta: l'identità del livello è CH + nome, la stessa clip in due CH = due livelli
   l.beat = beat; // il beat porta con sé le sue scene (◀ ▶ li scorrono) e quello da cui parte: { base, indice, scene }
   l.drum = !!drum; // una clip segnata «· drum»: sotto la sua card c'è l'onda (come per il beat)
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
   for (const vecchio of livelli) {
-    if (vecchio.nome !== l.nome || vecchio.a <= da) continue;
+    if (vecchio.nome !== l.nome || (vecchio.ch ?? null) !== l.ch || vecchio.a <= da) continue;
     // un cambio già in attesa (non è ancora entrato) viene sostituito dal nuovo: non suona mai, e il nuovo prende il suo posto
     if (vecchio.da >= da) {
       vecchio.a = vecchio.da;
@@ -679,6 +680,7 @@ const descrivi = (l) => ({
   id: l.id,
   nome: l.nome,
   provenienza: l.provenienza,
+  ch: l.ch ?? null,
   codice: l.codice,
   coda: l.coda,
   scivola: l.scivolate,
