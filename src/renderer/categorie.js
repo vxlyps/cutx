@@ -1,6 +1,10 @@
 // I tipi di suono delle clip: bass, lead, arp, pad, keys, fx. Stanno nella riga della clip (`// @clip reese · bass`), così valgono per
 // qualsiasi clip, non solo per quelle del synth. Modulo puro: lo usano brano.js (gruppi nel CUE), il synth e i test.
-export const CATEGORIE = ['bass', 'lead', 'arp', 'pad', 'keys', 'fx'];
+// Tutti i tipi che un CH può accogliere (pagina CANALI). Fonte unica.
+export const TIPI = ['drum', 'perc', 'bass', 'lead', 'arp', 'pad', 'keys', 'fx'];
+// I tipi del SYNTH: drum nasce dal DRUM e perc lo dà Valerio dal menu del CUE, quindi qui non ci sono.
+export const TIPI_SOLO_CH = ['drum', 'perc'];
+export const CATEGORIE = TIPI.filter((t) => !TIPI_SOLO_CH.includes(t));
 
 export const eCategoria = (x) => CATEGORIE.includes(x);
 

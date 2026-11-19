@@ -5,7 +5,8 @@
 // Parole: CH = un canale (CH1…CH8, definiti nella pagina CANALI) · NEXT = la clip scelta dalla manopolina, pronta · GO/OUT/MUTE = R/S/M ·
 // GO ALL = PLAY (entra tutto quello che è in NEXT) · FREE = il CH dei senza tipo e dei «in più» · SWEEP = la manopola ACQUA/ARIA.
 
-export const TIPI = ['drum', 'perc', 'bass', 'lead', 'keys', 'arp', 'pad', 'fx']; // lista fissa; i nomi delle canali sono liberi
+import { TIPI } from './categorie.js';
+export { TIPI }; // lista fissa, fonte in categorie.js; i nomi dei CH sono liberi
 export const ENTRA_TRA = [1, 2, 4, 8]; // battute (cicli)
 export const N_CH = 8;
 export const ISTERESI = 0.03; // ai bordi delle zone della manopolina

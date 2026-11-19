@@ -10,7 +10,7 @@ REGIA→NANO · SCALPELLO→X-TOUCH · PENNA→tastiera · corsia→CH (CH1…CH
 - «Annulla» di un'entrata già mandata: lo scrivo io nel motore, con test e `npm run prova` (mai Codex). Se è invasivo: FERMARSI e dirlo; nella prima versione si può togliere «annulla» (GO e OUT restano).
 - Il PROJ ha le sue definizioni in `canali.json` nella cartella del PROJ (se c'è vince; PROJ nuovo = predefinito). Si cambia solo a live fermo (acceso: sola lettura con scritta del perché).
 ## Da fare (fase 1 parte B, poi FERMARSI)
-1. Aggiungere `drum`/`perc` ai tipi senza rompere test/synth.test.js (CATEGORIE è usato lì con 6 tipi; oggi TIPI sta in canali.js).
+1. FATTO: `categorie.js` esporta TIPI (8, per i CH) e CATEGORIE (6, SYNTH, = TIPI senza drum/perc); canali.js importa TIPI da lì. Test synth/canali/pacchetto verdi (63). RESTA per la pagina CANALI: l'ordine dei gruppi nel CUE (`gruppiClip`) deve seguire l'ordine dei CH (predefinito: drum, keys/arp, bass, lead, pad, perc, fx, senza tipo) e `categoriaDi` deve riconoscere perc/drum nel CUE; oggi `gruppiClip` usa ancora CATEGORIE.
 2. Motore: livello con campo CH + identità CH+nome; annulla di un'entrata; stato ricostruibile dal live (leggere motore.js `guadagnoDi`, app.js ~347/383/451, stato-live.js).
 3. Pagina CANALI nelle impostazioni (8 righe: nome libero, colore, tipi a spunte, una FREE, «torna al predefinito»; canali.json nel PROJ).
 4. Griglia LIVE col mouse (8 colonne × alternative del brano nel CUE; chiusura: suona, NEXT, countdown, fader «non letto», mute, vecchia). Pila (src/renderer/pila.js, 588 righe) è il LIVE di oggi.
