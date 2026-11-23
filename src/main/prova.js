@@ -644,6 +644,38 @@ async function provaEntrata({ finestre, scrivi }) {
   controlla('gruppo di uscite: tutte allo stesso ciclo', gU?.da !== undefined && ua?.a === gU.da && ub?.a === gU.da, JSON.stringify([gU?.da, ua?.a, ub?.a]));
   await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${gErr.risposte[1].livello}, subito: true })`);
 
+  // 3d. STOP (annulla-attese): un messaggio solo annulla quello che non è cominciato; una transizione già partita va avanti; la rampa non lascia gradini
+  const tempoSet = () => chiedi(finestre.live, 'globalThis.cutxTempoSet()');
+  const annullaAttese = () => js(`cutxProva.richiestaLive({ tipo: 'annulla-attese' })`);
+  const t0 = await tempoSet();
+  const rp = await js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(66).gain(.0001)', nome: 'rampaP', provenienza: 'prova', ch: 5, cicli: 4, scritto: true, rampa: { bpm: ${t0.cps * 240 * 1.03}, cicli: 2 } })`);
+  const tConRampa = await tempoSet();
+  controlla('STOP: (prima) la rampa ha messo i suoi gradini', rp?.livello && tConRampa.cambi.length > t0.cambi.length, JSON.stringify([t0.cambi, tConRampa.cambi]));
+  const rStop = await annullaAttese();
+  const tDopo = await tempoSet();
+  const rpDopo = await livello(rp.livello);
+  controlla('STOP su un passaggio con rampa: i gradini spariscono e il tempo resta com\'era', rStop?.annullati >= 1 && JSON.stringify(tDopo.cambi) === JSON.stringify(t0.cambi) && Math.abs(tDopo.cps - t0.cps) < 1e-9 && (!rpDopo || rpDopo.a <= rpDopo.da), JSON.stringify([rStop, t0.cambi, tDopo.cambi, rpDopo && [rpDopo.da, rpDopo.a]]));
+  // un OUT lontano (la sfumata non è partita) si annulla; l'entrata lontana non suona mai
+  const sA = await entraU('stopA', 5, true);
+  await finoAlCiclo(sA.da + 0.6);
+  await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${sA.livello}, cicli: 4 })`);
+  const sB = await entraU('stopB', 6, true);
+  await aspetta(0.2);
+  const prima3d = [await livello(sA.livello), await livello(sB.livello)];
+  await annullaAttese();
+  const dopo3d = [await livello(sA.livello), await livello(sB.livello)];
+  controlla('STOP prima del confine annulla tutto: l\'uscita lontana è annullata e l\'entrata non entra', prima3d[0]?.a !== null && dopo3d[0]?.a === null && (!dopo3d[1] || dopo3d[1].a <= dopo3d[1].da), JSON.stringify([prima3d.map((l) => l && [l.da, l.a]), dopo3d.map((l) => l && [l.da, l.a])]));
+  // una transizione già partita: A sta sfumando sotto B, STOP non lo riprende
+  const tieni = (await live()).livelli.filter((l) => l.id !== sA.livello).map((l) => l.id);
+  const trB = await js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(68).gain(.0001)', nome: 'trB', provenienza: 'prova', ch: 6, unico: false, cicli: 1, scritto: true, transizione: { tipo: 'sweep', cicli: 6, hz: 150, tieni: ${JSON.stringify(tieni)} } })`);
+  await finoAlCiclo(trB.da + 0.6);
+  const aSfuma = await livello(sA.livello);
+  await annullaAttese();
+  const aDopo = await livello(sA.livello);
+  const bDopo = await livello(trB.livello);
+  controlla('STOP a transizione partita non riprende A: continua a sfumare sotto B', aSfuma?.a !== null && aDopo?.a === aSfuma?.a && bDopo?.a === null, JSON.stringify([aSfuma && [aSfuma.da, aSfuma.a], aDopo && [aDopo.da, aDopo.a], bDopo?.a]));
+  for (const id of [sA.livello, sB.livello, trB.livello]) await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${id}, subito: true })`);
+
   // 4. codice sbagliato: il live non cambia, l'errore si vede nel CUE
   const primaErr = JSON.stringify((await live()).livelli.map((l) => l.id));
   const re = await goLive('// @sezione kick\ns("sine*2".gain(', 1);

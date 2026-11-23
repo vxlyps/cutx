@@ -1192,28 +1192,16 @@ async function cueBranoVerso(verso) {
   return cue.slot.prossimo?.file === file ? libreria.find((b) => b.file === file)?.nome ?? file : null;
 }
 
-// STOP breve del nano: annulla tutto quello che non è ancora entrato (GO e OUT dei CH, da qualunque parte siano partiti, il cambio scena e il passaggio
-// in attesa). Il motore sa già annullare un livello che non è ancora entrato (tutto quello che doveva sostituire continua a suonare).
-function stopNano() {
-  const ciclo = cicloAdesso();
-  const effetti = statoCanali.annullaTutte();
-  let fatto = effetti.length > 0;
-  eseguiCanali(effetti);
-  for (const l of livelliLive) {
-    if (chDelLivello(l) === null) continue; // i livelli del controller e il paracadute non sono dei CH
-    if (l.a === null && l.da > ciclo) {
-      live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
-      fatto = true;
-    } else if (l.a !== null && l.da <= ciclo && l.a > ciclo) {
-      live.manda({ tipo: 'riprendi', livello: l.id });
-      fatto = true;
-    }
-  }
-  if (passaggio) {
-    passaggio = null;
-    fatto = true;
-  }
-  cue.avviso(fatto ? it.nano.stop : it.nano.stopNiente);
+// STOP breve del nano: annulla tutto quello che non è ancora cominciato (GO e OUT dei CH, da qualunque parte siano partiti, il cambio scena e il passaggio
+// in attesa, con la sua rampa di tempo). Lo decide il motore, in un colpo solo: sa da quando parte ogni entrata e ogni sfumata, e quello che è già
+// cominciato (una transizione partita) va avanti.
+async function stopNano() {
+  const avevaAttese = statoCanali.annullaTutte().length > 0 || !!passaggio;
+  passaggio = null;
+  if (inTest) return;
+  const r = await live.richiesta({ tipo: 'annulla-attese' });
+  if (r.errore) cue.avviso(`stop: ${r.errore}`);
+  else cue.avviso(avevaAttese || r.annullati > 0 ? it.nano.stop : it.nano.stopNiente);
   aggiornaCanali();
 }
 // Una scritta grande, a schermo, per un attimo (CYCLE del nano).

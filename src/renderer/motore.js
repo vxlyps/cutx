@@ -6,6 +6,7 @@ import { eventiDaHap } from './striscia.js';
 import { eNomeBeat } from './nomi.js';
 import { CEILING, creaLimiter, microEntrata } from './limiter.js';
 import { CICLI_RAMPA, gradiniRampa } from './passaggio.js';
+import { scegliAttese, togliRampa } from './attese.js';
 import { applica as applicaCoda, applicaGlobali, commuta, limitaGlobali, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, State, TimeSpan } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
@@ -479,6 +480,8 @@ function cambiaCoda(m) {
 function annullaIngresso(l, tieni) {
   if (l.tempo) rip.annullaCambio(l.tempo.ciclo, l.tempo.cps);
   l.tempo = null;
+  togliRampa(rip, l.rampa, (cambi) => cambiaTempo(null, { rimetti: cambi })); // il passaggio annullato non lascia i suoi gradini: il tempo resta com'era
+  l.rampa = null;
   if (tieni) {
     for (const v of l.scambiati ?? []) {
       if (!livelli.includes(v) || v.a === Infinity || v.a <= (rip.fine ?? -Infinity)) continue; // già uscito: non si può più tenere
@@ -580,7 +583,7 @@ function applicaEntra({ codice, nome, provenienza, ch = null, drum, cicli = 1, s
   livelli.push(l);
   l.tempo = c.cps ? { ciclo: da, cps: c.cps } : null;
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
-  if (rampa && rip.mappa) rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
+  if (rampa && rip.mappa) l.rampa = rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
   iniziaSet(da);
   aggiornaLivelli();
   dissolvi(l, 'entra', da, d.cicli, d.entra);
@@ -593,10 +596,37 @@ function applicaEntra({ codice, nome, provenienza, ch = null, drum, cicli = 1, s
 // La rampa del passaggio tra due brani: dal ciclo `da` (quando entra il beat nuovo) il tempo sale o scende di un gradino a ciclo fino a `cps1`.
 // Una modifica a mano del tempo ('ciclo') vince: annulla i gradini che non sono ancora arrivati.
 function rampaTempo(da, cps1, cicli) {
-  if (!(cps1 > 0)) return;
+  if (!(cps1 > 0)) return null;
   const ultimo = rip.cambiProssimi(ac.currentTime).filter((c) => c.ciclo < da).at(-1)?.cps;
   const cps0 = ultimo ?? rip.cpsAl(ac.currentTime);
-  cambiaTempo(null, { da, rampa: gradiniRampa(cps0, cps1, da, cicli) });
+  const gradini = gradiniRampa(cps0, cps1, da, cicli);
+  const tolti = rip.cambiTempo.filter((c) => c.ciclo > da - 1).map((c) => ({ ...c })); // i cambi che la rampa cancella: se la rampa si annulla tornano
+  cambiaTempo(null, { da, rampa: gradini });
+  return { gradini, tolti };
+}
+
+// STOP (e ogni «annulla le attese»): tutto quello che non è ancora cominciato si annulla in un colpo.
+// Entrate non ancora entrate (con la loro rampa e il loro setcpm; chi usciva per loro resta) e uscite la cui sfumata non è ancora partita.
+// Quello che è già cominciato (una transizione partita, una dissolvenza a metà) va avanti.
+function annullaAttese() {
+  if (!rip.mappa) return { annullati: 0 };
+  const soglia = Math.max(rip.ciclo(ac.currentTime), rip.fine ?? -Infinity);
+  const { entrate, uscite } = scegliAttese(livelli, soglia, {
+    salta: (l) => l.nome === 'paracadute' || l.provenienza === 'controller' || !!paracadute?.salvati.includes(l),
+  });
+  // prima le uscite: così chi usciva per un'entrata che si annulla non viene toccato due volte
+  for (const v of uscite) {
+    v.a = Infinity;
+    annullaDissolvi(v);
+  }
+  const tempo = entrate.some((l) => l.tempo || l.rampa);
+  for (const l of entrate) {
+    l.a = l.da; // non suona mai
+    annullaIngresso(l, true); // e quello che doveva sostituire continua a suonare
+  }
+  if (tempo) pubblicaMappa();
+  if (entrate.length || uscite.length) aggiornaLivelli();
+  return { annullati: entrate.length + uscite.length };
 }
 
 // --- paracadute "CUTX, scelgo te!" ---
@@ -927,6 +957,11 @@ function pubblicaMappa() {
 // quando: 'subito' | 'ciclo' | un numero di ciclo.
 function cambiaTempo(cps, quando) {
   if (!LIVE || !rip.mappa) return;
+  if (quando?.rimetti) {
+    // una rampa annullata: i cambi che aveva cancellato tornano
+    for (const g of quando.rimetti) rip.cambiaCpsA(g.ciclo, g.cps);
+    return pubblicaMappa();
+  }
   if (quando?.rampa) {
     // la rampa del passaggio tra due brani: un gradino a ciclo a partire da quando.da (i gradini già programmati dopo si annullano)
     rip.annullaCambiDopo(quando.da - 1);
@@ -1386,6 +1421,8 @@ async function ricevi(da, m) {
       return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0, Number(m.cicli) || 1);
     case 'riprendi':
       return riprendi(m.livello);
+    case 'annulla-attese':
+      return manda(da, { tipo: 'risposta', ...(LIVE ? annullaAttese() : { annullati: 0 }), id: m.id });
     case 'gruppo': {
       const r = LIVE ? await gruppo(m) : { errore: 'solo il live fa entrare i livelli' };
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
