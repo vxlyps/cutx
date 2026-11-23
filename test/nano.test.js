@@ -78,3 +78,33 @@ test('luci del nano: si manda solo quello che cambia, sul canale MIDI del nano',
   n.mostra([riga(0, 'accesa', 'spenta', 'spenta')]);
   assert.deepEqual(mandati.at(-1), [0xbf, 48, 0]);
 });
+
+test('nano: i tasti del trasporto (TRACK, SET, MARKER, CYCLE, STOP, REC) si leggono; REW e FF sono capiti ma liberi', () => {
+  const t = (cc) => leggiNano([0xb0, cc, 127]).tipo;
+  assert.deepEqual([58, 59, 60, 61, 62, 46, 42, 45, 43, 44].map(t), ['trackSu', 'trackGiu', 'set', 'markerSu', 'markerGiu', 'cycle', 'stop', 'rec', 'libero', 'libero']);
+  assert.equal(leggiNano([0xb0, 58, 0]).giu, false);
+});
+
+test('nano: trasporto = azioni solo alla pressione; STOP breve annulla, STOP tenuto 1 s apre il paracadute', async () => {
+  const visti = [];
+  const n = new Nano({
+    track: (v) => visti.push(`track${v}`), set: () => visti.push('set'), marker: (v) => visti.push(`marker${v}`), cycle: () => visti.push('cycle'), rec: () => visti.push('rec'),
+    stop: () => visti.push('stop'), tieniStop: () => visti.push('paracadute'),
+  });
+  for (const cc of [58, 59, 60, 61, 62, 46, 45, 43]) { n.riceve([0xb0, cc, 127]); n.riceve([0xb0, cc, 0]); }
+  assert.deepEqual(visti, ['track-1', 'track1', 'set', 'marker-1', 'marker1', 'cycle', 'rec']);
+  visti.length = 0;
+  n.riceve([0xb0, 42, 127]); n.riceve([0xb0, 42, 0]);
+  assert.deepEqual(visti, ['stop'], 'breve: al rilascio');
+  visti.length = 0;
+  n.riceve([0xb0, 42, 127]);
+  await new Promise((r) => setTimeout(r, 1100));
+  n.riceve([0xb0, 42, 0]);
+  assert.deepEqual(visti, ['paracadute'], 'tenuto: paracadute, e il rilascio non annulla niente');
+});
+
+test('luci del nano: CYCLE acceso se entra tra > 1, REC mentre registra, STOP col paracadute aperto', () => {
+  const vista = [];
+  assert.deepEqual([46, 45, 42].map((cc) => luciNano(vista, 0).get(cc)), [0, 0, 0]);
+  assert.deepEqual([46, 45, 42].map((cc) => luciNano(vista, 0, { cycle: true, rec: true, stop: true }).get(cc)), [127, 127, 127]);
+});

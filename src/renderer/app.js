@@ -1174,6 +1174,57 @@ async function eseguiCanali(effetti) {
   }
   aggiornaCanali();
 }
+// Il prossimo brano nell'ordine del set (senza quello che suona); senza set, nell'ordine della libreria. Lo apre in PROSSIMO senza rubare il fuoco.
+async function cueBranoVerso(verso) {
+  const base = cue.slot.prossimo?.file ?? cue.slot.attivo?.file ?? null;
+  let file = null;
+  if (serata.set && serata.primo()) {
+    file = serata.vicino(base, verso);
+    if (file && file === cue.slot.attivo?.file) file = serata.vicino(file, verso);
+    if (file && !libreria.some((b) => b.file === file)) file = null;
+  } else {
+    const i = libreria.findIndex((b) => b.file === base);
+    const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
+    file = j >= 0 && j < libreria.length && j !== i ? libreria[j].file : null;
+  }
+  if (!file) return null;
+  await cue.apri(file, 'prossimo', { fuoco: false, forza: true });
+  return cue.slot.prossimo?.file === file ? libreria.find((b) => b.file === file)?.nome ?? file : null;
+}
+
+// STOP breve del nano: annulla tutto quello che non è ancora entrato (GO e OUT dei CH, da qualunque parte siano partiti, il cambio scena e il passaggio
+// in attesa). Il motore sa già annullare un livello che non è ancora entrato (tutto quello che doveva sostituire continua a suonare).
+function stopNano() {
+  const ciclo = cicloAdesso();
+  const effetti = statoCanali.annullaTutte();
+  let fatto = effetti.length > 0;
+  eseguiCanali(effetti);
+  for (const l of livelliLive) {
+    if (chDelLivello(l) === null) continue; // i livelli del controller e il paracadute non sono dei CH
+    if (l.a === null && l.da > ciclo) {
+      live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
+      fatto = true;
+    } else if (l.a !== null && l.da <= ciclo && l.a > ciclo) {
+      live.manda({ tipo: 'riprendi', livello: l.id });
+      fatto = true;
+    }
+  }
+  if (passaggio) {
+    passaggio = null;
+    fatto = true;
+  }
+  cue.avviso(fatto ? it.nano.stop : it.nano.stopNiente);
+  aggiornaCanali();
+}
+// Una scritta grande, a schermo, per un attimo (CYCLE del nano).
+let grandeTimer = null;
+function mostraGrande(testo) {
+  const e = $('grande-nano');
+  e.textContent = testo;
+  e.classList.add('visibile');
+  clearTimeout(grandeTimer);
+  grandeTimer = setTimeout(() => e.classList.remove('visibile'), 1200);
+}
 const nomeBranoCanali = (b) => (b ? B.testa(b.modello).brano || b.file.replace(/\.cutx$/, '') : null);
 function impostaBranoCanali() {
   statoCanali.tieniBrani([nomeBranoCanali(cue.slot.attivo), nomeBranoCanali(cue.slot.prossimo)]);
@@ -1186,7 +1237,7 @@ function aggiornaCanali() {
   statoCanali.sincronizza(livelliLive.map((l) => ({ ...l, ch: chDelLivello(l) })), cicloAdesso());
   const vista = statoCanali.vista();
   griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
-  nano.mostra(vista);
+  nano.mostra(vista, { cycle: entraTra > 1, rec: !!synth.rec, stop: paracaduteAperto });
   cue.segnaNext(new Set(vista.filter((v) => v.armato && v.next).map((v) => v.next.id)), new Set(vista.filter((v) => v.suona).map((v) => v.suona.id)));
 }
 // Una scelta fatta con la griglia o con la manopola: aggiorno e porto il CUE sulla clip scelta (se non sto scrivendo).
@@ -2305,22 +2356,7 @@ const controllerMidi = new Controller({
   cueSposta: (delta) => spostaSelezione(delta),
   cuePosizione: () => posizioneSelezione(),
   // CUFFIA tenuto + ◀ ▶: il prossimo brano nell'ordine del set (senza il brano che suona); senza set, nell'ordine della libreria
-  cueBrano: async (verso) => {
-    const base = cue.slot.prossimo?.file ?? cue.slot.attivo?.file ?? null;
-    let file = null;
-    if (serata.set && serata.primo()) {
-      file = serata.vicino(base, verso);
-      if (file && file === cue.slot.attivo?.file) file = serata.vicino(file, verso);
-      if (file && !libreria.some((b) => b.file === file)) file = null;
-    } else {
-      const i = libreria.findIndex((b) => b.file === base);
-      const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
-      file = j >= 0 && j < libreria.length && j !== i ? libreria[j].file : null;
-    }
-    if (!file) return null;
-    await cue.apri(file, 'prossimo', { fuoco: false, forza: true });
-    return cue.slot.prossimo?.file === file ? libreria.find((b) => b.file === file)?.nome ?? file : null;
-  },
+  cueBrano: (verso) => cueBranoVerso(verso),
   passaBrano: () => passaBrano(),
   passaInAttesa: () => !!passaggio,
   seleziona: (id) => pila.seleziona(id),
@@ -2431,6 +2467,22 @@ const nano = new Nano({
   cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
   mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
   goAll: () => eseguiCanali(statoCanali.goAll()),
+  track: async (verso) => {
+    const scrivo = document.activeElement?.closest?.('.cm-editor, textarea, input, [contenteditable]') ? document.activeElement : null; // un editor in cui sto scrivendo
+    const nome = await cueBranoVerso(verso);
+    if (scrivo?.isConnected && document.activeElement !== scrivo) scrivo.focus(); // il fuoco resta lì
+    cue.avviso(nome ? it.nano.prossimo.replace('{nome}', nome) : it.nano.nessunBrano);
+  },
+  set: () => cue.cambiaLinguetta(),
+  marker: (verso) => muoviScena(verso),
+  cycle: () => {
+    const n = { 1: 2, 2: 4, 4: 8 }[entraTra] ?? 1;
+    scegliEntraTra(n, true);
+    mostraGrande(it.nano.entraTra.replace('{n}', n));
+  },
+  stop: () => stopNano(),
+  tieniStop: () => lanciaParacadute(),
+  rec: () => (vista === 'synth' ? synth.avviaRec() : cue.avviso(it.nano.recSoloSynth)),
   collegato: (si) => {
     $('nano-stato').hidden = !si;
     statoCanali.sganciaTutti(); // un nano appena collegato ha i fader dove li ha lasciati: si riagganciano

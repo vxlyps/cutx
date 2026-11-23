@@ -702,3 +702,15 @@ test('chDelLivello: senza ch → STRAY; fuori solo controller e paracadute', () 
   assert.equal(chDelLivello(cfg, { nome: 'a', provenienza: 'controller' }), null);
   assert.equal(chDelLivello(cfg, { nome: 'paracadute' }), null);
 });
+
+test('STOP breve: annullaTutte annulla le attese di tutti i CH (GO e OUT), niente se non aspetta nessuno', () => {
+  const s = new StatoCanali();
+  assert.deepEqual(s.annullaTutte(), []);
+  s.canali[0].attesa = { tipo: 'go', alt: { nome: 'a' }, da: 4 };
+  s.canali[3].attesa = { tipo: 'out', da: 4 };
+  const e = s.annullaTutte();
+  assert.deepEqual(e.map((x) => [x.tipo, x.ch, x.quale]), [['annulla', 0, 'go'], ['annulla', 3, 'out']]);
+  assert.equal(s.canali[0].attesa, null);
+  assert.equal(s.canali[3].attesa, null);
+  assert.deepEqual(s.annullaTutte(), []);
+});

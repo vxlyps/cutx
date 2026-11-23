@@ -352,6 +352,11 @@ export class StatoCanali {
     return effetti;
   }
 
+  // STOP breve: tutte le attese (GO e OUT, da qualunque parte siano partiti) si annullano. Chi esegue pulisce anche i livelli che il motore ha in attesa.
+  annullaTutte() {
+    return this.canali.flatMap((c, i) => (c.attesa ? [this.annullaAttesa(i)] : []));
+  }
+
   // GO ALL (PLAY): tutto quello che è ARMATO (scelto da me e diverso da ciò che suona, OUT compresi) parte insieme: chi esegue gli effetti li manda
   // con un solo ciclo d'arrivo. Le attese già in corso restano.
   goAll() {

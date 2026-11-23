@@ -764,6 +764,14 @@
     "spenta": "MOVIOLA spenta: accendila nelle impostazioni",
     "segno": "SEGNO"
   },
+  "nano": {
+    "stop": "attese annullate",
+    "stopNiente": "niente in attesa",
+    "prossimo": "PROSSIMO · {nome}",
+    "nessunBrano": "nessun altro brano da aprire",
+    "entraTra": "ENTRA TRA {n}",
+    "recSoloSynth": "REC vale nel SYNTH"
+  },
   "cue": {
     "entraTra1": "entra tra 1 ciclo",
     "entraTra": "entra tra {n} cicli",
