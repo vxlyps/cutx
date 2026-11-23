@@ -587,6 +587,19 @@ async function provaEntrata({ finestre, scrivi }) {
   controlla('il fader del CH cambia il volume del livello (a metà: circa 0,18)', conFader && Math.abs(conFader.volume - 0.178) < 0.03, JSON.stringify(conFader?.volume));
   await js('cutxProva.canaliFader(7, 1)');
 
+  // un CH con un tipo suona UNA clip sola: reese entra in CH3 e «sub» esce dove entra lei; in FREE invece si impila
+  const entraU = (nome, ch, unico) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(70).gain(.0001)', nome: ${JSON.stringify(nome)}, provenienza: 'prova', ch: ${ch}, unico: ${unico}, cicli: 1, scritto: true })`);
+  const u1 = await entraU('subU', 2, true);
+  await finoAlCiclo(u1.da + 0.6); // u1 sta suonando: così u2 la trova in onda e non in attesa
+  const u2 = await entraU('reeseU', 2, true);
+  const f1 = await entraU('fa', 7, false);
+  const f2 = await entraU('fb', 7, false);
+  const sU = (await live()).livelli;
+  const subU = sU.find((l) => l.id === u1.livello);
+  controlla('un CH con un tipo: la clip vecchia esce dove entra la nuova (una sola suona)', subU && subU.a === u2.da, JSON.stringify([subU?.a, u2.da]));
+  controlla('FREE impila: due clip insieme', [f1.livello, f2.livello].every((id) => sU.find((l) => l.id === id)?.a === null), JSON.stringify(sU.filter((l) => l.ch === 7).map((l) => [l.nome, l.a])));
+  for (const id of [u2.livello, f1.livello, f2.livello]) await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${id}, subito: true })`);
+
   // 3b. identità = CH + nome: stessa clip in due CH = due livelli; stesso CH = sostituzione
   const entraCh = (ch, cicli = 1) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(60).gain(.0001)', nome: 'lineaCH', provenienza: 'prova', ch: ${JSON.stringify(ch)}, cicli: ${cicli}, scritto: true })`);
   const c1 = await entraCh('CH1');
@@ -658,6 +671,7 @@ async function provaLivelli({ finestre, scrivi }) {
     ok &&= !!vero;
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
+  await js(`document.querySelector('#vista-live [data-vista="pila"]')?.click()`); // le card dei livelli si provano nella vista «pila» (di serie c'è la griglia dei canali)
   const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
   const attivi = async () => ((await live())?.livelli ?? []).filter((l) => l.a === null);
   const ciclo = async () => (await live())?.ciclo ?? -Infinity;

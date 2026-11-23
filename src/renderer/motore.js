@@ -493,7 +493,7 @@ function annullaIngresso(l, tieni) {
 // la scena nuova entra sempre sentita, anche se quella di prima era in muto.
 const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
 
-async function entra({ codice, nome, provenienza, ch = null, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
+async function entra({ codice, nome, provenienza, ch = null, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null, unico = false }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
@@ -536,6 +536,20 @@ async function entra({ codice, nome, provenienza, ch = null, drum, cicli = 1, sc
     l.coda = vecchio.coda; // una modifica al codice non butta via la coda
     // il preambolo (che il proiettore può nascondere) resta quello di prima finché il codice comincia uguale
     if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
+  }
+  // un CH con un tipo suona UNA clip sola: le altre dello stesso CH (nome diverso) escono dove entra la nuova, e non le lasciano niente in eredità
+  // (il ciclo «stesso nome» qui sopra fa ereditare beat, coda e volume: qui no, sono clip diverse). La FREE invece impila (scratch, scratch 2…).
+  if (unico && l.ch !== null) {
+    for (const v of livelli) {
+      if ((v.ch ?? null) !== l.ch || v.nome === l.nome || v.a <= da) continue;
+      if (v.da >= da) {
+        v.a = v.da; // era in attesa: non suona mai
+        annullaIngresso(v, false);
+        continue;
+      }
+      v.a = Math.max(v.da, da) + d.cicli;
+      scambi.push(v);
+    }
   }
   // la transizione: sull'1 in cui entra il nuovo, tutti gli altri livelli che suonano (tranne i tenuti) cominciano a uscire,
   // con il passa-alto che parte da `hz` (lo scambio dei bassi: la cassa del vecchio se ne va con tutto il resto)

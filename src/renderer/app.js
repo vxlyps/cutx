@@ -37,7 +37,7 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
-import { StatoCanali, canaliPredefiniti, chDelTipo, chDellaBeat, gainFader, leggiCanali, ordineCue } from './canali.js';
+import { StatoCanali, canaliPredefiniti, chDelTipo, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
 import { Griglia } from './griglia.js';
 import { Nano } from './nano.js';
 import { PaginaCanali } from './impostazioni-canali.js';
@@ -312,6 +312,9 @@ function nomeLiberoNuovo() {
   }
 }
 
+// In che CH entra un pezzo: quello deciso da chi lo manda (la griglia), il beat in THUMP, altrimenti quello del suo tipo (senza tipo: FREE).
+const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTipo(canaliConfig, p.tipo ?? ''));
+
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
 async function goLive(pezzo = null) {
   if (inTest) return;
@@ -348,7 +351,7 @@ async function goLive(pezzo = null) {
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
-  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, ch: p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTipo(canaliConfig, p.tipo ?? '')), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
   if (!r.errore) entraTraUsato();
@@ -1114,11 +1117,10 @@ async function eseguiCanali(effetti) {
       if (!r || r.errore) statoCanali.canali[e.ch].attesa = null;
       else cue.dopoGoLive();
     } else if (e.tipo === 'annulla') {
-      const l = livelliDelCH(e.ch).find((x) => x.da > cicloAdesso());
-      if (l) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
+      for (const l of livelliDelCH(e.ch).filter((x) => x.da > cicloAdesso())) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
     } else if (e.tipo === 'out' || e.tipo === 'out-subito') {
-      const l = livelliDelCH(e.ch).find((x) => x.da <= cicloAdesso());
-      if (l) live.manda({ tipo: 'togli', livello: l.id, subito: e.tipo === 'out-subito', dissolvenza: dissolvenza(e.tipo === 'out' ? preferenze.dissolvenzaUscita ?? 0 : 0) });
+      // tutto quello che suona in quel CH (in FREE ce ne possono essere più d'uno)
+      for (const l of livelliDelCH(e.ch).filter((x) => x.da <= cicloAdesso())) live.manda({ tipo: 'togli', livello: l.id, subito: e.tipo === 'out-subito', dissolvenza: dissolvenza(e.tipo === 'out' ? preferenze.dissolvenzaUscita ?? 0 : 0) });
     }
   }
   aggiornaCanali();
