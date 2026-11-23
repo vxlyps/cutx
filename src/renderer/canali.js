@@ -75,16 +75,20 @@ export const tipoDellaClip = (info) => TIPI.find((t) => info?.[t] === true) ?? '
 
 // --- le alternative (cosa può entrare in una ch) ---
 
+// L'identità di una clip è il suo NOME dentro il brano (non il numero: unisci/dividi/sposta non la confondono); una scena è il suo posto nel beat.
+export const idClip = (brano, nome) => `${brano}#${nome}`;
+export const idScena = (brano, k) => `${brano}◆${k}`;
+
 // brano = { nome, bpm, beat: { scene: [{ nome }] } | null, sezioni: [{ nome, info }] }. NELL'ORDINE DEL FILE, mai per tipo.
-// DRUM: prima le scene della @beat, poi le sue clip. FREE: tutte le clip del brano (le scene no). Le altre: le clip dei suoi tipi.
+// DRUM: prima le scene della @beat, poi le sue clip. Ogni clip sta in UN CH solo: quello del suo tipo; FREE prende le senza tipo e i tipi che nessuno prende.
 export function alternative(config, brano, ch) {
   if (!brano) return [];
   const di = (extra) => ({ brano: brano.nome, bpm: brano.bpm ?? null, ...extra });
   const out = [];
-  if (ch === chDellaBeat(config)) (brano.beat?.scene ?? []).forEach((s, k) => out.push(di({ id: `${brano.nome}#scena${k}`, tipo: 'scena', indice: k, nome: s.nome, tipoClip: 'drum', provenienza: `${brano.nome} ◆${k + 1}` })));
+  if (ch === chDellaBeat(config)) (brano.beat?.scene ?? []).forEach((s, k) => out.push(di({ id: idScena(brano.nome, k), tipo: 'scena', indice: k, nome: s.nome, tipoClip: 'drum', provenienza: `${brano.nome} ◆${k + 1}` })));
   (brano.sezioni ?? []).forEach((s, k) => {
     const tc = tipoDellaClip(s.info);
-    if (chDelTipo(config, tc) === ch || config[ch]?.free) out.push(di({ id: `${brano.nome}#clip${k}`, tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc, provenienza: `${brano.nome} §${k + 1}` }));
+    if (chDelTipo(config, tc) === ch) out.push(di({ id: idClip(brano.nome, s.nome), tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc, provenienza: `${brano.nome} §${k + 1}` }));
   });
   return out;
 }
@@ -120,7 +124,7 @@ export function sweep(pos) {
 
 // --- lo stato ---
 
-const vuota = () => ({ suona: null, pos: null, zona: null, fader: null, aa: null, mute: false, attesa: null, attesaMs: 0 });
+const vuota = () => ({ suona: null, pos: null, zona: null, scelta: null, fader: null, aa: null, mute: false, attesa: null, attesaMs: 0 });
 const ATTESA_MS = 1500; // dopo un GO/OUT il motore ci mette un attimo a dirlo: nel frattempo vale quello che ho chiesto
 
 export class StatoCanali {
@@ -136,41 +140,70 @@ export class StatoCanali {
   // I CANALI si cambiano a live fermo (lo garantisce chi chiama); cambiato, NEXT e attese si azzerano.
   impostaCANALI(config) {
     this.config = config;
-    for (const c of this.canali) Object.assign(c, { suona: null, zona: null, attesa: null });
+    for (const c of this.canali) Object.assign(c, { suona: null, zona: null, scelta: null, attesa: null });
   }
 
   // Un brano nuovo nel CUE: la stessa posizione di ogni manopolina sceglie tra le alternative del brano nuovo.
   impostaBrano(brano) {
     const nuovo = (brano?.nome ?? null) !== (this.brano?.nome ?? null);
     this.brano = brano; // chi lo rilegge a ogni giro (le clip cambiano mentre le scrivo) non azzera la scelta
-    if (nuovo) for (const c of this.canali) c.zona = null;
+    if (nuovo) for (const c of this.canali) Object.assign(c, { zona: null, scelta: null });
   }
 
   alternative(i) {
     return alternative(this.config, this.brano, i);
   }
 
-  // Cosa c'è in NEXT: la zona della manopolina (mai mossa = la prima), o niente se il brano non ha nulla per questo CH.
+  // Cosa c'è in NEXT: la clip scelta (da chiunque: mouse nel CUE, chip, manopola) se c'è ancora; altrimenti quella che suona (se è del brano nel CUE);
+  // altrimenti la prima. La scelta è per id: se il brano cambia (clip aggiunte, tipi cambiati) NEXT non salta su un'altra clip.
   next(i) {
     const alt = this.alternative(i);
-    const c = this.canali[i];
     if (!alt.length) return null;
-    c.zona = c.pos === null ? 0 : zona(c.pos, alt.length, c.zona);
-    return alt[c.zona] ?? null;
+    const c = this.canali[i];
+    return alt.find((a) => a.id === c.scelta) ?? alt.find((a) => a.id === c.suona?.id) ?? alt[0];
   }
 
-  // Dal mouse: scelgo l'alternativa k; la manopola «segue» (stessa posizione) così NEXT non salta quando la tocco.
-  scegliAlt(i, k) {
-    const n = this.alternative(i).length;
-    if (!(k >= 0 && k < n)) return null;
-    this.canali[i].pos = (k + 0.5) / n;
-    this.canali[i].zona = k;
-    return this.next(i);
+  // Armato = ho scelto una clip e non è quella che suona: il CH lampeggia e parte con GO ALL.
+  armato(i) {
+    const c = this.canali[i];
+    return !!c.scelta && c.scelta !== c.suona?.id && this.alternative(i).some((a) => a.id === c.scelta);
   }
 
+  // La manopola: la scelta cambia solo quando cambia la zona (con l'isteresi), così non «rumoreggia» sul CUE.
   scegli(i, pos) {
-    this.canali[i].pos = pos;
+    const alt = this.alternative(i);
+    const c = this.canali[i];
+    c.pos = pos;
+    if (!alt.length) return null;
+    const z = zona(pos, alt.length, c.zona);
+    if (z !== c.zona) {
+      c.zona = z;
+      c.scelta = alt[z].id;
+    }
     return this.next(i);
+  }
+
+  // Dal mouse (chip della griglia, card del CUE): scelgo l'alternativa k; la manopola «segue» così non salta quando la tocco.
+  scegliAlt(i, k) {
+    const alt = this.alternative(i);
+    if (!(k >= 0 && k < alt.length)) return null;
+    const c = this.canali[i];
+    c.scelta = alt[k].id;
+    c.zona = k;
+    c.pos = (k + 0.5) / alt.length;
+    return this.next(i);
+  }
+
+  // Dal CUE: una card o una scena scelta → NEXT del suo CH. Ritorna { ch, k } o null se non è di nessun CH.
+  scegliId(id) {
+    for (let i = 0; i < N_CH; i++) {
+      const k = this.alternative(i).findIndex((a) => a.id === id);
+      if (k >= 0) {
+        this.scegliAlt(i, k);
+        return { ch: i, k };
+      }
+    }
+    return null;
   }
 
   // --- entra / esce ---
@@ -220,9 +253,9 @@ export class StatoCanali {
     return effetti;
   }
 
-  // GO ALL (PLAY): entra tutto quello che è in NEXT ed è diverso da ciò che suona, alla stessa battuta. Le entrate già in attesa restano.
+  // GO ALL (PLAY): entra tutto quello che è ARMATO (scelto e diverso da ciò che suona), alla stessa battuta. Le entrate già in attesa restano.
   goAll() {
-    return this.canali.flatMap((_, i) => this.go(i, { annullando: false }));
+    return this.canali.flatMap((_, i) => (this.armato(i) ? this.go(i, { annullando: false }) : []));
   }
 
   // Dalla tastiera: un pezzo che entra direttamente nel CH del suo tipo (senza tipo → FREE), non passa dalla manopolina.
@@ -252,7 +285,7 @@ export class StatoCanali {
   sincronizza(livelli, ciclo) {
     const alt = (l) => {
       for (let i = 0; i < N_CH; i++) {
-        const t = this.alternative(i).find((a) => a.provenienza === l.provenienza);
+        const t = this.alternative(i).find((a) => (a.tipo === 'scena' ? a.provenienza === l.provenienza : a.nome === l.nome && l.provenienza?.startsWith(`${a.brano} §`)));
         if (t) return t;
       }
       return { id: `?#${l.provenienza ?? l.nome}`, tipo: 'clip', nome: l.nome, brano: null, bpm: null, tipoClip: '', provenienza: l.provenienza ?? null };
@@ -261,7 +294,7 @@ export class StatoCanali {
       const mie = livelli.filter((l) => l.ch === i);
       const suonaL = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).sort((x, y) => y.da - x.da)[0];
       const prossimo = mie.filter((l) => l.da > ciclo && l.a === null).sort((x, y) => x.da - y.da)[0];
-      c.suona = suonaL ? (c.suona && c.suona.provenienza === suonaL.provenienza ? c.suona : alt(suonaL)) : null;
+      c.suona = suonaL ? (c.suona && c.suona.nome === suonaL.nome && c.suona.provenienza?.split(' ')[0] === alt(suonaL).provenienza?.split(' ')[0] ? c.suona : alt(suonaL)) : null;
       if (i === chDellaBeat(this.config) && c.suona?.bpm) this.bpm = c.suona.bpm;
       if (this.adesso() - c.attesaMs < ATTESA_MS) return; // ho appena chiesto qualcosa: lo dice il motore tra poco
       if (prossimo) c.attesa = { tipo: 'go', alt: alt(prossimo), da: prossimo.da };
@@ -303,9 +336,8 @@ export class StatoCanali {
   // Luce di GO: spenta = vuoto · accesa = suona e in NEXT c'è la stessa · lenta = in NEXT c'è altro · veloce = entrata in attesa.
   luceGo(i) {
     const c = this.canali[i];
-    if (c.attesa?.tipo === 'go') return 'veloce';
-    const alt = this.next(i);
-    if (alt && alt.id !== c.suona?.id) return 'lenta';
+    if (c.attesa) return 'veloce'; // sta per entrare o per uscire (lo schermo dice quale)
+    if (this.armato(i)) return 'lenta';
     return c.suona ? 'accesa' : 'spenta';
   }
 
@@ -337,6 +369,7 @@ export class StatoCanali {
       fader: { valore: c.fader, letto: c.fader !== null, gain: gainFader(c.fader) },
       sweep: sweep(c.aa),
       mute: c.mute,
+      armato: this.armato(i),
       vecchia: this.vecchia(i),
       avvisi: this.avvisi(i),
       luci: { r: this.luceGo(i), s: this.luceOut(i), m: this.luceMute(i) },

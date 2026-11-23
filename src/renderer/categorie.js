@@ -22,15 +22,36 @@ export const ORDINE_PER_TIPO = TIPI.map((t) => ({ nome: t, tipi: [t] }));
 // Ritorna [{ categoria, indici }] (categoria = nome del gruppo); se nessuna clip ha un tipo c'è un gruppo solo (categoria null) e il CUE non mette titoli.
 export function gruppiClip(clip, ordine = ORDINE_PER_TIPO) {
   const tipi = clip.map((s) => tipoDi(s.info));
-  if (!tipi.some(Boolean)) return [{ categoria: null, indici: clip.map((_, i) => i) }];
+  const deiCh = ordine !== ORDINE_PER_TIPO; // con i CH i titoli ci sono sempre: ogni clip deve dire a chi appartiene
+  if (!deiCh && !tipi.some(Boolean)) return [{ categoria: null, indici: clip.map((_, i) => i) }];
   const free = ordine.findIndex((g) => g.free);
   const dove = (t) => {
     const i = t ? ordine.findIndex((g) => g.tipi?.includes(t)) : -1;
     return i >= 0 ? i : free; // -1 = in fondo, senza gruppo
   };
   const posti = tipi.map(dove);
-  const gruppi = [...ordine.map((g) => g.nome), ''].map((nome, g) => ({ categoria: nome, indici: posti.flatMap((p, i) => ((p < 0 ? ordine.length : p) === g ? [i] : [])) }));
+  const gruppi = [...ordine.map((g) => g.nome), ''].map((nome, g) => ({ categoria: nome, ...(deiCh && g < ordine.length ? { ch: g } : {}), indici: posti.flatMap((p, i) => ((p < 0 ? ordine.length : p) === g ? [i] : [])) }));
   return gruppi.filter((g) => g.indici.length);
 }
 
 export const ordineClip = (clip, ordine) => gruppiClip(clip, ordine).flatMap((g) => g.indici);
+
+// Scrive il tipo di una clip (info = { bass: true, volume: 0.8 … }): prima toglie TUTTI i tipi che aveva, poi mette il nuovo ('' = nessun tipo).
+// Il resto (volume, drum come onda…) non si tocca, tranne `drum` che è anche un tipo.
+export function conTipo(info, tipo) {
+  const resto = Object.fromEntries(Object.entries(info ?? {}).filter(([k]) => !TIPI.includes(k)));
+  return tipo ? { ...resto, [tipo]: true } : resto;
+}
+
+// Un tipo SUGGERITO dal nome della clip (mai applicato da solo: lo propone il menu del CUE). '' = nessun suggerimento.
+const PAROLE = [
+  ['bass', /\b(sub|reese|808|bass|basso|growl)\b/i],
+  ['pad', /\b(pad|chord|chords|drone|strings?)\b/i],
+  ['arp', /\b(arp|arpeggio|pluck)\b/i],
+  ['keys', /\b(keys?|piano|rhodes|organ|stab)\b/i],
+  ['lead', /\b(lead|melodia|melody|hook|riff)\b/i],
+  ['fx', /\b(fx|riser|noise|sweep|impact|rumori)\b/i],
+  ['perc', /\b(perc|hat|hats|clap|shaker|tom|rim)\b/i],
+  ['drum', /\b(drum|drums|kick|snare|beat|break)\b/i],
+];
+export const suggerisciTipo = (nome) => PAROLE.find(([, re]) => re.test(String(nome ?? '')))?.[0] ?? '';

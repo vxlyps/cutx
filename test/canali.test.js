@@ -33,12 +33,13 @@ test('validazione del CANALI', () => {
   assert.equal(validaCanali(canaliPredefiniti().slice(0, 7)).length, 1);
 });
 
-test('alternative: nell\'ordine del file, mai per tipo; DRUM = scene e poi clip drum; FREE = tutte le clip', () => {
+test('alternative: nell\'ordine del file, mai per tipo; DRUM = scene e poi clip drum; FREE = solo le clip senza tipo (ogni clip in un CH solo)', () => {
   const b = canaliPredefiniti();
   assert.deepEqual(nomi(alternative(b, brano1, 0)), ['intro', 'drop', 'kick']);
   assert.deepEqual(nomi(alternative(b, brano1, 2)), ['sub', 'reese'], 'BASSO: l\'ordine del file');
   assert.deepEqual(nomi(alternative(b, brano1, 1)), ['stab']);
-  assert.deepEqual(nomi(alternative(b, brano1, 7)), ['sub', 'melodia', 'reese', 'kick', 'rumori', 'stab'], 'FREE: tutte, in ordine di file, scene no');
+  assert.deepEqual(nomi(alternative(b, brano1, 7)), ['rumori'], 'FREE: solo la clip senza tipo');
+  assert.deepEqual(nomi(alternative(b, brano1, 2)), ['sub', 'reese'], 'ogni clip sta nel CH del suo tipo e basta');
   assert.deepEqual(alternative(b, brano1, 5), [], 'PERC: niente per questo brano');
   assert.deepEqual(alternative(b, null, 0), []);
   assert.equal(alternative(b, brano1, 2)[0].brano, 'uno');
@@ -59,7 +60,7 @@ test('zona: zone uguali, bordi con isteresi ±3%', () => {
   assert.equal(zona(0.5, 4, 9), 2, 'una zona di prima che non esiste si ignora');
 });
 
-test('in NEXT: manopolina mai mossa = la prima; girarla non fa suonare niente; il brano nuovo ricalcola dalla stessa posizione', () => {
+test('in NEXT: manopolina mai mossa = la prima; girarla non fa suonare niente; un brano nuovo riparte dalla prima', () => {
   const s = new StatoCanali();
   s.impostaBrano(brano1);
   assert.equal(s.next(2).nome, 'sub');
@@ -69,7 +70,23 @@ test('in NEXT: manopolina mai mossa = la prima; girarla non fa suonare niente; i
   assert.equal(s.next(2).nome, 'wobble', 'una sola alternativa: quella');
   assert.equal(s.next(5), null, 'PERC: niente in NEXT');
   s.impostaBrano(brano1);
-  assert.equal(s.next(2).nome, 'reese', 'stessa posizione 0,9 sul brano nuovo');
+  assert.equal(s.next(2).nome, 'sub', 'brano nuovo: si riparte dalla prima');
+});
+
+test('NEXT è per id: una clip aggiunta o un tipo cambiato non lo fanno saltare; la manopola cambia scelta solo quando cambia zona', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegliAlt(2, 1);
+  assert.equal(s.next(2).nome, 'reese');
+  s.impostaBrano({ ...brano1, sezioni: [clip('nuova', 'bass'), ...brano1.sezioni] }); // una clip in testa: gli indici slittano
+  assert.equal(s.next(2).nome, 'reese', 'stessa clip, non stessa posizione');
+  assert.equal(s.armato(2), true);
+  s.scegli(2, 0.99); // la manopola non rumoreggia: una zona nuova = una scelta nuova
+  assert.equal(s.next(2).nome, 'reese');
+  s.scegli(2, 0.01);
+  assert.equal(s.next(2).nome, 'nuova');
+  assert.deepEqual(s.scegliId('uno#sub'), { ch: 2, k: 1 });
+  assert.equal(s.scegliId('uno#inesistente'), null);
 });
 
 test('GO / annulla / niente in NEXT / stessa clip', () => {
@@ -120,17 +137,19 @@ test('GO e OUT sullo stesso CH: vince l\'ultimo premuto', () => {
   assert.equal(s.canali[2].attesa.tipo, 'go');
 });
 
-test('GO ALL: entra tutto quello che è in NEXT ed è diverso; le entrate già in attesa restano', () => {
+test('GO ALL: entra solo quello che è ARMATO (scelto e diverso da ciò che suona); le entrate già in attesa restano', () => {
   const s = new StatoCanali();
   s.impostaBrano(brano1);
-  s.go(2); s.scattato(2); // BASSO suona «sub» e in NEXT c'è «sub»
-  s.go(3); // LEAD già in attesa
+  s.go(2); s.scattato(2); // GROWL suona «sub»: non è armato
+  s.scegliAlt(0, 1); // THUMP: scena «drop»... armato
+  s.scegliAlt(1, 0); // PURR: armato
+  s.go(3); // HOWL già in attesa
   const e = s.goAll();
-  const canali = e.filter((x) => x.tipo === 'go').map((x) => x.ch);
-  assert.deepEqual(canali, [0, 1, 7]);
-  assert.equal(s.canali[3].attesa.tipo, 'go', 'LEAD non annullata');
-  assert.ok(!e.some((x) => x.ch === 2), 'BASSO suona già quella in NEXT');
+  assert.deepEqual(e.filter((x) => x.tipo === 'go').map((x) => x.ch), [0, 1]);
+  assert.equal(s.canali[3].attesa.tipo, 'go', 'HOWL non annullata');
+  assert.ok(!e.some((x) => x.ch === 2 || x.ch === 7), 'i CH non armati non partono');
   assert.equal(s.luceGo(5), 'spenta');
+  assert.equal(s.luceGo(0), 'veloce'); // ora aspetta
 });
 
 test('BPM: entra con la CH DRUM, solo se diverso; gli altri CH non lo toccano', () => {
@@ -286,7 +305,7 @@ test('sincronizza: suona, sta per entrare, sta per uscire; vince il motore (dopo
   ];
   st.sincronizza(livelli, 10);
   assert.equal(st.canali[bass].suona.nome, 'sub');
-  assert.equal(st.canali[bass].suona.id, 'uno#clip0');
+  assert.equal(st.canali[bass].suona.id, 'uno#sub');
   assert.equal(st.canali[bass].attesa.tipo, 'out');
   assert.equal(st.canali[lead].suona, null);
   assert.equal(st.canali[lead].attesa.tipo, 'go');
@@ -309,4 +328,16 @@ test('sincronizza: appena premuto GO il motore non cancella la richiesta (1,5 s 
   t += 2000;
   st.sincronizza([], 5);
   assert.equal(st.canali[bass].attesa, null);
+});
+
+import { conTipo, suggerisciTipo } from '../src/renderer/categorie.js';
+test('conTipo: toglie tutti i tipi vecchi, tiene il resto; suggerisciTipo dal nome (solo un suggerimento)', () => {
+  assert.deepEqual(conTipo({ bass: true, volume: 0.8 }, 'pad'), { volume: 0.8, pad: true });
+  assert.deepEqual(conTipo({ bass: true, drum: true, volume: 0.8 }, ''), { volume: 0.8 });
+  assert.deepEqual(conTipo(undefined, 'fx'), { fx: true });
+  assert.equal(suggerisciTipo('sub'), 'bass');
+  assert.equal(suggerisciTipo('reese'), 'bass');
+  assert.equal(suggerisciTipo('pad'), 'pad');
+  assert.equal(suggerisciTipo('melodia'), 'lead');
+  assert.equal(suggerisciTipo('xyz'), '');
 });

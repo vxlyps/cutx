@@ -1135,14 +1135,27 @@ function applicaFisico() {
     }
   });
 }
+function impostaBranoCanali() {
+  statoCanali.impostaBrano(cue.modo === 'brano' && cue.brano ? { nome: cue.nomeBrano, bpm: B.bpmDelBrano(cue.brano.modello), beat: cue.brano.modello.beat, sezioni: cue.brano.modello.sezioni } : null);
+}
+// Il CUE e la griglia dicono la stessa cosa: sulle card compaiono LIVE e NEXT, e quello che scelgo in un posto lo ritrovo nell'altro.
 function aggiornaCanali() {
   if (!griglia) return;
+  impostaBranoCanali();
   statoCanali.sincronizza(livelliLive, cicloAdesso());
-  statoCanali.impostaBrano(cue.modo === 'brano' && cue.brano ? { nome: cue.nomeBrano, bpm: B.bpmDelBrano(cue.brano.modello), beat: cue.brano.modello.beat, sezioni: cue.brano.modello.sezioni } : null);
   applicaFisico();
   const vista = statoCanali.vista();
   griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
   nano.mostra(vista);
+  cue.segnaNext(new Set(vista.filter((v) => v.armato && v.next).map((v) => v.next.id)), new Set(vista.filter((v) => v.suona).map((v) => v.suona.id)));
+}
+// Una scelta fatta con la griglia o con la manopola: aggiorno e porto il CUE sulla clip scelta (se non sto scrivendo).
+function scegliCanale(ch, fa) {
+  impostaBranoCanali();
+  const prima = statoCanali.next(ch)?.id;
+  const dopo = fa()?.id;
+  if (dopo && dopo !== prima) cue.portaIn(dopo);
+  aggiornaCanali();
 }
 
 // --- i PROJ ---
@@ -2345,16 +2358,23 @@ const controllerMidi = new Controller({
 });
 const paginaController = new PaginaController(controllerMidi);
 griglia = new Griglia($('canali-griglia'), {
-  scegli: (ch, k) => (statoCanali.scegliAlt(ch, k), aggiornaCanali()),
+  scegli: (ch, k) => scegliCanale(ch, () => statoCanali.scegliAlt(ch, k)),
   go: (ch) => eseguiCanali(statoCanali.go(ch)),
   out: (ch) => eseguiCanali(statoCanali.out(ch)),
   outSubito: (ch) => eseguiCanali(statoCanali.outSubito(ch)),
   mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
   fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
 });
+// La card scelta nel CUE (clic o cursore) è il NEXT del suo canale.
+cue.suAttiva = (carta) => {
+  const id = cue.idDiCarta(carta);
+  if (!id) return;
+  impostaBranoCanali();
+  if (statoCanali.scegliId(id)) aggiornaCanali();
+};
 const nano = new Nano({
   fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
-  manopola: (ch, pos) => (statoCanali.scegli(ch, pos), aggiornaCanali()),
+  manopola: (ch, pos) => scegliCanale(ch, () => statoCanali.scegli(ch, pos)),
   go: (ch) => eseguiCanali(statoCanali.go(ch)),
   out: (ch) => eseguiCanali(statoCanali.out(ch)),
   outSubito: (ch) => eseguiCanali(statoCanali.outSubito(ch)),

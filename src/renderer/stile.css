@@ -3753,3 +3753,18 @@ input[type='checkbox'] {
 .ch-stato, .ch-next { font-size: 9px; letter-spacing: 0.08em; }
 .ch-riga.suona .ch-stato { color: var(--marcio); }
 .ch-next { align-self: center; margin-right: 2px; }
+
+/* il menu «a quale canale appartiene questa clip» */
+.menu-ch { position: fixed; z-index: 50; width: 220px; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--pannello); border: 1px solid var(--bordo); }
+.menu-ch .key { text-align: left; }
+.menu-ch .suggerito { color: var(--marcio); }
+.tasto-ch { text-transform: uppercase; }
+
+/* LIVE e NEXT sulle card del CUE (solo scritte, bianco e verde) */
+.card.in-live .nome-sezione::after, .pillola.in-live::after { content: ' · LIVE'; color: var(--marcio); }
+.card.in-next .nome-sezione::after { content: ' · NEXT'; color: var(--testo); }
+.card.in-live.in-next .nome-sezione::after { content: ' · LIVE → NEXT'; }
+.pillola.in-live { color: var(--marcio); }
+.pillola.in-next { outline: 1px solid var(--testo); }
+.card.in-next { box-shadow: inset 3px 0 0 var(--testo); }
+.card.in-live { box-shadow: inset 3px 0 0 var(--marcio); }

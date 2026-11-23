@@ -3,7 +3,8 @@
 // - brano: un file .cutx della libreria, con la mappa in alto e una card per sezione.
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
-import { tipoDi } from './categorie.js';
+import { conTipo, suggerisciTipo, tipoDi } from './categorie.js';
+import { idClip, idScena } from './canali.js';
 import it from './testi/it.json';
 import { mostraApri } from './apri-clip.js';
 import { creaEditor } from './editor.js';
@@ -716,9 +717,10 @@ export class Cue {
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
     // le clip sono raggruppate per tipo (bass, lead, arp…) con un piccolo titolo; quelle senza tipo in fondo. Se nessuna ha un tipo, niente titoli.
     for (const g of B.gruppiClip(m.sezioni, this.ordineCh)) {
-      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
+      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.ch !== undefined ? `CH${g.ch + 1} ${g.categoria}` : g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
       for (const i of g.indici) contenitore.append(this.carta(i));
     }
+    this.segnaNext(this.nextIds, this.liveIds); // le carte sono nuove: rimetto LIVE e NEXT
     this.cartaAttiva = aperturaAttiva ? this.carte.find((c) => c.apertura) ?? null : scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
     $('riga-live').onclick = () => {
       this.mostraLive = !this.mostraLive;
@@ -834,10 +836,65 @@ export class Cue {
       const togliClip = tasto('×', '', 'Togli la clip dal brano');
       togliClip.dataset.aiuto = 'clip-togli';
       togliClip.onclick = () => this.togliClip(i);
-      testa.append(unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
+      const chBtn = this.tastoCh(i);
+      testa.append(chBtn, unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
     }
     this.carte.push(carta);
     return art;
+  }
+
+  // «CH3 GROWL ▾»: a quale canale del LIVE appartiene la clip; il clic apre l'elenco dei canali e scrive il tipo nella riga `// @clip`.
+  tastoCh(i) {
+    const ordine = this.ordineCh;
+    const sez = this.brano.modello.sezioni[i];
+    const tipo = tipoDi(sez.info);
+    const di = ordine && tipo ? ordine.findIndex((g) => g.tipi.includes(tipo)) : -1;
+    const k = ordine ? (di >= 0 ? di : ordine.findIndex((g) => g.free)) : -1;
+    const b = tasto(ordine ? `CH${k + 1} ${ordine[k].nome}` : 'tipo', '▾', 'In quale canale del LIVE entra questa clip');
+    b.classList.add('tasto-ch');
+    b.onclick = (e) => {
+      e.stopPropagation();
+      this.menuCh(b, i);
+    };
+    return b;
+  }
+
+  menuCh(ancora, i) {
+    document.querySelector('.menu-ch')?.remove();
+    const ordine = this.ordineCh;
+    const sez = this.brano.modello.sezioni[i];
+    if (!ordine) return;
+    if (this.statoSezione(this.nomeBrano, sez.nome) === 'live') return this.avviso(`«${sez.nome}» suona live: toglila dal live prima di cambiarle canale`);
+    const menu = el('div', 'menu-ch');
+    const scegli = (tipo) => {
+      menu.remove();
+      this.modifica(B.conInfo(this.brano.modello, i, conTipo(sez.info, tipo)), true, `canale della clip «${sez.nome}»`);
+    };
+    const voce = (testo, tipo, extra = '') => {
+      const v = el('button', `key piccolo${extra}`);
+      v.textContent = testo;
+      v.onclick = () => scegli(tipo);
+      menu.append(v);
+    };
+    const sug = suggerisciTipo(sez.nome);
+    if (sug) {
+      const ch = ordine.findIndex((g) => g.tipi.includes(sug));
+      if (ch >= 0) voce(`suggerito: CH${ch + 1} ${ordine[ch].nome} · ${sug}`, sug, ' suggerito');
+    }
+    ordine.forEach((g, ch) => {
+      if (g.free) return voce(`CH${ch + 1} ${g.nome} · nessun tipo`, '');
+      for (const t of g.tipi) voce(`CH${ch + 1} ${g.nome}${g.tipi.length > 1 ? ` · ${t}` : ''}`, t);
+    });
+    const r = ancora.getBoundingClientRect();
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, r.right - 220)}px`;
+    document.body.append(menu);
+    const chiudi = (e) => {
+      if (menu.contains(e.target)) return;
+      menu.remove();
+      document.removeEventListener('pointerdown', chiudi, true);
+    };
+    setTimeout(() => document.addEventListener('pointerdown', chiudi, true), 0);
   }
 
   // La card dell'APERTURA: un editor dove scrivo io, con il codice dell'apertura come testo fantasma (grigio) da seguire; Tab completa la
@@ -957,6 +1014,7 @@ export class Cue {
       const pillola = el('button', 'pillola', sc.nome);
       pillola.dataset.aiuto = 'scena';
       const carta = this.cartaScena(k, corpo, pillola);
+      carta.pillola = pillola;
       pillola.onclick = () => {
         this.scegliScena(k);
         carta.editor.focus();
@@ -1028,6 +1086,46 @@ export class Cue {
   attiva(carta) {
     this.cartaAttiva = carta;
     for (const c of this.carte) c.el.classList.toggle('attiva', c === carta);
+    if (!this.silenzioso) this.suAttiva?.(carta); // la card scelta nel CUE è anche il NEXT del suo canale (lo ascolta app.js)
+  }
+
+  // L'id della card per i CANALI (clip = brano#nome, scena = brano◆k), o null (apertura, preambolo, scratch).
+  idDiCarta(carta) {
+    if (this.modo !== 'brano' || !this.brano || !carta) return null;
+    if (carta.scena !== undefined) return idScena(this.nomeBrano, carta.scena);
+    if (carta.i >= 0) return idClip(this.nomeBrano, this.brano.modello.sezioni[carta.i]?.nome ?? '');
+    return null;
+  }
+
+  // Scritte sulle card: LIVE (suona in un canale) e NEXT (scelta, pronta a entrare). Ridisegnate a ogni giro e dopo ogni mostraBrano.
+  segnaNext(nextIds = new Set(), liveIds = new Set()) {
+    this.nextIds = nextIds;
+    this.liveIds = liveIds;
+    for (const c of this.carte) {
+      const id = this.idDiCarta(c);
+      for (const el of [c.el, c.pillola]) {
+        el?.classList.toggle('in-next', !!id && nextIds.has(id));
+        el?.classList.toggle('in-live', !!id && liveIds.has(id));
+      }
+    }
+  }
+
+  // La manopola o la griglia scelgono una clip: il CUE la porta in vista e la segna attiva, MA se sto scrivendo (un editor ha il fuoco)
+  // non mi rubano il cursore: si muove solo la scritta NEXT.
+  portaIn(id) {
+    if (this.modo !== 'brano' || !this.brano || document.activeElement?.closest?.('.cm-editor')) return;
+    const carta = this.carte.find((c) => this.idDiCarta(c) === id);
+    if (!carta || carta === this.cartaAttiva) return;
+    this.silenzioso = true;
+    try {
+      if (carta.scena !== undefined) this.scegliScena(carta.scena);
+      else {
+        this.attiva(carta);
+        carta.el.scrollIntoView?.({ block: 'nearest' });
+      }
+    } finally {
+      this.silenzioso = false;
+    }
   }
 
   // --- muoversi nel CUE senza mouse (controller): le sezioni di quello che ho davanti, e quella scelta ---
