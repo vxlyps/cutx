@@ -1,77 +1,33 @@
-# Ultimo stato - 23/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali`; main = beta 4 intatta)
-
-## PASSO 1 FATTO (piano approvato da Valerio, 5 passi: 1 R esegue NEXT · 2 mixer vero nel motore · 3 trasporto del nano · 4 passaggio a canali · 5 X-Touch MANI)
-- Fatto: R esegue NEXT (GO/OUT/ANNULLA/LIVE/—). NEXT di default = ciò che suona; OUT = prima zona della manopola e primo chip (indici uguali, `scegliAlt(i,k)` k=0 OUT). Scelte per brano (`scelte` Map), mai armate guardando: tolto `cue.suAttiva`. Gesto CUE→NEXT = tasto «NEXT» su ogni card (e uno nella testa del BEAT per la scena scelta), `alternaId`.
-- Motore: `togli` con `cicli` (OUT a entra tra), `riprendi` (ANNULLA di un OUT), `gruppo` (PLAY: compila tutti, UN solo ciclo d'arrivo, entrate+uscite insieme). `entra` diviso in `preparaEntra`+`applicaEntra`. App: `goLive` diviso in `preparaLive`/`finisciLive`; `eseguiCanali` manda un gruppo e rimette entra tra a 1 una volta sola.
-- Prove (volume 20% poi rimesso a 81): test 526/527 (resta MOD noto); entrata+livelli+robustezza 71 ok (5 controlli nuovi sui gruppi); brani+browser+impostazioni 64 ok. Foto controllata.
-- Non fatto / da sapere: il NEXT del BEAT è UN tasto nella testa (scena scelta), non uno per pillola. CH vuoto senza scelta: R mostra «—» (prima lanciava la prima clip). Non provato col nano vero.
-- File: canali.js, griglia.js, app.js, cue.js, motore.js, nano.js (commenti), stile.css, it.json (cue.next), prova.js (3c), test canali/nano.
-- Passo 1.1 fatto: una scelta eseguita (clip che ora suona, OUT fatto) si cancella in `sincronizza`; `tieniBrani` cancella le scelte dei brani che escono da entrambe le linguette del CUE (chiamata da `impostaBranoCanali`). Test 528/529 (resta MOD), prova entrata+brani 40 ok.
-- PASSO 2 FATTO (mixer vero): `mixer.js` (guadagnoLivello, applicaMessaggioCh); il motore live tiene `mixer[8]` {volume,pos,muto}, messaggio `ch`, guadagno = clip × CH × break; lo stato esce nei messaggi `livelli` e nello stato (pong). Cuffia pre-fader (non lo riceve mai). App: via applicaFisico/fisicoInviato; `ch` solo al live; copia nell'istantanea di ripristinaLive e rimandata a ogni live rinato; `riprendi()` rilegge `live.stato.mixer`. StatoCanali: aggancio ±3% o passaggio sopra, `sliderSchermo`, `sganciaTutti` (avvio, slider, ripristino, nano ricollegato, PROJ), avvisi MUTE / fader a zero / clip muta; griglia con tacca del valore vero.
-- Prove: test 534/535 (resta MOD); entrata 29 ok, livelli+robustezza 44 ok, 5 parti insieme 115 ok. Una volta su combinata robustezza «click 0/0» (non si è ripetuto: guasti sparsi noti).
-- Prossimo passo: PASSO 3 (trasporto del nano: TRACK, SET, MARKER, CYCLE, PLAY, STOP, REC). Prima 5 righe a Valerio e ok.
+# Ultimo stato - 23/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali`; main = beta 4 intatta, non si tocca)
 
 ## Obiettivo
-Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto a Valerio. Parte A (stato puro `src/renderer/canali.js`, 16 test) già fatta.
+LIVE a canali (CH1…CH8) col piano approvato da Valerio in 5 passi, UNO alla volta (5 righe → ok di Valerio → scrivo, test, commit, push, cosa provare, mi fermo). Passi 1, 1.1 e 2 FATTI (commit f8cc7aa, 0afdb98, 1d68a23). Il motore lo scrivo io, mai Codex. Prove col volume al 20% poi rimesso.
 
-## Decisioni prese (non rimettere in discussione)
-- Nomi: REGIA→NANO · SCALPELLO→X-TOUCH · PENNA→tastiera · corsia→CH · Banco→pagina CANALI · in canna→NEXT · ENTRA/ESCE/MUTO→GO/OUT/MUTE · ACQUA·ARIA→SWEEP · ARREMBAGGIO→GO ALL · CANAGLIA→FREE · in mano→FOCUS · TUTTO→MASTER · CUFFIA (tasto CYCLE)→CUE. Il file del PROJ è `canali.json`.
-- Alternative della manopolina = SOLO clip del brano nel CUE (ordine di file; DRUM = scene @beat poi clip drum; FREE = tutte le clip, scene no). Il resto entra nel CH del suo tipo, o FREE se senza tipo. I colpi che creano livelli da soli sono fuori dai CH.
-- Identità del livello = CH + nome. Dopo un crash l'interfaccia ricostruisce lo stato `canali` dal `ch` dei livelli del live.
-- SYNTH: niente drum e perc (le clip drum nascono dal DRUM; perc lo dà Valerio dal menu del CUE). Una fonte sola in `categorie.js`: TIPI (8, per i CH) e CATEGORIE (6, SYNTH).
-- L'ordine dei gruppi nel CUE segue l'ordine dei CH della pagina CANALI. Predefinito: drum, keys/arp, bass, lead, pad, perc, fx, poi senza tipo. Se cambia l'ordine dei CH, cambia il CUE.
-- Test del SYNTH: adeguarli solo se contano i tipi; se per farli passare cambia cosa verificano, FERMARSI e dirlo.
-- PROJ: definizioni in `canali.json` nella sua cartella (vince se c'è; PROJ nuovo = predefinito). Si cambiano solo a live fermo (acceso: sola lettura con scritta del perché).
-- «Annulla» = `togli` su livello non ancora entrato (c'era già). Il motore lo scrivo io, mai Codex.
+## Il modello (non si discute)
+- NANO = la regia: gira = scegli NEXT · R = fai · PLAY = fai tutto insieme · STOP = annulla. X-TOUCH = le mani (come suona il CH in FOCUS, righe di codice visibili; SYNTH e DRUM invariati). TASTIERA = la penna. Senza nano CUTX si comporta come la beta 4.
+- Nomi: THUMP·PURR·GROWL·HOWL·FUR·CLAW·HISS·STRAY (CH1-8). Niente colori nei canali: verde marcio = suona, bianco/grigi, scritte.
 
 ## Fatto
-- c4cce66 passo 1: TIPI/CATEGORIE in categorie.js, canali.js importa TIPI. Test synth/canali/pacchetto verdi.
-- b126097 passo 2: motore con `ch` (entra, descrivi, ripristino in app.js), sostituzione per CH+nome, prova `entrata` con 3 controlli nuovi (18 ok); `livelli`+`robustezza` 44 ok. `npm test` 505/506.
-- Rete di sicurezza: backup in ~/Progetti/backup/cutx-stash-2026-11-19 (e -con-tipi); il ramo gira con dati separati («CUTX canali», CUTX-canali; blocco `CANALI` in main.js da togliere prima di un merge).
-
-## Fatto (passo 3, 23/11/2026)
-- Pagina «canali» nelle impostazioni (`impostazioni-canali.js`, sezione in index.html, testi in it.json `canali`): nome, colore, tipi a spunte, FREE, «torna al predefinito». Salva subito in `canali.json` del PROJ; a live acceso è sola lettura. Si ricarica a ogni cambio di PROJ.
-- Nomi predefiniti: THUMP · PURR · GROWL · HOWL · FUR · CLAW · HISS · STRAY.
-- Il CUE segue l'ordine dei CH (`gruppiClip(clip, ordine)` in categorie.js, `cue.ordineCh`); drum/perc ora hanno il loro gruppo.
-- Test: canali+synth 64 ok. Foto `--foto` ora scatta anche `-impostazioni-canali.png`. NON lanciate le prove lunghe (`npm run prova`).
-
-## Fatto (passo 4, 23/11/2026)
-- Colori dei CH TOLTI (Valerio: «mi fanno cagare», vuole verde marcio, bianco, scritte). Solo verde = suona. Via `colore` da canali.js e dalla pagina.
-- LIVE: vista «canali» (griglia `griglia.js`, 8 righe: SUONA/VUOTO, NEXT, GO/OUT/M, fader) e «pila» (vecchia) con interruttore in alto. Default canali. Stato in `statoCanali` (app.js), si risincronizza ogni 250 ms dai livelli del motore (`StatoCanali.sincronizza`).
-- Ogni GO dal CUE entra nel CH del suo tipo (beat → THUMP, senza tipo/scratch/jam → FREE); `ch` mandato in goLive, muoviScena, passaBrano, jam. I colpi restano fuori dai CH.
-- NANO: `nano.js` legge i CC di fabbrica (fader 0-7, manopole 16-23, S 32-39, M 48-55, R 64-71, PLAY 41; qualsiasi canale MIDI). R=GO, S=OUT (tenuto 1 s = subito), M=MUTE, manopola=NEXT, fader=volume CH, PLAY=GO ALL. NON provato con le mani su nano vero.
-- LED del nano: NON si accendono (non risponde ai sysex). Serve l'Editor Korg: LED External, Momentary, un canale solo, Write Scene (Valerio, una volta).
-- Prove: test 515/516 (resta il solo MOD noto); prova livelli+entrata+robustezza 62 ok, brani+browser+impostazioni 64 ok, entrata 19 ok (nuovo controllo FREE).
-
-## Fatto dopo (23/11, sera)
-- Luci del nano pronte nel software (`luciNano` in nano.js, test ok): M accesa = muto; R fissa = suona, lampeggio lento = in NEXT c'è altro, veloce = sta per entrare; S veloce = sta per uscire; PLAY lento = GO ALL ha qualcosa. Mandate sul canale MIDI che il nano usa, solo quando cambiano. NON si accendono finché il nano non è configurato con l'Editor Korg (LED External).
-- Lanciatore: `strumenti/CUTX.command` (e la copia sul Desktop) ora apre ~/Progetti/cutx-canali (CUTX canali). Vecchio in ~/Progetti/backup/CUTX.command.2026-10-31.
-
-## Fatto nella notte (23/11, dopo il design di Opus)
-- Ogni clip sta in UN CH solo: FREE (STRAY) = solo le clip senza tipo. Il CUE mostra sempre i titoli «CH3 GROWL…», e ogni card ha il tasto «CH3 GROWL ▾» (menu: suggerito dal nome + tutti i CH; scrive `· tipo` nella riga `// @clip`, ⌘Z ok; bloccato se la clip suona live).
-- NEXT è unico (per id brano#nome), vive in `StatoCanali.scelta`: clic su card/scena nel CUE, chip della griglia e manopola del nano scrivono la stessa cosa; il CUE mostra LIVE/NEXT sulle card, e la manopola porta il CUE sulla clip (se nessun editor ha il fuoco).
-- Motore: un CH con tipo suona UNA clip sola (`unico` nel messaggio `entra`; FREE impila). OUT toglie tutto il CH.
-- Nano: R = un tasto (GO / OUT / ANNULLA, la parola sta sul tasto; tenuto 1 s esce subito) · S = preascolto in cuffia del NEXT (segue la manopola; di nuovo S smette) · M muto · manopola = NEXT · fader = volume · PLAY = GO ALL solo CH «armati». Livelli live senza CH contano come FREE (fader li comanda).
-- Prove: test 519/520 (resta il MOD noto); prove livelli+entrata+robustezza+brani+browser+impostazioni 130 ok.
+- Passo 1: R esegue NEXT (GO/OUT/ANNULLA/LIVE/«—»). NEXT di default = ciò che suona; OUT = prima zona manopola e primo chip (`scegliAlt(i,k)`, k=0 OUT); scelte per brano; guardare non arma (tolto `cue.suAttiva`); tasto NEXT su ogni card (e uno nella testa del BEAT per la scena scelta). Motore: `togli` con `cicli`, `riprendi` (ANNULLA di un OUT), `gruppo` (PLAY: un solo ciclo d'arrivo); `goLive` diviso in `preparaLive`/`finisciLive`.
+- Passo 1.1: la scelta eseguita si cancella in `sincronizza`; `tieniBrani` cancella le scelte dei brani fuori dalle due linguette del CUE.
+- Passo 2: `mixer.js`; il motore live tiene `mixer[8]` (volume, pos, muto), messaggio `ch`, guadagno = clip × CH × break; cuffia pre-fader (non riceve mai `ch`); mixer nella fotografia di `ripristinaLive` e rimandato a ogni live rinato; `riprendi()` lo rilegge. StatoCanali: aggancio fader ±3% o passaggio sopra, `sliderSchermo`, `sganciaTutti` (avvio, slider, ripristino, nano ricollegato, PROJ), avvisi MUTE / fader a zero / clip muta; tacca del valore vero in griglia. Fader 8 = CH8 STRAY.
+- Prove: test 534/535 (resta il MOD noto in `controller-synth`); entrata 29 ok, livelli+robustezza 44 ok, 5 parti insieme 115 ok. Una volta su prova combinata robustezza «click 0/0», non ripetuta (guasti sparsi noti).
 
 ## Da fare (in ordine)
-1. Richiesta di Valerio: il fader/slider del nano deve modificare ANCHE ciò che è già live (non solo prima di andare live). Ora lo fa per ogni livello con CH (e senza CH = FREE), provato con `cutxProva.canaliFader`; da verificare col nano vero: se non va, guardare cosa dice l'etichetta «NANO · hex» in alto nel LIVE.
-2. LED del nano: servono l'Editor Korg (LED External, Momentary, un canale solo, Write Scene). Il nano ignora ogni sysex. Software pronto (`luciNano`).
-3. Mani sul nano di Valerio: manopola↔CUE, S cuffia, R breve/lungo, PLAY, fader. Volume al 20%.
-4. X-TOUCH sui CH (FOCUS = ultimo CH toccato): da decidere con Valerio. Filtro DJ (sweep) va lì, non sulla manopola del nano.
-5. Fase 3: passaggio da brano a brano canale per canale. «OUT» non rispetta ancora «entra tra».
-6. Decisioni di Valerio da chiedere: fader 8 = CH8 (ora) o master?
-7. Prima di un merge: togliere il blocco `CANALI` in main.js; il lanciatore sul Desktop punta a cutx-canali.
-- Nota prove: le card dei livelli si provano nella vista «pila» (la prova la apre da sola).
+1. PASSO 3 · Trasporto del nano (nano.js, app.js). CC di fabbrica: TRACK◀ 58 ▶ 59 · CYCLE 46 · SET 60 · MARKER◀ 61 ▶ 62 · REW 43 · FF 44 · STOP 42 · PLAY 41 · REC 45. TRACK = brano prec./succ. del set nella linguetta PROSSIMO (come `cueBrano` dell'X-Touch) · SET = il CUE passa tra brano che suona e prossimo · MARKER = scena del beat indietro/avanti a fine frase (`muoviScena`) · CYCLE = entra tra 1→2→4→8→1, grande a schermo, una sola fonte (`entraTra` dell'app) · PLAY = GO ALL · STOP = annulla tutte le attese, tenuto 1 s = paracadute · REC = piano/registra · REW/FF liberi. Luci: PLAY lampeggia se c'è qualcosa armato, CYCLE acceso se entra tra > 1, REC acceso mentre registra, STOP col paracadute aperto. `riceve()` dentro `sicuro()` come l'X-Touch. PRIMA 5 righe a Valerio e aspettare l'ok.
+2. Passo 4 · Passaggio a canali (THUMP che lancia scena di altro brano = passaggio col tempo di `passaBrano`; bug 7: l'effetto go ha bpm ma `eseguiCanali` lo ignora e `goLive` toglie i setcpm; gli altri CH armati nello stesso PLAY sulla stessa battuta; CH non toccati restano «vecchia»).
+3. Passo 5 · X-Touch MANI (solo vista LIVE, solo col nano collegato): tasti 1-8 = FOCUS; manopole 1 SWEEP, 2 risonanza, 3 eco, 4 riverbero, 5 velocità, 6 sporco, 7 altezza, 8 volume generale; layer B = su tutto; paracadute dal nano. Senza nano: pagine A e B di oggi.
+4. Nano vero (Valerio, volume 20%): manopola↔CUE con OUT a sinistra, R, S cuffia, M, PLAY, fader con aggancio. LED: serve l'Editor Korg (LED External, Momentary, un canale solo, Write Scene); il nano ignora i sysex; software pronto (`luciNano`).
+5. Prima di un merge: togliere il blocco `CANALI` in `main.js`; il lanciatore sul Desktop punta a cutx-canali.
 
-## File toccati
-src/renderer/categorie.js, canali.js, motore.js (entra ~r.489-554, descrivi ~r.678), app.js (ripristino ~r.1434, cutxProva.richiestaLive), src/main/prova.js (provaEntrata, punto 3b).
+## File toccati (passi 1-2)
+src/renderer/canali.js, mixer.js (nuovo), motore.js (`preparaEntra`/`applicaEntra`, `gruppo`, `riprendi`, `mixer`, `ch`), app.js (`preparaLive`/`finisciLive`, `eseguiCanali`, ripristino), cue.js (tasto NEXT), griglia.js, nano.js, stile.css, testi/it.json, src/main/prova.js (3c e fader), test/canali.test.js, test/nano.test.js.
 
 ## Provato e non funziona
-- Prova annulla con entrata a 1 ciclo: troppo vicina, il confine passa prima del controllo. Usare cicli: 4.
+- Controlli di prova con uscita a 1 ciclo: il livello viene pulito prima del controllo; usare `cicli: 2` o più.
 
 ## Note
-- `test/controller-synth.test.js` (1 test, manopole MOD) fallisce già prima del ramo (verificato su 5efed97): non è dei CH, da guardare nel lavoro MOD.
-- Prove sempre con volume al 20% e poi rimesso (il Mac era a 100).
-- Fase 0 (piano B) ancora aperta: Valerio configura il nano col KORG Kontrol Editor (LED External, tasti Momentary, un canale globale, Write Scene); poi adattare `strumenti/midi-nano`. Il nano non risponde ai sysex.
-- Domande aperte a Valerio: nessuna.
+- Il NEXT del BEAT è un tasto solo (scena scelta), non uno per pillola; CH vuoto senza scelta mostra «—» (Valerio ha approvato entrambi).
+- Valerio ha cambiato il volume del Mac a 44 durante la sessione: lo rimetto sempre com'era a inizio prova.
+- Le card dei livelli si provano nella vista «pila» (la prova la apre da sola). Dati del ramo separati («CUTX canali»). Backup stash in ~/Progetti/backup/cutx-stash-2026-11-19.
+- Non toccare: main, blocco CANALI in main.js, file dello stash oltre a quello che scrive il menu del CH.
