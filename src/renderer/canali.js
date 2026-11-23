@@ -155,6 +155,13 @@ export class StatoCanali {
     if (nuovo) for (const c of this.canali) c.zona = null;
   }
 
+  // Le scelte vivono solo per i brani che stanno in una delle due linguette del CUE (attivo e prossimo): un brano che esce da tutte e due
+  // perde le sue, così tornandoci un'ora dopo non trovo niente di armato. nomi = i nomi dei brani nelle linguette.
+  tieniBrani(nomi) {
+    const vivi = new Set([...nomi, this.brano?.nome].filter(Boolean));
+    for (const c of this.canali) for (const nome of [...c.scelte.keys()]) if (!vivi.has(nome)) c.scelte.delete(nome);
+  }
+
   // La scelta di un CH per il brano nel CUE: un id di clip o scena, OUT_ID, o null. Un id che nel brano non c'è più vale come nessuna scelta.
   scelta(i) {
     const id = this.brano ? this.canali[i].scelte.get(this.brano.nome) ?? null : null;
@@ -390,7 +397,14 @@ export class StatoCanali {
       c.insieme = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).map(alt);
       c.suona = suonaL ? (c.suona && c.suona.nome === suonaL.nome && c.suona.provenienza?.split(' ')[0] === alt(suonaL).provenienza?.split(' ')[0] ? c.suona : alt(suonaL)) : null;
       if (i === chDellaBeat(this.config) && c.suona?.bpm) this.bpm = c.suona.bpm;
-      if (!c.suona && !c.attesa) for (const nome of c.scelte.keys()) if (c.scelte.get(nome) === OUT_ID) c.scelte.delete(nome); // un OUT fatto non resta scelto
+      // una scelta eseguita si cancella: l'OUT fatto (il CH è vuoto) e la clip che ora suona. Altrimenti un'altra clip mandata a mano nello stesso CH
+      // (⌘↵) lascerebbe il CH «armato» sulla vecchia, e PLAY la rimanderebbe indietro.
+      for (const [nome, id] of [...c.scelte]) {
+        const fatta = id === OUT_ID ? !c.suona && !c.attesa : this.suonaId(i, id);
+        if (!fatta) continue;
+        c.scelte.delete(nome);
+        if (nome === this.brano?.nome) c.zona = null;
+      }
       if (this.adesso() - c.attesaMs < ATTESA_MS) return; // ho appena chiesto qualcosa: lo dice il motore tra poco
       if (prossimo) c.attesa = { tipo: 'go', alt: alt(prossimo), da: prossimo.da };
       else if (suonaL && suonaL.a !== null && suonaL.a > ciclo) c.attesa = { tipo: 'out', da: suonaL.a };

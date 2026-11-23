@@ -1194,7 +1194,9 @@ function applicaFisico() {
     }
   });
 }
+const nomeBranoCanali = (b) => (b ? B.testa(b.modello).brano || b.file.replace(/\.cutx$/, '') : null);
 function impostaBranoCanali() {
+  statoCanali.tieniBrani([nomeBranoCanali(cue.slot.attivo), nomeBranoCanali(cue.slot.prossimo)]);
   statoCanali.impostaBrano(cue.modo === 'brano' && cue.brano ? { nome: cue.nomeBrano, bpm: B.bpmDelBrano(cue.brano.modello), beat: cue.brano.modello.beat, sezioni: cue.brano.modello.sezioni } : null);
 }
 // Il CUE e la griglia dicono la stessa cosa: sulle card compaiono LIVE e NEXT, e quello che scelgo in un posto lo ritrovo nell'altro.

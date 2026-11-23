@@ -6,6 +6,7 @@
 - Prove (volume 20% poi rimesso a 81): test 526/527 (resta MOD noto); entrata+livelli+robustezza 71 ok (5 controlli nuovi sui gruppi); brani+browser+impostazioni 64 ok. Foto controllata.
 - Non fatto / da sapere: il NEXT del BEAT è UN tasto nella testa (scena scelta), non uno per pillola. CH vuoto senza scelta: R mostra «—» (prima lanciava la prima clip). Non provato col nano vero.
 - File: canali.js, griglia.js, app.js, cue.js, motore.js, nano.js (commenti), stile.css, it.json (cue.next), prova.js (3c), test canali/nano.
+- Passo 1.1 fatto: una scelta eseguita (clip che ora suona, OUT fatto) si cancella in `sincronizza`; `tieniBrani` cancella le scelte dei brani che escono da entrambe le linguette del CUE (chiamata da `impostaBranoCanali`). Test 528/529 (resta MOD), prova entrata+brani 40 ok.
 - Prossimo passo: PASSO 2 (mixer vero: 8 CH nel motore con volume e muto, via applicaFisico, aggancio del fader, fader 8 = CH8 STRAY). Prima 5 righe a Valerio e aspettare l'ok.
 
 ## Obiettivo

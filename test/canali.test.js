@@ -512,3 +512,50 @@ test('un OUT fatto non resta scelto: il CH torna senza scelta', () => {
   assert.equal(s.next(2), null);
   assert.equal(s.azioneR(2), '');
 });
+
+test('passo 1.1: una scelta eseguita si cancella; ⌘↵ di un\'altra clip nello stesso CH non lascia il CH armato sulla vecchia', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  const bass = 2;
+  const viva = (nome, id, ch = bass) => ({ nome, provenienza: `uno §${brano1.sezioni.findIndex((x) => x.nome === nome) + 1}`, ch, da: 0, a: null });
+  s.scegliAlt(bass, 1); // «sub»
+  s.premiR(bass);
+  s.scattato(bass);
+  s.sincronizza([viva('sub')], 4);
+  assert.equal(s.canali[bass].scelte.size, 0, 'sub suona: la scelta è eseguita, si cancella');
+  assert.equal(s.canali[bass].zona, null);
+  // ⌘↵ manda «reese» nello stesso CH (senza passare da NEXT): il motore la fa suonare al posto di sub
+  s.sincronizza([viva('reese')], 8);
+  assert.equal(s.canali[bass].suona.nome, 'reese');
+  assert.equal(s.armato(bass), false, 'il CH non è armato su «sub»');
+  assert.deepEqual(s.goAll(), [], 'PLAY non rimanda indietro il CH');
+  // un OUT eseguito si cancella come prima
+  s.scegliAlt(bass, 0);
+  s.premiR(bass);
+  s.adesso = () => Date.now() + 5000; // passato il respiro di 1,5 s: il motore ha già detto com'è andata
+  s.sincronizza([], 12);
+  s.sincronizza([], 13);
+  assert.equal(s.canali[bass].scelte.size, 0);
+  // una scelta non ancora eseguita resta
+  s.scegliAlt(bass, 2);
+  s.sincronizza([], 16);
+  assert.equal(s.armato(bass), true);
+});
+
+test('passo 1.1: le scelte vivono solo per i brani in una linguetta del CUE; uscito e rientrato non ha niente armato', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegliAlt(3, 1);
+  s.tieniBrani(['uno', 'due']);
+  assert.equal(s.armato(3), true, 'uno è ancora nel CUE');
+  s.impostaBrano(brano2);
+  s.tieniBrani(['uno', 'due']);
+  s.impostaBrano(brano1);
+  assert.equal(s.armato(3), true, 'cambiare linguetta non perde le scelte');
+  s.impostaBrano(brano2);
+  s.tieniBrani(['due', 'tre']); // «uno» esce da tutte e due le linguette
+  s.impostaBrano(brano1);
+  s.tieniBrani(['uno', 'due']); // e rientra, un'ora dopo
+  assert.equal(s.armato(3), false);
+  assert.equal(s.next(3), null);
+});
