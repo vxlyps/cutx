@@ -37,3 +37,25 @@ test('la riga sotto le linguette dice cosa farà il tempo', () => {
   assert.match(P.testoPassaggio({ nome: 'brano 3', bpmAttuale: 174, bpmNuovo: 140, occupato: true, ritmiche: ['sub', 'melodia'] }), /il tempo salta \(174 → 140 bpm, −19\.5%\) · le clip ritmiche rimaste cambierebbero velocità: sub, melodia/);
   assert.equal(P.testoPassaggio({ nome: 'x', bpmAttuale: 170, bpmNuovo: 140, occupato: false }), '');
 });
+
+import { parametriPassaggio } from '../src/renderer/passaggio.js';
+
+test('passaggio dai CANALI: tempo vicino = rampa (il brano nuovo non porta il suo setcpm), lontano = salto, uguale = niente', () => {
+  const sweep = { tipo: 'sweep', cicli: 8 };
+  const r = parametriPassaggio({ attuale: 170, nuovo: 174, transizione: sweep, tieni: [3, 4] });
+  assert.equal(r.tempo.tipo, 'rampa');
+  assert.deepEqual(r.rampa, { bpm: 174, cicli: 8 });
+  assert.equal(r.togliTempo, true);
+  assert.deepEqual(r.dissolvenza, { cicli: 8, tipo: 'filtro', filtroUscita: 'hp' });
+  assert.deepEqual(r.transizione.tieni, [3, 4], 'gli altri livelli non escono da soli');
+  assert.equal(r.transizione.tipo, 'sweep');
+  const s = parametriPassaggio({ attuale: 170, nuovo: 140, transizione: sweep });
+  assert.equal(s.tempo.tipo, 'salto');
+  assert.equal(s.rampa, null);
+  assert.equal(s.togliTempo, false, 'il salto entra col setcpm del brano');
+  const u = parametriPassaggio({ attuale: 170, nuovo: 170, transizione: { tipo: 'cut', cicli: 0 } });
+  assert.equal(u.tempo.tipo, 'niente');
+  assert.equal(u.rampa, null);
+  assert.equal(parametriPassaggio({ attuale: 170, nuovo: 172, transizione: { tipo: 'cut', cicli: 0 } }).rampa.cicli, 8, 'cut: la rampa dura quanto il predefinito');
+  assert.equal(parametriPassaggio({ attuale: 170, nuovo: 172, transizione: sweep, rampaCicli: 2 }).rampa.cicli, 2, 'la preferenza vince');
+});

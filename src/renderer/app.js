@@ -346,8 +346,9 @@ function preparaLive(pezzo = null) {
   // Un brano a un altro BPM che entra in un live che sta già suonando NON cambia il tempo del set: si tolgono dal suo preambolo
   // le righe setcpm (un setcpm scritto dentro la sezione, o in un livello, continua a funzionare). Con il live vuoto il brano
   // porta il suo tempo, come sempre.
+  const pass = daCue ? null : passaggioDelBeat(p); // un altro brano che entra col suo beat: passaggio (tempo e transizione come passaBrano)
   const set = bpmSet();
-  const diverso = p.bpmBrano && set !== null && livelliLive.some((l) => l.a === null) && Math.abs(p.bpmBrano - set) > 0.05;
+  const diverso = !pass && p.bpmBrano && set !== null && livelliLive.some((l) => l.a === null) && Math.abs(p.bpmBrano - set) > 0.05;
   const messaggi = [];
   if (diverso) {
     const preambolo = B.senzaTempo(codice.slice(0, p.inizio));
@@ -357,16 +358,51 @@ function preparaLive(pezzo = null) {
     if (B.eSezioneAudio(codice.slice(p.inizio))) messaggi.push('questa clip suona un file audio: va al suo tempo originale');
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
+  if (pass?.togliTempo) {
+    // la rampa porta il tempo: il brano nuovo non entra col suo setcpm
+    const pre = B.senzaTempo(codice.slice(0, inizio));
+    codice = pre + codice.slice(inizio);
+    inizio = pre.length;
+  }
   const { codice: senzaCoda, coda } = separaCoda(codice);
   // una scena del beat: se il beat suona già, la coda e il volume dei suoi livelli restano com'erano (le manopole contano)
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
   const msg = { tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) };
-  return { msg, p, daCue, nomeLive, messaggi };
+  if (pass) {
+    Object.assign(msg, { rampa: pass.rampa ?? undefined, dissolvenza: pass.dissolvenza, transizione: pass.transizione });
+    messaggi.push(pass.testo);
+  }
+  return { msg, p, daCue, nomeLive, messaggi, passaggio: pass };
 }
 
-function finisciLive({ p, daCue, nomeLive, messaggi }, r, { azzeraEntraTra = false } = {}) {
+// Il BEAT di un altro brano mentre un beat suona: è un passaggio. null se non lo è (stesso brano, scratch, niente che suona).
+function passaggioDelBeat(p) {
+  const suona = statoBeat().suona;
+  if (!p.beat || p.beat.base === 'scratch' || !suona || suona.beat.base === p.beat.base) return null;
+  const slot = [cue.slot.prossimo, cue.slot.attivo].find((s) => s && nomeDelBrano(s) === p.beat.base);
+  const attuale = bpmSet();
+  const nuovo = p.bpmBrano ?? (slot ? B.bpmDelBrano(slot.modello) : null);
+  const { transizione, scartata } = T.sceglieTransizione(slot ? serata.transizioneDi(slot.file) : null, preferenze.transizione ?? T.PREDEFINITA);
+  const chBeat = chDellaBeat(canaliConfig);
+  const tieni = livelliLive.filter((l) => l.a === null && chDelLivello(l) !== chBeat && l.nome !== 'paracadute').map((l) => l.id); // gli altri CH non escono da soli
+  const par = P.parametriPassaggio({ attuale, nuovo, transizione, tieni, rampaCicli: preferenze.rampaCicli ?? null });
+  const n = (x) => Math.round(x * 10) / 10;
+  const testo = scartata
+    ? `transizione «${scartata}» non valida: uso ${T.scriviTransizione(transizione)}`
+    : par.tempo.tipo === 'rampa' ? `«${p.beat.base}»: il tempo va da ${n(attuale)} a ${n(nuovo)} bpm con una rampa`
+      : par.tempo.tipo === 'salto' ? `il tempo salta da ${n(attuale)} a ${n(nuovo)} bpm quando entra «${p.beat.base}»`
+        : `passo a «${p.beat.base}» · ${T.scriviTransizione(transizione)}`;
+  return { ...par, nome: p.beat.base, transizioneScelta: transizione, tieni, attuale, nuovo, testo };
+}
+
+function finisciLive({ p, daCue, nomeLive, messaggi, passaggio: pass }, r, { azzeraEntraTra = false } = {}) {
+  if (!r.errore && pass) {
+    // come passaBrano: il passaggio è in attesa, e quel brano diventa l'attivo quando il suo beat suona (controllaPassaggio)
+    passaggio = { nome: pass.nome, da: r.da };
+    moviola.scrivi('live', 'transizione', { brano: pass.nome, tipo: pass.transizioneScelta.tipo, cicli: pass.transizioneScelta.cicli, tieni: pass.tieni, da: r.da, tempo: pass.tempo.tipo, bpmDa: pass.attuale, bpmA: pass.nuovo });
+  }
   if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
   if (!r.errore && azzeraEntraTra) entraTraUsato();
@@ -1154,6 +1190,7 @@ async function eseguiCanali(effetti) {
         for (const l of livelliLive.filter((x) => chDelLivello(x) === e.ch && x.da <= ciclo && x.a !== null && x.a > ciclo)) live.manda({ tipo: 'riprendi', livello: l.id });
       } else {
         for (const l of livelliDelCH(e.ch).filter((x) => x.da > ciclo)) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
+        if (e.ch === chDellaBeat(canaliConfig)) passaggio = null; // un passaggio annullato: nel motore se ne vanno anche la rampa e la transizione
       }
     } else if (e.tipo === 'out-subito') {
       for (const l of livelliDelCH(e.ch).filter((x) => x.da <= cicloAdesso())) live.manda({ tipo: 'togli', livello: l.id, subito: true, dissolvenza: dissolvenza(0) });

@@ -676,6 +676,30 @@ async function provaEntrata({ finestre, scrivi }) {
   controlla('STOP a transizione partita non riprende A: continua a sfumare sotto B', aSfuma?.a !== null && aDopo?.a === aSfuma?.a && bDopo?.a === null, JSON.stringify([aSfuma && [aSfuma.da, aSfuma.a], aDopo && [aDopo.da, aDopo.a], bDopo?.a]));
   for (const id of [sA.livello, sB.livello, trB.livello]) await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${id}, subito: true })`);
 
+  // 3e. il passaggio dai CANALI: beat di un altro brano + una clip di B nello stesso gruppo (PLAY), il beat vecchio esce col filtro, gli altri CH restano,
+  // la rampa porta il tempo; STOP prima del confine rimette tutto com'era
+  const b0 = await js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(72).gain(.0001)', nome: 'beat', provenienza: 'prova', ch: 0, unico: true, cicli: 1, scritto: true })`);
+  await finoAlCiclo(b0.da + 0.6);
+  const altri3e = (await live()).livelli.filter((l) => l.id !== b0.livello && l.a === null && l.ch !== 3); // la CH3 è quella che la clip di B sostituisce, com'è giusto
+  const tP0 = await tempoSet();
+  const beatNuovo = { tipo: 'entra', codice: 's("sine*2").freq(74).gain(.0001)', nome: 'beat', provenienza: 'prova B', ch: 0, unico: true, scritto: true, rampa: { bpm: tP0.cps * 240 * 1.03, cicli: 2 }, dissolvenza: { cicli: 4, tipo: 'filtro', filtroUscita: 'hp' }, transizione: { tipo: 'sweep', cicli: 4, hz: 150, tieni: altri3e.map((l) => l.id) } };
+  const clipB = { tipo: 'entra', codice: 's("sine*2").freq(76).gain(.0001)', nome: 'clipB3e', provenienza: 'prova B', ch: 3, unico: true, scritto: true };
+  const gP = await js(`cutxProva.richiestaLive({ tipo: 'gruppo', cicli: 4, entrate: ${JSON.stringify([beatNuovo, clipB])}, uscite: [] })`);
+  const dP = gP?.risposte?.map((x) => x.da);
+  const sP = (await live()).livelli;
+  const vecchioBeat = sP.find((l) => l.id === b0.livello);
+  controlla('passaggio: il beat nuovo e la clip di B entrano sullo stesso ciclo', dP?.length === 2 && dP.every((d) => d === gP.da), JSON.stringify(gP));
+  controlla('passaggio: il beat vecchio esce col filtro della transizione (dove entra il nuovo, per 4 cicli)', vecchioBeat?.a === gP?.da + 4, JSON.stringify([vecchioBeat?.a, gP?.da]));
+  controlla('passaggio: gli altri CH non escono da soli', altri3e.every((l) => sP.find((x) => x.id === l.id)?.a === null), JSON.stringify(altri3e.map((l) => [l.id, sP.find((x) => x.id === l.id)?.a])));
+  controlla('passaggio: la rampa ha messo i suoi gradini', (await tempoSet()).cambi.length > tP0.cambi.length, JSON.stringify([tP0.cambi, (await tempoSet()).cambi]));
+  const stopP = await annullaAttese();
+  const sP2 = (await live()).livelli;
+  controlla('STOP sul passaggio (prima del confine): il beat vecchio e gli altri restano, il nuovo non entra, il tempo è com\'era',
+    stopP?.annullati >= 2 && sP2.find((l) => l.id === b0.livello)?.a === null && altri3e.every((l) => sP2.find((x) => x.id === l.id)?.a === null)
+      && gP.risposte.every((r) => { const l = sP2.find((x) => x.id === r.livello); return !l || l.a <= l.da; }) && JSON.stringify((await tempoSet()).cambi) === JSON.stringify(tP0.cambi),
+    JSON.stringify([stopP, sP2.find((l) => l.id === b0.livello)?.a, (await tempoSet()).cambi]));
+  await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${b0.livello}, subito: true })`);
+
   // 4. codice sbagliato: il live non cambia, l'errore si vede nel CUE
   const primaErr = JSON.stringify((await live()).livelli.map((l) => l.id));
   const re = await goLive('// @sezione kick\ns("sine*2".gain(', 1);
