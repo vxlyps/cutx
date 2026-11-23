@@ -89,6 +89,7 @@ export class Nano {
 
   riceve(dati) {
     const m = leggiNano(dati);
+    this.azioni.ultimo?.(dati.map((b) => b.toString(16).padStart(2, '0')).join(' '), !!m); // per vedere cosa manda davvero (e cosa non capisco)
     if (!m) return;
     this.stato = 0xb0 | (dati[0] & 0x0f);
     const a = this.azioni;

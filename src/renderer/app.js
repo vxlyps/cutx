@@ -2090,6 +2090,7 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   richiestaLive: (m) => live.richiesta(m),
+  canaliFader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()), // come il fader del nano o dello schermo
   apriNelSynth,
   dispetti: () => dispetti,
   hack: () => hack,
@@ -2360,6 +2361,7 @@ const nano = new Nano({
   mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
   goAll: () => eseguiCanali(statoCanali.goAll()),
   collegato: (si) => { $('nano-stato').hidden = !si; },
+  ultimo: (hex, capito) => { $('nano-stato').textContent = `nano · ${hex}${capito ? '' : ' (non capito)'}`; },
 });
 if (!inTest) nano.avvia();
 setInterval(aggiornaCanali, 250);

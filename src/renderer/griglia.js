@@ -36,6 +36,7 @@ export class Griglia {
       const r = this.righe[i];
       if (!r) return;
       const resta = v.attesa?.da !== undefined && this.ciclo !== null ? Math.max(0, Math.ceil(v.attesa.da - this.ciclo)) : null;
+      if (v.fader.letto && document.activeElement !== r.fader) r.fader.value = String(v.fader.valore); // lo slider segue il fader fisico
       r.fader.classList.toggle('non-letto', !v.fader.letto);
       r.fader.title = v.fader.letto ? '' : 'fader non letto: vale il volume del codice';
       r.conto.textContent = v.attesa ? `${v.attesa.tipo === 'go' ? 'entra' : 'esce'}${resta !== null ? ` tra ${resta}` : '…'}` : '';

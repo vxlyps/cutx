@@ -580,6 +580,13 @@ async function provaEntrata({ finestre, scrivi }) {
 
   controlla('un go live dal CUE senza tipo entra nel CH della FREE (l\'ultimo, 7)', nuovo?.ch === 7, JSON.stringify(nuovo?.ch));
 
+  // il fader dei CANALI (nano o schermo) cambia davvero il volume dei livelli di quel CH
+  await js('cutxProva.canaliFader(7, 0.5)');
+  await aspetta(0.6);
+  const conFader = (await live()).livelli.find((l) => l.id === r2.livello);
+  controlla('il fader del CH cambia il volume del livello (a metà: circa 0,18)', conFader && Math.abs(conFader.volume - 0.178) < 0.03, JSON.stringify(conFader?.volume));
+  await js('cutxProva.canaliFader(7, 1)');
+
   // 3b. identità = CH + nome: stessa clip in due CH = due livelli; stesso CH = sostituzione
   const entraCh = (ch, cicli = 1) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(60).gain(.0001)', nome: 'lineaCH', provenienza: 'prova', ch: ${JSON.stringify(ch)}, cicli: ${cicli}, scritto: true })`);
   const c1 = await entraCh('CH1');
