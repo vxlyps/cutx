@@ -1140,7 +1140,9 @@ function aggiornaCanali() {
   statoCanali.sincronizza(livelliLive, cicloAdesso());
   statoCanali.impostaBrano(cue.modo === 'brano' && cue.brano ? { nome: cue.nomeBrano, bpm: B.bpmDelBrano(cue.brano.modello), beat: cue.brano.modello.beat, sezioni: cue.brano.modello.sezioni } : null);
   applicaFisico();
-  griglia.aggiorna(statoCanali.vista(), mappa ? cicloAdesso() : null);
+  const vista = statoCanali.vista();
+  griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
+  nano.mostra(vista);
 }
 
 // --- i PROJ ---
@@ -2360,7 +2362,8 @@ const nano = new Nano({
   collegato: (si) => { $('nano-stato').hidden = !si; },
 });
 if (!inTest) nano.avvia();
-setInterval(aggiornaCanali, 250); // i conti alla rovescia e quello che il motore ha cambiato da solo
+setInterval(aggiornaCanali, 250);
+setInterval(() => nano.luci(), 100); // il lampeggio delle luci del nano (veloce = 200 ms) // i conti alla rovescia e quello che il motore ha cambiato da solo
 for (const b of document.querySelectorAll('#vista-live [data-vista]')) {
   b.onclick = () => {
     for (const x of document.querySelectorAll('#vista-live [data-vista]')) x.classList.toggle('on', x === b);

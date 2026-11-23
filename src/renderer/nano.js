@@ -3,6 +3,24 @@
 // R = GO · S = OUT (tenuto 1 s: esce subito) · M = MUTE · manopola = scelta di NEXT · fader = volume del CH · PLAY = GO ALL.
 export const NOME_NANO = /nanokontrol2/i;
 export const OUT_TENUTO_MS = 1000;
+export const LAMPEGGIO_LENTO_MS = 700; // R: in NEXT c'è altro da lanciare
+export const LAMPEGGIO_VELOCE_MS = 200; // R / S: sta per entrare / uscire
+
+// Le luci che il nano deve avere: Map cc → 0 | 127. `vista` = StatoCanali.vista(), t = millisecondi (per il lampeggio fatto qui: le luci del nano sono solo on/off).
+// R: spenta = vuoto · fissa = suona · lampeggio lento = in NEXT c'è altro · lampeggio veloce = sta per entrare. S: lampeggio veloce = sta per uscire.
+// M: accesa = muto. PLAY: lampeggia lento se GO ALL ha qualcosa da lanciare.
+export function luciNano(vista, t) {
+  const fase = (ms) => Math.floor(t / ms) % 2 === 0;
+  const come = (luce) => (luce === 'accesa' ? 127 : luce === 'lenta' ? (fase(LAMPEGGIO_LENTO_MS) ? 127 : 0) : luce === 'veloce' ? (fase(LAMPEGGIO_VELOCE_MS) ? 127 : 0) : 0);
+  const luci = new Map();
+  for (const v of vista.slice(0, 8)) {
+    luci.set(64 + v.indice, come(v.luci.r));
+    luci.set(32 + v.indice, come(v.luci.s));
+    luci.set(48 + v.indice, come(v.luci.m));
+  }
+  luci.set(41, vista.some((v) => v.luci.r === 'lenta') ? come('lenta') : 0);
+  return luci;
+}
 
 // Un messaggio MIDI grezzo → cosa vuol dire, o null. Puro: si prova con test/nano.test.js.
 export function leggiNano(dati) {
@@ -24,6 +42,28 @@ export class Nano {
     this.azioni = azioni;
     this.timer = new Map();
     this.collegato = false;
+    this.stato = 0xb0; // il canale MIDI su cui parla il nano: lo si impara dai suoi messaggi
+    this.inviate = new Map(); // cc → ultimo valore mandato: si manda solo quello che cambia
+    this.vista = null;
+  }
+
+  // Lo stato dei canali, da mostrare con le luci (a nano collegato e con i LED in «External»: dall'Editor Korg). Si può chiamare a ogni giro.
+  mostra(vista) {
+    this.vista = vista;
+    this.luci();
+  }
+
+  luci(t = Date.now()) {
+    if (!this.uscita || !this.vista) return;
+    for (const [cc, v] of luciNano(this.vista, t)) {
+      if (this.inviate.get(cc) === v) continue;
+      this.inviate.set(cc, v);
+      try {
+        this.uscita.send([this.stato, cc, v]);
+      } catch {
+        return; // il cavo è stato staccato proprio ora: ci pensa statechange
+      }
+    }
   }
 
   async avvia() {
@@ -35,6 +75,9 @@ export class Nano {
     }
     const cerca = () => {
       const porta = [...this.access.inputs.values()].find((p) => NOME_NANO.test(p.name));
+      const uscita = [...this.access.outputs.values()].find((p) => NOME_NANO.test(p.name));
+      if (uscita !== this.uscita) this.inviate.clear(); // un nano appena collegato non ha le luci di prima
+      this.uscita = uscita ?? null;
       if (this.porta && this.porta !== porta) this.porta.onmidimessage = null;
       this.porta = porta ?? null;
       if (porta) porta.onmidimessage = (e) => this.riceve([...e.data]);
@@ -47,6 +90,7 @@ export class Nano {
   riceve(dati) {
     const m = leggiNano(dati);
     if (!m) return;
+    this.stato = 0xb0 | (dati[0] & 0x0f);
     const a = this.azioni;
     if (m.tipo === 'fader') a.fader(m.ch, m.v);
     else if (m.tipo === 'manopola') a.manopola(m.ch, m.pos);

@@ -32,6 +32,10 @@ Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto
 - LED del nano: NON si accendono (non risponde ai sysex). Serve l'Editor Korg: LED External, Momentary, un canale solo, Write Scene (Valerio, una volta).
 - Prove: test 515/516 (resta il solo MOD noto); prova livelli+entrata+robustezza 62 ok, brani+browser+impostazioni 64 ok, entrata 19 ok (nuovo controllo FREE).
 
+## Fatto dopo (23/11, sera)
+- Luci del nano pronte nel software (`luciNano` in nano.js, test ok): M accesa = muto; R fissa = suona, lampeggio lento = in NEXT c'è altro, veloce = sta per entrare; S veloce = sta per uscire; PLAY lento = GO ALL ha qualcosa. Mandate sul canale MIDI che il nano usa, solo quando cambiano. NON si accendono finché il nano non è configurato con l'Editor Korg (LED External).
+- Lanciatore: `strumenti/CUTX.command` (e la copia sul Desktop) ora apre ~/Progetti/cutx-canali (CUTX canali). Vecchio in ~/Progetti/backup/CUTX.command.2026-10-31.
+
 ## Da fare
 - X-TOUCH sui CH: NON fatto. Oggi l'X-Touch comanda i «posti» della pila (beat + 5 clip, manopola 1 = CUE, 8 = master). Va deciso con Valerio cosa vuol dire «scolpisce il CH in FOCUS» prima di toccarlo.
 - Master: nano fader/manopola 8 = master o CH8? Oggi il fader 8 è il CH8. Da decidere.
