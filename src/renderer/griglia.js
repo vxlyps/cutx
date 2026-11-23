@@ -36,9 +36,14 @@ export class Griglia {
       const r = this.righe[i];
       if (!r) return;
       const resta = v.attesa?.da !== undefined && this.ciclo !== null ? Math.max(0, Math.ceil(v.attesa.da - this.ciclo)) : null;
-      if (v.fader.letto && document.activeElement !== r.fader) r.fader.value = String(v.fader.valore); // lo slider segue il fader fisico
+      if (document.activeElement !== r.fader) r.fader.value = String(v.fader.valore); // lo slider segue la mano (o il valore vero, se non c'è un fader fisico)
+      // il fader fisico non è agganciato: i suoi messaggi non contano; la tacca dice dove portarlo (il valore vero)
+      const sganciato = v.fader.letto && !v.fader.agganciato;
       r.fader.classList.toggle('non-letto', !v.fader.letto);
-      r.fader.title = v.fader.letto ? '' : 'fader non letto: vale il volume del codice';
+      r.fader.classList.toggle('sganciato', sganciato);
+      r.tacca.hidden = !sganciato;
+      r.tacca.style.left = `${v.fader.vero * 100}%`;
+      r.fader.title = sganciato ? 'fader non agganciato: portalo sulla tacca' : '';
       r.conto.textContent = v.attesa ? `${v.attesa.tipo === 'go' ? 'entra' : 'esce'}${resta !== null ? ` tra ${resta}` : '…'}` : '';
     });
   }
@@ -100,12 +105,16 @@ export class Griglia {
         fader.min = '0';
         fader.max = '1';
         fader.step = '0.01';
-        fader.value = v.fader.letto ? String(v.fader.valore) : '1';
+        fader.value = String(v.fader.valore);
         fader.oninput = () => this.azioni.fader(v.indice, Number(fader.value));
+        const tacca = crea('span', 'ch-tacca');
+        tacca.hidden = true;
+        const cassetta = crea('div', 'ch-fader-box');
+        cassetta.append(fader, tacca);
         const mezzo = crea('div', 'ch-mezzo');
         mezzo.append(ora, alt);
-        riga.append(testa, mezzo, fader, tasti);
-        this.righe[v.indice] = { conto, fader };
+        riga.append(testa, mezzo, cassetta, tasti);
+        this.righe[v.indice] = { conto, fader, tacca };
         return riga;
       }),
     );

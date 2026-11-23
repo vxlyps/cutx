@@ -11,6 +11,7 @@ export const ENTRA_TRA = [1, 2, 4, 8]; // battute (cicli)
 export const N_CH = 8;
 export const ISTERESI = 0.03; // ai bordi delle zone della manopolina
 export const ZONA_MORTA = 0.04; // al centro di SWEEP
+export const AGGANCIO = 0.03; // il fader fisico comanda solo quando è entro ±3% del valore vero (o ci passa sopra)
 export const OUT_ID = 'OUT'; // la prima zona della manopola e il primo chip: «togli questo CH»
 const USCITA = { id: OUT_ID, tipo: 'out', nome: 'OUT' };
 
@@ -126,7 +127,7 @@ export function sweep(pos) {
 
 // --- lo stato ---
 
-const vuota = () => ({ suona: null, insieme: [], pos: null, zona: null, scelte: new Map(), fader: null, aa: null, mute: false, attesa: null, attesaMs: 0 });
+const vuota = () => ({ suona: null, insieme: [], pos: null, zona: null, scelte: new Map(), fisico: null, vero: 1, agganciato: false, mutaClip: false, aa: null, mute: false, attesa: null, attesaMs: 0 });
 const ATTESA_MS = 1500; // dopo un GO/OUT il motore ci mette un attimo a dirlo: nel frattempo vale quello che ho chiesto
 
 export class StatoCanali {
@@ -396,6 +397,7 @@ export class StatoCanali {
       const prossimo = mie.filter((l) => l.da > ciclo && l.a === null).sort((x, y) => x.da - y.da)[0];
       c.insieme = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).map(alt);
       c.suona = suonaL ? (c.suona && c.suona.nome === suonaL.nome && c.suona.provenienza?.split(' ')[0] === alt(suonaL).provenienza?.split(' ')[0] ? c.suona : alt(suonaL)) : null;
+      c.mutaClip = !!suonaL?.muto; // la clip che suona è muta per conto suo (la spinta della manopola dell'X-Touch)
       if (i === chDellaBeat(this.config) && c.suona?.bpm) this.bpm = c.suona.bpm;
       // una scelta eseguita si cancella: l'OUT fatto (il CH è vuoto) e la clip che ora suona. Altrimenti un'altra clip mandata a mano nello stesso CH
       // (⌘↵) lascerebbe il CH «armato» sulla vecchia, e PLAY la rimanderebbe indietro.
@@ -412,10 +414,65 @@ export class StatoCanali {
     });
   }
 
-  // --- il fisico ---
+  // --- il mixer: il volume vero e il muto del CH stanno nel motore live (e qui ne tengo la copia); la cuffia non li sente mai ---
 
+  // Il valore vero cambia: ritorna l'effetto per il motore. `pos` è la posizione del fader (0…1), il volume è la curva da mixer.
+  poniMixer(i, { pos, muto }) {
+    const c = this.canali[i];
+    const effetto = { tipo: 'ch', ch: i };
+    if (pos !== undefined) {
+      c.vero = Math.min(1, Math.max(0, pos));
+      effetto.pos = c.vero;
+      effetto.volume = gainFader(c.vero);
+    }
+    if (muto !== undefined) {
+      c.mute = !!muto;
+      effetto.muto = c.mute;
+    }
+    return [effetto];
+  }
+
+  // Un messaggio del fader fisico. Dopo l'avvio, lo slider a schermo, un ripristino, il nano ricollegato o un PROJ nuovo il fader non è agganciato:
+  // i suoi messaggi non contano finché non è entro ±3% del valore vero, o ci passa sopra tra due messaggi di fila.
   fader(i, v) {
-    this.canali[i].fader = v;
+    const c = this.canali[i];
+    const prima = c.fisico;
+    c.fisico = v;
+    if (!c.agganciato) {
+      const dentro = Math.abs(v - c.vero) <= AGGANCIO;
+      const passa = prima !== null && (prima - c.vero) * (v - c.vero) < 0;
+      if (!dentro && !passa) return [];
+      c.agganciato = true;
+    }
+    return this.poniMixer(i, { pos: v });
+  }
+
+  // Lo slider a schermo comanda subito; il fader fisico dovrà riagganciarsi.
+  sliderSchermo(i, v) {
+    const c = this.canali[i];
+    c.agganciato = false;
+    c.fisico = null;
+    return this.poniMixer(i, { pos: v });
+  }
+
+  // I fader fisici si sganciano tutti (avvio, ripristino del live, nano ricollegato, PROJ nuovo).
+  sganciaTutti() {
+    for (const c of this.canali) Object.assign(c, { agganciato: false, fisico: null });
+  }
+
+  // La copia del mixer da mandare a un motore live nuovo (un live rinato non sa niente).
+  datiMixer() {
+    return this.canali.map((c, i) => ({ ch: i, pos: c.vero, volume: gainFader(c.vero), muto: c.mute }));
+  }
+
+  // Il mixer come l'ha tenuto il motore (dopo un crash dell'interfaccia): lo rimetto qui. I fader fisici si sganciano.
+  leggiMixer(dal) {
+    if (!Array.isArray(dal)) return;
+    dal.slice(0, N_CH).forEach((m, i) => {
+      if (Number.isFinite(m?.pos)) this.canali[i].vero = Math.min(1, Math.max(0, m.pos));
+      this.canali[i].mute = !!m?.muto;
+    });
+    this.sganciaTutti();
   }
 
   sweepPos(i, pos) {
@@ -423,8 +480,7 @@ export class StatoCanali {
   }
 
   mute(i, acceso) {
-    const c = this.canali[i];
-    c.mute = acceso ?? !c.mute;
+    return this.poniMixer(i, { muto: acceso ?? !this.canali[i].mute });
   }
 
   piuEntraTra(delta) {
@@ -463,7 +519,7 @@ export class StatoCanali {
   avvisi(i) {
     const c = this.canali[i];
     if (!c.suona) return [];
-    return [...(c.mute ? ['MUTE'] : []), ...(c.fader !== null && gainFader(c.fader) === 0 ? ['fader a zero'] : [])];
+    return [...(c.mute ? ['MUTE'] : []), ...(gainFader(c.vero) === 0 ? ['fader a zero'] : []), ...(c.mutaClip ? ['clip muta'] : [])];
   }
 
   // La foto per lo schermo.
@@ -476,7 +532,8 @@ export class StatoCanali {
       suona: c.suona,
       next: this.next(i),
       attesa: c.attesa,
-      fader: { valore: c.fader, letto: c.fader !== null, gain: gainFader(c.fader) },
+      // valore = dove sta lo slider (la mano, se il fader fisico non è agganciato; altrimenti il valore vero) · vero = la tacca
+      fader: { valore: c.agganciato || c.fisico === null ? c.vero : c.fisico, vero: c.vero, letto: c.fisico !== null, agganciato: c.agganciato, gain: gainFader(c.vero) },
       sweep: sweep(c.aa),
       mute: c.mute,
       armato: this.armato(i),

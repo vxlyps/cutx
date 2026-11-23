@@ -3749,6 +3749,10 @@ input[type='checkbox'] {
 .ch-tasti .key.veloce { animation: ch-lampeggio 0.4s steps(2) infinite; }
 .ch-fader { width: 100%; accent-color: var(--marcio); }
 .ch-fader.non-letto { opacity: 0.45; }
+.ch-fader-box { position: relative; width: 100%; display: flex; align-items: center; }
+.ch-fader.sganciato { opacity: 0.6; }
+.ch-tacca { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--testo); pointer-events: none; }
+.ch-tacca[hidden] { display: none; }
 @keyframes ch-lampeggio { 50% { background: var(--testo); color: var(--fondo); } }
 .ch-stato, .ch-next { font-size: 9px; letter-spacing: 0.08em; }
 .ch-riga.suona .ch-stato { color: var(--marcio); }

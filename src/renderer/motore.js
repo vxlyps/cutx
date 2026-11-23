@@ -30,6 +30,7 @@ import { suoniNuovi } from './suoni-nuovi.js';
 import { caricaSuoniStrudel } from './suoni-strudel.js';
 import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
 import { chiEsce } from './transizioni.js';
+import { N_CH_MIXER, applicaMessaggioCh, chNeutro, guadagnoLivello } from './mixer.js';
 import { guasto, sicuro } from './guasto.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
@@ -752,6 +753,9 @@ const descrivi = (l) => ({
 // agiscono subito anche sui suoni già partiti, con una sfumata breve (niente click).
 const SFUMATA_S = 0.02; // costante di tempo: a regime in circa 80 ms
 const guadagni = new Map(); // id → { orbita, gain }
+// Il mixer dei CANALI: volume e muto di ogni CH, solo qui nel live (la cuffia è pre-fader: non lo conosce). Una clip nuova di un CH lo prende da sola.
+const mixer = Array.from({ length: N_CH_MIXER }, chNeutro);
+const chDi = (l) => (Number.isInteger(l.ch) ? mixer[l.ch] ?? null : null);
 let masterVoluto = 1; // il volume generale del live, come l'ha chiesto l'ultima volta il controller
 let tagliato = false; // lo stop dei colpi è premuto: tutto è tagliato finché non torna l'1
 function guadagnoDi(l) {
@@ -759,7 +763,7 @@ function guadagnoDi(l) {
     const controller = getSuperdoughAudioController();
     const orbita = 1000 + l.id;
     const o = controller.getOrbit(orbita, [0, 1]);
-    const gain = new GainNode(ac, { gain: l.muto ? 0 : l.volume });
+    const gain = new GainNode(ac, { gain: guadagnoLivello(l, chDi(l)) });
     // orbita → passa-basso → passa-alto → volume → dissolvenza → casse (vedi dissolvenza.js): aperti, i filtri sono l'identità
     const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
     const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 0, Q: 0.707 });
@@ -787,7 +791,7 @@ function applicaGuadagni() {
     const g = guadagnoDi(l);
     l.orbita = g.orbita;
     const rompi = breakFattore < 1 && !eBeatVera(l) ? breakFattore : 1;
-    g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume * rompi, ac.currentTime, SFUMATA_S);
+    g.gain.gain.setTargetAtTime(guadagnoLivello(l, chDi(l), rompi), ac.currentTime, SFUMATA_S); // volume della clip × del CH × break
   }
 }
 // Lo stop come su un mixer. giù: i GainNode di taglio vanno a zero in pochi ms; su: tornano a uno al ciclo `ciclo` (o subito).
@@ -880,7 +884,7 @@ function aggiornaLivelli() {
   applicaGuadagni();
   rip.sorgenti = livelli;
   const descritti = livelli.map(descrivi);
-  const messaggio = { tipo: 'livelli', livelli: descritti, paracadute: !!paracadute };
+  const messaggio = { tipo: 'livelli', livelli: descritti, paracadute: !!paracadute, mixer: mixer.map((c) => ({ ...c })) };
   manda('controllo', messaggio);
   manda('uscita', messaggio);
   manda('cuffia', { tipo: 'livelli-live', livelli: descritti });
@@ -1203,6 +1207,7 @@ function stato() {
     nome: LIVE ? (ultimo?.nome ?? null) : prova.nome,
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
+    mixer: LIVE ? mixer.map((c) => ({ ...c })) : undefined, // dopo un crash dell'interfaccia lo riprende da qui
     ricostruzioni,
     globali: [...globali.values()],
     breakFattore,
@@ -1406,6 +1411,12 @@ async function ricevi(da, m) {
       return applicaGuadagni();
     case 'salva-livello': // un clic sulla card che sta sfumando
       return salva(livelli.find((x) => x.id === m.livello));
+    case 'ch': {
+      // volume e muto di un CH, subito (anche per le clip che entreranno)
+      if (!LIVE || !Number.isInteger(m.ch) || !mixer[m.ch]) return;
+      applicaMessaggioCh(mixer[m.ch], m);
+      return aggiornaLivelli();
+    }
     case 'livello': {
       // volume e muto di un livello, subito
       const l = livelli.find((x) => x.id === m.livello);

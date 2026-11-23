@@ -1089,7 +1089,6 @@ async function apriStash(stato) {
 let canaliConfig = canaliPredefiniti();
 const statoCanali = new StatoCanali(canaliConfig); // la verità sta nel motore: lo stato si risincronizza dai livelli (sincronizza)
 let griglia = null;
-const fisicoInviato = new Map(); // id del livello → 'volume|muto' già mandato al motore
 let canaliErrori = [];
 const liveAcceso = () => livelliLive.some((l) => l.a === null);
 function usaCanali(config, errori = []) {
@@ -1127,6 +1126,7 @@ async function eseguiCanali(effetti) {
   const uscite = [];
   for (const e of effetti) {
     if (e.tipo === 'avviso') cue.avviso(e.testo);
+    else if (e.tipo === 'ch') live.manda({ tipo: 'ch', ch: e.ch, volume: e.volume, pos: e.pos, muto: e.muto }); // volume e muto del CH: solo il live (la cuffia è pre-fader)
     else if (e.tipo === 'cuffia') {
       const pezzo = cue.pezzoAlt(e.alt);
       if (pezzo.errore) {
@@ -1174,26 +1174,6 @@ async function eseguiCanali(effetti) {
   }
   aggiornaCanali();
 }
-// Il fisico (fader e M) vince sul volume del codice: lo mando ai livelli del CH solo quando cambia.
-const muteApplicato = Array(8).fill(false); // il muto di ogni CH che ho già mandato ai suoi livelli
-function applicaFisico() {
-  statoCanali.canali.forEach((c, i) => {
-    const cambiato = c.mute !== muteApplicato[i]; // il muto si manda quando lo tocco (o a un livello nuovo, se il CH è muto); mai «non muto» da solo
-    muteApplicato[i] = c.mute;
-    for (const l of livelliDelCH(i)) {
-      const volume = c.fader === null ? undefined : gainFader(c.fader);
-      const muto = cambiato || (c.mute && !fisicoInviato.has(l.id)) ? c.mute : undefined;
-      const chiave = `${volume}|${muto}`;
-      if (volume === undefined && muto === undefined) {
-        fisicoInviato.set(l.id, fisicoInviato.get(l.id) ?? '|');
-        continue;
-      }
-      if (fisicoInviato.get(l.id) === chiave && !cambiato) continue;
-      fisicoInviato.set(l.id, chiave);
-      live.manda({ tipo: 'livello', livello: l.id, ...(volume !== undefined ? { volume } : {}), ...(muto !== undefined ? { muto } : {}) });
-    }
-  });
-}
 const nomeBranoCanali = (b) => (b ? B.testa(b.modello).brano || b.file.replace(/\.cutx$/, '') : null);
 function impostaBranoCanali() {
   statoCanali.tieniBrani([nomeBranoCanali(cue.slot.attivo), nomeBranoCanali(cue.slot.prossimo)]);
@@ -1204,7 +1184,6 @@ function aggiornaCanali() {
   if (!griglia) return;
   impostaBranoCanali();
   statoCanali.sincronizza(livelliLive.map((l) => ({ ...l, ch: chDelLivello(l) })), cicloAdesso());
-  applicaFisico();
   const vista = statoCanali.vista();
   griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
   nano.mostra(vista);
@@ -1235,6 +1214,7 @@ function mostraProj(info) {
 // Un altro PROJ: libreria, set e kit nuovi. A live fermo il CUE si svuota; col live che suona (confermato) il CUE resta com'è.
 async function cambiatoProj(info) {
   mostraProj(info);
+  statoCanali.sganciaTutti(); // un PROJ nuovo: i fader fisici si riagganciano
   if (!pila.livelli.length && !cue.slot.attivo?.sporco && !cue.slot.prossimo?.sporco) {
     cue.slot = { attivo: null, prossimo: null };
     cue.mostraLinguette();
@@ -1522,6 +1502,7 @@ function fermaTest() {
 function riprendi() {
   if (ripreso || !live.viva || !cuffia.viva) return;
   ripreso = true;
+  statoCanali.leggiMixer(live.stato.mixer); // volume e muto dei CH come li ha tenuti il motore
   const c = cuffia.stato;
   pezzoCuffia = c.codice ? { codice: c.codice, etichetta: { nome: c.nome, provenienza: c.provenienza } } : null;
   cuffiaUdibile = c.udibile ?? true;
@@ -1571,7 +1552,7 @@ function aggiornaIstantanea() {
   if (!ripreso || !live.viva || ripristinando) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   istantaneaLive = attivi.length
-    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ beat: l.beat, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    ? { bpm: bpmSet(), mixer: statoCanali.datiMixer(), livelli: attivi.map((l) => ({ beat: l.beat, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
     : null;
 }
 
@@ -1588,6 +1569,8 @@ async function ripristinaLive() {
     if (!nuovoEPronto() || (live.stato.livelli ?? []).some((l) => l.a === null)) return;
     window.cutx.logEvento('avviso', 'live', `riavviato: rimetto ${snap.livelli.length} livelli a ${snap.bpm} bpm`);
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
+    for (const m of snap.mixer ?? []) live.manda({ tipo: 'ch', ...m }); // un CH abbassato non torna pieno
+    statoCanali.sganciaTutti(); // i fader fisici si riagganciano al valore rimesso
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
       const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: l.ch ?? null, beat: l.beat ?? null, cicli: 1, scritto: true });
@@ -2102,6 +2085,10 @@ live.suCollegato = () => {
   live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (masterLive !== null) live.manda({ tipo: 'master', volume: masterLive }); // e con il volume generale di prima (altrimenti tornerebbe al massimo)
+  if (ripreso) {
+    for (const m of statoCanali.datiMixer()) live.manda({ tipo: 'ch', ...m }); // e col mixer dei CH com'era
+    statoCanali.sganciaTutti();
+  }
   if (ripreso) ripristinaLive();
 };
 // Una cuffia rinata riparte da vuota: le ridò il suo codice.
@@ -2164,7 +2151,9 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
   richiestaLive: (m) => live.richiesta(m),
-  canaliFader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()), // come il fader del nano o dello schermo
+  canaliFader: (ch, v) => eseguiCanali([...statoCanali.fader(ch, 1), ...statoCanali.fader(ch, v)]), // come il fader del nano: prima in cima (si aggancia), poi dove dico
+  canaliSlider: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)),
+  canaliMixer: () => statoCanali.datiMixer(),
   apriNelSynth,
   dispetti: () => dispetti,
   hack: () => hack,
@@ -2423,8 +2412,8 @@ griglia = new Griglia($('canali-griglia'), {
   premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
   tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
   cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
-  mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
-  fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
+  mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
+  fader: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)), // lo slider a schermo comanda subito; il fader fisico si riaggancia
 });
 // Il tasto NEXT di una card del CUE (l'unico gesto che la porta in NEXT): sceglie quella clip per il suo CH, ricliccato toglie la scelta.
 // Guardare una card, scrivere o navigare nel CUE non arma niente.
@@ -2435,14 +2424,18 @@ cue.suNext = (carta) => {
   if (statoCanali.alternaId(id)) aggiornaCanali();
 };
 const nano = new Nano({
-  fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
+  fader: (ch, v) => eseguiCanali(statoCanali.fader(ch, v)), // agganciato solo quando passa dal valore vero
   manopola: (ch, pos) => scegliCanale(ch, () => statoCanali.scegli(ch, pos)),
   premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
   tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
   cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
-  mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
+  mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
   goAll: () => eseguiCanali(statoCanali.goAll()),
-  collegato: (si) => { $('nano-stato').hidden = !si; },
+  collegato: (si) => {
+    $('nano-stato').hidden = !si;
+    statoCanali.sganciaTutti(); // un nano appena collegato ha i fader dove li ha lasciati: si riagganciano
+    aggiornaCanali();
+  },
   ultimo: (hex, capito) => { $('nano-stato').textContent = `nano · ${hex}${capito ? '' : ' (non capito)'}`; },
 });
 if (!inTest) nano.avvia();

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { guadagnoLivello, applicaMessaggioCh, chNeutro } from '../src/renderer/mixer.js';
 import { StatoCanali, sweep, alternative, canaliPredefiniti, chDelTipo, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
 
 const clip = (nome, tipo) => ({ nome, info: tipo ? { [tipo]: true } : {} });
@@ -222,6 +223,7 @@ test('fader: curva da mixer; «non letto» vale il codice; avvisi muta e fader a
   s.scegliAlt(2, 1);
   s.go(2); s.scattato(2);
   assert.deepEqual(s.avvisi(2), []);
+  s.fader(2, 1); // si aggancia in cima
   s.fader(2, 0);
   s.mute(2);
   assert.deepEqual(s.avvisi(2), ['MUTE', 'fader a zero']);
@@ -558,4 +560,115 @@ test('passo 1.1: le scelte vivono solo per i brani in una linguetta del CUE; usc
   s.tieniBrani(['uno', 'due']); // e rientra, un'ora dopo
   assert.equal(s.armato(3), false);
   assert.equal(s.next(3), null);
+});
+
+// --- passo 2: il mixer vero ---
+
+test('aggancio: dopo l\'avvio il fader non comanda finché non è entro ±3% del valore vero o ci passa sopra', () => {
+  const s = new StatoCanali();
+  assert.deepEqual(s.fader(2, 0.3), [], 'avvio: valore vero 1, il fader sta a 0,3: i suoi messaggi non contano');
+  assert.deepEqual(s.fader(2, 0.6), []);
+  assert.equal(s.canali[2].vero, 1);
+  assert.equal(s.vista()[2].fader.agganciato, false);
+  assert.equal(s.vista()[2].fader.vero, 1, 'la tacca dice dove portarlo');
+  assert.equal(s.vista()[2].fader.valore, 0.6, 'lo slider mostra la mano');
+  const e = s.fader(2, 0.98); // entro il 3%
+  assert.deepEqual(e.map((x) => [x.tipo, x.ch, x.pos]), [['ch', 2, 0.98]]);
+  assert.equal(s.canali[2].agganciato, true);
+  assert.equal(s.fader(2, 0.4)[0].pos, 0.4, 'agganciato: segue');
+  assert.equal(s.vista()[2].fader.valore, 0.4);
+  // la tolleranza è ±3%
+  const t = new StatoCanali();
+  assert.deepEqual(t.fader(0, 0.96), [], '4% sotto: fuori');
+  assert.equal(t.fader(0, 0.971)[0].tipo, 'ch', '2,9% sotto: dentro');
+});
+
+test('aggancio: ci passa sopra tra due messaggi di fila (un salto veloce che scavalca il valore)', () => {
+  const s = new StatoCanali();
+  s.sliderSchermo(3, 0.5); // il valore vero è 0,5
+  assert.deepEqual(s.fader(3, 0.2), [], 'da sotto');
+  const e = s.fader(3, 0.8); // sopra: ha scavalcato 0,5 tra due messaggi
+  assert.equal(e[0].pos, 0.8);
+  assert.equal(s.canali[3].agganciato, true);
+  // dalla stessa parte non si aggancia
+  const t = new StatoCanali();
+  t.sliderSchermo(3, 0.5);
+  t.fader(3, 0.1);
+  assert.deepEqual(t.fader(3, 0.3), []);
+  assert.deepEqual(t.fader(3, 0.1), []);
+});
+
+test('aggancio: lo slider a schermo comanda subito e sgancia il fisico; avvio, ripristino, nano ricollegato e PROJ nuovo lo sganciano', () => {
+  const s = new StatoCanali();
+  s.fader(1, 0.99);
+  assert.equal(s.canali[1].agganciato, true);
+  const e = s.sliderSchermo(1, 0.4);
+  assert.deepEqual(e.map((x) => [x.tipo, x.pos]), [['ch', 0.4]]);
+  assert.equal(s.canali[1].agganciato, false);
+  assert.equal(s.vista()[1].fader.valore, 0.4, 'subito dopo lo slider a schermo mostra il valore vero');
+  assert.deepEqual(s.fader(1, 0.9), [], 'il fisico sta a 0,9, il vero è 0,4: non comanda');
+  assert.equal(s.canali[1].vero, 0.4);
+  assert.equal(s.vista()[1].fader.valore, 0.9, 'poi lo slider mostra la mano, con la tacca sul valore vero');
+  assert.equal(s.vista()[1].fader.vero, 0.4);
+  s.fader(1, 0.41);
+  assert.equal(s.canali[1].agganciato, true);
+  s.sganciaTutti(); // ripristino del live, nano ricollegato, PROJ nuovo
+  assert.equal(s.canali[1].agganciato, false);
+  assert.deepEqual(s.fader(1, 0.9), []);
+  assert.equal(s.canali[1].vero, 0.41, 'il valore vero resta');
+  // dopo un crash dell\'interfaccia: il mixer come l\'ha tenuto il motore, fader sganciati
+  const t = new StatoCanali();
+  t.leggiMixer([{ pos: 0.3, muto: false }, { pos: 1, muto: true }]);
+  assert.equal(t.canali[0].vero, 0.3);
+  assert.equal(t.canali[1].mute, true);
+  assert.equal(t.canali[0].agganciato, false);
+  assert.equal(t.datiMixer()[0].pos, 0.3);
+  assert.equal(t.datiMixer().length, 8);
+});
+
+test('mixer: guadagno = volume clip × volume CH × break; muto se la clip o il CH è muto; un livello fuori dai CH non ha CH', () => {
+  const ch = { volume: 0.5, muto: false };
+  assert.equal(guadagnoLivello({ volume: 0.8, muto: false }, ch, 1), 0.4);
+  assert.equal(guadagnoLivello({ volume: 0.8, muto: false }, ch, 0.5), 0.2);
+  assert.equal(guadagnoLivello({ volume: 0.8, muto: true }, ch), 0, 'muta la clip');
+  assert.equal(guadagnoLivello({ volume: 0.8, muto: false }, { volume: 1, muto: true }), 0, 'muto il CH');
+  assert.equal(guadagnoLivello({ volume: 0.8, muto: false }, null), 0.8, 'senza CH');
+  const st = chNeutro();
+  applicaMessaggioCh(st, { volume: 0.3, pos: 0.7 });
+  assert.deepEqual(st, { volume: 0.3, pos: 0.7, muto: false });
+  applicaMessaggioCh(st, { muto: true });
+  assert.equal(st.muto, true);
+  applicaMessaggioCh(st, { volume: 'x', pos: NaN });
+  assert.equal(st.volume, 0.3, 'un volume che non è un numero non rompe niente');
+  applicaMessaggioCh(st, { volume: 7 });
+  assert.equal(st.volume, 1);
+});
+
+test('la cuffia è pre-fader: un CH a zero o muto si sente in cuffia, e l\'effetto cuffia non porta mai volume né muto', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.fader(2, 0.99);
+  s.fader(2, 0); // GROWL a zero
+  s.mute(2);
+  s.scegliAlt(2, 1);
+  const e = s.premiS(2);
+  assert.deepEqual(e.map((x) => x.tipo), ['cuffia'], 'si ascolta lo stesso');
+  assert.equal(e[0].alt.nome, 'sub');
+  assert.ok(!('volume' in e[0]) && !('pos' in e[0]) && !('muto' in e[0]));
+  // e le uniche cose che portano volume al motore sono gli effetti «ch» (l\'app li manda solo al live)
+  assert.ok(s.fader(2, 0.1).every((x) => x.tipo === 'ch'));
+  assert.ok(s.mute(2).every((x) => x.tipo === 'ch'));
+});
+
+test('avvisi: il CH dice anche quando la clip che suona è muta per conto suo (la spinta della manopola dell\'X-Touch)', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegliAlt(2, 1); s.go(2); s.scattato(2);
+  s.sincronizza([{ nome: 'sub', provenienza: 'uno §1', ch: 2, da: 0, a: null, muto: true }], 4);
+  assert.deepEqual(s.avvisi(2), ['clip muta']);
+  assert.deepEqual(s.vista()[2].avvisi, ['clip muta']);
+  s.sincronizza([{ nome: 'sub', provenienza: 'uno §1', ch: 2, da: 0, a: null, muto: false }], 5);
+  assert.deepEqual(s.avvisi(2), []);
+  s.sincronizza([], 6); // non suona: niente avvisi
+  assert.deepEqual(s.avvisi(2), []);
 });

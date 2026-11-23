@@ -7,7 +7,9 @@
 - Non fatto / da sapere: il NEXT del BEAT è UN tasto nella testa (scena scelta), non uno per pillola. CH vuoto senza scelta: R mostra «—» (prima lanciava la prima clip). Non provato col nano vero.
 - File: canali.js, griglia.js, app.js, cue.js, motore.js, nano.js (commenti), stile.css, it.json (cue.next), prova.js (3c), test canali/nano.
 - Passo 1.1 fatto: una scelta eseguita (clip che ora suona, OUT fatto) si cancella in `sincronizza`; `tieniBrani` cancella le scelte dei brani che escono da entrambe le linguette del CUE (chiamata da `impostaBranoCanali`). Test 528/529 (resta MOD), prova entrata+brani 40 ok.
-- Prossimo passo: PASSO 2 (mixer vero: 8 CH nel motore con volume e muto, via applicaFisico, aggancio del fader, fader 8 = CH8 STRAY). Prima 5 righe a Valerio e aspettare l'ok.
+- PASSO 2 FATTO (mixer vero): `mixer.js` (guadagnoLivello, applicaMessaggioCh); il motore live tiene `mixer[8]` {volume,pos,muto}, messaggio `ch`, guadagno = clip × CH × break; lo stato esce nei messaggi `livelli` e nello stato (pong). Cuffia pre-fader (non lo riceve mai). App: via applicaFisico/fisicoInviato; `ch` solo al live; copia nell'istantanea di ripristinaLive e rimandata a ogni live rinato; `riprendi()` rilegge `live.stato.mixer`. StatoCanali: aggancio ±3% o passaggio sopra, `sliderSchermo`, `sganciaTutti` (avvio, slider, ripristino, nano ricollegato, PROJ), avvisi MUTE / fader a zero / clip muta; griglia con tacca del valore vero.
+- Prove: test 534/535 (resta MOD); entrata 29 ok, livelli+robustezza 44 ok, 5 parti insieme 115 ok. Una volta su combinata robustezza «click 0/0» (non si è ripetuto: guasti sparsi noti).
+- Prossimo passo: PASSO 3 (trasporto del nano: TRACK, SET, MARKER, CYCLE, PLAY, STOP, REC). Prima 5 righe a Valerio e ok.
 
 ## Obiettivo
 Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto a Valerio. Parte A (stato puro `src/renderer/canali.js`, 16 test) già fatta.

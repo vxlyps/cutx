@@ -580,12 +580,16 @@ async function provaEntrata({ finestre, scrivi }) {
 
   controlla('un go live dal CUE senza tipo entra nel CH della FREE (l\'ultimo, 7)', nuovo?.ch === 7, JSON.stringify(nuovo?.ch));
 
-  // il fader dei CANALI (nano o schermo) cambia davvero il volume dei livelli di quel CH
+  // il fader dei CANALI (nano o schermo) cambia davvero il volume di quel CH, nel motore (non quello della clip): vale anche per le clip che entreranno
   await js('cutxProva.canaliFader(7, 0.5)');
   await aspetta(0.6);
-  const conFader = (await live()).livelli.find((l) => l.id === r2.livello);
-  controlla('il fader del CH cambia il volume del livello (a metà: circa 0,18)', conFader && Math.abs(conFader.volume - 0.178) < 0.03, JSON.stringify(conFader?.volume));
-  await js('cutxProva.canaliFader(7, null)'); // fader «non letto» di nuovo: la prova non lascia il fisico a metà
+  const sFader = await live();
+  const gFader = sFader?.guadagni?.[r2.livello];
+  const clipFader = sFader?.livelli?.find((l) => l.id === r2.livello);
+  controlla('il fader del CH cambia il guadagno vero del livello (a metà: circa 0,18 × volume clip)', clipFader && gFader !== undefined && Math.abs(gFader - 0.178 * clipFader.volume) < 0.03, JSON.stringify([gFader, clipFader?.volume]));
+  controlla('il volume della clip non cambia (il volume del CH è un altro)', clipFader && clipFader.volume === 1, JSON.stringify(clipFader?.volume));
+  controlla('il motore tiene il volume del CH (dopo un crash dell\'interfaccia lo si riprende)', Math.abs((sFader?.mixer?.[7]?.pos ?? 9) - 0.5) < 1e-6, JSON.stringify(sFader?.mixer?.[7]));
+  await js('cutxProva.canaliSlider(7, 1)'); // di nuovo pieno: la prova non lascia il mixer a metà
 
   // un CH con un tipo suona UNA clip sola: reese entra in CH3 e «sub» esce dove entra lei; in FREE invece si impila
   const entraU = (nome, ch, unico) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(70).gain(.0001)', nome: ${JSON.stringify(nome)}, provenienza: 'prova', ch: ${ch}, unico: ${unico}, cicli: 1, scritto: true })`);
@@ -634,7 +638,7 @@ async function provaEntrata({ finestre, scrivi }) {
   await aspetta(0.3);
   const gaRipresa = await livello(g.risposte[0].livello);
   controlla('ANNULLA di un OUT: il livello che usciva torna a suonare (anche senza dissolvenza)', gaRipresa && gaRipresa.a === null, JSON.stringify(gaRipresa?.a));
-  const gU = await js(`cutxProva.richiestaLive({ tipo: 'gruppo', cicli: 1, entrate: [], uscite: ${JSON.stringify([{ livello: g.risposte[0].livello }, { livello: g.risposte[1].livello }])} })`);
+  const gU = await js(`cutxProva.richiestaLive({ tipo: 'gruppo', cicli: 2, entrate: [], uscite: ${JSON.stringify([{ livello: g.risposte[0].livello }, { livello: g.risposte[1].livello }])} })`);
   await aspetta(0.3);
   const [ua, ub] = [await livello(g.risposte[0].livello), await livello(g.risposte[1].livello)];
   controlla('gruppo di uscite: tutte allo stesso ciclo', gU?.da !== undefined && ua?.a === gU.da && ub?.a === gU.da, JSON.stringify([gU?.da, ua?.a, ub?.a]));
