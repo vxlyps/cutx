@@ -37,7 +37,9 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
-import { canaliPredefiniti, leggiCanali, ordineCue } from './canali.js';
+import { StatoCanali, canaliPredefiniti, chDelTipo, chDellaBeat, gainFader, leggiCanali, ordineCue } from './canali.js';
+import { Griglia } from './griglia.js';
+import { Nano } from './nano.js';
 import { PaginaCanali } from './impostazioni-canali.js';
 import { eNomeBeat } from './nomi.js';
 import { analizza, valuta } from './analisi.js';
@@ -346,7 +348,7 @@ async function goLive(pezzo = null) {
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
-  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, ch: p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTipo(canaliConfig, p.tipo ?? '')), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
   if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
   if (!r.errore) entraTraUsato();
@@ -384,6 +386,7 @@ async function muoviScena(delta) {
   const { codice: senzaCoda, coda } = separaCoda(pre + m.codice.slice(m.inizio));
   const r = await live.richiesta({
     tipo: 'entra',
+    ch: chDellaBeat(canaliConfig),
     beat: { base, indice: k, scene },
     codice: senzaCoda,
     coda: coda.length ? coda : undefined,
@@ -450,7 +453,7 @@ async function passaBrano(k = 0) {
   const { codice: senzaCoda, coda } = separaCoda(codice);
   // col live vuoto (dopo «ferma tutto», o al primo brano) non c'è niente da cui passare: il beat entra subito, pieno, senza transizione
   const sfuma = occupato ? { dissolvenza: { cicli: transizione.cicli, tipo: 'filtro', filtroUscita: 'hp' }, transizione: T.perIlLive(transizione, tieni) } : {};
-  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, ...sfuma });
+  const r = await live.richiesta({ tipo: 'entra', ch: chDellaBeat(canaliConfig), beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, ...sfuma });
   mostraErrore(r.errore, 'live');
   if (r.errore) return r;
   entraTraUsato();
@@ -1066,10 +1069,14 @@ async function apriStash(stato) {
 // --- i CANALI (gli 8 CH del LIVE, canali.json nel PROJ) ---
 
 let canaliConfig = canaliPredefiniti();
+const statoCanali = new StatoCanali(canaliConfig); // la verità sta nel motore: lo stato si risincronizza dai livelli (sincronizza)
+let griglia = null;
+const fisicoInviato = new Map(); // id del livello → 'volume|muto' già mandato al motore
 let canaliErrori = [];
 const liveAcceso = () => livelliLive.some((l) => l.a === null);
 function usaCanali(config, errori = []) {
   canaliConfig = config;
+  statoCanali.impostaCANALI(config);
   canaliErrori = errori;
   cue.ordineCh = ordineCue(config);
   if (cue.modo === 'brano') cue.mostraBrano?.(false);
@@ -1090,6 +1097,51 @@ async function ripristinaCanali() {
   await window.cutx.cancellaCanali().catch(() => {});
 }
 let paginaCanali = null;
+
+// La griglia dei CANALI: legge lo stato e manda intenzioni; le «azioni» le esegue chi parla col motore.
+const livelliDelCH = (i) => livelliLive.filter((l) => l.ch === i && l.a === null);
+async function eseguiCanali(effetti) {
+  for (const e of effetti) {
+    if (e.tipo === 'avviso') cue.avviso(e.testo);
+    else if (e.tipo === 'go') {
+      const pezzo = cue.pezzoAlt(e.alt);
+      if (pezzo.errore) {
+        statoCanali.canali[e.ch].attesa = null;
+        cue.avviso(pezzo.errore);
+        continue;
+      }
+      const r = await goLive({ ...pezzo, ch: e.ch });
+      if (!r || r.errore) statoCanali.canali[e.ch].attesa = null;
+      else cue.dopoGoLive();
+    } else if (e.tipo === 'annulla') {
+      const l = livelliDelCH(e.ch).find((x) => x.da > cicloAdesso());
+      if (l) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
+    } else if (e.tipo === 'out' || e.tipo === 'out-subito') {
+      const l = livelliDelCH(e.ch).find((x) => x.da <= cicloAdesso());
+      if (l) live.manda({ tipo: 'togli', livello: l.id, subito: e.tipo === 'out-subito', dissolvenza: dissolvenza(e.tipo === 'out' ? preferenze.dissolvenzaUscita ?? 0 : 0) });
+    }
+  }
+  aggiornaCanali();
+}
+// Il fisico (fader e M) vince sul volume del codice: lo mando ai livelli del CH solo quando cambia.
+function applicaFisico() {
+  statoCanali.canali.forEach((c, i) => {
+    for (const l of livelliDelCH(i)) {
+      const volume = c.fader === null ? undefined : gainFader(c.fader);
+      const chiave = `${volume}|${c.mute}`;
+      if (fisicoInviato.get(l.id) === chiave) continue;
+      fisicoInviato.set(l.id, chiave);
+      live.manda({ tipo: 'livello', livello: l.id, ...(volume !== undefined ? { volume } : {}), muto: c.mute });
+    }
+  });
+}
+function aggiornaCanali() {
+  if (!griglia) return;
+  statoCanali.sincronizza(livelliLive, cicloAdesso());
+  statoCanali.impostaBrano(cue.modo === 'brano' && cue.brano ? { nome: cue.nomeBrano, bpm: B.bpmDelBrano(cue.brano.modello), beat: cue.brano.modello.beat, sezioni: cue.brano.modello.sezioni } : null);
+  applicaFisico();
+  griglia.aggiorna(statoCanali.vista(), mappa ? cicloAdesso() : null);
+}
 
 // --- i PROJ ---
 
@@ -1730,6 +1782,7 @@ const pila = new Pila($('livelli'), $('jam'), {
     const prima = livello ? livelloVivo(livello.id)?.codice : null;
     const r = await live.richiesta({
       tipo: 'entra',
+      ch: livello ? livello.ch ?? null : chDelTipo(canaliConfig, ''), // modificare un livello lo tiene nel suo CH; una jam nuova va in FREE
       codice,
       ...(coda.length ? { coda } : {}),
       nome: livello?.nome ?? 'jam',
@@ -1766,6 +1819,7 @@ function mostraLive() {
   else if (live.stato.livelli && live.ultimoPong > spintaLivelli) livelliLive = live.stato.livelli;
   pila.aggiorna(livelliLive);
   paginaCanali?.disegna();
+  aggiornaCanali();
 }
 
 function mostraCue() {
@@ -1928,6 +1982,7 @@ for (const m of [live, cuffia]) {
       livelliLive = msg.livelli;
       paracaduteAperto = !!msg.paracadute;
       pila.aggiorna(livelliLive);
+      aggiornaCanali();
     }
     else if (msg.tipo === 'globali') mostraGlobali(msg.righe);
     else if (msg.tipo === 'strisce') pila.suStrisce(msg);
@@ -2286,6 +2341,33 @@ const controllerMidi = new Controller({
   faderScegli: (effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: effetto } }),
 });
 const paginaController = new PaginaController(controllerMidi);
+griglia = new Griglia($('canali-griglia'), {
+  scegli: (ch, k) => (statoCanali.scegliAlt(ch, k), aggiornaCanali()),
+  go: (ch) => eseguiCanali(statoCanali.go(ch)),
+  out: (ch) => eseguiCanali(statoCanali.out(ch)),
+  outSubito: (ch) => eseguiCanali(statoCanali.outSubito(ch)),
+  mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
+  fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
+});
+const nano = new Nano({
+  fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
+  manopola: (ch, pos) => (statoCanali.scegli(ch, pos), aggiornaCanali()),
+  go: (ch) => eseguiCanali(statoCanali.go(ch)),
+  out: (ch) => eseguiCanali(statoCanali.out(ch)),
+  outSubito: (ch) => eseguiCanali(statoCanali.outSubito(ch)),
+  mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
+  goAll: () => eseguiCanali(statoCanali.goAll()),
+  collegato: (si) => { $('nano-stato').hidden = !si; },
+});
+if (!inTest) nano.avvia();
+setInterval(aggiornaCanali, 250); // i conti alla rovescia e quello che il motore ha cambiato da solo
+for (const b of document.querySelectorAll('#vista-live [data-vista]')) {
+  b.onclick = () => {
+    for (const x of document.querySelectorAll('#vista-live [data-vista]')) x.classList.toggle('on', x === b);
+    $('canali-griglia').hidden = b.dataset.vista !== 'canali';
+    $('livelli').hidden = b.dataset.vista !== 'pila';
+  };
+}
 paginaCanali = new PaginaCanali({ config: () => canaliConfig, errori: () => canaliErrori, vivo: liveAcceso, salva: salvaCanali, ripristina: ripristinaCanali });
 caricaCanali();
 const specchio = new Specchio($('specchio'));

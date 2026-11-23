@@ -15,14 +15,14 @@ export const ZONA_MORTA = 0.04; // al centro di SWEEP
 // --- la pagina CANALI (le 8 definizioni) ---
 
 export const canaliPredefiniti = () => [
-  { nome: 'THUMP', colore: '#e8e8e8', tipi: ['drum'], free: false }, // qui entra anche la @beat con le sue scene
-  { nome: 'PURR', colore: '#e0b23c', tipi: ['keys', 'arp'], free: false },
-  { nome: 'GROWL', colore: '#d9582b', tipi: ['bass'], free: false },
-  { nome: 'HOWL', colore: '#3cc0e0', tipi: ['lead'], free: false },
-  { nome: 'FUR', colore: '#8a6fe0', tipi: ['pad'], free: false },
-  { nome: 'CLAW', colore: '#e06fae', tipi: ['perc'], free: false },
-  { nome: 'HISS', colore: '#6fe0a8', tipi: ['fx'], free: false },
-  { nome: 'STRAY', colore: '#9bd02a', tipi: [], free: true }, // i senza tipo, e qualsiasi clip del brano
+  { nome: 'THUMP', tipi: ['drum'], free: false }, // qui entra anche la @beat con le sue scene
+  { nome: 'PURR', tipi: ['keys', 'arp'], free: false },
+  { nome: 'GROWL', tipi: ['bass'], free: false },
+  { nome: 'HOWL', tipi: ['lead'], free: false },
+  { nome: 'FUR', tipi: ['pad'], free: false },
+  { nome: 'CLAW', tipi: ['perc'], free: false },
+  { nome: 'HISS', tipi: ['fx'], free: false },
+  { nome: 'STRAY', tipi: [], free: true }, // i senza tipo, e qualsiasi clip del brano
 ];
 
 // Gli errori della pagina CANALI, in italiano; lista vuota = va bene. Otto CH, una sola FREE, ogni tipo in un CH solo.
@@ -49,7 +49,7 @@ export function leggiCanali(testo) {
   try {
     const grezzo = JSON.parse(testo);
     const base = canaliPredefiniti();
-    const config = Array.isArray(grezzo) ? grezzo.map((c, i) => ({ nome: String(c?.nome ?? '').trim(), colore: /^#[0-9a-f]{6}$/i.test(c?.colore) ? c.colore : base[i]?.colore ?? '#888888', tipi: Array.isArray(c?.tipi) ? c.tipi.filter((t) => TIPI.includes(t)) : [], free: c?.free === true })) : null;
+    const config = Array.isArray(grezzo) ? grezzo.map((c, i) => ({ nome: String(c?.nome ?? '').trim(), tipi: Array.isArray(c?.tipi) ? c.tipi.filter((t) => TIPI.includes(t)) : [], free: c?.free === true })) : null;
     const errori = config ? validaCanali(config) : ['il file non è una lista'];
     return errori.length ? { config: canaliPredefiniti(), errori } : { config, errori: [] };
   } catch (e) {
@@ -81,10 +81,10 @@ export function alternative(config, brano, ch) {
   if (!brano) return [];
   const di = (extra) => ({ brano: brano.nome, bpm: brano.bpm ?? null, ...extra });
   const out = [];
-  if (ch === chDellaBeat(config)) (brano.beat?.scene ?? []).forEach((s, k) => out.push(di({ id: `${brano.nome}#scena${k}`, tipo: 'scena', indice: k, nome: s.nome, tipoClip: 'drum' })));
+  if (ch === chDellaBeat(config)) (brano.beat?.scene ?? []).forEach((s, k) => out.push(di({ id: `${brano.nome}#scena${k}`, tipo: 'scena', indice: k, nome: s.nome, tipoClip: 'drum', provenienza: `${brano.nome} ◆${k + 1}` })));
   (brano.sezioni ?? []).forEach((s, k) => {
     const tc = tipoDellaClip(s.info);
-    if (chDelTipo(config, tc) === ch || config[ch]?.free) out.push(di({ id: `${brano.nome}#clip${k}`, tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc }));
+    if (chDelTipo(config, tc) === ch || config[ch]?.free) out.push(di({ id: `${brano.nome}#clip${k}`, tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc, provenienza: `${brano.nome} §${k + 1}` }));
   });
   return out;
 }
@@ -120,7 +120,8 @@ export function sweep(pos) {
 
 // --- lo stato ---
 
-const vuota = () => ({ suona: null, pos: null, zona: null, fader: null, aa: null, mute: false, attesa: null });
+const vuota = () => ({ suona: null, pos: null, zona: null, fader: null, aa: null, mute: false, attesa: null, attesaMs: 0 });
+const ATTESA_MS = 1500; // dopo un GO/OUT il motore ci mette un attimo a dirlo: nel frattempo vale quello che ho chiesto
 
 export class StatoCanali {
   constructor(config = canaliPredefiniti()) {
@@ -129,6 +130,7 @@ export class StatoCanali {
     this.canali = Array.from({ length: N_CH }, vuota);
     this.entraTra = 1;
     this.bpm = null; // il tempo del set: lo porta la ch DRUM
+    this.adesso = () => Date.now();
   }
 
   // I CANALI si cambiano a live fermo (lo garantisce chi chiama); cambiato, NEXT e attese si azzerano.
@@ -139,8 +141,9 @@ export class StatoCanali {
 
   // Un brano nuovo nel CUE: la stessa posizione di ogni manopolina sceglie tra le alternative del brano nuovo.
   impostaBrano(brano) {
-    this.brano = brano;
-    for (const c of this.canali) c.zona = null;
+    const nuovo = (brano?.nome ?? null) !== (this.brano?.nome ?? null);
+    this.brano = brano; // chi lo rilegge a ogni giro (le clip cambiano mentre le scrivo) non azzera la scelta
+    if (nuovo) for (const c of this.canali) c.zona = null;
   }
 
   alternative(i) {
@@ -154,6 +157,15 @@ export class StatoCanali {
     if (!alt.length) return null;
     c.zona = c.pos === null ? 0 : zona(c.pos, alt.length, c.zona);
     return alt[c.zona] ?? null;
+  }
+
+  // Dal mouse: scelgo l'alternativa k; la manopola «segue» (stessa posizione) così NEXT non salta quando la tocco.
+  scegliAlt(i, k) {
+    const n = this.alternative(i).length;
+    if (!(k >= 0 && k < n)) return null;
+    this.canali[i].pos = (k + 0.5) / n;
+    this.canali[i].zona = k;
+    return this.next(i);
   }
 
   scegli(i, pos) {
@@ -176,6 +188,7 @@ export class StatoCanali {
     if (c.suona?.id === alt.id) return []; // è già quella che suona
     const effetti = c.attesa ? [{ tipo: 'annulla', ch: i }] : []; // vince l'ultimo premuto
     c.attesa = { tipo: 'go', alt };
+    c.attesaMs = this.adesso();
     const bpm = i === chDellaBeat(this.config) && alt.bpm && alt.bpm !== this.bpm ? alt.bpm : undefined;
     effetti.push({ tipo: 'go', ch: i, alt, cicli: this.entraTra, ...(bpm ? { bpm } : {}) });
     return effetti;
@@ -191,6 +204,7 @@ export class StatoCanali {
     if (!c.suona) return [];
     const effetti = c.attesa ? [{ tipo: 'annulla', ch: i }] : [];
     c.attesa = { tipo: 'out' };
+    c.attesaMs = this.adesso();
     effetti.push({ tipo: 'out', ch: i, cicli: this.entraTra });
     return effetti;
   }
@@ -231,6 +245,29 @@ export class StatoCanali {
       if (i === chDellaBeat(this.config) && c.suona.bpm) this.bpm = c.suona.bpm;
     } else c.suona = null;
     c.attesa = null;
+  }
+
+  // La verità è il motore: dai livelli del live (con il loro `ch`, `da`, `a`) si ricava cosa suona, cosa sta per entrare e cosa sta per uscire.
+  // livelli: [{ nome, provenienza, ch, da, a }] (a null = non esce) · ciclo: il ciclo di adesso. Dopo un crash lo stato si ricostruisce da qui.
+  sincronizza(livelli, ciclo) {
+    const alt = (l) => {
+      for (let i = 0; i < N_CH; i++) {
+        const t = this.alternative(i).find((a) => a.provenienza === l.provenienza);
+        if (t) return t;
+      }
+      return { id: `?#${l.provenienza ?? l.nome}`, tipo: 'clip', nome: l.nome, brano: null, bpm: null, tipoClip: '', provenienza: l.provenienza ?? null };
+    };
+    this.canali.forEach((c, i) => {
+      const mie = livelli.filter((l) => l.ch === i);
+      const suonaL = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).sort((x, y) => y.da - x.da)[0];
+      const prossimo = mie.filter((l) => l.da > ciclo && l.a === null).sort((x, y) => x.da - y.da)[0];
+      c.suona = suonaL ? (c.suona && c.suona.provenienza === suonaL.provenienza ? c.suona : alt(suonaL)) : null;
+      if (i === chDellaBeat(this.config) && c.suona?.bpm) this.bpm = c.suona.bpm;
+      if (this.adesso() - c.attesaMs < ATTESA_MS) return; // ho appena chiesto qualcosa: lo dice il motore tra poco
+      if (prossimo) c.attesa = { tipo: 'go', alt: alt(prossimo), da: prossimo.da };
+      else if (suonaL && suonaL.a !== null && suonaL.a > ciclo) c.attesa = { tipo: 'out', da: suonaL.a };
+      else c.attesa = null;
+    });
   }
 
   // --- il fisico ---
@@ -292,7 +329,6 @@ export class StatoCanali {
     return this.canali.map((c, i) => ({
       indice: i,
       nome: this.config[i].nome,
-      colore: this.config[i].colore,
       free: !!this.config[i].free,
       alternative: this.alternative(i),
       suona: c.suona,

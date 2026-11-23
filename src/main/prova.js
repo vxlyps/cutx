@@ -578,6 +578,8 @@ async function provaEntrata({ finestre, scrivi }) {
   const nuovo = dopo.livelli.find((l) => l.id === r2.livello);
   controlla('il vecchio non suona più dopo il confine, il nuovo sì', !dopo.livelli.some((l) => l.id === r1.livello) && nuovo?.primo === r2.da, JSON.stringify(dopo.livelli.map((l) => [l.id, l.primo, l.ultimo, l.a])));
 
+  controlla('un go live dal CUE senza tipo entra nel CH della FREE (l\'ultimo, 7)', nuovo?.ch === 7, JSON.stringify(nuovo?.ch));
+
   // 3b. identità = CH + nome: stessa clip in due CH = due livelli; stesso CH = sostituzione
   const entraCh = (ch, cicli = 1) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(60).gain(.0001)', nome: 'lineaCH', provenienza: 'prova', ch: ${JSON.stringify(ch)}, cicli: ${cicli}, scritto: true })`);
   const c1 = await entraCh('CH1');

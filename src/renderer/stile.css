@@ -3716,9 +3716,40 @@ input[type='checkbox'] {
 }
 
 /* pagina CANALI (impostazioni) */
-.can-riga { border-left: 4px solid var(--ch, var(--linea)); padding-left: 12px; flex-wrap: wrap; }
+.can-riga { flex-wrap: wrap; }
 .can-num { min-width: 36px; }
 .can-nome { width: 150px; background: transparent; color: inherit; border: 1px solid var(--linea); padding: 6px 8px; font: inherit; text-transform: uppercase; }
-.can-colore { width: 36px; height: 30px; padding: 0; border: 1px solid var(--linea); background: transparent; }
 .can-tipi { flex-wrap: wrap; }
 .can-riga button:disabled, .can-riga input:disabled { opacity: 0.5; }
+
+/* la griglia dei CANALI nel LIVE */
+.canali-griglia { display: flex; flex-direction: column; overflow: auto; min-height: 0; }
+.ch-riga { display: grid; grid-template-columns: 84px minmax(0, 1fr) 96px auto; gap: 8px; padding: 5px 8px; border-left: 3px solid var(--grigio); border-bottom: 1px solid var(--linea); align-items: center; }
+.ch-riga.suona { background: #0c1006; border-left-color: var(--marcio); }
+.ch-riga.vecchia { border-left-style: dashed; }
+.ch-testa { display: flex; flex-direction: column; line-height: 1.1; }
+.ch-nome { font-family: 'Canaglia Stencil', monospace; font-size: 16px; color: var(--testo); }
+.ch-riga.suona .ch-nome { color: var(--marcio); }
+.ch-n { font-size: 9px; }
+.ch-mezzo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ch-ora { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+.ch-suona { font-size: 13px; }
+.ch-riga.suona .ch-suona { color: var(--marcio); }
+.ch-conto { color: var(--testo); }
+.ch-avviso { background: var(--testo); color: var(--fondo); padding: 1px 6px; font-size: 10px; text-transform: uppercase; }
+.ch-alt { display: flex; flex-wrap: wrap; gap: 3px; }
+.ch-chip { padding: 1px 7px; font-size: 11px; min-height: 0; }
+.ch-chip.next { outline: 1px solid var(--testo); }
+.ch-chip.in-onda { color: var(--marcio); }
+.ch-vuoto { font-size: 10px; opacity: 0.5; }
+.ch-tasti { display: flex; gap: 3px; }
+.ch-tasti .key { padding: 4px 8px; min-height: 0; }
+.ch-tasti .key.acceso { background: var(--marcio); color: #050604; }
+.ch-tasti .key.lenta { animation: ch-lampeggio 1.2s steps(2) infinite; }
+.ch-tasti .key.veloce { animation: ch-lampeggio 0.4s steps(2) infinite; }
+.ch-fader { width: 100%; accent-color: var(--marcio); }
+.ch-fader.non-letto { opacity: 0.45; }
+@keyframes ch-lampeggio { 50% { background: var(--testo); color: var(--fondo); } }
+.ch-stato, .ch-next { font-size: 9px; letter-spacing: 0.08em; }
+.ch-riga.suona .ch-stato { color: var(--marcio); }
+.ch-next { align-self: center; margin-right: 2px; }

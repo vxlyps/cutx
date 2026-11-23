@@ -1,4 +1,4 @@
-// Impostazioni → canali: gli 8 CH del LIVE (nome, colore, tipi, FREE). Ogni modifica valida si salva subito; a live acceso la pagina è di sola lettura.
+// Impostazioni → canali: gli 8 CH del LIVE (nome, tipi, FREE). Ogni modifica valida si salva subito; a live acceso la pagina è di sola lettura.
 import { TIPI, validaCanali } from './canali.js';
 import it from './testi/it.json';
 
@@ -50,7 +50,6 @@ export class PaginaCanali {
     righe.replaceChildren(
       ...config.map((c, i) => {
         const riga = crea('div', 'imp-riga can-riga');
-        riga.style.setProperty('--ch', c.colore);
         const num = crea('span', 'lbl can-num', T.ch.replace('{n}', i + 1));
         const nome = crea('input', 'can-nome');
         nome.value = c.nome;
@@ -61,12 +60,6 @@ export class PaginaCanali {
           if (!nome.value.trim()) return this.mostraErrore(T.errNome.replace('{n}', i + 1)), this.disegna();
           this.cambia(i, (_, ch) => { ch.nome = nome.value.trim(); });
         };
-        const colore = crea('input', 'can-colore');
-        colore.type = 'color';
-        colore.value = c.colore;
-        colore.disabled = !fermo;
-        colore.setAttribute('aria-label', T.colore);
-        colore.onchange = () => this.cambia(i, (_, ch) => { ch.colore = colore.value; });
         const tipi = crea('div', 'segmenti can-tipi');
         for (const t of TIPI) {
           const b = crea('button', 'key', T.tipi[t]);
@@ -84,7 +77,7 @@ export class PaginaCanali {
         free.classList.toggle('acid', c.free);
         free.disabled = !fermo;
         free.onclick = () => this.cambia(i, (tutti, ch) => { for (const x of tutti) x.free = false; ch.free = true; });
-        riga.append(num, nome, colore, tipi, free);
+        riga.append(num, nome, tipi, free);
         return riga;
       }),
     );

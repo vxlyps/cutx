@@ -3,6 +3,7 @@
 // - brano: un file .cutx della libreria, con la mappa in alto e una card per sezione.
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
+import { tipoDi } from './categorie.js';
 import it from './testi/it.json';
 import { mostraApri } from './apri-clip.js';
 import { creaEditor } from './editor.js';
@@ -287,6 +288,16 @@ export class Cue {
     };
   }
 
+  // Il pezzo di un'alternativa dei CANALI (scena del beat o clip del brano nel CUE), intero, senza passare dalla card scelta.
+  pezzoAlt(alt) {
+    const m = this.brano?.modello;
+    if (!m || !alt) return { errore: 'nessun brano nel CUE' };
+    if (alt.tipo === 'scena') return m.beat?.scene[alt.indice] ? { ...this.pezzoScena(m, alt.indice, 'brano'), bpmBrano: B.bpmDelBrano(m) } : { errore: `la scena «${alt.nome}» non c'è più` };
+    const sez = m.sezioni[alt.indice];
+    if (!sez) return { errore: `la clip «${alt.nome}» non c'è più` };
+    return { nome: sez.nome, provenienza: `${this.nomeBrano} §${alt.indice + 1}`, tipo: tipoDi(sez.info), volume: sez.info?.volume, drum: !!sez.info?.drum, ...B.codice(m, alt.indice, null), bpmBrano: B.bpmDelBrano(m) };
+  }
+
   // L'apertura: SOLO quello che ho scritto io (mai il fantasma), tutto o le righe scelte, come livello «apertura».
   pezzoApertura(carta) {
     const m = this.brano.modello;
@@ -321,6 +332,7 @@ export class Cue {
     return {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
+      tipo: tipoDi(m.sezioni[carta.i].info), // il tipo decide in che CH del LIVE entra
       volume: m.sezioni[carta.i].info?.volume,
       drum: !!m.sezioni[carta.i].info?.drum, // · drum nella riga della clip: sotto la sua card c'è l'onda
       ...B.codice(m, carta.i, righe),

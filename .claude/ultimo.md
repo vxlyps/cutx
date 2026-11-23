@@ -24,10 +24,20 @@ Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto
 - Il CUE segue l'ordine dei CH (`gruppiClip(clip, ordine)` in categorie.js, `cue.ordineCh`); drum/perc ora hanno il loro gruppo.
 - Test: canali+synth 64 ok. Foto `--foto` ora scatta anche `-impostazioni-canali.png`. NON lanciate le prove lunghe (`npm run prova`).
 
-## Da fare (parte B, poi FERMARSI)
-4. Griglia LIVE col mouse (8 colonne × alternative del brano nel CUE; suona, NEXT, countdown, fader «non letto», mute, vecchia). Il LIVE di oggi è `src/renderer/pila.js`. GO deve mandare `ch`; `canali` si ricostruisce da `ch` dei livelli (stato-live.js, app.js).
-5. X-TOUCH con la mappa di oggi sui CH. Poi test + prova + rapporto (cosa funziona/no/rischia/cosa provare + tabella regola→file→test). Fermarsi.
-- Il NANO è collegato: fase 0 (monitor MIDI in sola lettura) da fare prima del passo del nano.
+## Fatto (passo 4, 23/11/2026)
+- Colori dei CH TOLTI (Valerio: «mi fanno cagare», vuole verde marcio, bianco, scritte). Solo verde = suona. Via `colore` da canali.js e dalla pagina.
+- LIVE: vista «canali» (griglia `griglia.js`, 8 righe: SUONA/VUOTO, NEXT, GO/OUT/M, fader) e «pila» (vecchia) con interruttore in alto. Default canali. Stato in `statoCanali` (app.js), si risincronizza ogni 250 ms dai livelli del motore (`StatoCanali.sincronizza`).
+- Ogni GO dal CUE entra nel CH del suo tipo (beat → THUMP, senza tipo/scratch/jam → FREE); `ch` mandato in goLive, muoviScena, passaBrano, jam. I colpi restano fuori dai CH.
+- NANO: `nano.js` legge i CC di fabbrica (fader 0-7, manopole 16-23, S 32-39, M 48-55, R 64-71, PLAY 41; qualsiasi canale MIDI). R=GO, S=OUT (tenuto 1 s = subito), M=MUTE, manopola=NEXT, fader=volume CH, PLAY=GO ALL. NON provato con le mani su nano vero.
+- LED del nano: NON si accendono (non risponde ai sysex). Serve l'Editor Korg: LED External, Momentary, un canale solo, Write Scene (Valerio, una volta).
+- Prove: test 515/516 (resta il solo MOD noto); prova livelli+entrata+robustezza 62 ok, brani+browser+impostazioni 64 ok, entrata 19 ok (nuovo controllo FREE).
+
+## Da fare
+- X-TOUCH sui CH: NON fatto. Oggi l'X-Touch comanda i «posti» della pila (beat + 5 clip, manopola 1 = CUE, 8 = master). Va deciso con Valerio cosa vuol dire «scolpisce il CH in FOCUS» prima di toccarlo.
+- Master: nano fader/manopola 8 = master o CH8? Oggi il fader 8 è il CH8. Da decidere.
+- Provare il nano a mano; poi luci (dopo l'Editor Korg) e fase 3: passaggio da brano a brano canale per canale.
+- OUT non rispetta ancora «entra tra» (esce al prossimo confine con la dissolvenza di uscita).
+- Prima di un merge: togliere il blocco `CANALI` in main.js.
 
 ## File toccati
 src/renderer/categorie.js, canali.js, motore.js (entra ~r.489-554, descrivi ~r.678), app.js (ripristino ~r.1434, cutxProva.richiestaLive), src/main/prova.js (provaEntrata, punto 3b).

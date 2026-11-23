@@ -264,3 +264,49 @@ test('canali.json: manca → predefiniti; sbagliato → predefiniti con l\'error
   const doppio = predef().map((c) => ({ ...c, tipi: ['bass'] }));
   assert.ok(leggiCanali(JSON.stringify(doppio)).errori[0].includes('due CH'));
 });
+
+// --- griglia col mouse e sincronizzazione col motore ---
+test('scegliAlt: dal mouse NEXT è quella scelta e la manopola la segue', () => {
+  const st = new StatoCanali();
+  st.impostaBrano(brano1);
+  const ch = chDelTipo(st.config, 'bass');
+  assert.equal(st.scegliAlt(ch, 1).nome, 'reese');
+  assert.equal(st.next(ch).nome, 'reese'); // chi rilegge non la fa saltare
+  assert.equal(st.scegliAlt(ch, 9), null);
+});
+
+test('sincronizza: suona, sta per entrare, sta per uscire; vince il motore (dopo un crash si ricostruisce)', () => {
+  const st = new StatoCanali();
+  st.impostaBrano(brano1);
+  const bass = chDelTipo(st.config, 'bass');
+  const lead = chDelTipo(st.config, 'lead');
+  const livelli = [
+    { nome: 'sub', provenienza: 'uno §1', ch: bass, da: 0, a: 12 },
+    { nome: 'melodia', provenienza: 'uno §2', ch: lead, da: 16, a: null },
+  ];
+  st.sincronizza(livelli, 10);
+  assert.equal(st.canali[bass].suona.nome, 'sub');
+  assert.equal(st.canali[bass].suona.id, 'uno#clip0');
+  assert.equal(st.canali[bass].attesa.tipo, 'out');
+  assert.equal(st.canali[lead].suona, null);
+  assert.equal(st.canali[lead].attesa.tipo, 'go');
+  assert.equal(st.canali[lead].attesa.da, 16);
+  st.sincronizza(livelli, 20);
+  assert.equal(st.canali[bass].suona, null);
+  assert.equal(st.canali[lead].suona.nome, 'melodia');
+  assert.equal(st.canali[lead].attesa, null);
+});
+
+test('sincronizza: appena premuto GO il motore non cancella la richiesta (1,5 s di respiro)', () => {
+  const st = new StatoCanali();
+  st.impostaBrano(brano1);
+  let t = 1000;
+  st.adesso = () => t;
+  const bass = chDelTipo(st.config, 'bass');
+  st.go(bass);
+  st.sincronizza([], 5); // il motore non ne sa ancora niente
+  assert.equal(st.canali[bass].attesa.tipo, 'go');
+  t += 2000;
+  st.sincronizza([], 5);
+  assert.equal(st.canali[bass].attesa, null);
+});

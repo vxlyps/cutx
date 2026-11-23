@@ -149,9 +149,16 @@
         <div class="testa">
           <span class="titolo">LIVE</span>
           <span class="lbl">casse + proiettore</span>
+          <div class="spazio"></div>
+          <span id="nano-stato" class="lbl" hidden>nano</span>
+          <div class="segmenti" id="vista-live">
+            <button class="key on" data-vista="canali">canali</button>
+            <button class="key" data-vista="pila">pila</button>
+          </div>
         </div>
         <div class="corpo">
-          <div id="livelli" class="livelli"></div>
+          <div id="canali-griglia" class="canali-griglia"></div>
+          <div id="livelli" class="livelli" hidden></div>
           <pre id="globali" class="globali" data-aiuto="globali" hidden></pre>
           <article id="jam" class="card jam"></article>
         </div>

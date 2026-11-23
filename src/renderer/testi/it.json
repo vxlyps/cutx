@@ -983,11 +983,10 @@
     }
   },
   "canali": {
-    "aiuto": "Gli 8 canali del LIVE. Ognuno ha un nome (libero), un colore e i tipi di clip che accoglie. Un tipo sta in un canale solo; la clip senza tipo (e ogni clip «in più») va nel canale FREE. Si cambiano a live fermo e valgono per questo PROJ.",
+    "aiuto": "Gli 8 canali del LIVE. Ognuno ha un nome (libero) e i tipi di clip che accoglie. Un tipo sta in un canale solo; la clip senza tipo (e ogni clip «in più») va nel canale FREE. Si cambiano a live fermo e valgono per questo PROJ.",
     "fermo": "Il live suona: i canali si possono solo guardare. Ferma il live per cambiarli.",
     "ch": "CH{n}",
     "nome": "nome del canale",
-    "colore": "colore",
     "free": "FREE",
     "freeAiuto": "il canale dei senza tipo e dei «in più»",
     "predefinito": "torna al predefinito",
