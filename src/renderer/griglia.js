@@ -10,7 +10,7 @@ const crea = (tag, classe, testo) => {
 const NOMI_LUCE = { spenta: '', accesa: 'acceso', lenta: 'lenta', veloce: 'veloce' };
 
 export class Griglia {
-  // azioni: { scegli(ch, k), go(ch), out(ch), outSubito(ch), mute(ch), fader(ch, v) }
+  // azioni: { scegli(ch, k), premiR(ch), tieniR(ch), cuffia(ch), mute(ch), fader(ch, v) }
   constructor(contenitore, azioni) {
     this.el = contenitore;
     this.azioni = azioni;
@@ -21,7 +21,7 @@ export class Griglia {
   // vista = StatoCanali.vista(); ciclo = il ciclo di adesso (per il conto alla rovescia)
   aggiorna(vista, ciclo) {
     this.ciclo = ciclo;
-    const firma = JSON.stringify(vista.map((v) => [v.nome, v.alternative.map((a) => a.id), v.suona?.id, v.next?.id, v.attesa?.tipo, v.attesa?.alt?.id, v.mute, v.vecchia, v.avvisi, v.luci]));
+    const firma = JSON.stringify(vista.map((v) => [v.nome, v.alternative.map((a) => a.id), v.suona?.id, v.next?.id, v.attesa?.tipo, v.attesa?.alt?.id, v.azioneR, v.inCuffia, v.mute, v.vecchia, v.avvisi, v.luci]));
     const trascino = this.el.contains(document.activeElement) && document.activeElement.type === 'range';
     if (firma !== this.firma && !trascino) {
       this.firma = firma; // se sto muovendo un fader il ridisegno aspetta: non gli tolgo il fader di mano
@@ -60,6 +60,7 @@ export class Griglia {
         ora.append(stato, suona, conto);
         if (v.vecchia) ora.append(crea('span', 'lbl ch-vecchia', 'vecchia'));
         for (const a of v.avvisi) ora.append(crea('span', 'ch-avviso', a));
+        if (v.inCuffia) ora.append(crea('span', 'lbl ch-in-cuffia', 'IN CUFFIA'));
         const alt = crea('div', 'ch-alt');
         if (v.alternative.length) alt.append(crea('span', 'lbl ch-next', 'NEXT'));
         v.alternative.forEach((a, k) => {
@@ -68,29 +69,31 @@ export class Griglia {
           b.classList.toggle('in-onda', v.suona?.id === a.id);
           b.title = a.tipo === 'scena' ? 'scena del beat' : '';
           b.onclick = () => this.azioni.scegli(v.indice, k);
-          b.ondblclick = () => this.azioni.go(v.indice);
+          b.ondblclick = () => this.azioni.premiR(v.indice);
           alt.append(b);
         });
         if (!v.alternative.length) alt.append(crea('span', 'lbl ch-vuoto', 'niente nel brano'));
         const tasti = crea('div', 'ch-tasti');
-        const go = crea('button', `key ch-go ${NOMI_LUCE[v.luci.r]}`, 'GO');
-        go.onclick = () => this.azioni.go(v.indice);
-        const out = crea('button', `key ch-out ${NOMI_LUCE[v.luci.s]}`, 'OUT');
-        out.title = 'esce al prossimo «entra tra» · tenuto 1 s: esce subito';
+        // R: un tasto solo, la parola dice cosa fa adesso (GO / OUT / ANNULLA); tenuto 1 s esce subito
+        const go = crea('button', `key ch-go ${NOMI_LUCE[v.luci.r]}`, v.azioneR || 'GO');
+        go.title = 'R · manda live o toglie · tenuto 1 s: esce subito';
         let timer = null;
         let lungo = false;
-        out.onpointerdown = () => {
+        go.onpointerdown = () => {
           lungo = false;
-          timer = setTimeout(() => ((lungo = true), this.azioni.outSubito(v.indice)), 1000);
+          timer = setTimeout(() => ((lungo = true), this.azioni.tieniR(v.indice)), 1000);
         };
-        out.onpointerup = () => {
+        go.onpointerup = () => {
           clearTimeout(timer);
-          if (!lungo) this.azioni.out(v.indice);
+          if (!lungo) this.azioni.premiR(v.indice);
         };
-        out.onpointerleave = () => clearTimeout(timer);
+        go.onpointerleave = () => clearTimeout(timer);
+        const cue = crea('button', `key ch-cue ${NOMI_LUCE[v.luci.s]}`, 'CUE');
+        cue.title = 'S · ascolta in cuffia la clip in NEXT';
+        cue.onclick = () => this.azioni.cuffia(v.indice);
         const mute = crea('button', `key ch-mute ${NOMI_LUCE[v.luci.m]}`, 'M');
         mute.onclick = () => this.azioni.mute(v.indice);
-        tasti.append(go, out, mute);
+        tasti.append(go, cue, mute);
         const fader = crea('input', 'ch-fader');
         fader.type = 'range';
         fader.min = '0';

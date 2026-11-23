@@ -3768,3 +3768,5 @@ input[type='checkbox'] {
 .pillola.in-next { outline: 1px solid var(--testo); }
 .card.in-next { box-shadow: inset 3px 0 0 var(--testo); }
 .card.in-live { box-shadow: inset 3px 0 0 var(--marcio); }
+.ch-in-cuffia { color: var(--testo); }
+.ch-tasti .ch-go { min-width: 66px; }

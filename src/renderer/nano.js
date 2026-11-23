@@ -1,6 +1,7 @@
 // Il Korg nanoKONTROL2 come mixer dei CANALI. Legge i messaggi della scena di fabbrica (stessi numeri della modalità nativa, su un canale qualsiasi):
 // fader 0–7 · manopole 16–23 · S 32–39 · M 48–55 · R 64–71 · PLAY 41. Mai niente in scrittura: il nano non si tocca.
-// R = GO · S = OUT (tenuto 1 s: esce subito) · M = MUTE · manopola = scelta di NEXT · fader = volume del CH · PLAY = GO ALL.
+// R = manda live / toglie (un tasto solo; tenuto 1 s: esce subito) · S = preascolto in CUFFIA · M = MUTE · manopola = scelta di NEXT ·
+// fader = volume del CH (anche dei livelli già live) · PLAY = GO ALL (solo i CH armati).
 export const NOME_NANO = /nanokontrol2/i;
 export const OUT_TENUTO_MS = 1000;
 export const LAMPEGGIO_LENTO_MS = 700; // R: in NEXT c'è altro da lanciare
@@ -37,7 +38,7 @@ export function leggiNano(dati) {
 }
 
 export class Nano {
-  // azioni: { fader(ch, v), manopola(ch, pos), go(ch), out(ch), outSubito(ch), mute(ch), goAll(), collegato(si) }
+  // azioni: { fader(ch, v), manopola(ch, pos), premiR(ch), tieniR(ch), cuffia(ch), mute(ch), goAll(), collegato(si) }
   constructor(azioni) {
     this.azioni = azioni;
     this.timer = new Map();
@@ -95,16 +96,17 @@ export class Nano {
     const a = this.azioni;
     if (m.tipo === 'fader') a.fader(m.ch, m.v);
     else if (m.tipo === 'manopola') a.manopola(m.ch, m.pos);
-    else if (m.tipo === 'go' && m.giu) a.go(m.ch);
+    else if (m.tipo === 'out' && m.giu) a.cuffia(m.ch); // S
     else if (m.tipo === 'mute' && m.giu) a.mute(m.ch);
     else if (m.tipo === 'goAll' && m.giu) a.goAll();
-    else if (m.tipo === 'out') {
+    else if (m.tipo === 'go') {
+      // R: si decide al rilascio (breve = premiR), oppure dopo 1 s tenuto (tieniR, esce subito)
       if (m.giu) {
-        this.timer.set(m.ch, setTimeout(() => (this.timer.set(m.ch, null), a.outSubito(m.ch)), OUT_TENUTO_MS));
+        this.timer.set(m.ch, setTimeout(() => (this.timer.set(m.ch, null), a.tieniR(m.ch)), OUT_TENUTO_MS));
       } else if (this.timer.get(m.ch)) {
-        clearTimeout(this.timer.get(m.ch)); // rilasciato prima di 1 s: OUT normale
+        clearTimeout(this.timer.get(m.ch));
         this.timer.set(m.ch, null);
-        a.out(m.ch);
+        a.premiR(m.ch);
       }
     }
   }

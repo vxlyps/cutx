@@ -244,6 +244,7 @@ function mostraErrore(errore, chi) {
 
 // Ferma quello che hai in cuffia (non il live).
 function fermaCuffia() {
+  statoCanali.cuffiaCh = null; // qualsiasi altro stop della cuffia spegne anche la luce S
   if (inTest) return;
   pezzoCuffia = null;
   dovaCuffia = null;
@@ -252,6 +253,7 @@ function fermaCuffia() {
 
 // Il tasto «cuffia» di una card: se si sta già sentendo quella, spegne; altrimenti la manda in cuffia.
 function provaInCuffia(pezzo = null) {
+  statoCanali.cuffiaCh = null; // mandare altro in cuffia (card, ⌘↵, kit) toglie il CUE di un CH
   if (inTest) return;
   pezzo ??= serata.pezzoScelto(); // la clip del kit scelta col controller
   const p = pezzo && typeof pezzo === 'object' && 'codice' in pezzo ? pezzo : cue.pezzo(); // un pezzo dato (le clip del kit) o quello del CUE
@@ -1102,11 +1104,23 @@ async function ripristinaCanali() {
 let paginaCanali = null;
 
 // La griglia dei CANALI: legge lo stato e manda intenzioni; le «azioni» le esegue chi parla col motore.
-const livelliDelCH = (i) => livelliLive.filter((l) => l.ch === i && l.a === null);
+// Un livello live senza CH (ripristinato, partito da altre vie) conta come FREE: la griglia lo vede e il fader lo comanda. Fuori dai CH: i colpi del controller e il paracadute.
+const chDelLivello = (l) => l.ch ?? (l.provenienza === 'controller' || l.nome === 'paracadute' ? null : indiceFree(canaliConfig));
+const livelliDelCH = (i) => livelliLive.filter((l) => chDelLivello(l) === i && l.a === null);
 async function eseguiCanali(effetti) {
   for (const e of effetti) {
     if (e.tipo === 'avviso') cue.avviso(e.testo);
-    else if (e.tipo === 'go') {
+    else if (e.tipo === 'cuffia') {
+      const pezzo = cue.pezzoAlt(e.alt);
+      if (pezzo.errore) {
+        statoCanali.cuffiaCh = null;
+        cue.avviso(pezzo.errore);
+        continue;
+      }
+      if (!inTest) provaPezzo(pezzo); // la cuffia va a tempo col live, come il tasto «cuffia» di una card
+    } else if (e.tipo === 'cuffia-stop') {
+      if (!inTest) cuffia.manda({ tipo: 'ferma' });
+    } else if (e.tipo === 'go') {
       const pezzo = cue.pezzoAlt(e.alt);
       if (pezzo.errore) {
         statoCanali.canali[e.ch].attesa = null;
@@ -1144,7 +1158,7 @@ function impostaBranoCanali() {
 function aggiornaCanali() {
   if (!griglia) return;
   impostaBranoCanali();
-  statoCanali.sincronizza(livelliLive, cicloAdesso());
+  statoCanali.sincronizza(livelliLive.map((l) => ({ ...l, ch: chDelLivello(l) })), cicloAdesso());
   applicaFisico();
   const vista = statoCanali.vista();
   griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
@@ -1157,7 +1171,7 @@ function scegliCanale(ch, fa) {
   const prima = statoCanali.next(ch)?.id;
   const dopo = fa()?.id;
   if (dopo && dopo !== prima) cue.portaIn(dopo);
-  aggiornaCanali();
+  eseguiCanali(statoCanali.seguiCuffia(ch)); // con S acceso la cuffia segue NEXT
 }
 
 // --- i PROJ ---
@@ -2361,9 +2375,9 @@ const controllerMidi = new Controller({
 const paginaController = new PaginaController(controllerMidi);
 griglia = new Griglia($('canali-griglia'), {
   scegli: (ch, k) => scegliCanale(ch, () => statoCanali.scegliAlt(ch, k)),
-  go: (ch) => eseguiCanali(statoCanali.go(ch)),
-  out: (ch) => eseguiCanali(statoCanali.out(ch)),
-  outSubito: (ch) => eseguiCanali(statoCanali.outSubito(ch)),
+  premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
+  tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
+  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
   mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
   fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
 });
@@ -2377,9 +2391,9 @@ cue.suAttiva = (carta) => {
 const nano = new Nano({
   fader: (ch, v) => (statoCanali.fader(ch, v), aggiornaCanali()),
   manopola: (ch, pos) => scegliCanale(ch, () => statoCanali.scegli(ch, pos)),
-  go: (ch) => eseguiCanali(statoCanali.go(ch)),
-  out: (ch) => eseguiCanali(statoCanali.out(ch)),
-  outSubito: (ch) => eseguiCanali(statoCanali.outSubito(ch)),
+  premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
+  tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
+  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
   mute: (ch) => (statoCanali.mute(ch), aggiornaCanali()),
   goAll: () => eseguiCanali(statoCanali.goAll()),
   collegato: (si) => { $('nano-stato').hidden = !si; },

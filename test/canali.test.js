@@ -118,9 +118,9 @@ test('OUT: annulla se ripremuto; tenuto 1 s esce subito; su una CH vuota niente'
   assert.deepEqual(s.out(2), []);
   s.go(2); s.scattato(2);
   assert.deepEqual(s.out(2).map((x) => x.tipo), ['out']);
-  assert.equal(s.luceOut(2), 'veloce');
+  assert.equal(s.luceGo(2), 'veloce'); // R lampeggia veloce: sta per uscire
   assert.deepEqual(s.out(2).map((x) => x.tipo), ['annulla']);
-  assert.equal(s.luceOut(2), 'spenta');
+  assert.equal(s.luceGo(2), 'accesa');
   assert.deepEqual(s.outSubito(2).map((x) => x.tipo), ['out-subito']);
   assert.equal(s.canali[2].suona, null);
 });
@@ -340,4 +340,43 @@ test('conTipo: toglie tutti i tipi vecchi, tiene il resto; suggerisciTipo dal no
   assert.equal(suggerisciTipo('pad'), 'pad');
   assert.equal(suggerisciTipo('melodia'), 'lead');
   assert.equal(suggerisciTipo('xyz'), '');
+});
+
+test('R è un tasto solo: GO se ho scelto altro o è vuoto, OUT se è quella che suona, ANNULLA se aspetta; tenuto = esce subito', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  const bass = 2;
+  assert.equal(s.azioneR(bass), 'GO'); // vuoto: manda la prima
+  assert.deepEqual(s.premiR(bass).map((x) => x.tipo), ['go']);
+  assert.equal(s.azioneR(bass), 'ANNULLA');
+  assert.deepEqual(s.premiR(bass).map((x) => x.tipo), ['annulla']); // ripremuto mentre aspetta
+  s.go(bass); s.scattato(bass); // «sub» suona
+  assert.equal(s.azioneR(bass), 'OUT'); // nessuno ha scelto, qualcosa suona: R toglie
+  assert.deepEqual(s.premiR(bass).map((x) => x.tipo), ['out']);
+  s.premiR(bass); // annulla l'uscita
+  s.scegliAlt(bass, 1); // scelgo «reese»
+  assert.equal(s.azioneR(bass), 'GO');
+  assert.deepEqual(s.premiR(bass).map((x) => x.tipo), ['go']);
+  s.scattato(bass); // reese suona
+  s.scegliAlt(bass, 1);
+  assert.equal(s.azioneR(bass), 'OUT'); // la scelta è quella che suona
+  assert.deepEqual(s.tieniR(bass).map((x) => x.tipo), ['out-subito']);
+  assert.equal(s.canali[bass].suona, null);
+  assert.equal(s.premiR(5)[0].tipo, 'avviso'); // CLAW: niente nel brano
+});
+
+test('S: preascolto in cuffia del NEXT; di nuovo S smette; un altro CH la sostituisce; la manopola la segue', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  const e = s.premiS(2);
+  assert.deepEqual([e[0].tipo, e[0].alt.nome], ['cuffia', 'sub']);
+  assert.equal(s.luceOut(2), 'accesa');
+  s.scegliAlt(2, 1);
+  assert.deepEqual(s.seguiCuffia(2).map((x) => x.alt.nome), ['reese']);
+  assert.deepEqual(s.seguiCuffia(2), []); // niente di nuovo, niente di rifatto
+  assert.deepEqual(s.premiS(3).map((x) => x.tipo), ['cuffia']); // LEAD: la cuffia passa lì
+  assert.equal(s.luceOut(2), 'spenta');
+  assert.deepEqual(s.premiS(3).map((x) => x.tipo), ['cuffia-stop']);
+  assert.equal(s.cuffiaCh, null);
+  assert.equal(s.premiS(5)[0].tipo, 'avviso');
 });

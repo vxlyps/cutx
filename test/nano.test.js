@@ -14,19 +14,19 @@ test('nano: fader, manopole, S, M, R e PLAY (su qualsiasi canale MIDI)', () => {
   assert.equal(leggiNano([0xb0, 99, 1]), null);
 });
 
-test('nano: OUT breve = out, OUT tenuto = out subito; R/M/PLAY solo alla pressione', async () => {
+test('nano: R breve = premiR, R tenuto = tieniR; S = cuffia, M = mute, PLAY = GO ALL, solo alla pressione', async () => {
   const visti = [];
-  const n = new Nano({ fader: () => {}, manopola: () => {}, go: (c) => visti.push(`go${c}`), out: (c) => visti.push(`out${c}`), outSubito: (c) => visti.push(`subito${c}`), mute: (c) => visti.push(`mute${c}`), goAll: () => visti.push('all') });
-  n.riceve([0xb0, 64, 127]); n.riceve([0xb0, 64, 0]); // R1: premuto e rilasciato = un solo GO
+  const n = new Nano({ fader: () => {}, manopola: () => {}, premiR: (c) => visti.push(`R${c}`), tieniR: (c) => visti.push(`tieni${c}`), cuffia: (c) => visti.push(`S${c}`), mute: (c) => visti.push(`mute${c}`), goAll: () => visti.push('all') });
+  n.riceve([0xb0, 64, 127]); n.riceve([0xb0, 64, 0]); // R1 breve
   n.riceve([0xb0, 49, 127]); n.riceve([0xb0, 49, 0]);
   n.riceve([0xb0, 41, 127]); n.riceve([0xb0, 41, 0]);
-  n.riceve([0xb0, 33, 127]); n.riceve([0xb0, 33, 0]); // S2 breve
-  assert.deepEqual(visti, ['go0', 'mute1', 'all', 'out1']);
+  n.riceve([0xb0, 33, 127]); n.riceve([0xb0, 33, 0]); // S2
+  assert.deepEqual(visti, ['R0', 'mute1', 'all', 'S1']);
   visti.length = 0;
-  n.riceve([0xb0, 34, 127]);
+  n.riceve([0xb0, 66, 127]);
   await new Promise((r) => setTimeout(r, 1100));
-  n.riceve([0xb0, 34, 0]); // S3 tenuto: esce subito, e il rilascio non fa altro
-  assert.deepEqual(visti, ['subito2']);
+  n.riceve([0xb0, 66, 0]); // R3 tenuto: esce subito, e il rilascio non fa altro
+  assert.deepEqual(visti, ['tieni2']);
 });
 
 import { luciNano } from '../src/renderer/nano.js';

@@ -135,12 +135,14 @@ export class StatoCanali {
     this.entraTra = 1;
     this.bpm = null; // il tempo del set: lo porta la ch DRUM
     this.adesso = () => Date.now();
+    this.cuffiaCh = null; // { ch, id }: il CH che sto ascoltando in cuffia (S)
   }
 
   // I CANALI si cambiano a live fermo (lo garantisce chi chiama); cambiato, NEXT e attese si azzerano.
   impostaCANALI(config) {
     this.config = config;
     for (const c of this.canali) Object.assign(c, { suona: null, zona: null, scelta: null, attesa: null });
+    this.cuffiaCh = null;
   }
 
   // Un brano nuovo nel CUE: la stessa posizione di ogni manopolina sceglie tra le alternative del brano nuovo.
@@ -225,6 +227,56 @@ export class StatoCanali {
     const bpm = i === chDellaBeat(this.config) && alt.bpm && alt.bpm !== this.bpm ? alt.bpm : undefined;
     effetti.push({ tipo: 'go', ch: i, alt, cicli: this.entraTra, ...(bpm ? { bpm } : {}) });
     return effetti;
+  }
+
+  // R (premuto e rilasciato in meno di 1 s): UN tasto solo. In attesa di entrare o uscire → annulla; ho scelto una clip diversa da quella che suona
+  // (o il CH è vuoto) → GO; ho scelto quella che suona (o non ho scelto niente e qualcosa suona) → OUT; niente da mandare → avviso.
+  premiR(i) {
+    const c = this.canali[i];
+    if (c.attesa) {
+      c.attesa = null;
+      return [{ tipo: 'annulla', ch: i }];
+    }
+    const scelta = this.alternative(i).find((a) => a.id === c.scelta);
+    if (!scelta && c.suona) return this.out(i); // nessuno ha scelto: R vuol dire «togli»
+    if (scelta && scelta.id === c.suona?.id) return this.out(i);
+    return this.go(i, { annullando: false });
+  }
+
+  // R tenuto 1 s: esce subito (micro-sfumata) e cancella ogni attesa.
+  tieniR(i) {
+    return this.outSubito(i);
+  }
+
+  // Che cosa farebbe R adesso: 'GO' · 'OUT' · 'ANNULLA' · '' (niente da fare). Serve per scrivere la parola sul tasto.
+  azioneR(i) {
+    const c = this.canali[i];
+    if (c.attesa) return 'ANNULLA';
+    const scelta = this.alternative(i).find((a) => a.id === c.scelta);
+    if (!scelta && c.suona) return 'OUT';
+    if (scelta && scelta.id === c.suona?.id) return 'OUT';
+    return this.next(i) ? 'GO' : '';
+  }
+
+  // S: preascolto in cuffia del NEXT di quel CH (come il «cue» di un mixer DJ). Di nuovo S: smette. S su un altro CH: passa lì (la cuffia è una).
+  premiS(i) {
+    if (this.cuffiaCh?.ch === i) {
+      this.cuffiaCh = null;
+      return [{ tipo: 'cuffia-stop', ch: i }];
+    }
+    const alt = this.next(i);
+    if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente da ascoltare per ${this.config[i].nome}` }];
+    this.cuffiaCh = { ch: i, id: alt.id };
+    return [{ tipo: 'cuffia', ch: i, alt }];
+  }
+
+  // Con S acceso, girando la manopola (o cliccando un'altra clip) la cuffia segue NEXT.
+  seguiCuffia(i) {
+    if (this.cuffiaCh?.ch !== i) return [];
+    const alt = this.next(i);
+    if (!alt || alt.id === this.cuffiaCh.id) return [];
+    this.cuffiaCh = { ch: i, id: alt.id };
+    return [{ tipo: 'cuffia', ch: i, alt }];
   }
 
   // OUT (S): il CH esce al prossimo «entra tra». Ripremute: annulla.
@@ -341,8 +393,9 @@ export class StatoCanali {
     return c.suona ? 'accesa' : 'spenta';
   }
 
+  // S: accesa = quel CH è in cuffia.
   luceOut(i) {
-    return this.canali[i].attesa?.tipo === 'out' ? 'veloce' : 'spenta';
+    return this.cuffiaCh?.ch === i ? 'accesa' : 'spenta';
   }
 
   luceMute(i) {
@@ -370,6 +423,8 @@ export class StatoCanali {
       sweep: sweep(c.aa),
       mute: c.mute,
       armato: this.armato(i),
+      azioneR: this.azioneR(i),
+      inCuffia: this.cuffiaCh?.ch === i,
       vecchia: this.vecchia(i),
       avvisi: this.avvisi(i),
       luci: { r: this.luceGo(i), s: this.luceOut(i), m: this.luceMute(i) },
