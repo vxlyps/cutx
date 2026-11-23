@@ -3759,6 +3759,7 @@ input[type='checkbox'] {
 .menu-ch .key { text-align: left; }
 .menu-ch .suggerito { color: var(--marcio); }
 .tasto-ch { text-transform: uppercase; }
+.tasto-next.on { background: var(--testo); color: #050604; }
 
 /* LIVE e NEXT sulle card del CUE (solo scritte, bianco e verde) */
 .card.in-live .nome-sezione::after, .pillola.in-live::after { content: ' · LIVE'; color: var(--marcio); }

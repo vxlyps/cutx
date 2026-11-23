@@ -1,15 +1,15 @@
 // Il Korg nanoKONTROL2 come mixer dei CANALI. Legge i messaggi della scena di fabbrica (stessi numeri della modalità nativa, su un canale qualsiasi):
 // fader 0–7 · manopole 16–23 · S 32–39 · M 48–55 · R 64–71 · PLAY 41. Mai niente in scrittura: il nano non si tocca.
-// R = manda live / toglie (un tasto solo; tenuto 1 s: esce subito) · S = preascolto in CUFFIA · M = MUTE · manopola = scelta di NEXT ·
-// fader = volume del CH (anche dei livelli già live) · PLAY = GO ALL (solo i CH armati).
+// R = esegue NEXT (GO / OUT / ANNULLA; tenuto 1 s: esce subito) · S = preascolto in CUFFIA · M = MUTE · manopola = scelta di NEXT (a sinistra OUT) ·
+// fader = volume del CH (anche dei livelli già live) · PLAY = GO ALL (solo i CH armati, OUT compresi).
 export const NOME_NANO = /nanokontrol2/i;
 export const OUT_TENUTO_MS = 1000;
 export const LAMPEGGIO_LENTO_MS = 700; // R: in NEXT c'è altro da lanciare
 export const LAMPEGGIO_VELOCE_MS = 200; // R / S: sta per entrare / uscire
 
 // Le luci che il nano deve avere: Map cc → 0 | 127. `vista` = StatoCanali.vista(), t = millisecondi (per il lampeggio fatto qui: le luci del nano sono solo on/off).
-// R: spenta = vuoto · fissa = suona · lampeggio lento = in NEXT c'è altro · lampeggio veloce = sta per entrare. S: lampeggio veloce = sta per uscire.
-// M: accesa = muto. PLAY: lampeggia lento se GO ALL ha qualcosa da lanciare.
+// R: spenta = vuoto · fissa = suona · lampeggio lento = ho armato qualcosa (un'altra clip, o OUT) · lampeggio veloce = sta per entrare o per uscire.
+// S: accesa = quel CH è in cuffia. M: accesa = muto. PLAY: lampeggia lento se PLAY (GO ALL) ha qualcosa da lanciare.
 export function luciNano(vista, t) {
   const fase = (ms) => Math.floor(t / ms) % 2 === 0;
   const come = (luce) => (luce === 'accesa' ? 127 : luce === 'lenta' ? (fase(LAMPEGGIO_LENTO_MS) ? 127 : 0) : luce === 'veloce' ? (fase(LAMPEGGIO_VELOCE_MS) ? 127 : 0) : 0);

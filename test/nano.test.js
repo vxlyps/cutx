@@ -52,6 +52,19 @@ test('luci del nano: M acceso = muto; R fisso = suona; lampeggi lento/veloce dal
   assert.equal(luciNano([riga(0, 'accesa')], 0).get(41), 0);
 });
 
+test('luci del nano: un OUT armato lampeggia lento come un GO armato (e accende PLAY)', async () => {
+  const { StatoCanali } = await import('../src/renderer/canali.js');
+  const s = new StatoCanali();
+  s.impostaBrano({ nome: 'uno', bpm: 170, beat: null, sezioni: [{ nome: 'sub', info: { bass: true } }] });
+  s.scegliAlt(2, 1); s.go(2); s.scattato(2);
+  assert.equal(luciNano(s.vista(), 0).get(66), 127);
+  s.scegliAlt(2, 0); // OUT armato
+  assert.equal(s.vista()[2].luci.r, 'lenta');
+  assert.equal(luciNano(s.vista(), 0).get(66), 127);
+  assert.equal(luciNano(s.vista(), 750).get(66), 0, 'lampeggia');
+  assert.equal(luciNano(s.vista(), 0).get(41), 127, 'PLAY ha qualcosa da lanciare');
+});
+
 test('luci del nano: si manda solo quello che cambia, sul canale MIDI del nano', () => {
   const mandati = [];
   const n = new Nano({});

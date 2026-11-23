@@ -62,12 +62,13 @@ export class Griglia {
         for (const a of v.avvisi) ora.append(crea('span', 'ch-avviso', a));
         if (v.inCuffia) ora.append(crea('span', 'lbl ch-in-cuffia', 'IN CUFFIA'));
         const alt = crea('div', 'ch-alt');
-        if (v.alternative.length) alt.append(crea('span', 'lbl ch-next', 'NEXT'));
-        v.alternative.forEach((a, k) => {
+        alt.append(crea('span', 'lbl ch-next', 'NEXT'));
+        // il primo chip è OUT, come la prima zona della manopola: stessi indici
+        [{ id: 'OUT', tipo: 'out', nome: 'OUT' }, ...v.alternative].forEach((a, k) => {
           const b = crea('button', 'key ch-chip', a.nome);
           b.classList.toggle('next', v.next?.id === a.id);
           b.classList.toggle('in-onda', v.suona?.id === a.id);
-          b.title = a.tipo === 'scena' ? 'scena del beat' : '';
+          b.title = a.tipo === 'scena' ? 'scena del beat' : a.tipo === 'out' ? 'il CH esce' : '';
           b.onclick = () => this.azioni.scegli(v.indice, k);
           b.ondblclick = () => this.azioni.premiR(v.indice);
           alt.append(b);
@@ -75,8 +76,8 @@ export class Griglia {
         if (!v.alternative.length) alt.append(crea('span', 'lbl ch-vuoto', 'niente nel brano'));
         const tasti = crea('div', 'ch-tasti');
         // R: un tasto solo, la parola dice cosa fa adesso (GO / OUT / ANNULLA); tenuto 1 s esce subito
-        const go = crea('button', `key ch-go ${NOMI_LUCE[v.luci.r]}`, v.azioneR || 'GO');
-        go.title = 'R · manda live o toglie · tenuto 1 s: esce subito';
+        const go = crea('button', `key ch-go ${NOMI_LUCE[v.luci.r]}`, v.azioneR || '—');
+        go.title = v.azioneR ? 'R · esegue NEXT · tenuto 1 s: esce subito' : 'R · niente da fare';
         let timer = null;
         let lungo = false;
         go.onpointerdown = () => {

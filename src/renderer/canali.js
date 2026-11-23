@@ -11,6 +11,8 @@ export const ENTRA_TRA = [1, 2, 4, 8]; // battute (cicli)
 export const N_CH = 8;
 export const ISTERESI = 0.03; // ai bordi delle zone della manopolina
 export const ZONA_MORTA = 0.04; // al centro di SWEEP
+export const OUT_ID = 'OUT'; // la prima zona della manopola e il primo chip: «togli questo CH»
+const USCITA = { id: OUT_ID, tipo: 'out', nome: 'OUT' };
 
 // --- la pagina CANALI (le 8 definizioni) ---
 
@@ -124,7 +126,7 @@ export function sweep(pos) {
 
 // --- lo stato ---
 
-const vuota = () => ({ suona: null, pos: null, zona: null, scelta: null, fader: null, aa: null, mute: false, attesa: null, attesaMs: 0 });
+const vuota = () => ({ suona: null, insieme: [], pos: null, zona: null, scelte: new Map(), fader: null, aa: null, mute: false, attesa: null, attesaMs: 0 });
 const ATTESA_MS = 1500; // dopo un GO/OUT il motore ci mette un attimo a dirlo: nel frattempo vale quello che ho chiesto
 
 export class StatoCanali {
@@ -141,87 +143,125 @@ export class StatoCanali {
   // I CANALI si cambiano a live fermo (lo garantisce chi chiama); cambiato, NEXT e attese si azzerano.
   impostaCANALI(config) {
     this.config = config;
-    for (const c of this.canali) Object.assign(c, { suona: null, zona: null, scelta: null, attesa: null });
+    for (const c of this.canali) Object.assign(c, { suona: null, insieme: [], zona: null, scelte: new Map(), attesa: null });
     this.cuffiaCh = null;
   }
 
-  // Un brano nuovo nel CUE: la stessa posizione di ogni manopolina sceglie tra le alternative del brano nuovo.
+  // Un brano nuovo nel CUE: la manopola riparte da zero (il primo tocco sceglie tra le alternative del brano nuovo). Le scelte già fatte restano:
+  // sono per brano, cambiare linguetta del CUE non le perde.
   impostaBrano(brano) {
     const nuovo = (brano?.nome ?? null) !== (this.brano?.nome ?? null);
-    this.brano = brano; // chi lo rilegge a ogni giro (le clip cambiano mentre le scrivo) non azzera la scelta
-    if (nuovo) for (const c of this.canali) Object.assign(c, { zona: null, scelta: null });
+    this.brano = brano; // chi lo rilegge a ogni giro (le clip cambiano mentre le scrivo) non azzera niente
+    if (nuovo) for (const c of this.canali) c.zona = null;
+  }
+
+  // La scelta di un CH per il brano nel CUE: un id di clip o scena, OUT_ID, o null. Un id che nel brano non c'è più vale come nessuna scelta.
+  scelta(i) {
+    const id = this.brano ? this.canali[i].scelte.get(this.brano.nome) ?? null : null;
+    if (id === OUT_ID) return id;
+    return id && this.alternative(i).some((a) => a.id === id) ? id : null;
+  }
+
+  poniScelta(i, id) {
+    if (!this.brano) return;
+    const c = this.canali[i];
+    if (id === null) c.scelte.delete(this.brano.nome);
+    else c.scelte.set(this.brano.nome, id);
   }
 
   alternative(i) {
     return alternative(this.config, this.brano, i);
   }
 
-  // Cosa c'è in NEXT: la clip scelta (da chiunque: mouse nel CUE, chip, manopola) se c'è ancora; altrimenti quella che suona (se è del brano nel CUE);
-  // altrimenti la prima. La scelta è per id: se il brano cambia (clip aggiunte, tipi cambiati) NEXT non salta su un'altra clip.
+  // Cosa c'è in NEXT: quello che ho scelto io (manopola, chip della griglia, tasto NEXT di una card), altrimenti quello che suona adesso (nessun cambio:
+  // anche se nel CUE c'è un altro brano). Un CH vuoto senza scelta non ha NEXT. La scelta può essere OUT.
   next(i) {
-    const alt = this.alternative(i);
-    if (!alt.length) return null;
-    const c = this.canali[i];
-    return alt.find((a) => a.id === c.scelta) ?? alt.find((a) => a.id === c.suona?.id) ?? alt[0];
+    const id = this.scelta(i);
+    if (id === OUT_ID) return USCITA;
+    if (id) return this.alternative(i).find((a) => a.id === id);
+    return this.canali[i].suona ?? null;
   }
 
-  // Armato = ho scelto una clip e non è quella che suona: il CH lampeggia e parte con GO ALL.
+  // Cosa suona nel CH, tutto (la FREE impila più clip).
+  suonaId(i, id) {
+    const c = this.canali[i];
+    return c.suona?.id === id || c.insieme.some((a) => a.id === id);
+  }
+
+  // Armato = ho scelto io qualcosa che cambierebbe il CH: una clip che non suona già, oppure OUT con qualcosa che suona. Il CH lampeggia e parte con PLAY.
   armato(i) {
-    const c = this.canali[i];
-    return !!c.scelta && c.scelta !== c.suona?.id && this.alternative(i).some((a) => a.id === c.scelta);
+    const id = this.scelta(i);
+    if (!id) return false;
+    if (id === OUT_ID) return !!this.canali[i].suona;
+    return !this.suonaId(i, id);
   }
 
-  // La manopola: la scelta cambia solo quando cambia la zona (con l'isteresi), così non «rumoreggia» sul CUE.
+  // NEXT solo se è una clip vera del brano nel CUE (per il preascolto in cuffia): né OUT né una clip di un altro brano.
+  nextDelBrano(i) {
+    const n = this.next(i);
+    return n && n.id !== OUT_ID && this.alternative(i).some((a) => a.id === n.id) ? n : null;
+  }
+
+  // La manopola: la prima zona a sinistra è OUT, poi le alternative nell'ordine del file. La scelta cambia solo quando cambia la zona (con l'isteresi),
+  // così non «rumoreggia» sul CUE.
   scegli(i, pos) {
     const alt = this.alternative(i);
     const c = this.canali[i];
     c.pos = pos;
-    if (!alt.length) return null;
-    const z = zona(pos, alt.length, c.zona);
+    const z = zona(pos, alt.length + 1, c.zona);
     if (z !== c.zona) {
       c.zona = z;
-      c.scelta = alt[z].id;
+      this.poniScelta(i, z === 0 ? OUT_ID : alt[z - 1].id);
     }
     return this.next(i);
   }
 
-  // Dal mouse (chip della griglia, card del CUE): scelgo l'alternativa k; la manopola «segue» così non salta quando la tocco.
+  // Dal mouse (chip della griglia): gli stessi indici delle zone della manopola, 0 = OUT, 1… = le alternative. La manopola «segue» così non salta quando la tocco.
   scegliAlt(i, k) {
     const alt = this.alternative(i);
-    if (!(k >= 0 && k < alt.length)) return null;
+    if (!(k >= 0 && k <= alt.length)) return null;
     const c = this.canali[i];
-    c.scelta = alt[k].id;
+    this.poniScelta(i, k === 0 ? OUT_ID : alt[k - 1].id);
     c.zona = k;
-    c.pos = (k + 0.5) / alt.length;
+    c.pos = (k + 0.5) / (alt.length + 1);
     return this.next(i);
   }
 
-  // Dal CUE: una card o una scena scelta → NEXT del suo CH. Ritorna { ch, k } o null se non è di nessun CH.
-  scegliId(id) {
+  // Il tasto NEXT di una card del CUE (l'unico gesto che porta il CUE in NEXT): sceglie quella clip per il suo CH; ricliccato toglie la scelta
+  // (il CH torna a «quello che suona»). Ritorna { ch, k, acceso } o null se la clip non è di nessun CH.
+  alternaId(id) {
     for (let i = 0; i < N_CH; i++) {
       const k = this.alternative(i).findIndex((a) => a.id === id);
-      if (k >= 0) {
-        this.scegliAlt(i, k);
-        return { ch: i, k };
+      if (k < 0) continue;
+      if (this.scelta(i) === id) {
+        this.poniScelta(i, null);
+        this.canali[i].zona = null;
+        return { ch: i, k: k + 1, acceso: false };
       }
+      this.scegliAlt(i, k + 1);
+      return { ch: i, k: k + 1, acceso: true };
     }
     return null;
   }
 
   // --- entra / esce ---
 
-  // GO (R): la clip in NEXT entra al prossimo «entra tra». Ripremuto mentre aspetta: annulla.
+  // L'attesa si annulla: lo dice anche quale era (entrare o uscire), perché chi parla col motore le annulla in modo diverso.
+  annullaAttesa(i) {
+    const c = this.canali[i];
+    const quale = c.attesa.tipo;
+    c.attesa = null;
+    return { tipo: 'annulla', ch: i, quale };
+  }
+
+  // GO: la clip in NEXT entra al prossimo «entra tra». Ripremuto mentre aspetta: annulla.
   go(i, { annullando = true } = {}) {
     const c = this.canali[i];
-    if (c.attesa?.tipo === 'go') {
-      if (!annullando) return [];
-      c.attesa = null;
-      return [{ tipo: 'annulla', ch: i }];
-    }
+    if (c.attesa?.tipo === 'go') return annullando ? [this.annullaAttesa(i)] : [];
     const alt = this.next(i);
-    if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente in NEXT per ${this.config[i].nome}` }];
-    if (c.suona?.id === alt.id) return []; // è già quella che suona
-    const effetti = c.attesa ? [{ tipo: 'annulla', ch: i }] : []; // vince l'ultimo premuto
+    if (!alt || alt.id === OUT_ID) return [{ tipo: 'avviso', ch: i, testo: `niente in NEXT per ${this.config[i].nome}` }];
+    if (this.suonaId(i, alt.id)) return []; // è già quella che suona
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : []; // vince l'ultimo premuto
     c.attesa = { tipo: 'go', alt };
     c.attesaMs = this.adesso();
     const bpm = i === chDellaBeat(this.config) && alt.bpm && alt.bpm !== this.bpm ? alt.bpm : undefined;
@@ -229,33 +269,31 @@ export class StatoCanali {
     return effetti;
   }
 
-  // R (premuto e rilasciato in meno di 1 s): UN tasto solo. In attesa di entrare o uscire → annulla; ho scelto una clip diversa da quella che suona
-  // (o il CH è vuoto) → GO; ho scelto quella che suona (o non ho scelto niente e qualcosa suona) → OUT; niente da mandare → avviso.
+  // Cosa farebbe R adesso: 'ANNULLA' (qualcosa aspetta) · 'OUT' (NEXT è OUT e il CH suona) · 'GO' (NEXT è una clip che non suona) ·
+  // 'LIVE' (NEXT è già quello che suona: niente da fare) · '' (CH vuoto, niente da mandare).
+  azioneR(i) {
+    const c = this.canali[i];
+    if (c.attesa) return 'ANNULLA';
+    const n = this.next(i);
+    if (!n) return '';
+    if (n.id === OUT_ID) return c.suona ? 'OUT' : '';
+    return this.suonaId(i, n.id) ? 'LIVE' : 'GO';
+  }
+
+  // R (premuto e rilasciato in meno di 1 s): UN tasto solo, fa quello che dice la parola sul tasto (azioneR).
   premiR(i) {
     const c = this.canali[i];
-    if (c.attesa) {
-      c.attesa = null;
-      return [{ tipo: 'annulla', ch: i }];
-    }
-    const scelta = this.alternative(i).find((a) => a.id === c.scelta);
-    if (!scelta && c.suona) return this.out(i); // nessuno ha scelto: R vuol dire «togli»
-    if (scelta && scelta.id === c.suona?.id) return this.out(i);
-    return this.go(i, { annullando: false });
+    if (c.attesa) return [this.annullaAttesa(i)];
+    const azione = this.azioneR(i);
+    if (azione === 'OUT') return this.out(i);
+    if (azione === 'GO') return this.go(i, { annullando: false });
+    if (azione === '') return [{ tipo: 'avviso', ch: i, testo: `niente da fare per ${this.config[i].nome}` }];
+    return []; // LIVE: è già in onda
   }
 
   // R tenuto 1 s: esce subito (micro-sfumata) e cancella ogni attesa.
   tieniR(i) {
     return this.outSubito(i);
-  }
-
-  // Che cosa farebbe R adesso: 'GO' · 'OUT' · 'ANNULLA' · '' (niente da fare). Serve per scrivere la parola sul tasto.
-  azioneR(i) {
-    const c = this.canali[i];
-    if (c.attesa) return 'ANNULLA';
-    const scelta = this.alternative(i).find((a) => a.id === c.scelta);
-    if (!scelta && c.suona) return 'OUT';
-    if (scelta && scelta.id === c.suona?.id) return 'OUT';
-    return this.next(i) ? 'GO' : '';
   }
 
   // S: preascolto in cuffia del NEXT di quel CH (come il «cue» di un mixer DJ). Di nuovo S: smette. S su un altro CH: passa lì (la cuffia è una).
@@ -264,7 +302,7 @@ export class StatoCanali {
       this.cuffiaCh = null;
       return [{ tipo: 'cuffia-stop', ch: i }];
     }
-    const alt = this.next(i);
+    const alt = this.nextDelBrano(i);
     if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente da ascoltare per ${this.config[i].nome}` }];
     this.cuffiaCh = { ch: i, id: alt.id };
     return [{ tipo: 'cuffia', ch: i, alt }];
@@ -273,21 +311,18 @@ export class StatoCanali {
   // Con S acceso, girando la manopola (o cliccando un'altra clip) la cuffia segue NEXT.
   seguiCuffia(i) {
     if (this.cuffiaCh?.ch !== i) return [];
-    const alt = this.next(i);
+    const alt = this.nextDelBrano(i);
     if (!alt || alt.id === this.cuffiaCh.id) return [];
     this.cuffiaCh = { ch: i, id: alt.id };
     return [{ tipo: 'cuffia', ch: i, alt }];
   }
 
-  // OUT (S): il CH esce al prossimo «entra tra». Ripremute: annulla.
+  // OUT: il CH esce al prossimo «entra tra». Ripremuto: annulla.
   out(i) {
     const c = this.canali[i];
-    if (c.attesa?.tipo === 'out') {
-      c.attesa = null;
-      return [{ tipo: 'annulla', ch: i }];
-    }
+    if (c.attesa?.tipo === 'out') return [this.annullaAttesa(i)];
     if (!c.suona) return [];
-    const effetti = c.attesa ? [{ tipo: 'annulla', ch: i }] : [];
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : [];
     c.attesa = { tipo: 'out' };
     c.attesaMs = this.adesso();
     effetti.push({ tipo: 'out', ch: i, cicli: this.entraTra });
@@ -298,16 +333,18 @@ export class StatoCanali {
   outSubito(i) {
     const c = this.canali[i];
     if (!c.suona) return [];
-    const effetti = c.attesa ? [{ tipo: 'annulla', ch: i }] : [];
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : [];
     c.attesa = null;
     c.suona = null;
+    c.insieme = [];
     effetti.push({ tipo: 'out-subito', ch: i });
     return effetti;
   }
 
-  // GO ALL (PLAY): entra tutto quello che è ARMATO (scelto e diverso da ciò che suona), alla stessa battuta. Le entrate già in attesa restano.
+  // GO ALL (PLAY): tutto quello che è ARMATO (scelto da me e diverso da ciò che suona, OUT compresi) parte insieme: chi esegue gli effetti li manda
+  // con un solo ciclo d'arrivo. Le attese già in corso restano.
   goAll() {
-    return this.canali.flatMap((_, i) => (this.armato(i) ? this.go(i, { annullando: false }) : []));
+    return this.canali.flatMap((c, i) => (this.armato(i) && !c.attesa ? (this.scelta(i) === OUT_ID ? this.out(i) : this.go(i, { annullando: false })) : []));
   }
 
   // Dalla tastiera: un pezzo che entra direttamente nel CH del suo tipo (senza tipo → FREE), non passa dalla manopolina.
@@ -315,7 +352,7 @@ export class StatoCanali {
     const i = chDelTipo(this.config, tipo);
     const c = this.canali[i];
     const alt = { id: `${pezzo.brano ?? 'scratch'}#${pezzo.nome}`, tipo: 'clip', nome: pezzo.nome, brano: pezzo.brano ?? null, bpm: null, tipoClip: tipo ?? '' };
-    const effetti = c.attesa ? [{ tipo: 'annulla', ch: i }] : [];
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : [];
     c.attesa = { tipo: 'go', alt };
     effetti.push({ tipo: 'go', ch: i, alt, cicli: this.entraTra, codice: pezzo.codice });
     return effetti;
@@ -328,7 +365,11 @@ export class StatoCanali {
     if (c.attesa.tipo === 'go') {
       c.suona = c.attesa.alt;
       if (i === chDellaBeat(this.config) && c.suona.bpm) this.bpm = c.suona.bpm;
-    } else c.suona = null;
+    } else {
+      c.suona = null;
+      c.insieme = [];
+      this.poniScelta(i, null); // l'OUT è fatto: il CH torna senza scelta
+    }
     c.attesa = null;
   }
 
@@ -346,8 +387,10 @@ export class StatoCanali {
       const mie = livelli.filter((l) => l.ch === i);
       const suonaL = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).sort((x, y) => y.da - x.da)[0];
       const prossimo = mie.filter((l) => l.da > ciclo && l.a === null).sort((x, y) => x.da - y.da)[0];
+      c.insieme = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).map(alt);
       c.suona = suonaL ? (c.suona && c.suona.nome === suonaL.nome && c.suona.provenienza?.split(' ')[0] === alt(suonaL).provenienza?.split(' ')[0] ? c.suona : alt(suonaL)) : null;
       if (i === chDellaBeat(this.config) && c.suona?.bpm) this.bpm = c.suona.bpm;
+      if (!c.suona && !c.attesa) for (const nome of c.scelte.keys()) if (c.scelte.get(nome) === OUT_ID) c.scelte.delete(nome); // un OUT fatto non resta scelto
       if (this.adesso() - c.attesaMs < ATTESA_MS) return; // ho appena chiesto qualcosa: lo dice il motore tra poco
       if (prossimo) c.attesa = { tipo: 'go', alt: alt(prossimo), da: prossimo.da };
       else if (suonaL && suonaL.a !== null && suonaL.a > ciclo) c.attesa = { tipo: 'out', da: suonaL.a };

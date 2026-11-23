@@ -1,4 +1,12 @@
-# Ultimo stato - 19/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali` da v0.5.1-beta.4; main = beta 4 intatta)
+# Ultimo stato - 23/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali`; main = beta 4 intatta)
+
+## PASSO 1 FATTO (piano approvato da Valerio, 5 passi: 1 R esegue NEXT · 2 mixer vero nel motore · 3 trasporto del nano · 4 passaggio a canali · 5 X-Touch MANI)
+- Fatto: R esegue NEXT (GO/OUT/ANNULLA/LIVE/—). NEXT di default = ciò che suona; OUT = prima zona della manopola e primo chip (indici uguali, `scegliAlt(i,k)` k=0 OUT). Scelte per brano (`scelte` Map), mai armate guardando: tolto `cue.suAttiva`. Gesto CUE→NEXT = tasto «NEXT» su ogni card (e uno nella testa del BEAT per la scena scelta), `alternaId`.
+- Motore: `togli` con `cicli` (OUT a entra tra), `riprendi` (ANNULLA di un OUT), `gruppo` (PLAY: compila tutti, UN solo ciclo d'arrivo, entrate+uscite insieme). `entra` diviso in `preparaEntra`+`applicaEntra`. App: `goLive` diviso in `preparaLive`/`finisciLive`; `eseguiCanali` manda un gruppo e rimette entra tra a 1 una volta sola.
+- Prove (volume 20% poi rimesso a 81): test 526/527 (resta MOD noto); entrata+livelli+robustezza 71 ok (5 controlli nuovi sui gruppi); brani+browser+impostazioni 64 ok. Foto controllata.
+- Non fatto / da sapere: il NEXT del BEAT è UN tasto nella testa (scena scelta), non uno per pillola. CH vuoto senza scelta: R mostra «—» (prima lanciava la prima clip). Non provato col nano vero.
+- File: canali.js, griglia.js, app.js, cue.js, motore.js, nano.js (commenti), stile.css, it.json (cue.next), prova.js (3c), test canali/nano.
+- Prossimo passo: PASSO 2 (mixer vero: 8 CH nel motore con volume e muto, via applicaFisico, aggancio del fader, fader 8 = CH8 STRAY). Prima 5 righe a Valerio e aspettare l'ok.
 
 ## Obiettivo
 Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto a Valerio. Parte A (stato puro `src/renderer/canali.js`, 16 test) già fatta.

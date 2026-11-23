@@ -768,7 +768,9 @@
     "entraTra1": "entra tra 1 ciclo",
     "entraTra": "entra tra {n} cicli",
     "senzaBeat": "«{nome}» va live senza il BEAT · per la base: go live sulla card BEAT",
-    "vuota": "«{nome}» è vuota: niente da mandare live"
+    "vuota": "«{nome}» è vuota: niente da mandare live",
+    "next": "NEXT",
+    "nextTitolo": "Porta questa clip in NEXT del suo canale (ricliccato la toglie): parte con R o con PLAY"
   },
   "proj": {
     "titolo": "PROJ",

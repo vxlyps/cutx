@@ -837,10 +837,23 @@ export class Cue {
       togliClip.dataset.aiuto = 'clip-togli';
       togliClip.onclick = () => this.togliClip(i);
       const chBtn = this.tastoCh(i);
-      testa.append(chBtn, unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
+      carta.tastoNext = this.tastoNext(carta);
+      testa.append(chBtn, carta.tastoNext, unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
     }
     this.carte.push(carta);
     return art;
+  }
+
+  // NEXT: l'unico gesto che porta una card (o la scena scelta del beat) in NEXT del suo canale; acceso se lo è già, ricliccato toglie la scelta.
+  // Guardare, scrivere o navigare nel CUE non arma niente.
+  tastoNext(carta) {
+    const b = tasto(it.cue.next, '', it.cue.nextTitolo);
+    b.classList.add('tasto-next');
+    b.onclick = (e) => {
+      e.stopPropagation();
+      this.suNext?.(carta);
+    };
+    return b;
   }
 
   // «CH3 GROWL ▾»: a quale canale del LIVE appartiene la clip; il clic apre l'elenco dei canali e scrive il tipo nella riga `// @clip`.
@@ -996,7 +1009,14 @@ export class Cue {
       },
       'scena-volume',
     );
-    if (scene.length) testa.append(espandi, toglie, volume.el, cuffia, live);
+    const nextScena = scene.length ? this.tastoNext(null) : null;
+    if (nextScena) nextScena.onclick = (e) => {
+      e.stopPropagation();
+      const c = this.carte.find((x) => x.scena === this.scenaScelta());
+      if (c) this.suNext?.(c);
+    };
+    this.beatNext = nextScena;
+    if (scene.length) testa.append(espandi, toglie, volume.el, nextScena, cuffia, live);
     const pillole = el('div', 'pillole');
     const aggiungi = el('button', 'pillola nuova', '+ scena');
     aggiungi.title = 'Aggiungi una scena al beat (la base ritmica del brano)';
@@ -1086,7 +1106,6 @@ export class Cue {
   attiva(carta) {
     this.cartaAttiva = carta;
     for (const c of this.carte) c.el.classList.toggle('attiva', c === carta);
-    if (!this.silenzioso) this.suAttiva?.(carta); // la card scelta nel CUE è anche il NEXT del suo canale (lo ascolta app.js)
   }
 
   // L'id della card per i CANALI (clip = brano#nome, scena = brano◆k), o null (apertura, preambolo, scratch).
@@ -1107,7 +1126,9 @@ export class Cue {
         el?.classList.toggle('in-next', !!id && nextIds.has(id));
         el?.classList.toggle('in-live', !!id && liveIds.has(id));
       }
+      c.tastoNext?.classList.toggle('on', !!id && nextIds.has(id));
     }
+    this.beatNext?.classList.toggle('on', nextIds.has(idScena(this.nomeBrano, this.scenaScelta())));
   }
 
   // La manopola o la griglia scelgono una clip: il CUE la porta in vista e la segna attiva, MA se sto scrivendo (un editor ha il fuoco)

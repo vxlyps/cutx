@@ -617,6 +617,29 @@ async function provaEntrata({ finestre, scrivi }) {
   const c2dopo = await livello(c2.livello);
   controlla('annulla: chi doveva uscire per lui resta a suonare', c2dopo?.a === null, JSON.stringify(c2dopo?.a));
 
+  // 3c. i gruppi (PLAY): un solo ciclo d'arrivo per tutti, entrate e uscite insieme; OUT a «entra tra»; ANNULLA di un OUT riprende il livello
+  const pezzoG = (nome, ch) => ({ tipo: 'entra', codice: 's("sine*2").freq(65).gain(.0001)', nome, provenienza: 'prova', ch, unico: true, scritto: true });
+  const g = await js(`cutxProva.richiestaLive({ tipo: 'gruppo', cicli: 2, entrate: ${JSON.stringify([pezzoG('gA', 2), pezzoG('gB', 3)])}, uscite: [] })`);
+  const dG = g?.risposte?.map((x) => x.da);
+  controlla('gruppo: tutti i pezzi entrano sullo stesso ciclo, quello d\'arrivo del gruppo', g?.da !== undefined && dG?.length === 2 && dG.every((d) => d === g.da), JSON.stringify(g));
+  const gErr = await js(`cutxProva.richiestaLive({ tipo: 'gruppo', cicli: 1, entrate: ${JSON.stringify([{ ...pezzoG('gC', 4), codice: 's("sine*2".gain(' }, pezzoG('gD', 5)])}, uscite: [] })`);
+  controlla('gruppo: un pezzo con un errore non entra, gli altri sì', gErr?.risposte?.[0]?.errore && gErr?.risposte?.[1]?.livello, JSON.stringify(gErr));
+  await finoAlCiclo(g.da + 0.6); // gA e gB suonano
+  const cG = await ciclo();
+  const toglie = await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${g.risposte[0].livello}, cicli: 2 })`);
+  await aspetta(0.3);
+  const gaUscente = await livello(g.risposte[0].livello);
+  controlla('OUT a «entra tra 2»: esce un ciclo dopo il confine, non sul primo', gaUscente?.a !== null && gaUscente?.a !== undefined && gaUscente.a >= Math.ceil(cG) + 1, JSON.stringify([cG, gaUscente?.a, toglie]));
+  await js(`cutxProva.richiestaLive({ tipo: 'riprendi', livello: ${g.risposte[0].livello} })`);
+  await aspetta(0.3);
+  const gaRipresa = await livello(g.risposte[0].livello);
+  controlla('ANNULLA di un OUT: il livello che usciva torna a suonare (anche senza dissolvenza)', gaRipresa && gaRipresa.a === null, JSON.stringify(gaRipresa?.a));
+  const gU = await js(`cutxProva.richiestaLive({ tipo: 'gruppo', cicli: 1, entrate: [], uscite: ${JSON.stringify([{ livello: g.risposte[0].livello }, { livello: g.risposte[1].livello }])} })`);
+  await aspetta(0.3);
+  const [ua, ub] = [await livello(g.risposte[0].livello), await livello(g.risposte[1].livello)];
+  controlla('gruppo di uscite: tutte allo stesso ciclo', gU?.da !== undefined && ua?.a === gU.da && ub?.a === gU.da, JSON.stringify([gU?.da, ua?.a, ub?.a]));
+  await js(`cutxProva.richiestaLive({ tipo: 'togli', livello: ${gErr.risposte[1].livello}, subito: true })`);
+
   // 4. codice sbagliato: il live non cambia, l'errore si vede nel CUE
   const primaErr = JSON.stringify((await live()).livelli.map((l) => l.id));
   const re = await goLive('// @sezione kick\ns("sine*2".gain(', 1);

@@ -493,19 +493,33 @@ function annullaIngresso(l, tieni) {
 // la scena nuova entra sempre sentita, anche se quella di prima era in muto.
 const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
 
-async function entra({ codice, nome, provenienza, ch = null, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null, unico = false }) {
+// Compila e controlla un pezzo (l'unica parte che aspetta): { c } o { errore }. Il guardiano: un codice che si rompe in uno dei primi cicli
+// (un errore pigro) non entra, e quello che suona continua.
+async function preparaEntra({ codice, nome }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
-  // il guardiano: un codice che si rompe in uno dei primi cicli (un errore pigro) non entra, e quello che suona continua
   const guasto = verificaPattern(c.pattern);
   if (guasto) return { errore: guasto };
   avvisaSuoniMancanti(c.pattern, nome);
+  return { c };
+}
+
+async function entra(m) {
+  const p = await preparaEntra(m);
+  return p.errore ? p : applicaEntra(m, p.c);
+}
+
+// Il confine in cui entra qualcosa «tra N cicli»: il prossimo confine più N−1 cicli.
+const confineTra = (cicli = 1) => rip.prossimoConfine() + Math.max(1, cicli) - 1;
+
+// `daFisso`: il ciclo d'arrivo deciso da chi manda un gruppo (PLAY): vale per tutti allo stesso modo.
+function applicaEntra({ codice, nome, provenienza, ch = null, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null, unico = false }, c, daFisso = null) {
   // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
   // (con una griglia — i colpi — entra sul primo punto della griglia)
-  let da = subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  let da = daFisso ?? (subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : confineTra(cicli));
   // armare il drop: se un cambio di scena è in attesa, la clip entra insieme a lui
-  if (Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
+  if (daFisso === null && Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
   l.ch = ch ?? null; // il CH (CH1…CH8) in cui sta: l'identità del livello è CH + nome, la stessa clip in due CH = due livelli
   l.beat = beat; // il beat porta con sé le sue scene (◀ ▶ li scorrono) e quello da cui parte: { base, indice, scene }
@@ -629,7 +643,7 @@ function riprendiDalParacadute(dissolvenza) {
 
 // Esce alla fine del ciclo in corso.
 // Con una dissolvenza il livello continua a suonare e sfuma per tot cicli; un secondo togli (o un clic sulla card) lo salva.
-function togli(id, dissolvenza, subito = false, griglia = 0) {
+function togli(id, dissolvenza, subito = false, griglia = 0, cicli = 1, daFisso = null) {
   const l = livelli.find((x) => x.id === id);
   if (!l) return;
   if (subito && l.a === Infinity) {
@@ -639,13 +653,34 @@ function togli(id, dissolvenza, subito = false, griglia = 0) {
   if (l.sfuma?.verso === 'esce' && l.a !== Infinity) return salva(l);
   if (l.a !== Infinity) return;
   const d = dissolvenzaDi(dissolvenza);
-  const fine = Math.max(l.da, rip.prossimoConfine());
+  const fine = Math.max(l.da, daFisso ?? confineTra(cicli)); // esce a «entra tra», come entra
   const inAttesa = l.da > rip.ciclo(ac.currentTime);
   const parte = inAttesa ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
   l.a = fine + parte;
   if (inAttesa) annullaIngresso(l, true); // e quello che doveva sostituire continua a suonare
   aggiornaLivelli();
   dissolvi(l, 'esce', fine, parte, d.esce);
+}
+
+// Un OUT in attesa si annulla (ANNULLA su R): il livello che stava uscendo torna a suonare, con o senza dissolvenza.
+function riprendi(id) {
+  const l = livelli.find((x) => x.id === id);
+  if (!l || l.a === Infinity || l.a <= rip.ciclo(ac.currentTime)) return; // già uscito, o non sta uscendo
+  l.a = Infinity;
+  annullaDissolvi(l);
+  aggiornaLivelli();
+}
+
+// Un gruppo (PLAY): prima si preparano e compilano tutti i pezzi, poi si calcola UN solo ciclo d'arrivo e tutti entrano (o escono) lì,
+// nella stessa mossa, senza niente in mezzo che aspetti. Se un pezzo ha un errore non entra, gli altri sì.
+async function gruppo({ cicli = 1, entrate = [], uscite = [] }) {
+  if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
+  const pronte = [];
+  for (const m of entrate) pronte.push(await preparaEntra(m));
+  const da = confineTra(cicli);
+  const risposte = entrate.map((m, k) => (pronte[k].errore ? { errore: pronte[k].errore } : applicaEntra(m, pronte[k].c, da)));
+  for (const u of uscite) togli(u.livello, u.dissolvenza, false, 0, 1, da);
+  return { da, risposte };
 }
 
 // L'uscita si annulla: il livello torna al suo volume e resta.
@@ -1343,7 +1378,13 @@ async function ricevi(da, m) {
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'togli':
-      return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0);
+      return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0, Number(m.cicli) || 1);
+    case 'riprendi':
+      return riprendi(m.livello);
+    case 'gruppo': {
+      const r = LIVE ? await gruppo(m) : { errore: 'solo il live fa entrare i livelli' };
+      return manda(da, { tipo: 'risposta', ...r, id: m.id });
+    }
     case 'globale': // una riga globale (all(x => …)) del fader o di un colpo; riga null la toglie
       // lo stop: taglia SUBITO tutto quello che suona (anche le note già partite), e al rilascio il suono torna sull'inizio della griglia (l'1)
       if (m.taglio === 'giu') tagliaTutto(true);
