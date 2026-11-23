@@ -373,6 +373,9 @@ export async function foto({ finestre, file: fotoFile }) {
   await chiedi(finestre.controllo, `document.querySelector('#imp-nav [data-sez="stash"]').click()`);
   await aspetta(0.4);
   await writeFile(altro.replace('.png', '-stash.png'), (await wc.capturePage()).toPNG());
+  await chiedi(finestre.controllo, `document.querySelector('#imp-nav [data-sez="canali"]').click()`);
+  await aspetta(0.4);
+  await writeFile(altro.replace('.png', '-canali.png'), (await wc.capturePage()).toPNG());
 }
 
 // --- prova dei brani: + sezione, salva, riapri, modifica, manda live, suoni mancanti ---

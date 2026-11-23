@@ -37,6 +37,8 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
+import { canaliPredefiniti, leggiCanali, ordineCue } from './canali.js';
+import { PaginaCanali } from './impostazioni-canali.js';
 import { eNomeBeat } from './nomi.js';
 import { analizza, valuta } from './analisi.js';
 import { attivi, patternDi } from './evidenzia.js';
@@ -1053,12 +1055,41 @@ async function apriStash(stato) {
   // il PROJ: riaperto da solo (impostazione, o l'interfaccia è ripartita) oppure si sceglie dalla schermata
   const avvio = haStash ? await window.cutx.proj.avvio() : { schermata: false, proj: null };
   mostraProj(avvio.proj);
+  await caricaCanali();
   await aggiornaLibreria();
   await caricaSerata(stato);
   await aggiornaElenchi();
   if (avvio.schermata && !schermataProj.visibile) await schermataProj.mostra({ ultimo: avvio.proj?.ultimo });
   else if (!haStash) schermataProj.chiudi();
 }
+
+// --- i CANALI (gli 8 CH del LIVE, canali.json nel PROJ) ---
+
+let canaliConfig = canaliPredefiniti();
+let canaliErrori = [];
+const liveAcceso = () => livelliLive.some((l) => l.a === null);
+function usaCanali(config, errori = []) {
+  canaliConfig = config;
+  canaliErrori = errori;
+  cue.ordineCh = ordineCue(config);
+  if (cue.modo === 'brano') cue.mostraBrano?.(false);
+  paginaCanali?.disegna();
+}
+async function caricaCanali() {
+  const testo = haStash ? await window.cutx.leggiCanali().catch(() => null) : null;
+  const { config, errori } = leggiCanali(testo);
+  usaCanali(config, errori);
+  if (errori.length) window.cutx.logEvento('avviso', 'canali', errori[0]);
+}
+async function salvaCanali(config) {
+  usaCanali(config);
+  await window.cutx.scriviCanali(JSON.stringify(config, null, 2) + '\n').catch((e) => cue.avviso(String(e.message ?? e)));
+}
+async function ripristinaCanali() {
+  usaCanali(canaliPredefiniti());
+  await window.cutx.cancellaCanali().catch(() => {});
+}
+let paginaCanali = null;
 
 // --- i PROJ ---
 
@@ -1082,6 +1113,7 @@ async function cambiatoProj(info) {
     cue.mostraBrano?.(true);
   }
   await aggiornaLibreria();
+  await caricaCanali();
   await caricaSerata({ percorso: percorsoStash });
   window.cutx.logEvento('info', 'proj', `aperto ${etichettaProj(projAperto)}`);
 }
@@ -1733,6 +1765,7 @@ function mostraLive() {
   if (!live.viva) livelliLive = [];
   else if (live.stato.livelli && live.ultimoPong > spintaLivelli) livelliLive = live.stato.livelli;
   pila.aggiorna(livelliLive);
+  paginaCanali?.disegna();
 }
 
 function mostraCue() {
@@ -2253,6 +2286,8 @@ const controllerMidi = new Controller({
   faderScegli: (effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: effetto } }),
 });
 const paginaController = new PaginaController(controllerMidi);
+paginaCanali = new PaginaCanali({ config: () => canaliConfig, errori: () => canaliErrori, vivo: liveAcceso, salva: salvaCanali, ripristina: ripristinaCanali });
+caricaCanali();
 const specchio = new Specchio($('specchio'));
 setInterval(() => specchio.aggiorna(controllerMidi), 100);
 const specchioSynth = new Specchio(synth.specchioEl, { synth: true });

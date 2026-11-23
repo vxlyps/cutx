@@ -15,14 +15,14 @@ export const ZONA_MORTA = 0.04; // al centro di SWEEP
 // --- la pagina CANALI (le 8 definizioni) ---
 
 export const canaliPredefiniti = () => [
-  { nome: 'DRUM', colore: '#e8e8e8', tipi: ['drum'], free: false }, // qui entra anche la @beat con le sue scene
-  { nome: 'MELODIA', colore: '#e0b23c', tipi: ['keys', 'arp'], free: false },
-  { nome: 'BASSO', colore: '#d9582b', tipi: ['bass'], free: false },
-  { nome: 'LEAD', colore: '#3cc0e0', tipi: ['lead'], free: false },
-  { nome: 'PAD', colore: '#8a6fe0', tipi: ['pad'], free: false },
-  { nome: 'PERC', colore: '#e06fae', tipi: ['perc'], free: false },
-  { nome: 'FX', colore: '#6fe0a8', tipi: ['fx'], free: false },
-  { nome: 'FREE', colore: '#9bd02a', tipi: [], free: true }, // i senza tipo, e qualsiasi clip del brano
+  { nome: 'THUMP', colore: '#e8e8e8', tipi: ['drum'], free: false }, // qui entra anche la @beat con le sue scene
+  { nome: 'PURR', colore: '#e0b23c', tipi: ['keys', 'arp'], free: false },
+  { nome: 'GROWL', colore: '#d9582b', tipi: ['bass'], free: false },
+  { nome: 'HOWL', colore: '#3cc0e0', tipi: ['lead'], free: false },
+  { nome: 'FUR', colore: '#8a6fe0', tipi: ['pad'], free: false },
+  { nome: 'CLAW', colore: '#e06fae', tipi: ['perc'], free: false },
+  { nome: 'HISS', colore: '#6fe0a8', tipi: ['fx'], free: false },
+  { nome: 'STRAY', colore: '#9bd02a', tipi: [], free: true }, // i senza tipo, e qualsiasi clip del brano
 ];
 
 // Gli errori della pagina CANALI, in italiano; lista vuota = va bene. Otto CH, una sola FREE, ogni tipo in un CH solo.
@@ -42,6 +42,23 @@ export function validaCanali(config) {
   if (nFree !== 1) errori.push(nFree ? 'la FREE deve essere una sola' : 'manca la FREE');
   return errori;
 }
+
+// Il testo di canali.json → le 8 definizioni; se manca o non va bene, le predefinite (con la lista degli errori, per dirlo a Valerio).
+export function leggiCanali(testo) {
+  if (!testo) return { config: canaliPredefiniti(), errori: [] };
+  try {
+    const grezzo = JSON.parse(testo);
+    const base = canaliPredefiniti();
+    const config = Array.isArray(grezzo) ? grezzo.map((c, i) => ({ nome: String(c?.nome ?? '').trim(), colore: /^#[0-9a-f]{6}$/i.test(c?.colore) ? c.colore : base[i]?.colore ?? '#888888', tipi: Array.isArray(c?.tipi) ? c.tipi.filter((t) => TIPI.includes(t)) : [], free: c?.free === true })) : null;
+    const errori = config ? validaCanali(config) : ['il file non è una lista'];
+    return errori.length ? { config: canaliPredefiniti(), errori } : { config, errori: [] };
+  } catch (e) {
+    return { config: canaliPredefiniti(), errori: [`file illeggibile (${e.message})`] };
+  }
+}
+
+// L'ordine dei gruppi del CUE (categorie.js, gruppiClip): quello dei CH.
+export const ordineCue = (config) => config.map(({ nome, tipi, free }) => ({ nome, tipi, free }));
 
 export const indiceFree = (config) => Math.max(0, config.findIndex((c) => c.free));
 

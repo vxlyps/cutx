@@ -703,8 +703,8 @@ export class Cue {
     contenitore.append(this.cartaBeat());
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
     // le clip sono raggruppate per tipo (bass, lead, arp…) con un piccolo titolo; quelle senza tipo in fondo. Se nessuna ha un tipo, niente titoli.
-    for (const g of B.gruppiClip(m.sezioni)) {
-      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.categoria ? it.synth.categorie[g.categoria] : it.synth.msg.altre));
+    for (const g of B.gruppiClip(m.sezioni, this.ordineCh)) {
+      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
       for (const i of g.indici) contenitore.append(this.carta(i));
     }
     this.cartaAttiva = aperturaAttiva ? this.carte.find((c) => c.apertura) ?? null : scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
@@ -1025,7 +1025,7 @@ export class Cue {
   vociNav() {
     if (this.modo === 'brano') {
       const m = this.brano?.modello;
-      return m ? [...(m.beat?.scene ?? []).map((x, k) => ({ nome: x.nome, scena: k })), ...B.ordineClip(m.sezioni).map((i) => ({ nome: m.sezioni[i].nome, sezione: i }))] : [];
+      return m ? [...(m.beat?.scene ?? []).map((x, k) => ({ nome: x.nome, scena: k })), ...B.ordineClip(m.sezioni, this.ordineCh).map((i) => ({ nome: m.sezioni[i].nome, sezione: i }))] : [];
     }
     return B.blocchi(this.libero.codice).blocchi.filter((b) => b.sezione >= 0 || b.sezione === -2).map((b) => (b.sezione === -2 ? { nome: b.nome, scena: b.scena } : { nome: b.nome, sezione: b.sezione }));
   }

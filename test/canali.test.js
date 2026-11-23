@@ -92,7 +92,7 @@ test('GO / annulla / niente in NEXT / stessa clip', () => {
   assert.equal(s.luceGo(5), 'spenta');
   const v = s.go(5);
   assert.equal(v[0].tipo, 'avviso');
-  assert.match(v[0].testo, /niente in NEXT per PERC/);
+  assert.match(v[0].testo, /niente in NEXT per CLAW/);
 });
 
 test('OUT: annulla se ripremuto; tenuto 1 s esce subito; su una CH vuota niente', () => {
@@ -229,9 +229,38 @@ test('vista: tutto quello che serve allo schermo', () => {
   s.impostaBrano(brano1);
   const v = s.vista();
   assert.equal(v.length, 8);
-  assert.equal(v[0].nome, 'DRUM');
+  assert.equal(v[0].nome, 'THUMP');
   assert.equal(v[7].free, true);
   assert.equal(v[0].alternative.length, 3);
   assert.equal(v[0].next.nome, 'intro');
   assert.equal(v[5].next, null);
+});
+
+// --- pagina CANALI: ordine del CUE e lettura di canali.json ---
+import { gruppiClip, ordineClip } from '../src/renderer/categorie.js';
+import { leggiCanali, ordineCue, canaliPredefiniti as predef } from '../src/renderer/canali.js';
+
+test('il CUE segue l\'ordine dei CH: drum e perc nel loro gruppo, senza tipo in FREE', () => {
+  const clip = [{ info: {} }, { info: { perc: true } }, { info: { bass: true } }, { info: { drum: true } }, { info: { arp: true } }, { info: { keys: true } }];
+  const g = gruppiClip(clip, ordineCue(predef()));
+  assert.deepEqual(g.map((x) => [x.categoria, x.indici]), [['THUMP', [3]], ['PURR', [4, 5]], ['GROWL', [2]], ['CLAW', [1]], ['STRAY', [0]]]);
+  assert.deepEqual(ordineClip(clip, ordineCue(predef())), [3, 4, 5, 2, 1, 0]);
+});
+
+test('cambia l\'ordine dei CH, cambia il CUE; un tipo senza CH va in FREE', () => {
+  const c = predef();
+  [c[1], c[2]] = [c[2], c[1]]; // GROWL prima di PURR
+  c[4].tipi = []; // il pad non ha più un CH
+  const clip = [{ info: { pad: true } }, { info: { keys: true } }, { info: { bass: true } }];
+  assert.deepEqual(gruppiClip(clip, ordineCue(c)).map((x) => [x.categoria, x.indici]), [['GROWL', [2]], ['PURR', [1]], ['STRAY', [0]]]);
+});
+
+test('canali.json: manca → predefiniti; sbagliato → predefiniti con l\'errore; buono → suoi', () => {
+  assert.deepEqual(leggiCanali(null), { config: predef(), errori: [] });
+  assert.ok(leggiCanali('{').errori.length);
+  assert.ok(leggiCanali('[]').errori.length);
+  const buono = predef().map((c, i) => (i === 0 ? { ...c, nome: 'KICK' } : c));
+  assert.equal(leggiCanali(JSON.stringify(buono)).config[0].nome, 'KICK');
+  const doppio = predef().map((c) => ({ ...c, tipi: ['bass'] }));
+  assert.ok(leggiCanali(JSON.stringify(doppio)).errori[0].includes('due CH'));
 });

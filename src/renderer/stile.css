@@ -3714,3 +3714,11 @@ input[type='checkbox'] {
   font-size: 10px;
   color: var(--spento);
 }
+
+/* pagina CANALI (impostazioni) */
+.can-riga { border-left: 4px solid var(--ch, var(--linea)); padding-left: 12px; flex-wrap: wrap; }
+.can-num { min-width: 36px; }
+.can-nome { width: 150px; background: transparent; color: inherit; border: 1px solid var(--linea); padding: 6px 8px; font: inherit; text-transform: uppercase; }
+.can-colore { width: 36px; height: 30px; padding: 0; border: 1px solid var(--linea); background: transparent; }
+.can-tipi { flex-wrap: wrap; }
+.can-riga button:disabled, .can-riga input:disabled { opacity: 0.5; }

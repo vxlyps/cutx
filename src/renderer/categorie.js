@@ -11,13 +11,26 @@ export const eCategoria = (x) => CATEGORIE.includes(x);
 // Il tipo scritto nella riga di una clip (info = { bass: true, volume: 0.8 … }), o '' se non c'è.
 export const categoriaDi = (info) => CATEGORIE.find((c) => info?.[c] === true) ?? '';
 
-// Gli indici delle clip nell'ordine dei gruppi: bass, lead, arp, pad, keys, fx, poi quelle senza tipo (nell'ordine del brano dentro ogni gruppo).
-// Ritorna [{ categoria, indici }]; se nessuna clip ha un tipo c'è un gruppo solo (categoria null) e il CUE non mette titoli.
-export function gruppiClip(clip) {
-  const tipi = clip.map((s) => categoriaDi(s.info));
+// Il tipo di una clip tra tutti gli 8 (anche drum e perc), o '' se non c'è.
+export const tipoDi = (info) => TIPI.find((t) => info?.[t] === true) ?? '';
+
+// Ordine dei gruppi nel CUE: una lista di { nome, tipi, free }. Di serie un gruppo per tipo; la pagina CANALI passa i suoi 8 CH (nell'ordine dei CH:
+// ogni clip va nel gruppo del suo tipo, quelle senza tipo e i tipi che nessuno prende vanno nel gruppo `free`).
+export const ORDINE_PER_TIPO = TIPI.map((t) => ({ nome: t, tipi: [t] }));
+
+// Gli indici delle clip nell'ordine dei gruppi (nell'ordine del brano dentro ogni gruppo), poi quelle senza tipo se nessun gruppo è `free`.
+// Ritorna [{ categoria, indici }] (categoria = nome del gruppo); se nessuna clip ha un tipo c'è un gruppo solo (categoria null) e il CUE non mette titoli.
+export function gruppiClip(clip, ordine = ORDINE_PER_TIPO) {
+  const tipi = clip.map((s) => tipoDi(s.info));
   if (!tipi.some(Boolean)) return [{ categoria: null, indici: clip.map((_, i) => i) }];
-  const gruppi = [...CATEGORIE, ''].map((c) => ({ categoria: c, indici: tipi.flatMap((t, i) => (t === c ? [i] : [])) }));
+  const free = ordine.findIndex((g) => g.free);
+  const dove = (t) => {
+    const i = t ? ordine.findIndex((g) => g.tipi?.includes(t)) : -1;
+    return i >= 0 ? i : free; // -1 = in fondo, senza gruppo
+  };
+  const posti = tipi.map(dove);
+  const gruppi = [...ordine.map((g) => g.nome), ''].map((nome, g) => ({ categoria: nome, indici: posti.flatMap((p, i) => ((p < 0 ? ordine.length : p) === g ? [i] : [])) }));
   return gruppi.filter((g) => g.indici.length);
 }
 
-export const ordineClip = (clip) => gruppiClip(clip).flatMap((g) => g.indici);
+export const ordineClip = (clip, ordine) => gruppiClip(clip, ordine).flatMap((g) => g.indici);

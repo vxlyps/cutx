@@ -981,5 +981,28 @@
       "nome": "finale HACK · durata",
       "testo": "quanto dura il finale in cui la cimice si prende il set e lo chiude (bottone HACK o ⌥⌘⇧H due volte): da 1 a 3 minuti, di serie 2. Solo in memoria: i file del set non si toccano; il paracadute lo ferma e rimette tutto."
     }
+  },
+  "canali": {
+    "aiuto": "Gli 8 canali del LIVE. Ognuno ha un nome (libero), un colore e i tipi di clip che accoglie. Un tipo sta in un canale solo; la clip senza tipo (e ogni clip «in più») va nel canale FREE. Si cambiano a live fermo e valgono per questo PROJ.",
+    "fermo": "Il live suona: i canali si possono solo guardare. Ferma il live per cambiarli.",
+    "ch": "CH{n}",
+    "nome": "nome del canale",
+    "colore": "colore",
+    "free": "FREE",
+    "freeAiuto": "il canale dei senza tipo e dei «in più»",
+    "predefinito": "torna al predefinito",
+    "errNome": "il CH{n} non ha un nome: il cambio non è stato salvato",
+    "letto": "canali.json non va bene ({motivo}): uso quelli predefiniti",
+    "salvato": "salvato",
+    "tipi": {
+      "drum": "drum",
+      "perc": "perc",
+      "bass": "bass",
+      "lead": "lead",
+      "arp": "arp",
+      "pad": "pad",
+      "keys": "keys",
+      "fx": "fx"
+    }
   }
 }

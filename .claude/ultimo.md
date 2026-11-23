@@ -18,11 +18,16 @@ Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto
 - b126097 passo 2: motore con `ch` (entra, descrivi, ripristino in app.js), sostituzione per CH+nome, prova `entrata` con 3 controlli nuovi (18 ok); `livelli`+`robustezza` 44 ok. `npm test` 505/506.
 - Rete di sicurezza: backup in ~/Progetti/backup/cutx-stash-2026-11-19 (e -con-tipi); il ramo gira con dati separati («CUTX canali», CUTX-canali; blocco `CANALI` in main.js da togliere prima di un merge).
 
+## Fatto (passo 3, 23/11/2026)
+- Pagina «canali» nelle impostazioni (`impostazioni-canali.js`, sezione in index.html, testi in it.json `canali`): nome, colore, tipi a spunte, FREE, «torna al predefinito». Salva subito in `canali.json` del PROJ; a live acceso è sola lettura. Si ricarica a ogni cambio di PROJ.
+- Nomi predefiniti: THUMP · PURR · GROWL · HOWL · FUR · CLAW · HISS · STRAY.
+- Il CUE segue l'ordine dei CH (`gruppiClip(clip, ordine)` in categorie.js, `cue.ordineCh`); drum/perc ora hanno il loro gruppo.
+- Test: canali+synth 64 ok. Foto `--foto` ora scatta anche `-impostazioni-canali.png`. NON lanciate le prove lunghe (`npm run prova`).
+
 ## Da fare (parte B, poi FERMARSI)
-3. Pagina CANALI nelle impostazioni: 8 righe (nome libero, colore, tipi a spunte, una FREE, «torna al predefinito»), `canali.json` nel PROJ. Prima del codice: piano a Valerio e 2-3 nomi per le voci visibili. Parole in `testi/it.json`.
-   - Qui sistemare anche `gruppiClip`/`categoriaDi` in categorie.js: oggi usano CATEGORIE (6), quindi una clip `perc`/`drum` nel CUE finisce tra i senza tipo. Deve usare TIPI e l'ordine dei CH.
-4. Griglia LIVE col mouse (8 colonne × alternative del brano nel CUE; suona, NEXT, countdown, fader «non letto», mute, vecchia). Il LIVE di oggi è `src/renderer/pila.js` (588 righe). GO deve mandare `ch`; ricostruire `canali` da `ch` dei livelli (stato-live.js, app.js ~347/383/451).
+4. Griglia LIVE col mouse (8 colonne × alternative del brano nel CUE; suona, NEXT, countdown, fader «non letto», mute, vecchia). Il LIVE di oggi è `src/renderer/pila.js`. GO deve mandare `ch`; `canali` si ricostruisce da `ch` dei livelli (stato-live.js, app.js).
 5. X-TOUCH con la mappa di oggi sui CH. Poi test + prova + rapporto (cosa funziona/no/rischia/cosa provare + tabella regola→file→test). Fermarsi.
+- Il NANO è collegato: fase 0 (monitor MIDI in sola lettura) da fare prima del passo del nano.
 
 ## File toccati
 src/renderer/categorie.js, canali.js, motore.js (entra ~r.489-554, descrivi ~r.678), app.js (ripristino ~r.1434, cutxProva.richiestaLive), src/main/prova.js (provaEntrata, punto 3b).

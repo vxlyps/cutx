@@ -2,7 +2,7 @@
 import { app } from 'electron';
 import path from 'node:path';
 import { constants, existsSync, readFileSync, renameSync } from 'node:fs';
-import { copyFile, mkdir, readdir, readFile, stat, statfs, utimes, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, stat, statfs, utimes, writeFile } from 'node:fs/promises';
 import * as preferenze from './preferenze.js';
 import * as brano from '../renderer/brano.js';
 import { COLPI_PREDEFINITI } from '../renderer/colpi.js';
@@ -231,6 +231,7 @@ async function leggiFileStash(nome) {
 
 export const leggiSet = () => leggiFileStash('set.cutx');
 export const leggiKit = () => leggiFileStash('kit.cutx');
+export const leggiCanali = () => leggiFileStash('canali.json'); // i CH del LIVE, nella cartella del PROJ
 
 async function scriviFileStash(nome, testo) {
   if (!cartellaProj()) throw new Error('nessun PROJ aperto');
@@ -240,6 +241,8 @@ async function scriviFileStash(nome, testo) {
 
 export const scriviSet = (testo) => scriviFileStash('set.cutx', testo);
 export const scriviKit = (testo) => scriviFileStash('kit.cutx', testo);
+export const scriviCanali = (testo) => scriviFileStash('canali.json', testo);
+export const cancellaCanali = async () => { if (cartellaProj()) await rm(path.join(cartellaProj(), 'canali.json'), { force: true }); return true; };
 
 export async function leggiBrano(nome, numero = projAperto) {
   const file = radice() && fileBrano(nome, numero);
