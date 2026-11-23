@@ -65,6 +65,9 @@ export const ordineCue = (config) => config.map(({ nome, tipi, free }) => ({ nom
 
 export const indiceFree = (config) => Math.max(0, config.findIndex((c) => c.free));
 
+// Il CH di un livello vivo. Una regola sola, per l'interfaccia e per il motore: senza ch → STRAY, tranne i livelli del controller e il paracadute (fuori dai CH).
+export const chDelLivello = (config, l) => l.ch ?? (l.provenienza === 'controller' || l.nome === 'paracadute' ? null : indiceFree(config));
+
 // La ch di un tipo ('' = senza tipo → FREE). Un tipo che nessuna ch prende va in FREE.
 export function chDelTipo(config, tipo) {
   const i = tipo ? config.findIndex((c) => c.tipi.includes(tipo)) : -1;
@@ -438,6 +441,7 @@ export class StatoCanali {
     const c = this.canali[i];
     const prima = c.fisico;
     c.fisico = v;
+    if (!c.agganciato && !c.suona && !c.attesa) c.agganciato = true; // CH vuoto e senza attese: nessun volume può saltare, il fader comanda dal primo tocco
     if (!c.agganciato) {
       const dentro = Math.abs(v - c.vero) <= AGGANCIO;
       const passa = prima !== null && (prima - c.vero) * (v - c.vero) < 0;

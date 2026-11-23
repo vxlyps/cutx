@@ -37,7 +37,7 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
-import { StatoCanali, canaliPredefiniti, chDelTipo, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
+import { StatoCanali, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
 import { Griglia } from './griglia.js';
 import { Nano } from './nano.js';
 import { PaginaCanali } from './impostazioni-canali.js';
@@ -1117,7 +1117,7 @@ let paginaCanali = null;
 
 // La griglia dei CANALI: legge lo stato e manda intenzioni; le «azioni» le esegue chi parla col motore.
 // Un livello live senza CH (ripristinato, partito da altre vie) conta come FREE: la griglia lo vede e il fader lo comanda. Fuori dai CH: i colpi del controller e il paracadute.
-const chDelLivello = (l) => l.ch ?? (l.provenienza === 'controller' || l.nome === 'paracadute' ? null : indiceFree(canaliConfig));
+const chDelLivello = (l) => chDelLivelloPuro(canaliConfig, l);
 const livelliDelCH = (i) => livelliLive.filter((l) => chDelLivello(l) === i && l.a === null);
 // Le intenzioni dello stato → il motore. GO e OUT di una mossa sola (R, o PLAY che ne ha molte) partono INSIEME: prima preparo tutti i pezzi,
 // poi un solo messaggio al motore con un solo ciclo d'arrivo, e «entra tra» torna a 1 una volta sola, alla fine.
@@ -1573,7 +1573,7 @@ async function ripristinaLive() {
     statoCanali.sganciaTutti(); // i fader fisici si riagganciano al valore rimesso
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: l.ch ?? null, beat: l.beat ?? null, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: chDelLivello(l), beat: l.beat ?? null, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
@@ -1841,7 +1841,7 @@ const pila = new Pila($('livelli'), $('jam'), {
     const prima = livello ? livelloVivo(livello.id)?.codice : null;
     const r = await live.richiesta({
       tipo: 'entra',
-      ch: livello ? livello.ch ?? null : chDelTipo(canaliConfig, ''), // modificare un livello lo tiene nel suo CH; una jam nuova va in FREE
+      ch: livello ? chDelLivello(livello) : chDelTipo(canaliConfig, ''), // modificare un livello lo tiene nel suo CH (senza ch: STRAY, come nella pila); una jam nuova va in FREE
       codice,
       ...(coda.length ? { coda } : {}),
       nome: livello?.nome ?? 'jam',

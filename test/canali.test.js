@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guadagnoLivello, applicaMessaggioCh, chNeutro } from '../src/renderer/mixer.js';
-import { StatoCanali, sweep, alternative, canaliPredefiniti, chDelTipo, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
+import { StatoCanali, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
 
 const clip = (nome, tipo) => ({ nome, info: tipo ? { [tipo]: true } : {} });
 const brano1 = { nome: 'uno', bpm: 170, beat: { scene: [{ nome: 'intro' }, { nome: 'drop' }] }, sezioni: [clip('sub', 'bass'), clip('melodia', 'lead'), clip('reese', 'bass'), clip('kick', 'drum'), clip('rumori'), clip('stab', 'keys')] };
@@ -566,6 +566,7 @@ test('passo 1.1: le scelte vivono solo per i brani in una linguetta del CUE; usc
 
 test('aggancio: dopo l\'avvio il fader non comanda finché non è entro ±3% del valore vero o ci passa sopra', () => {
   const s = new StatoCanali();
+  s.canali[2].suona = { nome: 'x' }; // il CH suona: l'aggancio serve
   assert.deepEqual(s.fader(2, 0.3), [], 'avvio: valore vero 1, il fader sta a 0,3: i suoi messaggi non contano');
   assert.deepEqual(s.fader(2, 0.6), []);
   assert.equal(s.canali[2].vero, 1);
@@ -579,12 +580,14 @@ test('aggancio: dopo l\'avvio il fader non comanda finché non è entro ±3% del
   assert.equal(s.vista()[2].fader.valore, 0.4);
   // la tolleranza è ±3%
   const t = new StatoCanali();
+  t.canali[0].suona = { nome: 'x' };
   assert.deepEqual(t.fader(0, 0.96), [], '4% sotto: fuori');
   assert.equal(t.fader(0, 0.971)[0].tipo, 'ch', '2,9% sotto: dentro');
 });
 
 test('aggancio: ci passa sopra tra due messaggi di fila (un salto veloce che scavalca il valore)', () => {
   const s = new StatoCanali();
+  s.canali[3].suona = { nome: 'x' };
   s.sliderSchermo(3, 0.5); // il valore vero è 0,5
   assert.deepEqual(s.fader(3, 0.2), [], 'da sotto');
   const e = s.fader(3, 0.8); // sopra: ha scavalcato 0,5 tra due messaggi
@@ -592,6 +595,7 @@ test('aggancio: ci passa sopra tra due messaggi di fila (un salto veloce che sca
   assert.equal(s.canali[3].agganciato, true);
   // dalla stessa parte non si aggancia
   const t = new StatoCanali();
+  t.canali[3].suona = { nome: 'x' };
   t.sliderSchermo(3, 0.5);
   t.fader(3, 0.1);
   assert.deepEqual(t.fader(3, 0.3), []);
@@ -600,6 +604,7 @@ test('aggancio: ci passa sopra tra due messaggi di fila (un salto veloce che sca
 
 test('aggancio: lo slider a schermo comanda subito e sgancia il fisico; avvio, ripristino, nano ricollegato e PROJ nuovo lo sganciano', () => {
   const s = new StatoCanali();
+  s.canali[1].suona = { nome: 'x' };
   s.fader(1, 0.99);
   assert.equal(s.canali[1].agganciato, true);
   const e = s.sliderSchermo(1, 0.4);
@@ -671,4 +676,29 @@ test('avvisi: il CH dice anche quando la clip che suona è muta per conto suo (l
   assert.deepEqual(s.avvisi(2), []);
   s.sincronizza([], 6); // non suona: niente avvisi
   assert.deepEqual(s.avvisi(2), []);
+});
+
+test('aggancio solo quando serve: CH vuoto e senza attese = il fader comanda subito; se suona o aspetta resta l\'aggancio', () => {
+  const s = new StatoCanali();
+  s.sliderSchermo(4, 0.5); // sganciato, valore vero 0,5
+  const e = s.fader(4, 0.1); // CH vuoto: nessun salto da evitare
+  assert.deepEqual(e.map((x) => [x.tipo, x.ch, x.pos]), [['ch', 4, 0.1]]);
+  assert.equal(s.canali[4].agganciato, true);
+  s.sganciaTutti();
+  s.canali[4].attesa = { tipo: 'go', alt: { nome: 'x' }, da: 8 }; // entrata in attesa: l'aggancio resta
+  assert.deepEqual(s.fader(4, 0.9), []);
+  s.canali[4].attesa = null;
+  s.canali[4].suona = { nome: 'x' };
+  assert.deepEqual(s.fader(4, 0.95), [], 'suona: resta');
+  s.canali[4].suona = null; // la clip esce: il CH è di nuovo vuoto, il fader riprende subito
+  assert.equal(s.fader(4, 0.3)[0].pos, 0.3);
+});
+
+test('chDelLivello: senza ch → STRAY; fuori solo controller e paracadute', () => {
+  const cfg = canaliPredefiniti();
+  const stray = cfg.findIndex((c) => c.free);
+  assert.equal(chDelLivello(cfg, { nome: 'a', provenienza: 'jam' }), stray);
+  assert.equal(chDelLivello(cfg, { nome: 'a', ch: 2 }), 2);
+  assert.equal(chDelLivello(cfg, { nome: 'a', provenienza: 'controller' }), null);
+  assert.equal(chDelLivello(cfg, { nome: 'paracadute' }), null);
 });
