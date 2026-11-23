@@ -585,7 +585,7 @@ async function provaEntrata({ finestre, scrivi }) {
   await aspetta(0.6);
   const conFader = (await live()).livelli.find((l) => l.id === r2.livello);
   controlla('il fader del CH cambia il volume del livello (a metà: circa 0,18)', conFader && Math.abs(conFader.volume - 0.178) < 0.03, JSON.stringify(conFader?.volume));
-  await js('cutxProva.canaliFader(7, 1)');
+  await js('cutxProva.canaliFader(7, null)'); // fader «non letto» di nuovo: la prova non lascia il fisico a metà
 
   // un CH con un tipo suona UNA clip sola: reese entra in CH3 e «sub» esce dove entra lei; in FREE invece si impila
   const entraU = (nome, ch, unico) => js(`cutxProva.richiestaLive({ tipo: 'entra', codice: 's("sine*2").freq(70).gain(.0001)', nome: ${JSON.stringify(nome)}, provenienza: 'prova', ch: ${ch}, unico: ${unico}, cicli: 1, scritto: true })`);

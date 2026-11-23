@@ -36,12 +36,22 @@ Nuovo LIVE a canali (CH1…CH8): fase 1 parte B, poi FERMARSI e fare il rapporto
 - Luci del nano pronte nel software (`luciNano` in nano.js, test ok): M accesa = muto; R fissa = suona, lampeggio lento = in NEXT c'è altro, veloce = sta per entrare; S veloce = sta per uscire; PLAY lento = GO ALL ha qualcosa. Mandate sul canale MIDI che il nano usa, solo quando cambiano. NON si accendono finché il nano non è configurato con l'Editor Korg (LED External).
 - Lanciatore: `strumenti/CUTX.command` (e la copia sul Desktop) ora apre ~/Progetti/cutx-canali (CUTX canali). Vecchio in ~/Progetti/backup/CUTX.command.2026-10-31.
 
-## Da fare
-- X-TOUCH sui CH: NON fatto. Oggi l'X-Touch comanda i «posti» della pila (beat + 5 clip, manopola 1 = CUE, 8 = master). Va deciso con Valerio cosa vuol dire «scolpisce il CH in FOCUS» prima di toccarlo.
-- Master: nano fader/manopola 8 = master o CH8? Oggi il fader 8 è il CH8. Da decidere.
-- Provare il nano a mano; poi luci (dopo l'Editor Korg) e fase 3: passaggio da brano a brano canale per canale.
-- OUT non rispetta ancora «entra tra» (esce al prossimo confine con la dissolvenza di uscita).
-- Prima di un merge: togliere il blocco `CANALI` in main.js.
+## Fatto nella notte (23/11, dopo il design di Opus)
+- Ogni clip sta in UN CH solo: FREE (STRAY) = solo le clip senza tipo. Il CUE mostra sempre i titoli «CH3 GROWL…», e ogni card ha il tasto «CH3 GROWL ▾» (menu: suggerito dal nome + tutti i CH; scrive `· tipo` nella riga `// @clip`, ⌘Z ok; bloccato se la clip suona live).
+- NEXT è unico (per id brano#nome), vive in `StatoCanali.scelta`: clic su card/scena nel CUE, chip della griglia e manopola del nano scrivono la stessa cosa; il CUE mostra LIVE/NEXT sulle card, e la manopola porta il CUE sulla clip (se nessun editor ha il fuoco).
+- Motore: un CH con tipo suona UNA clip sola (`unico` nel messaggio `entra`; FREE impila). OUT toglie tutto il CH.
+- Nano: R = un tasto (GO / OUT / ANNULLA, la parola sta sul tasto; tenuto 1 s esce subito) · S = preascolto in cuffia del NEXT (segue la manopola; di nuovo S smette) · M muto · manopola = NEXT · fader = volume · PLAY = GO ALL solo CH «armati». Livelli live senza CH contano come FREE (fader li comanda).
+- Prove: test 519/520 (resta il MOD noto); prove livelli+entrata+robustezza+brani+browser+impostazioni 130 ok.
+
+## Da fare (in ordine)
+1. Richiesta di Valerio: il fader/slider del nano deve modificare ANCHE ciò che è già live (non solo prima di andare live). Ora lo fa per ogni livello con CH (e senza CH = FREE), provato con `cutxProva.canaliFader`; da verificare col nano vero: se non va, guardare cosa dice l'etichetta «NANO · hex» in alto nel LIVE.
+2. LED del nano: servono l'Editor Korg (LED External, Momentary, un canale solo, Write Scene). Il nano ignora ogni sysex. Software pronto (`luciNano`).
+3. Mani sul nano di Valerio: manopola↔CUE, S cuffia, R breve/lungo, PLAY, fader. Volume al 20%.
+4. X-TOUCH sui CH (FOCUS = ultimo CH toccato): da decidere con Valerio. Filtro DJ (sweep) va lì, non sulla manopola del nano.
+5. Fase 3: passaggio da brano a brano canale per canale. «OUT» non rispetta ancora «entra tra».
+6. Decisioni di Valerio da chiedere: fader 8 = CH8 (ora) o master?
+7. Prima di un merge: togliere il blocco `CANALI` in main.js; il lanciatore sul Desktop punta a cutx-canali.
+- Nota prove: le card dei livelli si provano nella vista «pila» (la prova la apre da sola).
 
 ## File toccati
 src/renderer/categorie.js, canali.js, motore.js (entra ~r.489-554, descrivi ~r.678), app.js (ripristino ~r.1434, cutxProva.richiestaLive), src/main/prova.js (provaEntrata, punto 3b).

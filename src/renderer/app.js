@@ -1140,14 +1140,22 @@ async function eseguiCanali(effetti) {
   aggiornaCanali();
 }
 // Il fisico (fader e M) vince sul volume del codice: lo mando ai livelli del CH solo quando cambia.
+const muteApplicato = Array(8).fill(false); // il muto di ogni CH che ho già mandato ai suoi livelli
 function applicaFisico() {
   statoCanali.canali.forEach((c, i) => {
+    const cambiato = c.mute !== muteApplicato[i]; // il muto si manda quando lo tocco (o a un livello nuovo, se il CH è muto); mai «non muto» da solo
+    muteApplicato[i] = c.mute;
     for (const l of livelliDelCH(i)) {
       const volume = c.fader === null ? undefined : gainFader(c.fader);
-      const chiave = `${volume}|${c.mute}`;
-      if (fisicoInviato.get(l.id) === chiave) continue;
+      const muto = cambiato || (c.mute && !fisicoInviato.has(l.id)) ? c.mute : undefined;
+      const chiave = `${volume}|${muto}`;
+      if (volume === undefined && muto === undefined) {
+        fisicoInviato.set(l.id, fisicoInviato.get(l.id) ?? '|');
+        continue;
+      }
+      if (fisicoInviato.get(l.id) === chiave && !cambiato) continue;
       fisicoInviato.set(l.id, chiave);
-      live.manda({ tipo: 'livello', livello: l.id, ...(volume !== undefined ? { volume } : {}), muto: c.mute });
+      live.manda({ tipo: 'livello', livello: l.id, ...(volume !== undefined ? { volume } : {}), ...(muto !== undefined ? { muto } : {}) });
     }
   });
 }
