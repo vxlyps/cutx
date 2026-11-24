@@ -5092,7 +5092,7 @@ async function provaOnda({ finestre, scrivi }) {
   // quanti puntini verdi accesi ci sono nel canvas dell'onda (pixel col verde marcio pieno)
   const accesi = (dove) => `(() => { const cv = ${dove}; if (!cv || !cv.width) return -1; const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 170 && d[i] > 130 && d[i + 2] < 110) n++; return n; })()`;
   const carta = (nome) => `[...cutxProva.pila.carte.values()].find((c) => c.livello.nome === '${nome}')`;
-  const brano = '// @brano onde\n// @bpm 120\nsetcpm(120/4)\n// @clip colpi · drum\ns("square*4").decay(.08).sustain(0).gain(.5)\n// @clip basso\nnote("c2 eb2").s("sine").gain(.3)\n';
+  const brano = '// @brano onde\n// @bpm 120\nsetcpm(120/4)\n// @clip colpi · drum\ns("square*4").decay(.08).sustain(0).gain(.5)\n// @clip basso · bass\nnote("c2 eb2").s("sine").gain(.3)\n';
   try {
     await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
     await aspetta(1.5);
