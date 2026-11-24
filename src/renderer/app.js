@@ -337,10 +337,18 @@ const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTip
 
 // X-TOUCH MANI: le righe che le manopole hanno messo a un CH sono del CH. Una clip che entra nel CH le eredita (stessa chiave: vince la manopola).
 const righeManiCH = new Map(); // ch → Map chiave → riga
+// Un CH perde le righe delle manopole: anche le manopole e gli anelli dell'X-Touch tornano al neutro (ch = null: tutti).
+function scordaRigheCH(ch) {
+  if (ch === null) righeManiCH.clear();
+  else righeManiCH.delete(ch);
+  try {
+    controllerMidi.dimenticaMani(ch);
+  } catch {} // il controller può non esserci ancora
+}
 function ereditaCoda(ch, coda, eBeat, codice = '') {
   // vivo = suona, o sta per uscire ma non è ancora uscito (OUT e poi GO ravvicinati: la clip nuova eredita lo stesso)
   const vivo = livelliLive.some((l) => chDelLivello(l) === ch && (l.a === null || l.a > cicloAdesso()));
-  if (!vivo) righeManiCH.delete(ch); // un CH rimasto vuoto: le righe di una volta non tornano alla prossima clip
+  if (!vivo) scordaRigheCH(ch); // un CH rimasto vuoto: le righe di una volta non tornano alla prossima clip
   if (eBeat && vivo) return coda.length ? coda : undefined; // la scena cambia sul beat che suona: la sua coda resta com'è
   const righe = righeManiCH.get(ch);
   if (!righe?.size) return eBeat && !coda.length ? undefined : coda;
@@ -606,7 +614,7 @@ function pulisciCoda(id) {
   const l = livelloVivo(id);
   if (inTest || !l?.coda?.length) return;
   const prima = [...l.coda];
-  righeManiCH.delete(chDelLivello(l)); // le righe delle manopole di quel CH non tornano alla prossima clip
+  scordaRigheCH(chDelLivello(l)); // le righe delle manopole di quel CH non tornano alla prossima clip
   live.manda({ tipo: 'coda', livello: id, pulisci: true });
   const rimetti = () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true, imposta: prima }) : false);
   cronologia.registra({
@@ -1169,7 +1177,7 @@ let griglia = null;
 let canaliErrori = [];
 const liveAcceso = () => livelliLive.some((l) => l.a === null);
 function usaCanali(config, errori = []) {
-  righeManiCH.clear(); // un'altra mappa dei CH: le righe delle manopole erano di un altro canale
+  scordaRigheCH(null); // un'altra mappa dei CH: le righe delle manopole erano di un altro canale
   canaliConfig = config;
   statoCanali.impostaCANALI(config);
   canaliErrori = errori;

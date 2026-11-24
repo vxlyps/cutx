@@ -388,7 +388,10 @@ export class StatoCanali {
   // di tutti i brani nelle linguette. Chi esegue pulisce anche i livelli che il motore ha in attesa.
   annullaTutte() {
     const effetti = this.canali.flatMap((c, i) => (c.attesa ? [this.annullaAttesa(i)] : []));
-    for (const c of this.canali) c.scelte.clear();
+    for (const c of this.canali) {
+      c.scelte.clear();
+      c.zona = null; // la manopola dov'è adesso riarma al prossimo tocco
+    }
     return effetti;
   }
 

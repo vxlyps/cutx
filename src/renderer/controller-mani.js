@@ -64,9 +64,10 @@ function scrivi(c, param, riga, chiaveRiga) {
   c.azioni.maniRiga?.(c.focusCH, chiaveRiga, riga);
 }
 
-function togli(c, chiaveRiga) {
+// `annullabile`: la spinta si può annullare con ⌘Z; il passaggio dal centro dello SWEEP no (sarebbe una voce di cronologia a ogni scatto).
+function togli(c, chiaveRiga, annullabile = false) {
   if (c.pagina === 'B') return c.azioni.maniGlobale?.(`mani:${chiaveRiga}`, null);
-  for (const l of livelliDelFocus(c)) c.azioni.resetRiga?.(l.id, chiaveRiga);
+  for (const l of livelliDelFocus(c)) (annullabile ? c.azioni.resetRiga : c.azioni.togliRiga)?.(l.id, chiaveRiga);
   c.azioni.maniRiga?.(c.focusCH, chiaveRiga, null);
 }
 
@@ -137,11 +138,11 @@ export function resetMani(c, n) {
   }
   const k = `${scopo(c)}|${param}`;
   if (param === 'sweep') {
-    togli(c, 'lpf');
-    togli(c, 'hpf');
+    togli(c, 'lpf', true);
+    togli(c, 'hpf', true);
     c.maniX.set(k, 0.5);
   } else {
-    togli(c, chiaveCoda(param));
+    togli(c, chiaveCoda(param), true);
     c.maniX.delete(k);
     c.maniUltimo.delete(k);
   }

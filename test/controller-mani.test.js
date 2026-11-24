@@ -114,12 +114,12 @@ test('SWEEP sulla manopola 1: a sinistra .lpf, a destra .hpf (e toglie l\'altra)
   c.riceve(giro(1, -20));
   avanza(100);
   assert.match(righeCoda(log).at(-1)[1], /^\.lpf\(/);
-  assert.ok(log.some((x) => x[0] === 'reset' && x[2] === 'hpf'));
+  assert.ok(log.some((x) => x[0] === 'togli' && x[2] === 'hpf'));
   log.length = 0;
   c.riceve(giro(1, 60));
   avanza(100);
   assert.match(righeCoda(log).at(-1)[1], /^\.hpf\(/);
-  assert.ok(log.some((x) => x[0] === 'reset' && x[2] === 'lpf'));
+  assert.ok(log.some((x) => x[0] === 'togli' && x[2] === 'lpf'));
 });
 
 test('velocità a scatti e altezza: scrivono .fast e .transpose; al valore neutro la riga esce', () => {
@@ -134,7 +134,7 @@ test('velocità a scatti e altezza: scrivono .fast e .transpose; al valore neutr
   log.length = 0;
   c.riceve(giro(7, -3)); // torna a 0
   avanza(100);
-  assert.ok(log.some((x) => x[0] === 'reset' && x[2] === 'transpose'), 'a zero la riga esce');
+  assert.ok(log.some((x) => x[0] === 'togli' && x[2] === 'transpose'), 'a zero la riga esce');
 });
 
 test('spinta: la riga esce dal CH in focus (e il CH la dimentica)', () => {
@@ -302,4 +302,26 @@ test('senza nano (MANI spenta): manopola 1 naviga, 2–7 volumi, il tasto 8 tenu
   assert.ok(log.some((x) => x[0] === 'paracadute'), 'il tasto 8 tenuto lancia il paracadute');
   c.riceve(tasto(c, 8, false));
   assert.ok(!chiamate.includes('maniFocus') && !chiamate.includes('maniRiga') && !chiamate.includes('maniGlobale'), 'nessun gesto MANI');
+});
+
+test('i passaggi dello SWEEP dal centro non riempiono ⌘Z (togliRiga, non resetRiga); la spinta sì', () => {
+  const { c, log, avanza } = prova({ livelliDelCH: { 2: [L(7, 'basso', ['.lpf(500)'])] } });
+  c.riceve(tasto(c, 3));
+  for (let i = 0; i < 6; i++) { c.riceve(giro(1, -3)); c.riceve(giro(1, 3)); }
+  avanza(100);
+  assert.equal(log.filter((x) => x[0] === 'reset').length, 0);
+  c.riceve(push(1, true)); c.riceve(push(1, false));
+  assert.ok(log.some((x) => x[0] === 'reset'), 'la spinta è annullabile');
+});
+
+test('dimenticaMani: quando il CH perde le righe, manopole e anelli tornano al neutro', () => {
+  const { c } = prova({ livelliDelCH: { 2: [L(7, 'basso')] } });
+  c.riceve(tasto(c, 3));
+  c.riceve(giro(1, -8));
+  assert.ok(c.maniX.get('ch2|sweep') < 0.5);
+  c.dimenticaMani(2);
+  assert.equal(c.maniX.get('ch2|sweep'), undefined);
+  c.riceve(giro(1, -8));
+  c.dimenticaMani(null);
+  assert.equal(c.maniX.size, 0);
 });

@@ -872,3 +872,14 @@ test('STOP breve: annulla anche le SCELTE armate di tutti i brani; PLAY dopo non
   assert.equal(s.armato(3), false);
   assert.deepEqual(s.goAll(), []);
 });
+
+test('dopo STOP la manopola ferma nella stessa zona riarma al prossimo tocco', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegli(2, 0.5);
+  assert.ok(s.armato(2));
+  s.annullaTutte();
+  assert.equal(s.armato(2), false);
+  s.scegli(2, 0.51);
+  assert.ok(s.armato(2), 'stessa zona di prima: riarma');
+});

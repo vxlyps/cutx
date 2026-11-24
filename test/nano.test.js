@@ -122,3 +122,14 @@ test('luci del nano: CYCLE acceso se entra tra > 1, REC mentre registra, STOP co
   assert.deepEqual([46, 45, 42].map((cc) => luciNano(vista, 0).get(cc)), [0, 0, 0]);
   assert.deepEqual([46, 45, 42].map((cc) => luciNano(vista, 0, { cycle: true, rec: true, stop: true }).get(cc)), [127, 127, 127]);
 });
+
+test('nano: cavo staccato con R e STOP tenuti a metà: niente OUT subito, niente paracadute, la carica si spegne', async () => {
+  const visti = [];
+  const n = new Nano({ tieniR: (ch) => visti.push(`tieniR${ch}`), tieniStop: () => visti.push('paracadute'), stopCarica: (on) => visti.push(on ? 'carica' : 'scarica') });
+  n.riceve([0xb0, 64, 127]); // R del CH1 giù
+  n.riceve([0xb0, 42, 127]);
+  n.annullaPendenti(); // il cavo si stacca
+  await new Promise((r) => setTimeout(r, 1700));
+  assert.deepEqual(visti, ['carica', 'scarica']);
+});
+

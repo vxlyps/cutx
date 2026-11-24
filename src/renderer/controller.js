@@ -667,6 +667,12 @@ export class Controller {
     this.azioni.scritta?.(`GLOBALE · ${p.nome} ${x.toFixed(2)}`);
   }
 
+  // MANI: un CH ha perso le sue righe (è rimasto vuoto, o sono state tolte): le manopole e gli anelli tornano al neutro. ch = null: tutti.
+  dimenticaMani(ch = null) {
+    for (const m of [this.maniX, this.maniUltimo]) for (const k of [...m.keys()]) if (ch === null ? k.startsWith('ch') : k.startsWith(`ch${ch}|`)) m.delete(k);
+    this.cambiato?.();
+  }
+
   // Le righe di coda partono al massimo ~30 volte al secondo per livello e funzione: l'ultima vince.
   mandaCoda(id, riga) {
     this.codaDa.set(`${id}|${riga.match(/^\.(\w+)/)[1]}`, { id, riga });

@@ -864,7 +864,7 @@ export class Cue {
     const scegli = (tipo) => {
       chiudi();
       this.modifica(B.conInfo(this.brano.modello, i, conTipo(sez.info, tipo)), true, `canale della clip «${sez.nome}»`);
-      if (dopo && tipo) dopo(); // le card sono state ridisegnate: chi parte rilegge la clip dalla card (una selezione di righe si perde: entra tutta la clip)
+      if (dopo && tipo) dopo(); // le card sono state ridisegnate: chi parte rilegge la clip dalla card (la selezione di righe è rimessa da chiediCanale)
     };
     const voce = (testo, tipo, extra = '') => {
       const v = el('button', `key piccolo${extra}`);
@@ -949,7 +949,17 @@ export class Cue {
   // Un gesto di lancio su una clip senza tipo: si apre il menu del suo canale (e poi parte). Ritorna l'avviso.
   chiediCanale(i, dopo) {
     const carta = this.carte.find((c) => c.i === i && c.scena === undefined);
-    if (carta?.tastoCh?.isConnected) this.menuCh(carta.tastoCh, i, dopo);
+    // le righe scelte (⇧⌘↵ su un frammento) sopravvivono al ridisegno delle card: la clip entra col frammento che avevo scelto
+    const sel = carta?.editor?.righeScelte?.();
+    const poi = () => {
+      const nuova = this.carte.find((c) => c.i === i && c.scena === undefined);
+      if (sel && !sel.vuota && nuova?.editor?.scegliRighe) {
+        nuova.editor.scegliRighe(sel.da, sel.a);
+        this.attiva(nuova);
+      }
+      return dopo?.();
+    };
+    if (carta?.tastoCh?.isConnected) this.menuCh(carta.tastoCh, i, poi);
     return this.avviso(it.canali.senzaCanale.replace('{nome}', this.brano?.modello.sezioni[i]?.nome ?? ''));
   }
 

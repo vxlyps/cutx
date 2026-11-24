@@ -121,6 +121,13 @@ export function creaEditor({ root, codice, suValuta, suFerma, suCambio, suFuoco,
       const a = !empty && to === fine.from && fine.number - 1 > da ? fine.number - 2 : fine.number - 1;
       return { da, a, vuota: empty };
     },
+    // Rimette la selezione su queste righe (contate da 0), per intero.
+    scegliRighe(da, a) {
+      const doc = vista.state.doc;
+      const r0 = doc.line(Math.min(da + 1, doc.lines));
+      const r1 = doc.line(Math.min(a + 1, doc.lines));
+      vista.dispatch({ selection: { anchor: r0.from, head: r1.to } });
+    },
     vaiAllaRiga(n) {
       const riga = vista.state.doc.line(Math.min(n + 1, vista.state.doc.lines));
       vista.dispatch({ selection: { anchor: riga.to }, scrollIntoView: true });

@@ -79,6 +79,16 @@ export class Nano {
     }
   }
 
+  // R e STOP tenuti a metà: con il cavo staccato non succede niente (né OUT né paracadute) e la carica del gatto si spegne.
+  annullaPendenti() {
+    for (const [ch, t] of this.timer) if (t) (clearTimeout(t), this.timer.set(ch, null));
+    if (this.timerStop) {
+      clearTimeout(this.timerStop);
+      this.timerStop = null;
+      this.azioni.stopCarica?.(false);
+    }
+  }
+
   async avvia() {
     if (!navigator.requestMIDIAccess) return;
     try {
@@ -94,6 +104,7 @@ export class Nano {
       if (this.porta && this.porta !== porta) this.porta.onmidimessage = null;
       this.porta = porta ?? null;
       if (porta) porta.onmidimessage = (e) => this.riceve([...e.data]);
+      if (!porta) this.annullaPendenti(); // cavo staccato: R e STOP tenuti a metà non scattano da soli
       if (!!porta !== this.collegato) this.azioni.collegato?.((this.collegato = !!porta));
     };
     cerca();
