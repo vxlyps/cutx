@@ -1,5 +1,20 @@
 # Prossimi passi (decisi il 2/11/2026)
 
+## Appunti di Valerio per la versione dopo la 0.6.0 (24/11/2026, NON ora)
+
+**Principio: CUTX è una macchina da live, per divertirsi e far ballare liberi.**
+
+1. **ACIDO + AUTO.** «Una manopola che rende un suono più acido o più morbido (filtro, risonanza, inviluppo, sporco insieme) e un tasto AUTO che scrive un'automazione lenta nel codice.»
+   *Nota tecnica (senza codice):* l'ACIDO è una manopola che muove insieme 3–4 righe di coda (`.lpf`, `.lpq`, `.distort`, inviluppo del filtro) lungo una curva decisa una volta, come SWEEP; sta bene come manopola MANI sul CH in FOCUS. AUTO scrive nella coda una riga con un segnale lento, per esempio `.lpf(saw.range(300,3000).slow(16))`: il motore le legge già come righe di coda, ma `valoreLetterale` e `limitaRigaMani` non capiscono un segnale (vanno insegnati a lasciarlo stare), e la riga va tolta con la stessa spinta della manopola.
+2. **RANDOM / CAOS.** «Dare imprevisto entro limiti decisi da me (degradeBy, sometimesBy, perlin, irand, choose, ribbon), anche alle melodie; forse una manopola MANI sul CH in FOCUS.»
+   *Nota tecnica:* la quantità di caos è una sola manopola 0–1 che scrive righe di coda con limiti fissi (es. `.degradeBy(0.3)` al massimo, `.sometimesBy(0.2, x => x.transpose(12))`), mai note fuori scala: per le melodie conviene restare dentro la scala del brano. Va in coda, quindi ⌘Z e la spinta la tolgono; il CAOS già pianificato (vedi sotto) è lo stesso lavoro.
+3. **Codice al pubblico.** «Un'impostazione per vedere il codice tutto (adattato allo schermo) o più o meno zoomato.»
+   *Nota tecnica:* è solo la finestra del proiettore: tre modi (adatta tutto / zoom fisso / come ora). «Adatta tutto» misura il testo e riduce il corpo finché sta nello schermo; niente da fare nel motore.
+4. **Dispetti della cimice.** «Intensità che arriva molto più in alto; dispetti che si sentono davvero quando arriva (non solo nel finale HACK); regolabili.»
+   *Nota tecnica:* oggi i dispetti (`src/cimice/dispetti.js`) sono righe di coda con valori prudenti. Servono due cose: un tetto di intensità più alto nelle impostazioni, e una scala per cui ogni dispetto ha un effetto udibile già a metà corsa. Va regolabile con un solo cursore, non con un tetto per dispetto.
+
+---
+
 Si parte da qui quando sono finiti il blocco 1 e il blocco 2 del SYNTH (vedi `docs/SYNTH.md`).
 
 ## Regola per tutto il lavoro
