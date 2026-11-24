@@ -3,7 +3,7 @@
 
 ## LISTA DELLA TIRATA (mandato completo in docs/CANALI-TIRATA.md: leggerlo dopo una compattazione). Spuntare a ogni lavoro.
 - [x] 0 · bug del 4.1 corretto (pezzoBrano ora è pura; il blocco sta in preparaLive con `senzaCanale`)
-- [ ] 1 · ritocchi al 4.1 (cuffia ok, menu per chi l'apre, USA I SUGGERITI)
+- [x] 1 · ritocchi al 4.1 FATTO (test puri 47 canali; prova entrata 51 ok con 11 controlli nuovi nel blocco «7. clip senza tipo»)
 - [ ] 2 · S tenuto + TRACK sicuro
 - [ ] 3 · un volume solo
 - [ ] 4 · X-Touch MANI

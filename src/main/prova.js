@@ -741,6 +741,49 @@ async function provaEntrata({ finestre, scrivi }) {
   await premi('.', 'meta');
   await js(`cutxProva.valuta('live', 'setcpm(120/4)')`);
   await premi('.', 'meta');
+
+  // 7. clip senza tipo (lavoro 1 della tirata): cuffia libera, go live apre il menu e poi entra nel CH scelto, «CHn ▾» scrive e basta, USA I SUGGERITI = un ⌘Z
+  const brano7 = '// @brano senzatipo\n// @bpm 120\nsetcpm(120/4)\n// @clip melo\ns("sine*2").freq(300).gain(.0001)\n// @clip altra\ns("sine*2").freq(310).gain(.0001)\n// @clip bass uno\ns("sine*2").freq(60).gain(.0001)\n// @clip arp due\ns("sine*2").freq(80).gain(.0001)\n';
+  await js(`cutxProva.cue.apriModello('senzatipo.cutx', ${JSON.stringify(brano7)}); cutxProva.cue.cambiaModo('brano')`);
+  await aspetta(1);
+  const tipi7 = () => js(`JSON.stringify(cutxProva.cue.brano.modello.sezioni.map((s) => Object.keys(s.info ?? {}).join('+')))`);
+  const menu7 = () => js(`document.querySelectorAll('.menu-ch').length`);
+  const scegliVoce = (testo) => js(`(() => { const b = [...document.querySelectorAll('.menu-ch button')].find((x) => x.textContent.includes(${JSON.stringify(testo)})); if (!b) return 'nessuna voce'; b.click(); return 'ok'; })()`);
+  await js(`cutxProva.cue.attiva(cutxProva.cue.carte.find((c) => c.i === 0))`);
+  controlla('clip senza tipo: il pezzo c\'è ed è senza errore (la cuffia la può sentire)', await js(`(() => { const p = cutxProva.cue.pezzo(); return !p.errore && p.tipo === '' && p.clipDelBrano === 0; })()`));
+  await aspetta(1.3); // cosaParte gira due volte al secondo: non deve aprire il menu da sola
+  controlla('guardarla non apre il menu', (await menu7()) === 0, String(await menu7()));
+  const prima7 = (await live()).livelli.length;
+  await js(`cutxProva.scegliEntraTra(1)`);
+  await js(`cutxProva.goLive()`);
+  await aspetta(0.5);
+  controlla('go live su clip senza tipo: non entra, si apre UN menu', (await live()).livelli.length === prima7 && (await menu7()) === 1, JSON.stringify([(await live()).livelli.length, await menu7()]));
+  await aspetta(1.3);
+  controlla('e resta uno (non si riapre da solo)', (await menu7()) === 1, String(await menu7()));
+  const esito7 = await scegliVoce('PURR · keys');
+  controlla('la voce di PURR c\'è', esito7 !== 'nessuna voce', await js(`JSON.stringify([...document.querySelectorAll('.menu-ch button')].map((b) => b.textContent))`));
+  await aspetta(0.5);
+  const r7 = (await live()).livelli.find((l) => l.nome === 'melo');
+  controlla('scelto il CH: scrive il tipo e la clip entra nel CH2 (senza R)', (await tipi7()).startsWith('["keys"') && r7 && r7.ch === 1, JSON.stringify([await tipi7(), r7 && [r7.nome, r7.ch]]));
+  controlla('il menu si è chiuso', (await menu7()) === 0);
+  // dal tasto «CHn ▾»: scrive il tipo e basta
+  const n7 = (await live()).livelli.length;
+  await js(`cutxProva.cue.carte.find((c) => c.i === 1).tastoCh.click()`);
+  await aspetta(0.2);
+  controlla('«CHn ▾» apre il menu', (await menu7()) === 1);
+  await scegliVoce('GROWL');
+  await aspetta(0.5);
+  controlla('dal tasto: scrive il tipo (bass) e non suona né arma niente', (await tipi7()).includes('"bass"') && (await live()).livelli.length === n7, JSON.stringify([await tipi7(), (await live()).livelli.length]));
+  // USA I SUGGERITI: «bass uno» e «arp due» sono senza tipo (le altre due ce l'hanno già dopo i passi sopra)
+  controlla('prima: «bass uno» e «arp due» non hanno tipo', (await tipi7()) === '["keys","bass","",""]', await tipi7());
+  await js(`document.querySelector('.gruppo-da-assegnare button')?.click()`);
+  await aspetta(0.5);
+  controlla('USA I SUGGERITI: bass e arp prendono il loro tipo', (await tipi7()) === '["keys","bass","bass","arp"]', await tipi7());
+  controlla('e non parte niente', (await live()).livelli.length === n7);
+  await js(`cutxProva.cronologia.annulla()`);
+  await aspetta(0.5);
+  controlla('un solo ⌘Z li toglie tutti e due', (await tipi7()) === '["keys","bass","",""]', await tipi7());
+  await premi('.', 'meta');
   return ok;
 }
 
