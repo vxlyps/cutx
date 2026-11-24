@@ -4990,13 +4990,13 @@ async function provaProj({ finestre, scrivi }) {
     controlla('col live che suona da PROJ 01 il suo numero è verde', sc[0].live, JSON.stringify(sc[0]));
     controlla('e la schermata dice che il live suona', /il live suona/.test(await js(`document.getElementById('proj-avviso').textContent`)));
     // nuovo PROJ col live che suona: il primo invio chiede conferma, il secondo crea
-    const invio = `(() => { const i = document.querySelector('.proj-nuovo .proj-sottotitolo'); i.value = 'compleanno di prova'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`;
+    const invio = `(() => { const i = document.querySelector('.proj-nuovo .proj-sottotitolo'); i.value = 'neon chrome'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`;
     await js(invio);
     await aspetta(0.5);
     controlla('nuovo PROJ col live che suona: prima chiede conferma', /premi di nuovo/.test(await js(`document.getElementById('proj-avviso').textContent`)) && !existsSync(p2));
     await js(invio);
     await aspetta(1.5);
-    controlla('al secondo invio nasce PROJ 02 e si apre', existsSync(p2) && (await js(`document.getElementById('proj-schermata').hidden`)) && (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 02 · compleanno di prova', await js(`document.getElementById('proj-nome').textContent`));
+    controlla('al secondo invio nasce PROJ 02 e si apre', existsSync(p2) && (await js(`document.getElementById('proj-schermata').hidden`)) && (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 02 · neon chrome', await js(`document.getElementById('proj-nome').textContent`));
     controlla('PROJ 02 nasce con il kit di PROJ 01 e la libreria vuota', (await leggi(path.join(p2, 'kit.cutx'))) === prima['kit.cutx'] && (await js('window.cutx.libreria()')).length === 0);
     controlla('il live continua a suonare', (await live()).livelli?.some((l) => l.nome === 'basso'));
     // --- altri PROJ ---
@@ -5034,9 +5034,9 @@ async function provaProj({ finestre, scrivi }) {
     // --- sottotitolo e cambio PROJ ---
     await js(`document.getElementById('proj').click()`);
     await aspetta(0.5);
-    await js(`(() => { const i = document.querySelector('.proj-scheda[data-numero="1"] .proj-sottotitolo'); i.value = 'serata di prova'; i.dispatchEvent(new Event('change')); })()`);
+    await js(`(() => { const i = document.querySelector('.proj-scheda[data-numero="1"] .proj-sottotitolo'); i.value = 'night city'; i.dispatchEvent(new Event('change')); })()`);
     await aspetta(0.5);
-    controlla('il sottotitolo si scrive sulla scheda e va in proj.json', JSON.parse((await leggi(path.join(p1, 'proj.json'))) ?? '{}').sottotitolo === 'serata di prova');
+    controlla('il sottotitolo si scrive sulla scheda e va in proj.json', JSON.parse((await leggi(path.join(p1, 'proj.json'))) ?? '{}').sottotitolo === 'night city');
     await js(`cutxProva.fermaTutto()`);
     await aspetta(1.5);
     await js(`cutxProva.schermataProj.mostra({ aperto: 2, ultimo: 2 })`);
@@ -5053,7 +5053,7 @@ async function provaProj({ finestre, scrivi }) {
     controlla('tenendo premuto «apri» il pulsante non salta', Math.abs(alto1 - alto0) < 0.5, `${alto0} → ${alto1}`);
     if (!(await js(`document.getElementById('proj-schermata').hidden`))) await js(`document.querySelector('.proj-scheda[data-numero="1"] .proj-apri').click()`);
     await aspetta(1);
-    controlla('a live fermo «apri» cambia PROJ subito', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01 · serata di prova' && (await js(`document.getElementById('proj-schermata').hidden`)));
+    controlla('a live fermo «apri» cambia PROJ subito', (await js(`document.getElementById('proj-nome').textContent`)) === 'PROJ 01 · night city' && (await js(`document.getElementById('proj-schermata').hidden`)));
     controlla('stash.json ricorda l\'ultimo PROJ', JSON.parse((await leggi(path.join(tmp, 'stash.json'))) ?? '{}').proj?.ultimo === 1);
     // --- l'interruttore ---
     await js(`cutxProva.imp.disegna()`);
