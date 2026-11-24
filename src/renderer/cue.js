@@ -63,6 +63,8 @@ export class Cue {
     this.modo = 'libero';
     this.stati = { live: [], cuffia: null }; // cosa suona: [{ nome, provenienza }]
     this.fileLibero = null; // il brano in cui è stato salvato il testo libero
+    this.cursoriCh = new Set(); // gli slider delle card che comandano un CH (cursoreCh)
+    this.vistaCanali = null;
     this.volumeScratch = 1; // il volume d'ingresso dello scratch (non si salva: lo scratch è testo libero)
     const vs = cursoreVolume(() => this.volumeScratch, (v) => (this.volumeScratch = v), 'ingresso-volume');
     $('manda-cuffia').before(vs.el);
@@ -798,47 +800,9 @@ export class Cue {
         this.attiva(carta);
         this.azioni.goLive();
       };
-      // il volume con cui la sezione entra: lo stesso controllo delle card del LIVE, scritto nell'intestazione @sezione
-      const volume = el('div', 'volume');
-      volume.dataset.aiuto = 'sezione-volume';
-      const pieno = el('div');
-      volume.append(pieno);
-      const mostraVolume = () => (pieno.style.width = `${Math.min(1, this.brano.modello.sezioni[i]?.info?.volume ?? 1) * 100}%`);
-      const imposta = (e) => {
-        const r = volume.getBoundingClientRect();
-        const v = Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 100) / 100;
-        const m2 = this.brano.modello;
-        const { volume: _vecchio, ...resto } = m2.sezioni[i].info ?? {};
-        this.modifica(B.conInfo(m2, i, v === 1 ? resto : { ...resto, volume: v }), false);
-        mostraVolume();
-      };
-      let prima = null; // il modello com'era all'inizio del trascinamento: un trascinamento è un passo solo di ⌘Z
-      volume.onpointerdown = (e) => {
-        volume.setPointerCapture(e.pointerId);
-        prima = { modello: this.brano.modello, sporco: this.brano.sporco, versione: this.versione };
-        imposta(e);
-        volume.onpointermove = imposta;
-      };
-      volume.onpointerup = () => {
-        volume.onpointermove = null;
-        if (!prima || prima.modello === this.brano.modello) return;
-        const { modello, sporco } = prima;
-        const dopo = this.brano.modello;
-        const v = this.versione;
-        prima = null;
-        this.registra?.({
-          etichetta: `volume della clip «${dopo.sezioni[i]?.nome ?? i + 1}»`,
-          annulla: () => {
-            if (this.versione !== v) return false;
-            this.brano.modello = modello;
-            this.brano.sporco = sporco;
-            this.versione++;
-            this.mostraBrano(true);
-            this.mostraModo();
-          },
-        });
-      };
-      mostraVolume();
+      // il volume della card È il volume del CH (fader del nano, slider della griglia e questo: la stessa cosa) e non scrive niente nel file.
+      // Il volume proprio della clip resta nella sua riga (`· volume 0.8`), scritto a mano. Senza tipo (DA ASSEGNARE) non c'è: non è di nessun CH.
+      const volume = tipoDi(m.sezioni[i].info) ? this.cursoreCh(this.chDiTipo(tipoDi(m.sezioni[i].info)), 'sezione-volume') : null;
       // solo le clip fatte dal synth (// @synth) o dalla scheda DRUM (// @drum) si riaprono lì
       const apriSynth = tasto(it.synth.msg.apri, '', it.synth.msg.apriTitolo);
       mostraApri(apriSynth, righe.join('\n'));
@@ -850,7 +814,7 @@ export class Cue {
       const chBtn = this.tastoCh(i);
       carta.tastoCh = chBtn;
       carta.tastoNext = this.tastoNext(carta);
-      testa.append(chBtn, carta.tastoNext, unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
+      testa.append(chBtn, carta.tastoNext, unisci, dividi, apriSynth, ...(volume ? [volume.el] : []), cuffia, live, togliClip);
     }
     this.carte.push(carta);
     return art;
@@ -922,6 +886,64 @@ export class Cue {
     menu.style.left = `${Math.max(8, r.right - 220)}px`;
     document.body.append(menu);
     setTimeout(() => menu.isConnected && document.addEventListener('pointerdown', chiudi, true), 0);
+  }
+
+  // Il CH di un tipo (dall'ordine dei CH del CUE): il suo gruppo, o la FREE. Il beat sta in quello che prende `drum`.
+  chDiTipo(tipo) {
+    const ordine = this.ordineCh ?? [];
+    const i = ordine.findIndex((g) => g.tipi?.includes(tipo));
+    return i >= 0 ? i : Math.max(0, ordine.findIndex((g) => g.free));
+  }
+
+  chDelBeat() {
+    const i = (this.ordineCh ?? []).findIndex((g) => g.tipi?.includes('drum'));
+    return i >= 0 ? i : 0;
+  }
+
+  // Lo slider del volume di una card con CH: clic o trascina, comanda il CH (azioni.volumeCh) e segue il suo fader (mostraVolumiCh, a ogni giro).
+  // Sotto, la scritta «CHn» di cosa muove. Ritorna { el, mostra }.
+  cursoreCh(ch, aiuto) {
+    const volume = el('div', 'volume');
+    volume.dataset.aiuto = aiuto;
+    const pieno = el('div');
+    volume.append(pieno);
+    const scritta = el('span', 'lbl volume-ch-nome', `CH${ch + 1}`);
+    const cassetta = el('div', 'volume-ch');
+    cassetta.title = `volume del CH${ch + 1} (lo stesso del fader)`;
+    cassetta.append(volume, scritta);
+    const voce = { ch, pieno, tengo: false, el: cassetta };
+    voce.mostra = () => {
+      if (!voce.tengo) pieno.style.width = `${Math.min(1, this.vistaCanali?.[ch]?.fader.valore ?? 1) * 100}%`;
+    };
+    const imposta = (e) => {
+      const r = volume.getBoundingClientRect();
+      const v = Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 100) / 100;
+      pieno.style.width = `${v * 100}%`;
+      this.azioni.volumeCh?.(ch, v);
+    };
+    volume.onpointerdown = (e) => {
+      volume.setPointerCapture(e.pointerId);
+      voce.tengo = true;
+      imposta(e);
+      volume.onpointermove = imposta;
+    };
+    volume.onpointerup = () => {
+      volume.onpointermove = null;
+      voce.tengo = false;
+    };
+    volume.onpointercancel = volume.onpointerup;
+    this.cursoriCh.add(voce);
+    voce.mostra();
+    return voce;
+  }
+
+  // Ogni giro: gli slider delle card seguono i fader dei CH (nano, griglia). `vista` = StatoCanali.vista().
+  mostraVolumiCh(vista) {
+    this.vistaCanali = vista;
+    for (const v of this.cursoriCh) {
+      if (!v.pieno.isConnected) this.cursoriCh.delete(v);
+      else v.mostra();
+    }
   }
 
   // Un gesto di lancio su una clip senza tipo: si apre il menu del suo canale (e poi parte). Ritorna l'avviso.
@@ -1029,16 +1051,8 @@ export class Cue {
     const toglie = tasto('×', '', 'Togli la scena scelta');
     const espandi = tasto(this.beatEspanso ? 'riduci' : 'espandi', '', 'Il codice della scena: compatto o per intero');
     testa.append(titolo, stato, el('div', 'spazio'));
-    // il volume con cui il beat entra partendo dalla scena scelta: scritto nell'intestazione @scena, come per le clip
-    const volume = cursoreVolume(
-      () => this.brano.modello.beat?.scene[this.scenaScelta()]?.info?.volume,
-      (v) => {
-        const k = this.scenaScelta();
-        const { volume: _vecchio, ...resto } = this.brano.modello.beat.scene[k].info ?? {};
-        this.modifica(B.conInfoScena(this.brano.modello, k, v === 1 ? resto : { ...resto, volume: v }), false);
-      },
-      'scena-volume',
-    );
+    // il volume della card del BEAT è quello di THUMP (il CH del beat): non scrive niente nel file
+    const volume = this.cursoreCh(this.chDelBeat(), 'scena-volume');
     const nextScena = scene.length ? this.tastoNext(null) : null;
     if (nextScena) nextScena.onclick = (e) => {
       e.stopPropagation();

@@ -5,8 +5,8 @@
 - [x] 0 · bug del 4.1 corretto (pezzoBrano ora è pura; il blocco sta in preparaLive con `senzaCanale`)
 - [x] 1 · ritocchi al 4.1 FATTO (test puri 47 canali; prova entrata 51 ok con 11 controlli nuovi nel blocco «7. clip senza tipo»)
 - [x] 2 · S tenuto + TRACK sicuro FATTO (chiave per fonte nano/schermo; lasciaTutteS se il nano si ricollega; guardiaTrack 2 s; test puri 58 canali+nano; nessuna prova audio dedicata)
-- [ ] 3 · un volume solo
-- [ ] 4 · X-Touch MANI
+- [x] 3 · un volume solo FATTO (slider card = volume CH con «CHn» sotto; cuffia: guadagno-prova nel motore cuffia, M non la tocca; prova entrata+livelli 87 ok; slider griglia e pillole scena ridisegnati su richiesta di Valerio)
+- [~] 4 · X-Touch MANI: codice scritto (controller-mani.js, hook in controller.js e app.js, 13 test puri ok); DA FARE: prova app (livelli+robustezza) con MANI e commit finale
 - [ ] 5 · serata finta (prova.js parte «serata», 2 volte di fila)
 - [ ] 6 · revisione indipendente (subagente) + seconda sui fix
 - [ ] 7 · chiusura (npm test, prova completa, build, docs/CANALI.md, NOVITA bozza; niente merge/release)

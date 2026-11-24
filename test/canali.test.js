@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { tipiSuggeriti } from '../src/renderer/categorie.js';
-import { guadagnoLivello, applicaMessaggioCh, chNeutro } from '../src/renderer/mixer.js';
+import { guadagnoLivello, applicaMessaggioCh, chNeutro, guadagnoProva, provaDaEffettoCh } from '../src/renderer/mixer.js';
 import { StatoCanali, guardiaTrack, senzaCanale, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
 
 const clip = (nome, tipo) => ({ nome, info: tipo ? { [tipo]: true } : {} });
@@ -803,4 +803,41 @@ test('USA I SUGGERITI: solo le clip senza tipo che hanno un suggerimento; chi ha
   const dopo = sez.map((s, i) => { const t = da.find((x) => x.i === i); return t ? { ...s, info: conTipo(s.info, t.tipo) } : s; });
   assert.deepEqual(tipiSuggeriti(dopo), [], 'dopo non resta niente da suggerire');
   assert.equal(dopo[1].info.pad, true, 'chi aveva un tipo lo tiene');
+});
+
+test('un volume solo: il fader (o lo slider) muove il CH; il valore mostrato dalla card è quello della vista', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  // il fader del nano (CH vuoto: comanda subito) → la vista, da cui lo slider della card e quello della griglia leggono lo stesso valore
+  s.fader(2, 0.4);
+  assert.equal(s.vista()[2].fader.valore, 0.4);
+  // lo slider della card = sliderSchermo (come quello della griglia): stesso effetto, e sgancia il fader fisico
+  const e = s.sliderSchermo(2, 0.7);
+  assert.deepEqual([e[0].tipo, e[0].ch, e[0].pos], ['ch', 2, 0.7]);
+  assert.equal(s.vista()[2].fader.valore, 0.7, 'la card e la griglia vedono lo stesso valore');
+  assert.equal(s.canali[2].agganciato, false, 'muovere lo slider a schermo sgancia il fader fisico');
+  // il volume proprio della clip resta fuori: lo slider non scrive niente, il guadagno è clip × CH
+  assert.equal(guadagnoLivello({ volume: 0.8, muto: false }, { volume: gainFader(0.7), muto: false }), 0.8 * gainFader(0.7));
+});
+
+test('cuffia dopo il fader: preascolto a volume clip × volume CH; segue il fader; M non la tocca', () => {
+  assert.equal(guadagnoProva(0.8, 0.5), 0.4);
+  assert.equal(guadagnoProva(undefined, 0.5), 0.5, 'senza volume scritto la clip vale 1');
+  assert.equal(guadagnoProva(1, 1), 1);
+  assert.equal(guadagnoProva(0.8, 0), 0);
+  const prova = { ch: 2, volumeClip: 0.8 };
+  // il fader del CH della clip in prova si muove: la cuffia segue
+  const s = new StatoCanali();
+  const [mossa] = s.fader(2, 0.5);
+  assert.equal(provaDaEffettoCh(mossa, prova), 0.8 * gainFader(0.5));
+  // un altro CH: la cuffia non si muove
+  const [altro] = s.fader(3, 0.2);
+  assert.equal(provaDaEffettoCh(altro, prova), null);
+  // M (muto) del CH in prova: nessun cambio per la cuffia
+  const [muto] = s.mute(2, true);
+  assert.equal(muto.muto, true);
+  assert.equal(provaDaEffettoCh(muto, prova), null, 'M non zittisce la cuffia');
+  assert.equal(provaDaEffettoCh(mossa, null), null, 'nessuna prova in corso');
+  // con il CH muto, il preascolto di una clip ha comunque il suo guadagno (il muto non c'è nel calcolo)
+  assert.equal(guadagnoProva(0.8, gainFader(0.5)), 0.8 * gainFader(0.5));
 });

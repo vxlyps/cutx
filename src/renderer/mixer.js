@@ -18,3 +18,18 @@ export function applicaMessaggioCh(stato, m) {
   if (m.muto !== undefined) stato.muto = m.muto === 'inverti' ? !stato.muto : !!m.muto;
   return stato;
 }
+
+// Il PREASCOLTO in cuffia: volume della clip × volume del CH (dopo il fader). Il muto del CH (M) NON c'entra: un muto non zittisce la cuffia.
+// Il motore cuffia lo tiene in un guadagno a parte («guadagno della prova»), separato dal volume generale della cuffia.
+export function guadagnoProva(volumeClip, volumeCh) {
+  const c = Number(volumeClip);
+  const f = Number(volumeCh);
+  return Math.max(0, Math.min(1.5, (Number.isFinite(c) ? c : 1) * (Number.isFinite(f) ? f : 1)));
+}
+
+// Il fader di un CH si muove mentre in cuffia c'è la prova di una sua clip: il nuovo guadagno da mandare alla cuffia, o null (altro CH, o solo il muto).
+// effetto = { ch, volume?, muto? } come lo manda StatoCanali; prova = { ch, volumeClip } o null.
+export function provaDaEffettoCh(effetto, prova) {
+  if (!prova || effetto?.ch !== prova.ch || effetto.volume === undefined) return null;
+  return guadagnoProva(prova.volumeClip, effetto.volume);
+}

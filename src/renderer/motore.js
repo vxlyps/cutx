@@ -61,6 +61,8 @@ let limiter = null; // { compressore, analisi, ingresso }
 let porta = null; // GainNode dopo il limiter: chiuso per un attimo durante il cambio di uscita
 let volumeCuffia = null; // cuffia: GainNode prima del limiter
 let volumeCuffiaVoluto = 1; // e dove deve arrivare (leggere .value di un parametro che sfuma non dà il valore finale)
+let guadagnoProva = null; // cuffia: GainNode a parte per il preascolto (volume della clip × volume del CH), prima del volume della cuffia
+let guadagnoProvaVoluto = 1;
 function installaLimiter() {
   if (!limiter) {
     const l = creaLimiter(ac);
@@ -68,13 +70,15 @@ function installaLimiter() {
     if (!LIVE) {
       volumeCuffia = new GainNode(ac, { gain: volumeCuffiaVoluto });
       volumeCuffia.connect(l.ingresso);
+      guadagnoProva = new GainNode(ac, { gain: guadagnoProvaVoluto });
+      guadagnoProva.connect(volumeCuffia);
     }
     // la porta: l'ultimo nodo prima delle casse. Si chiude un attimo quando l'uscita audio cambia (scheda riattaccata), così il cambio non schiocca.
     porta = new GainNode(ac, { gain: 1 });
     l.uscita.connect(porta).connect(ac.destination);
     l.uscita.connect(analisi);
     analisi.connect(new GainNode(ac, { gain: 0 })).connect(ac.destination); // senza arrivare all'uscita l'analizzatore non lavora
-    limiter = { compressore: l.compressore, analisi, ingresso: volumeCuffia ?? l.ingresso };
+    limiter = { compressore: l.compressore, analisi, ingresso: guadagnoProva ?? l.ingresso };
   }
   collegaLimiter();
 }
@@ -1249,6 +1253,7 @@ function stato() {
     tagliato,
     master: LIVE ? masterVoluto : undefined,
     volumeCuffia: volumeCuffia ? volumeCuffiaVoluto : undefined,
+    guadagnoProva: guadagnoProva ? guadagnoProvaVoluto : undefined, // il preascolto: volume della clip × volume del CH
     limiter: limiter ? { riduzioneDb: limiter.compressore.reduction, picco: piccoUscita(), ceiling: CEILING } : null,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
@@ -1561,6 +1566,10 @@ async function ricevi(da, m) {
     case 'volume-cuffia': // il SYNTH ascolta piano (0,5); il CUE torna a 1. Con una sfumata breve, mai uno scalino
       volumeCuffiaVoluto = Math.max(0, Math.min(1, Number(m.volume)));
       volumeCuffia?.gain.setTargetAtTime(volumeCuffiaVoluto, ac.currentTime, SFUMATA_S);
+      return;
+    case 'guadagno-prova': // il preascolto di una clip: volume della clip × volume del CH (muto escluso). Una sfumata breve, mai uno scalino
+      guadagnoProvaVoluto = Math.max(0, Math.min(1.5, Number.isFinite(Number(m.volume)) ? Number(m.volume) : 1));
+      guadagnoProva?.gain.setTargetAtTime(guadagnoProvaVoluto, ac.currentTime, SFUMATA_S);
       return;
     case 'udibile': // cuffia on/off: il motore continua a girare, si spegne solo l'uscita
       getSuperdoughAudioController().output.destinationGain.gain.value = m.on ? 1 : 0;

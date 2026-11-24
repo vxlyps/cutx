@@ -36,7 +36,7 @@ export class Griglia {
       const r = this.righe[i];
       if (!r) return;
       const resta = v.attesa?.da !== undefined && this.ciclo !== null ? Math.max(0, Math.ceil(v.attesa.da - this.ciclo)) : null;
-      if (document.activeElement !== r.fader) r.fader.value = String(v.fader.valore); // lo slider segue la mano (o il valore vero, se non c'è un fader fisico)
+      if (document.activeElement !== r.fader) (r.fader.value = String(v.fader.valore), r.fader.style.setProperty('--p', `${v.fader.valore * 100}%`)); // lo slider segue la mano (o il valore vero, se non c'è un fader fisico)
       // il fader fisico non è agganciato: i suoi messaggi non contano; la tacca dice dove portarlo (il valore vero)
       const sganciato = v.fader.letto && !v.fader.agganciato;
       r.fader.classList.toggle('non-letto', !v.fader.letto);
@@ -114,7 +114,11 @@ export class Griglia {
         fader.max = '1';
         fader.step = '0.01';
         fader.value = String(v.fader.valore);
-        fader.oninput = () => this.azioni.fader(v.indice, Number(fader.value));
+        fader.style.setProperty('--p', `${v.fader.valore * 100}%`);
+        fader.oninput = () => {
+          fader.style.setProperty('--p', `${Number(fader.value) * 100}%`);
+          this.azioni.fader(v.indice, Number(fader.value));
+        };
         const tacca = crea('span', 'ch-tacca');
         tacca.hidden = true;
         const cassetta = crea('div', 'ch-fader-box');

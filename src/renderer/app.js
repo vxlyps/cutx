@@ -37,6 +37,8 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
+import { guadagnoProva, provaDaEffettoCh } from './mixer.js';
+import { ereditaRighe } from './controller-mani.js';
 import { StatoCanali, guardiaTrack, senzaCanale, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
 import { Griglia } from './griglia.js';
 import { Nano } from './nano.js';
@@ -184,6 +186,7 @@ const cue = new Cue(CODICE_INIZIALE, {
   provaInCuffia: () => provaInCuffia(),
   fermaCuffia: () => fermaCuffia(),
   goLive: () => goLive(),
+  volumeCh: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)), // lo slider della card = il volume del CH
   fermaTutto: () => fermaTutto(),
   suoniStash: () => suoni,
   haStash: () => haStash,
@@ -227,9 +230,17 @@ try {
 // --- i gesti ---
 
 // Gli errori si vedono solo qui, nel CUE: mai sull'uscita.
-async function manda(motore, codice, etichetta = {}) {
+// `prova` = { ch, volumeClip } quando è il preascolto di una clip di un CH: la cuffia lo sente a volume clip × volume del CH (dopo il fader, M escluso).
+// Tutto il resto (il SYNTH, un codice qualsiasi) suona a guadagno 1.
+let provaCorrente = null;
+const volumeDelCH = (ch) => gainFader(statoCanali.canali[ch]?.vero ?? 1);
+async function manda(motore, codice, etichetta = {}, prova = null) {
   if (motore === cuffia && cuffiaInPausa) pausaCuffia(false); // chi manda qualcosa in cuffia vuole sentirlo
-  if (motore === cuffia) pezzoCuffia = { codice, etichetta, da: performance.now() };
+  if (motore === cuffia) {
+    provaCorrente = prova;
+    cuffia.manda({ tipo: 'guadagno-prova', volume: prova ? guadagnoProva(prova.volumeClip, volumeDelCH(prova.ch)) : 1 });
+  }
+  if (motore === cuffia) pezzoCuffia = { codice, etichetta, prova, da: performance.now() };
   const errore = await motore.valuta(codice, etichetta);
   mostraErrore(errore, motore.ruolo);
   return errore;
@@ -245,6 +256,7 @@ function mostraErrore(errore, chi) {
 // Ferma quello che hai in cuffia (non il live).
 function fermaCuffia() {
   statoCanali.cuffiaCh = null; // qualsiasi altro stop della cuffia spegne anche la luce S
+  provaCorrente = null;
   if (inTest) return;
   pezzoCuffia = null;
   dovaCuffia = null;
@@ -264,7 +276,7 @@ function provaPezzo(p) {
   if (p.errore) return cue.avviso(p.errore);
   precarica(p.codice); // quello che provo in cuffia sto per mandarlo: il live carica già i suoi campioni
   dovaCuffia = p.dove ? { ...p.dove, inizio: p.inizio } : null;
-  return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza });
+  return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza }, { ch: chDelPezzo(p), volumeClip: p.volume }); // la cuffia sente il volume della clip × quello del CH
 }
 
 // Le note che suonano in cuffia, in bianco nel CUE: solo finché quelle righe non sono cambiate.
@@ -316,6 +328,19 @@ function nomeLiberoNuovo() {
 
 // In che CH entra un pezzo: quello deciso da chi lo manda (la griglia), il beat in THUMP, altrimenti quello del suo tipo (senza tipo: FREE).
 const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTipo(canaliConfig, p.tipo ?? ''));
+
+// X-TOUCH MANI: le righe che le manopole hanno messo a un CH sono del CH. Una clip che entra nel CH le eredita (stessa chiave: vince la manopola).
+const righeManiCH = new Map(); // ch → Map chiave → riga
+function ereditaCoda(ch, coda, eBeat) {
+  const righe = righeManiCH.get(ch);
+  if (!righe?.size) return eBeat && !coda.length ? undefined : coda;
+  return ereditaRighe(coda, righe);
+}
+function maniRiga(ch, chiave, riga) {
+  if (!righeManiCH.has(ch)) righeManiCH.set(ch, new Map());
+  if (riga === null) righeManiCH.get(ch).delete(chiave);
+  else righeManiCH.get(ch).set(chiave, riga);
+}
 
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
 // In due metà, così PLAY può preparare tutti i pezzi e mandarli insieme: preparaLive scrive il messaggio per il motore (o dice perché non parte),
@@ -371,7 +396,7 @@ function preparaLive(pezzo = null) {
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
-  const msg = { tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) };
+  const msg = { tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: ereditaCoda(chDelPezzo(p), coda, !!p.beat), inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) };
   if (pass) {
     Object.assign(msg, { rampa: pass.rampa ?? undefined, dissolvenza: pass.dissolvenza, transizione: pass.transizione });
     messaggi.push(pass.testo);
@@ -571,6 +596,7 @@ function pulisciCoda(id) {
   const l = livelloVivo(id);
   if (inTest || !l?.coda?.length) return;
   const prima = [...l.coda];
+  righeManiCH.delete(chDelLivello(l)); // le righe delle manopole di quel CH non tornano alla prossima clip
   live.manda({ tipo: 'coda', livello: id, pulisci: true });
   const rimetti = () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true, imposta: prima }) : false);
   cronologia.registra({
@@ -585,6 +611,7 @@ function togliRigaCoda(id, chiave) {
   const l = livelloVivo(id);
   if (inTest || !l?.coda?.length) return;
   const prima = [...l.coda];
+  maniRiga(chDelLivello(l), chiave, null);
   live.manda({ tipo: 'coda', livello: id, togli: [chiave] });
   cronologia.registra({
     etichetta: `riga .${chiave} di «${l.nome}»`,
@@ -1163,7 +1190,11 @@ async function eseguiCanali(effetti) {
   const uscite = [];
   for (const e of effetti) {
     if (e.tipo === 'avviso') cue.avviso(e.testo);
-    else if (e.tipo === 'ch') live.manda({ tipo: 'ch', ch: e.ch, volume: e.volume, pos: e.pos, muto: e.muto }); // volume e muto del CH: solo il live (la cuffia è pre-fader)
+    else if (e.tipo === 'ch') {
+      live.manda({ tipo: 'ch', ch: e.ch, volume: e.volume, pos: e.pos, muto: e.muto }); // volume e muto del CH al live
+      const g = provaDaEffettoCh(e, provaCorrente); // la cuffia segue solo il volume del CH (non il muto) e solo se sta provando una sua clip
+      if (g !== null) cuffia.manda({ tipo: 'guadagno-prova', volume: g });
+    }
     else if (e.tipo === 'cuffia') {
       const pezzo = cue.pezzoAlt(e.alt);
       if (pezzo.errore) {
@@ -1264,6 +1295,7 @@ function aggiornaCanali() {
   const vista = statoCanali.vista();
   griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
   nano.mostra(vista, { cycle: entraTra > 1, rec: !!synth.rec, stop: paracaduteAperto });
+  cue.mostraVolumiCh(vista);
   cue.segnaNext(new Set(vista.filter((v) => v.armato && v.next).map((v) => v.next.id)), new Set(vista.filter((v) => v.suona).map((v) => v.suona.id)));
 }
 // Una scelta fatta con la griglia o con la manopola: aggiorno e porto il CUE sulla clip scelta (se non sto scrivendo).
@@ -2184,7 +2216,7 @@ cuffia.suCollegato = async () => {
     cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH }); // la cuffia rinata riparte prudente
     synth.inviaSuono();
   }
-  if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
+  if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta, pezzoCuffia.prova ?? null); // la cuffia rinata riprende anche il suo guadagno di prova
 };
 
 $('wordmark').src = wordmark;
@@ -2230,6 +2262,7 @@ globalThis.cutxProva = {
   richiestaLive: (m) => live.richiesta(m),
   canaliFader: (ch, v) => eseguiCanali([...statoCanali.fader(ch, 1), ...statoCanali.fader(ch, v)]), // come il fader del nano: prima in cima (si aggancia), poi dove dico
   canaliSlider: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)),
+  canaliMute: (ch, acceso) => eseguiCanali(statoCanali.mute(ch, acceso)),
   canaliMixer: () => statoCanali.datiMixer(),
   apriNelSynth,
   dispetti: () => dispetti,
@@ -2415,6 +2448,13 @@ const controllerMidi = new Controller({
   breakTutti: (fattore) => live.manda({ tipo: 'break', fattore }),
   riser: (r) => gestisciRiser(r),
   coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
+  // X-TOUCH MANI (solo vista LIVE e solo se il nano è stato visto in questa sessione)
+  maniAttiva: () => nanoVisto && vista !== 'synth',
+  maniLivelli: (ch) => pila.attivi().filter((l) => chDelLivello(l) === ch),
+  maniNome: (ch) => `CH${ch + 1} ${canaliConfig[ch]?.nome ?? ''}`.trim(),
+  maniFocus: (ch) => mostraGrande(`FOCUS · CH${ch + 1} ${canaliConfig[ch]?.nome ?? ''}`.trim()),
+  maniRiga: (ch, chiave, riga) => maniRiga(ch, chiave, riga),
+  maniGlobale: (chiave, riga) => globaleDelController(chiave, riga),
   master: (volume) => {
     masterLive = volume;
     live.manda({ tipo: 'master', volume });
@@ -2487,6 +2527,7 @@ cue.suNext = (carta) => {
   if (statoCanali.alternaId(id)) aggiornaCanali();
 };
 let trackAvvisatoA = null; // TRACK: quando ho avvisato che il PROSSIMO ha modifiche
+let nanoVisto = false; // il nano è stato collegato in questa sessione: resta così fino alla chiusura (un cavo che balla non cambia le pagine dell'X-Touch)
 const nano = new Nano({
   fader: (ch, v) => eseguiCanali(statoCanali.fader(ch, v)), // agganciato solo quando passa dal valore vero
   manopola: (ch, pos) => scegliCanale(ch, () => statoCanali.scegli(ch, pos)),
@@ -2518,6 +2559,7 @@ const nano = new Nano({
   rec: () => (vista === 'synth' ? synth.avviaRec() : cue.avviso(it.nano.recSoloSynth)),
   collegato: (si) => {
     $('nano-stato').hidden = !si;
+    if (si) nanoVisto = true;
     eseguiCanali(statoCanali.lasciaTutteS()); // un S che era giù non farà più il rilascio
     statoCanali.sganciaTutti(); // un nano appena collegato ha i fader dove li ha lasciati: si riagganciano
     aggiornaCanali();

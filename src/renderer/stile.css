@@ -1199,6 +1199,20 @@ input[type='checkbox'] {
   background: var(--testo);
 }
 
+/* lo slider della card = volume del CH: sotto, la scritta del canale che muove */
+.volume-ch {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.volume-ch-nome {
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+}
+
 .livello.muto .volume div {
   background: var(--spento);
 }
@@ -3088,10 +3102,10 @@ input[type='checkbox'] {
   border-color: var(--testo);
 }
 .pillola.live {
-  background: var(--marcio);
-  color: var(--su-marcio);
+  /* una scena che suona: contorno e scritta verdi, MAI un riempimento (la scritta deve restare leggibile, anche scelta o col cursore sopra) */
+  background: transparent;
+  color: var(--marcio);
   border-color: var(--marcio);
-  box-shadow: 0 0 10px rgba(159, 194, 58, 0.35);
 }
 .pillola.in-arrivo {
   border: 1px dashed var(--marcio);
@@ -3771,7 +3785,35 @@ input[type='checkbox'] {
 .ch-tasti .key.acceso { background: var(--marcio); color: #050604; }
 .ch-tasti .key.lenta { animation: ch-lampeggio 1.2s steps(2) infinite; }
 .ch-tasti .key.veloce { animation: ch-lampeggio 0.4s steps(2) infinite; }
-.ch-fader { width: 100%; accent-color: var(--marcio); }
+/* il fader di un CH: una linea sottile (la parte sotto il valore più chiara) e una tacca dritta come cursore, niente pallino. Verde solo se il CH suona. */
+.ch-fader {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  cursor: ew-resize;
+  outline: none;
+}
+.ch-fader::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(to right, var(--riempi, var(--spento)) var(--p, 100%), var(--bordo) var(--p, 100%));
+}
+.ch-fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 4px;
+  height: 16px;
+  margin-top: -7px;
+  border: 0;
+  border-radius: 0;
+  background: var(--testo);
+}
+.ch-fader:hover::-webkit-slider-thumb,
+.ch-fader:focus-visible::-webkit-slider-thumb { background: #fff; }
+.ch-riga.suona .ch-fader { --riempi: var(--marcio-scuro); }
+.ch-riga.suona .ch-fader::-webkit-slider-thumb { background: var(--marcio); }
 .ch-fader.non-letto { opacity: 0.45; }
 .ch-fader-box { position: relative; width: 100%; display: flex; align-items: center; }
 .ch-fader.sganciato { opacity: 0.6; }
@@ -3794,6 +3836,14 @@ input[type='checkbox'] {
 .card.in-next .nome-sezione::after { content: ' · NEXT'; color: var(--testo); }
 .card.in-live.in-next .nome-sezione::after { content: ' · LIVE → NEXT'; }
 .pillola.in-live { color: var(--marcio); }
+/* scelta e live insieme (il caso di «drop» appena partito): resta una pillola normale con contorno verde, non si ingrandisce e non si riempie */
+.beat-card:has(.beat-codice.attiva) .pillola.scelta.live,
+.pillola.live:hover {
+  background: transparent;
+  color: var(--marcio);
+  border-color: var(--marcio);
+  outline-color: var(--marcio);
+}
 .pillola.in-next { outline: 1px solid var(--testo); }
 .card.in-next { box-shadow: inset 3px 0 0 var(--testo); }
 .card.in-live { box-shadow: inset 3px 0 0 var(--marcio); }
