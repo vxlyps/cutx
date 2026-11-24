@@ -8,10 +8,14 @@
 - [x] 3 · un volume solo FATTO (slider card = volume CH con «CHn» sotto; cuffia: guadagno-prova nel motore cuffia, M non la tocca; prova entrata+livelli 87 ok; slider griglia e pillole scena ridisegnati su richiesta di Valerio)
 - [x] 4 · X-Touch MANI FATTO (controller-mani.js; 13 test puri; provato nell'app dalla serata: FOCUS, SWEEP, eredità riga al cambio clip)
 - [x] 5 · serata finta FATTA (`npm run prova:parte -- serata`: 28 ok, passata 2 volte di fila; sentinella: click del beat tutti sentiti, nessuno fuori tempo; i «mancati» sono le clip silenziose)
-- [~] 6 · revisione indipendente: prima FATTA (8 problemi veri sistemati nel commit «Correzioni dalla revisione»); seconda sui fix IN CORSO
-- [ ] 7 · chiusura (npm test, prova completa, build, docs/CANALI.md, NOVITA bozza; niente merge/release)
+- [x] 6 · revisione indipendente FATTA due volte (8 problemi veri sistemati; la seconda sulle correzioni: nessun grave, 2 minori sistemati)
+- [x] 7 · chiusura FATTA: npm test 571/572 (resta il MOD noto), prova completa 351 ok 0 falliti (con la serata), build ok, docs/CANALI.md, docs/NOVITA-CANALI.md. NIENTE merge, NIENTE release.
 **ORDINE DI VALERIO (24/11, a metà tirata): ALLA FINE DI TUTTO IL VOLUME DEL MAC VA A 100** (`osascript -e 'set volume output volume 100'`), non «com'era». Durante le prove: 20%.
-Scostamenti dalla specifica da riportare a Valerio:
+Scostamenti dalla specifica da riportare a Valerio (vedi rapporto finale):
+- Eredità delle righe: il motore non sa da dove viene una riga, quindi si ereditano solo quelle MANI tenute dall'app (non quelle delle vecchie manopole beta 4).
+- Layer B = righe globali con chiave `mani:…` (non righe sui livelli).
+- Sentinella nella serata: si misurano solo i click del beat (le altre clip sono silenziose).
+- Slider di apertura e scratch: restano quelli d'ingresso di prima (la spec parla solo di clip con CH e BEAT).
 - ⌘↵ nel CUE è la CUFFIA (invio() → provaInCuffia), quindi resta permesso su clip senza tipo; bloccati go live e ⇧⌘↵ (e PLAY non li riguarda: le clip dei CH hanno già un tipo). Selezione di righe persa quando il menu ridisegna le card: entra tutta la clip. (aggiungere qui)
 
 ## 5 righe
