@@ -819,6 +819,7 @@ async function provaEntrata({ finestre, scrivi }) {
   controlla('M del CH non zittisce la cuffia (guadagno invariato, la cuffia suona ancora)', (await cuffiaSt())?.guadagnoProva === prima8 && !!(await cuffiaSt())?.codice, JSON.stringify([prima8, (await cuffiaSt())?.guadagnoProva]));
   await js(`cutxProva.canaliMute(1, false); cutxProva.fermaCuffia(); cutxProva.canaliSlider(1, 1)`);
   await js(`cutxProva.fermaTutto()`);
+  await js(`for (const k of ['attivo', 'prossimo']) if (cutxProva.cue.slot[k]) cutxProva.cue.slot[k].sporco = false; cutxProva.cue.cambiaModo('libero')`); // i brani di prova non restano «con modifiche non salvate»: la parte dopo non deve trovare la conferma
   await premi('.', 'meta');
   return ok;
 }
@@ -1015,6 +1016,7 @@ async function provaSerata({ finestre, scrivi }) {
     controlla('STOP tenuto = paracadute: resta solo il codice di emergenza', fuori.length >= 1 && fuori.every((l) => l.nome === 'paracadute'), JSON.stringify(fuori.map((l) => [l.nome, l.ch])));
 
   } finally {
+    await js(`for (const k of ['attivo', 'prossimo']) if (cutxProva.cue.slot[k]) cutxProva.cue.slot[k].sporco = false`).catch(() => {});
     await js(`cutxProva.fermaTutto()`).catch(() => {});
     for (const nome of Object.keys(brani)) await rm(path.join(cartella, `${nome}.cutx`), { force: true }).catch(() => {});
   }
