@@ -3,6 +3,7 @@
 // Layer A = il CH in focus; layer B = le stesse manopole su TUTTO (righe globali). Spinta = la riga esce. Fila in basso e fader: come prima.
 // Qui c'è la logica; controller.js le passa se stesso (`c`) e il resto (anelli, luci, scritte) lo fa già lui.
 import { sweep } from './canali.js';
+import { limitaRigaMani } from './coda.js';
 import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PASSO_X, PASSI_PER_SCATTO, SCATTI_VELOCITA, SCATTO_NORMALE, clamp01, etichettaAltezza, etichettaVelocita, rigaCoda, valoreDa, valoreTesto } from './controller-mappa.js';
 
 // Cosa fa la manopola n (1–7); la 8 è il volume generale.
@@ -59,7 +60,7 @@ function valorePartenza(c, param, livelli) {
 // Una riga di coda al bersaglio (layer A: ai livelli del CH + memoria del CH per le clip nuove; layer B: riga globale).
 function scrivi(c, param, riga, chiaveRiga) {
   if (c.pagina === 'B') return c.azioni.maniGlobale?.(`mani:${chiaveRiga}`, rigaGlobale(riga));
-  for (const l of livelliDelFocus(c)) c.mandaCoda(l.id, riga);
+  for (const l of livelliDelFocus(c)) c.mandaCoda(l.id, limitaRigaMani(riga, l.codice)); // il filtro della clip fa da tetto/pavimento
   c.azioni.maniRiga?.(c.focusCH, chiaveRiga, riga);
 }
 

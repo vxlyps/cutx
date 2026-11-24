@@ -23,7 +23,7 @@ import { misuraLimiter, misuraMicroEntrata } from './limiter.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
-import { leggiVoce, separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
+import { leggiVoce, limitaRigaMani, separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
 import { Importa } from './importa.js';
 import { Controller } from './controller.js';
 import { PaginaController } from './impostazioni-controller.js';
@@ -337,14 +337,14 @@ const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTip
 
 // X-TOUCH MANI: le righe che le manopole hanno messo a un CH sono del CH. Una clip che entra nel CH le eredita (stessa chiave: vince la manopola).
 const righeManiCH = new Map(); // ch → Map chiave → riga
-function ereditaCoda(ch, coda, eBeat) {
+function ereditaCoda(ch, coda, eBeat, codice = '') {
   // vivo = suona, o sta per uscire ma non è ancora uscito (OUT e poi GO ravvicinati: la clip nuova eredita lo stesso)
   const vivo = livelliLive.some((l) => chDelLivello(l) === ch && (l.a === null || l.a > cicloAdesso()));
   if (!vivo) righeManiCH.delete(ch); // un CH rimasto vuoto: le righe di una volta non tornano alla prossima clip
   if (eBeat && vivo) return coda.length ? coda : undefined; // la scena cambia sul beat che suona: la sua coda resta com'è
   const righe = righeManiCH.get(ch);
   if (!righe?.size) return eBeat && !coda.length ? undefined : coda;
-  return ereditaRighe(coda, righe);
+  return ereditaRighe(coda, new Map([...righe].map(([k, r]) => [k, limitaRigaMani(r, codice)]))); // col filtro di QUESTA clip
 }
 function maniRiga(ch, chiave, riga) {
   if (!righeManiCH.has(ch)) righeManiCH.set(ch, new Map());
@@ -406,7 +406,7 @@ function preparaLive(pezzo = null) {
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
-  const msg = { tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: ereditaCoda(chDelPezzo(p), coda, !!p.beat), inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) };
+  const msg = { tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: ereditaCoda(chDelPezzo(p), coda, !!p.beat, senzaCoda), inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) };
   if (pass) {
     Object.assign(msg, { rampa: pass.rampa ?? undefined, dissolvenza: pass.dissolvenza, transizione: pass.transizione });
     messaggi.push(pass.testo);

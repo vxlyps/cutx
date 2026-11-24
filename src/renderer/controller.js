@@ -442,6 +442,7 @@ export class Controller {
 
   // Pagina B: il livello che sto scolpendo è anche quello selezionato (bordo verde sulla card): a lui vanno i colpi.
   selezionaBersaglio() {
+    if (maniAttiva(this)) return; // MANI: il layer B è «tutto», nessun livello da selezionare
     const l = this.bersaglio === 'globale' ? null : this.livello(this.bersaglio);
     if (l) this.azioni.seleziona?.(l.id);
   }

@@ -176,6 +176,16 @@ export function limitaGlobali(righe, codice, coda) {
     .replace(new RegExp(`\\.hpf\\(\\s*${NUMERO}\\s*\\)`, 'g'), (m, n) => (Number.isFinite(hpf) && Number(n) < hpf ? `.hpf(${hpf})` : m)));
 }
 
+// Una riga di coda di MANI (SWEEP) rispetta il filtro scritto nel CODICE della clip: lato passa-basso il filtro della clip fa da tetto (min),
+// lato passa-alto da pavimento (max). Clip senza filtro: la riga non cambia. Si legge solo il codice, mai la coda.
+export function limitaRigaMani(riga, codice) {
+  const lpf = valoreLetterale(codice ?? '', 'lpf');
+  const hpf = valoreLetterale(codice ?? '', 'hpf');
+  return String(riga)
+    .replace(new RegExp(`^(\\s*)\\.lpf\\(\\s*${NUMERO}\\s*\\)`), (m, sp, n) => (Number.isFinite(lpf) && Number(n) > lpf ? `${sp}.lpf(${lpf})` : m))
+    .replace(new RegExp(`^(\\s*)\\.hpf\\(\\s*${NUMERO}\\s*\\)`), (m, sp, n) => (Number.isFinite(hpf) && Number(n) < hpf ? `${sp}.hpf(${hpf})` : m));
+}
+
 // { pattern } con tutte le righe globali messe sopra, oppure { errore } (e allora chi chiama tiene il pattern senza).
 export function applicaGlobali(pattern, righe) {
   const espressioni = (righe ?? []).map(leggiGlobale).filter(Boolean);

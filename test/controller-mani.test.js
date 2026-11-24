@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Controller } from '../src/renderer/controller.js';
 import { righeSweep, ereditaRighe, MANOPOLE_MANI } from '../src/renderer/controller-mani.js';
+import { limitaRigaMani } from '../src/renderer/coda.js';
 
 const giro = (n, passi) => [0xb0, 15 + n, passi > 0 ? passi : 0x40 | -passi];
 const push = (n, giu) => [0x90, 31 + n, giu ? 127 : 0];
@@ -11,12 +12,13 @@ const tasto = (c, n, giu = true) => [0x90, c.tab.tasti[n - 1], giu ? 127 : 0];
 // livelliDelCH: { ch → [livelli] }
 function prova({ livelliDelCH = {}, maniAttiva = true } = {}) {
   const log = [];
+  const chiamate = []; // il nome di ogni azione chiamata dal controller
   let t = 0;
   const timer = [];
   const attiva = { si: maniAttiva };
   const azioni = {
     livelli: () => Object.values(livelliDelCH).flat(),
-    posti: () => Array(6).fill(null),
+    posti: () => Object.values(livelliDelCH).flat().concat(Array(6).fill(null)).slice(0, 6),
     selezionato: () => null,
     volume: () => {},
     muto: () => {},
@@ -35,16 +37,20 @@ function prova({ livelliDelCH = {}, maniAttiva = true } = {}) {
     maniFocus: (ch) => log.push(['focus', ch]),
     maniRiga: (ch, chiave, riga) => log.push(['maniRiga', ch, chiave, riga]),
     maniGlobale: (chiave, riga) => log.push(['globale', chiave, riga]),
+    // le azioni che scelgono / navigano: ci sono per vedere se qualcuno le chiama
+    goLive: () => {}, linguetta: () => ({ quale: 'a', nome: 'x' }), scena: () => {}, togli: () => {}, tocca: () => {}, passaBrano: () => {}, passaInAttesa: () => {},
+    cueSposta: () => 'x', cuePosizione: () => null, cueBrano: () => {}, passoScattato: () => {}, registra: () => {}, cuffia: () => {},
   };
+  for (const k of Object.keys(azioni)) { const f = azioni[k]; azioni[k] = (...a) => (chiamate.push(k), f(...a)); }
   const c = new Controller(azioni, { ora: () => t, imposta: (fn, ms) => { const x = { fn, a: t + ms }; timer.push(x); return x; }, ferma: (x) => x && (x.annullato = true) });
   c.modo = 'MC';
   const avanza = (ms) => {
     t += ms;
     for (const x of [...timer]) if (!x.annullato && !x.fatto && x.a <= t) ((x.fatto = true), x.fn());
   };
-  return { c, log, avanza, attiva };
+  return { c, log, avanza, attiva, chiamate };
 }
-const L = (id, nome, coda = []) => ({ id, nome, volume: 1, muto: false, coda, codice: '' });
+const L = (id, nome, coda = [], codice = '') => ({ id, nome, volume: 1, muto: false, coda, codice });
 const righeCoda = (log) => log.filter((x) => x[0] === 'coda').map((x) => x.slice(1));
 
 test('SWEEP: a sinistra passa-basso, a destra passa-alto, al centro nessuna riga', () => {
@@ -204,4 +210,96 @@ test('spinta su un CH vuoto: nessuna riga da togliere dai livelli, ma la memoria
   const mem = log.filter((x) => x[0] === 'maniRiga' && x[3] === null).map((x) => x[2]).sort();
   assert.deepEqual(mem, ['hpf', 'lpf'], 'lo SWEEP dimenticato');
   assert.ok(log.some((x) => x[0] === 'riga' && x[1] === 'CH3 vuoto'));
+});
+
+// --- A1 · SWEEP rispetta il filtro scritto nel codice della clip ---
+
+const valoriLpf = (log) => righeCoda(log).map((x) => x[1]).filter((r) => r.startsWith('.lpf')).map((r) => Number(r.match(/\((.+)\)/)[1]));
+const valoriHpf = (log) => righeCoda(log).map((x) => x[1]).filter((r) => r.startsWith('.hpf')).map((r) => Number(r.match(/\((.+)\)/)[1]));
+
+test('limitaRigaMani: il filtro del codice è tetto (lpf) e pavimento (hpf); senza filtro la riga non cambia', () => {
+  assert.equal(limitaRigaMani('.lpf(18670)', 'note("c2").s("sawtooth").lpf(800)'), '.lpf(800)');
+  assert.equal(limitaRigaMani('.lpf(300)', 's("a").lpf(800)'), '.lpf(300)', 'più chiuso della clip: passa');
+  assert.equal(limitaRigaMani('.hpf(40)', 's("a").hpf(120)'), '.hpf(120)');
+  assert.equal(limitaRigaMani('.hpf(500)', 's("a").hpf(120)'), '.hpf(500)');
+  assert.equal(limitaRigaMani('.lpf(18670)', 's("a")'), '.lpf(18670)');
+  assert.equal(limitaRigaMani('.room(0.4)', 's("a").lpf(800)'), '.room(0.4)');
+  assert.equal(limitaRigaMani('.lpf(18670)', 's("a").hpf(120)'), '.lpf(18670)', 'un hpf della clip non limita il lpf');
+});
+
+test('SWEEP a sinistra su un reese .lpf(800): non scrive mai un lpf sopra 800', () => {
+  const { c, log, avanza } = prova({ livelliDelCH: { 2: [L(7, 'reese', [], 'note("c2").s("sawtooth").lpf(800)')] } });
+  c.riceve(tasto(c, 3));
+  for (let i = 0; i < 12; i++) { c.riceve(giro(1, -1)); avanza(100); }
+  const v = valoriLpf(log);
+  assert.ok(v.length > 0);
+  assert.ok(v.every((x) => x <= 800), `mai sopra 800: ${v}`);
+});
+
+test('SWEEP a destra su una clip .hpf(120): non scrive mai un hpf sotto 120', () => {
+  const { c, log, avanza } = prova({ livelliDelCH: { 3: [L(8, 'lead', [], 's("a").hpf(120)')] } });
+  c.riceve(tasto(c, 4));
+  for (let i = 0; i < 12; i++) { c.riceve(giro(1, 1)); avanza(100); }
+  const v = valoriHpf(log);
+  assert.ok(v.length > 0);
+  assert.ok(v.every((x) => x >= 120), `mai sotto 120: ${v}`);
+});
+
+test('STRAY: ogni livello del CH8 ha il suo filtro come limite', () => {
+  const { c, log, avanza } = prova({ livelliDelCH: { 7: [L(10, 'scratch', [], 's("a").lpf(500)'), L(11, 'jam', [], 's("b")')] } });
+  c.riceve(tasto(c, 8));
+  for (let i = 0; i < 12; i++) { c.riceve(giro(1, -1)); avanza(100); }
+  const di = (id) => righeCoda(log).filter((x) => x[0] === id && x[1].startsWith('.lpf')).map((x) => Number(x[1].match(/\((.+)\)/)[1]));
+  assert.ok(di(10).length && di(10).every((x) => x <= 500));
+  assert.ok(di(11).length && Math.max(...di(11)) > 500, 'la clip senza filtro: come prima');
+});
+
+test('eredità: la riga del CH su una clip nuova col filtro più basso viene limitata dal filtro di quella clip', () => {
+  const righe = new Map([['lpf', '.lpf(3000)'], ['room', '.room(0.4)']]);
+  const clip = 's("a").lpf(800)';
+  const mia = ereditaRighe([], new Map([...righe].map(([k, r]) => [k, limitaRigaMani(r, clip)])));
+  assert.deepEqual(mia, ['.lpf(800)', '.room(0.4)']);
+});
+
+// --- A2 · l'X-Touch non sceglie mai cosa entra ---
+
+// Le azioni che scelgono, armano o navigano: con MANI attivo non le chiama nessun evento dell'X-Touch.
+const VIETATE = ['goLive', 'linguetta', 'scena', 'togli', 'tocca', 'seleziona', 'cuffia', 'passaBrano', 'passaInAttesa', 'cueSposta', 'cuePosizione', 'cueBrano', 'passoScattato'];
+
+test('MANI: nessun evento dell\'X-Touch (manopole, spinte, tasti, layer, fader) sceglie, arma o naviga', () => {
+  const { c, chiamate, avanza } = prova({ livelliDelCH: { 0: [L(1, 'beat')], 2: [L(7, 'basso')] } });
+  for (let n = 1; n <= 8; n++) for (const passi of [3, -3, 1, -1]) c.riceve(giro(n, passi));
+  for (const pagina of ['A', 'B']) {
+    for (let n = 1; n <= 8; n++) { c.riceve(push(n, true)); avanza(1500); c.riceve(push(n, false)); }
+    for (let n = 1; n <= 16; n++) { c.riceve(tasto(c, n)); avanza(1500); c.riceve(tasto(c, n, false)); }
+    for (let k = 0; k < 128; k++) { c.riceve([0x90, k, 127]); avanza(1500); c.riceve([0x90, k, 0]); }
+    for (let k = 0; k < 128; k++) c.riceve([0xb0, k, 64]);
+    for (let n = 1; n <= 8; n++) for (const passi of [3, -3]) c.riceve(giro(n, passi));
+    if (pagina === 'A') c.riceve([0x90, 14, 127]); // il tasto layer (se è questo il numero, non importa: la prova gira sopra tutte le note)
+  }
+  const chiamateVietate = chiamate.filter((x) => VIETATE.includes(x));
+  assert.deepEqual(chiamateVietate, []);
+});
+
+test('MANI: la manopola 1 è solo SWEEP (non naviga il CUE)', () => {
+  const { c, chiamate, log, avanza } = prova({ livelliDelCH: { 0: [L(1, 'beat')] } });
+  c.riceve(giro(1, -4));
+  avanza(100);
+  assert.ok(!chiamate.includes('cueSposta'));
+  assert.ok(valoriLpf(log).length > 0, 'ha scritto lo sweep');
+});
+
+// --- A3 · senza nano è la beta 4 ---
+
+test('senza nano (MANI spenta): manopola 1 naviga, 2–7 volumi, il tasto 8 tenuto è il paracadute, niente FOCUS', () => {
+  const { c, chiamate, log, avanza } = prova({ livelliDelCH: { 2: [L(7, 'basso')] }, maniAttiva: false });
+  c.riceve(giro(1, 1));
+  assert.ok(chiamate.includes('cueSposta'), 'la manopola 1 naviga il CUE');
+  c.riceve(giro(2, 2));
+  assert.ok(chiamate.includes('volume'), 'la 2 muove il volume del livello');
+  c.riceve(tasto(c, 8));
+  avanza(1500);
+  assert.ok(log.some((x) => x[0] === 'paracadute'), 'il tasto 8 tenuto lancia il paracadute');
+  c.riceve(tasto(c, 8, false));
+  assert.ok(!chiamate.includes('maniFocus') && !chiamate.includes('maniRiga') && !chiamate.includes('maniGlobale'), 'nessun gesto MANI');
 });
