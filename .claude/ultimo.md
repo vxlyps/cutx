@@ -8,7 +8,7 @@
 - [x] 3 · un volume solo FATTO (slider card = volume CH con «CHn» sotto; cuffia: guadagno-prova nel motore cuffia, M non la tocca; prova entrata+livelli 87 ok; slider griglia e pillole scena ridisegnati su richiesta di Valerio)
 - [x] 4 · X-Touch MANI FATTO (controller-mani.js; 13 test puri; provato nell'app dalla serata: FOCUS, SWEEP, eredità riga al cambio clip)
 - [x] 5 · serata finta FATTA (`npm run prova:parte -- serata`: 28 ok, passata 2 volte di fila; sentinella: click del beat tutti sentiti, nessuno fuori tempo; i «mancati» sono le clip silenziose)
-- [ ] 6 · revisione indipendente (subagente) + seconda sui fix
+- [~] 6 · revisione indipendente: prima FATTA (8 problemi veri sistemati nel commit «Correzioni dalla revisione»); seconda sui fix IN CORSO
 - [ ] 7 · chiusura (npm test, prova completa, build, docs/CANALI.md, NOVITA bozza; niente merge/release)
 **ORDINE DI VALERIO (24/11, a metà tirata): ALLA FINE DI TUTTO IL VOLUME DEL MAC VA A 100** (`osascript -e 'set volume output volume 100'`), non «com'era». Durante le prove: 20%.
 Scostamenti dalla specifica da riportare a Valerio:

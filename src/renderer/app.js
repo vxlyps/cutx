@@ -338,7 +338,8 @@ const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTip
 // X-TOUCH MANI: le righe che le manopole hanno messo a un CH sono del CH. Una clip che entra nel CH le eredita (stessa chiave: vince la manopola).
 const righeManiCH = new Map(); // ch → Map chiave → riga
 function ereditaCoda(ch, coda, eBeat) {
-  const vivo = livelliDelCH(ch).length > 0;
+  // vivo = suona, o sta per uscire ma non è ancora uscito (OUT e poi GO ravvicinati: la clip nuova eredita lo stesso)
+  const vivo = livelliLive.some((l) => chDelLivello(l) === ch && (l.a === null || l.a > cicloAdesso()));
   if (!vivo) righeManiCH.delete(ch); // un CH rimasto vuoto: le righe di una volta non tornano alla prossima clip
   if (eBeat && vivo) return coda.length ? coda : undefined; // la scena cambia sul beat che suona: la sua coda resta com'è
   const righe = righeManiCH.get(ch);

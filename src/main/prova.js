@@ -908,7 +908,8 @@ async function provaSerata({ finestre, scrivi }) {
     // lo snapshot del live (per il ripristino se il motore rinasce) porta il CH di ogni livello: senza, tornerebbero tutti in CH8
     const snapCh = JSON.parse((await js(`JSON.stringify(cutxProva.istantaneaCh())`)) ?? 'null') ?? [];
     const chVivi = (await attivi()).map((l) => [l.nome, l.ch]);
-    controlla('lo snapshot del live ha il CH di ogni livello', chVivi.length >= 3 && chVivi.every(([n, ch]) => snapCh.some(([sn, sch]) => sn === n && sch === (ch ?? 7)))) // senza CH (lo scratch) vale CH8, JSON.stringify([snapCh, chVivi]));
+    // senza CH (lo scratch) vale CH8
+    controlla('lo snapshot del live ha il CH di ogni livello', chVivi.length >= 3 && chVivi.every(([n, ch]) => snapCh.some(([sn, sch]) => sn === n && sch === (ch ?? 7))), JSON.stringify([snapCh, chVivi]));
     // la sentinella: con il beat e i due livelli in onda, per 8 secondi non deve perdere né aggiungere un click
     await aspetta(1);
     const sent0 = (await live())?.sentinella;
