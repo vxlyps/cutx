@@ -196,7 +196,6 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
   if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
   if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
-  if (parti.includes('serata')) ok = (await sicura('serata', provaSerata)) && ok;
   if (parti.includes('browser')) ok = (await sicura('browser', provaBrowser)) && ok;
   if (parti.includes('impostazioni')) ok = (await sicura('impostazioni', provaImpostazioni)) && ok;
   if (parti.includes('ableton')) ok = (await sicura('ableton', provaAbleton)) && ok;
@@ -247,6 +246,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('finestra')) ok = (await sicura('finestra', provaFinestra)) && ok;
   if (parti.includes('coda')) ok = (await sicura('coda', provaCoda)) && ok;
   if (parti.includes('dissolvenze')) ok = (await sicura('dissolvenze', provaDissolvenze)) && ok;
+  if (parti.includes('serata')) ok = (await sicura('serata', provaSerata)) && ok;
   // le «prove a mano» del check-up beta 5 fatte dal Mac (prova-mano.js)
   if (parti.some((p) => p.startsWith('mano-'))) ok = (await sicura('mano', (a) => import('./prova-mano.js').then((m) => m.provaMano({ ...a, parti })))) && ok;
 
