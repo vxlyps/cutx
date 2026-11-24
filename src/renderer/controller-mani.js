@@ -129,7 +129,11 @@ export function giraMani(c, n, passi) {
 export function resetMani(c, n) {
   const param = PARAMETRO_MANI(n);
   if (!param) return;
-  if (c.pagina === 'A' && !livelliDelFocus(c).length) return vuoto(c, n);
+  if (c.pagina === 'A' && !livelliDelFocus(c).length) {
+    // CH vuoto: niente da togliere dai livelli, ma la memoria delle righe del CH si può pulire (non devono tornare alla prossima clip)
+    for (const k of param === 'sweep' ? ['lpf', 'hpf'] : [chiaveCoda(param)]) c.azioni.maniRiga?.(c.focusCH, k, null);
+    return vuoto(c, n);
+  }
   const k = `${scopo(c)}|${param}`;
   if (param === 'sweep') {
     togli(c, 'lpf');

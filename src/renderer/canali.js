@@ -341,11 +341,12 @@ export class StatoCanali {
     return [{ tipo: 'cuffia-stop', ch: i }];
   }
 
-  // Il nano che si stacca (o si ricollega) mentre S è giù: il rilascio non arriverà mai. Si spegne la cuffia che gli S avevano acceso.
-  lasciaTutteS() {
+  // Il nano che si stacca (o si ricollega) mentre S è giù: il rilascio non arriverà mai. Si spegne la cuffia che i suoi S avevano acceso
+  // (non quella del tasto CUE a schermo, che ha il suo rilascio).
+  lasciaTutteS(fonte = 'nano') {
+    this.sTenuti = this.sTenuti.filter((k) => !k.startsWith(fonte));
     const c = this.cuffiaCh;
-    this.sTenuti = [];
-    if (!c?.chiave) return [];
+    if (!c?.chiave?.startsWith(fonte)) return [];
     this.cuffiaCh = null;
     return [{ tipo: 'cuffia-stop', ch: c.ch }];
   }

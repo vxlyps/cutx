@@ -195,3 +195,13 @@ test('il cavo del nano che si stacca: MANI resta (il flag è della sessione, non
   c.riceve(giro(3, 2));
   assert.equal(c.focusCH, 1, 'il focus non si muove da solo');
 });
+
+test('spinta su un CH vuoto: nessuna riga da togliere dai livelli, ma la memoria del CH si pulisce', () => {
+  const { c, log } = prova({ livelliDelCH: {} });
+  c.riceve(tasto(c, 3));
+  c.riceve(push(1, true));
+  c.riceve(push(1, false));
+  const mem = log.filter((x) => x[0] === 'maniRiga' && x[3] === null).map((x) => x[2]).sort();
+  assert.deepEqual(mem, ['hpf', 'lpf'], 'lo SWEEP dimenticato');
+  assert.ok(log.some((x) => x[0] === 'riga' && x[1] === 'CH3 vuoto'));
+});

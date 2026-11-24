@@ -913,7 +913,7 @@ export class Cue {
     cassetta.append(volume, scritta);
     const voce = { ch, pieno, tengo: false, el: cassetta };
     voce.mostra = () => {
-      if (!voce.tengo) pieno.style.width = `${Math.min(1, this.vistaCanali?.[ch]?.fader.valore ?? 1) * 100}%`;
+      if (!voce.tengo) pieno.style.width = `${Math.min(1, this.vistaCanali?.[ch]?.fader.vero ?? 1) * 100}%`;
     };
     const imposta = (e) => {
       const r = volume.getBoundingClientRect();

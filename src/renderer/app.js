@@ -233,6 +233,12 @@ try {
 // `prova` = { ch, volumeClip } quando è il preascolto di una clip di un CH: la cuffia lo sente a volume clip × volume del CH (dopo il fader, M escluso).
 // Tutto il resto (il SYNTH, un codice qualsiasi) suona a guadagno 1.
 let provaCorrente = null;
+// Ferma il motore cuffia e rimette il guadagno della prova a 1: quello che suonerà dopo (il SYNTH, un altro pezzo) non deve ereditare il fader di un CH.
+function fermaMotoreCuffia() {
+  provaCorrente = null;
+  cuffia.manda({ tipo: 'guadagno-prova', volume: 1 });
+  cuffia.manda({ tipo: 'ferma' });
+}
 const volumeDelCH = (ch) => gainFader(statoCanali.canali[ch]?.vero ?? 1);
 async function manda(motore, codice, etichetta = {}, prova = null) {
   if (motore === cuffia && cuffiaInPausa) pausaCuffia(false); // chi manda qualcosa in cuffia vuole sentirlo
@@ -260,7 +266,7 @@ function fermaCuffia() {
   if (inTest) return;
   pezzoCuffia = null;
   dovaCuffia = null;
-  cuffia.manda({ tipo: 'ferma' });
+  fermaMotoreCuffia();
 }
 
 // Il tasto «cuffia» di una card: se si sta già sentendo quella, spegne; altrimenti la manda in cuffia.
@@ -332,6 +338,9 @@ const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTip
 // X-TOUCH MANI: le righe che le manopole hanno messo a un CH sono del CH. Una clip che entra nel CH le eredita (stessa chiave: vince la manopola).
 const righeManiCH = new Map(); // ch → Map chiave → riga
 function ereditaCoda(ch, coda, eBeat) {
+  const vivo = livelliDelCH(ch).length > 0;
+  if (!vivo) righeManiCH.delete(ch); // un CH rimasto vuoto: le righe di una volta non tornano alla prossima clip
+  if (eBeat && vivo) return coda.length ? coda : undefined; // la scena cambia sul beat che suona: la sua coda resta com'è
   const righe = righeManiCH.get(ch);
   if (!righe?.size) return eBeat && !coda.length ? undefined : coda;
   return ereditaRighe(coda, righe);
@@ -778,7 +787,7 @@ function fermaTutto() {
   if (inTest) return fermaTest();
   pezzoCuffia = null;
   live.manda({ tipo: 'ferma' });
-  cuffia.manda({ tipo: 'ferma' });
+  fermaMotoreCuffia();
   // i riser e i «sale» del controller sono andati via con tutto il resto: senza questo il prossimo punterebbe a un livello che non c'è più
   temporanei.clear();
   passaggio = null;
@@ -890,6 +899,8 @@ let vista = 'live';
 const synth = new VistaSynth($('vista-synth'), {
   suona: async (codice, nome) => {
     if (inTest) return null;
+    provaCorrente = null; // il SYNTH non sente il fader di nessun CH
+    cuffia.manda({ tipo: 'guadagno-prova', volume: 1 });
     cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH });
     if (cuffiaInPausa) pausaCuffia(false);
     const etichetta = { nome: `synth · ${nome}`, provenienza: 'synth' };
@@ -1157,6 +1168,7 @@ let griglia = null;
 let canaliErrori = [];
 const liveAcceso = () => livelliLive.some((l) => l.a === null);
 function usaCanali(config, errori = []) {
+  righeManiCH.clear(); // un'altra mappa dei CH: le righe delle manopole erano di un altro canale
   canaliConfig = config;
   statoCanali.impostaCANALI(config);
   canaliErrori = errori;
@@ -1204,7 +1216,7 @@ async function eseguiCanali(effetti) {
       }
       if (!inTest) provaPezzo(pezzo); // la cuffia va a tempo col live, come il tasto «cuffia» di una card
     } else if (e.tipo === 'cuffia-stop') {
-      if (!inTest) cuffia.manda({ tipo: 'ferma' });
+      fermaCuffia(); // l'S rilasciato: come ogni altro stop (il pezzo non va ridato alla cuffia se rinasce)
     } else if (e.tipo === 'go') {
       const pezzo = cue.pezzoAlt(e.alt);
       if (pezzo.errore) {
@@ -1398,7 +1410,7 @@ const importa = new Importa({
   },
   ferma: () => {
     pezzoCuffia = null;
-    cuffia.manda({ tipo: 'ferma' });
+    fermaMotoreCuffia();
   },
   // finché non finisce da sola: il motore svuota il suo codice, e qui il tasto torna ▶ (1,5 s di tolleranza per la partenza)
   inAscolto: (chiave) =>
@@ -1449,7 +1461,7 @@ browser = new Browser(
     },
     ferma: () => {
       pezzoCuffia = null;
-      cuffia.manda({ tipo: 'ferma' });
+      fermaMotoreCuffia();
     },
     // finché non finisce da sola (il motore svuota il suo codice): 1,5 s di tolleranza per la partenza
     inAscolto: (chiave) =>
@@ -1661,7 +1673,7 @@ function aggiornaIstantanea() {
   if (!ripreso || !live.viva || ripristinando) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   istantaneaLive = attivi.length
-    ? { bpm: bpmSet(), mixer: statoCanali.datiMixer(), livelli: attivi.map((l) => ({ beat: l.beat, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    ? { bpm: bpmSet(), mixer: statoCanali.datiMixer(), livelli: attivi.map((l) => ({ ch: chDelLivello(l), beat: l.beat, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
     : null;
 }
 
@@ -1682,7 +1694,7 @@ async function ripristinaLive() {
     statoCanali.sganciaTutti(); // i fader fisici si riagganciano al valore rimesso
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: chDelLivello(l), beat: l.beat ?? null, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: l.ch ?? chDelLivello(l), beat: l.beat ?? null, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
@@ -2267,6 +2279,7 @@ globalThis.cutxProva = {
   statoCanali: () => statoCanali,
   righeManiCH: () => Object.fromEntries([...righeManiCH].map(([ch, m]) => [ch, Object.fromEntries(m)])),
   nanoVistoForza: () => (nanoVisto = true),
+  istantaneaCh: () => (aggiornaIstantanea(), istantaneaLive?.livelli.map((l) => [l.nome, l.ch]) ?? null), // per la prova: lo snapshot del live porta il CH di ogni livello
   canaliMixer: () => statoCanali.datiMixer(),
   apriNelSynth,
   dispetti: () => dispetti,

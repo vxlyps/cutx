@@ -841,3 +841,15 @@ test('cuffia dopo il fader: preascolto a volume clip × volume CH; segue il fade
   // con il CH muto, il preascolto di una clip ha comunque il suo guadagno (il muto non c'è nel calcolo)
   assert.equal(guadagnoProva(0.8, gainFader(0.5)), 0.8 * gainFader(0.5));
 });
+
+test('nano ricollegato con S giù: spegne solo la cuffia dei suoi S, non quella del tasto CUE a schermo', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegliAlt(2, 1);
+  s.premiS(2, 'schermo');
+  assert.deepEqual(s.lasciaTutteS(), [], 'il clic a schermo ha il suo rilascio');
+  assert.equal(s.cuffiaCh.ch, 2);
+  s.premiS(2, 'nano');
+  assert.deepEqual(s.lasciaTutteS().map((x) => x.tipo), ['cuffia-stop']);
+  assert.deepEqual(s.sTenuti, ['schermo2'], 'resta solo il tasto a schermo');
+});
