@@ -3,8 +3,8 @@
 // applica i valori. Il volume generale (manopola 8), il fader e il paracadute (tasto 8) restano sempre del LIVE.
 import { aPosizione, attivo, daPosizione, limiti } from './synth-modello.js';
 
-// I tasti in alto 1–5 scelgono il gruppo (il 6 e il 7 sono liberi: mod, arpeggio…). Premere di nuovo lo stesso gruppo passa alla sua pagina 2.
-export const GRUPPI_TASTI = ['osc', 'filtro', 'amp', 'drive', 'space'];
+// I tasti in alto 1–6 scelgono il gruppo (il 7 è libero: arpeggio…). Premere di nuovo lo stesso gruppo passa alla sua pagina 2.
+export const GRUPPI_TASTI = ['osc', 'filtro', 'amp', 'drive', 'space', 'mod'];
 
 // Le manopole 1–7 per pagina. Ogni parametro ha un posto fisso (la mano impara dove sono): un parametro che in quel momento non conta
 // resta al suo posto con l'anello spento. I più importanti vanno sulle prime manopole.
@@ -14,6 +14,8 @@ export const PAGINE_SYNTH = {
   amp: [['attack', 'decay', 'sustain', 'release', 'gain', 'penv', 'pdecay']],
   drive: [['shape', 'distort', 'crush', 'coarse']],
   space: [['delay', 'delaysync', 'delayfeedback', 'room', 'roomsize', 'phaser', 'phaserdepth'], ['tremolo', 'tremolodepth']],
+  // MOD: due LFO, una pagina l'uno (il destino a scatti: destinazione, forma e rate sono scelte, come velocità e tipo)
+  mod: [['mod1dest', 'mod1forma', 'mod1rate', 'mod1depth'], ['mod2dest', 'mod2forma', 'mod2rate', 'mod2depth']],
 };
 
 // I tasti in basso (nome Mackie → comando del synth). Nel LIVE sono i colpi: qui sono del synth.

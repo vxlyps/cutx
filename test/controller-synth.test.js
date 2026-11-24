@@ -11,7 +11,7 @@ test('ogni parametro del synth ha il suo posto, una volta sola, e nessuna pagina
   for (const pagine of Object.values(PAGINE_SYNTH)) for (const pagina of pagine) assert.ok(pagina.length <= 7);
   // ogni parametro sta nel gruppo che il pannello gli dà
   for (const [gruppo, pagine] of Object.entries(PAGINE_SYNTH)) for (const k of pagine.flat()) assert.equal(parametro(k).g, gruppo, k);
-  assert.deepEqual(GRUPPI_TASTI, ['osc', 'filtro', 'amp', 'drive', 'space']);
+  assert.deepEqual(GRUPPI_TASTI, ['osc', 'filtro', 'amp', 'drive', 'space', 'mod']);
   assert.equal(COMANDI_BASSO.length, 8);
 });
 
@@ -20,7 +20,9 @@ test('i tasti in alto: un altro gruppo parte dalla prima pagina, lo stesso gira 
   assert.deepEqual(dopoTasto('filtro', 0, 2), { gruppo: 'filtro', pagina: 1 });
   assert.deepEqual(dopoTasto('filtro', 1, 2), { gruppo: 'filtro', pagina: 0 });
   assert.deepEqual(dopoTasto('amp', 0, 3), { gruppo: 'amp', pagina: 0 }, 'un gruppo a una pagina sola resta lì');
-  assert.deepEqual(dopoTasto('osc', 1, 6), { gruppo: 'osc', pagina: 1 }, 'i tasti 6 e 7 non cambiano niente');
+  assert.deepEqual(dopoTasto('osc', 1, 7), { gruppo: 'osc', pagina: 1 }, 'il tasto 7 non cambia niente');
+  assert.deepEqual(dopoTasto('osc', 1, 6), { gruppo: 'mod', pagina: 0 }, 'il 6 è MOD');
+  assert.equal(paginePerGruppo('mod'), 2);
   assert.equal(paginePerGruppo('space'), 2);
   assert.equal(paginePerGruppo('drive'), 1);
 });

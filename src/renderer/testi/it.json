@@ -681,7 +681,8 @@
         "filtro": "filtro",
         "amp": "amp",
         "drive": "drive",
-        "space": "space"
+        "space": "space",
+        "mod": "mod"
       },
       "comandi": {
         "cue": "→ CUE",
@@ -701,6 +702,14 @@
       },
       "generale": "master",
       "corti": {
+        "mod1dest": "lfo1",
+        "mod1forma": "lfo1 wav",
+        "mod1rate": "lfo1 rat",
+        "mod1depth": "lfo1 dep",
+        "mod2dest": "lfo2",
+        "mod2forma": "lfo2 wav",
+        "mod2rate": "lfo2 rat",
+        "mod2depth": "lfo2 dep",
         "forma": "forma",
         "voci": "voci",
         "detune": "detune",

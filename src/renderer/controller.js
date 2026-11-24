@@ -912,14 +912,14 @@ export class Controller {
 
   premiTastoSynth(n, giu) {
     if (!giu) return;
-    if (n <= 5) {
+    if (n <= GRUPPI_TASTI.length) {
       this.sy = dopoTasto(this.sy.gruppo, this.sy.pagina, n);
       this.ultime.clear();
       this.toccaSynth(null, this.nomeGruppoSynth());
       this.cambiato();
       return;
     }
-    if (n <= 8) return; // 6 e 7 liberi (mod, arpeggio)
+    if (n <= 8) return; // il 7 libero (arpeggio)
     const comando = COMANDI_BASSO[n - 9];
     if (!comando) return;
     if (!['play', 'rec', 'ab'].includes(comando)) this.lampo(this.tab.tasti[n - 1]); // quelli con uno stato (▶, REC, A/B) si accendono da soli
