@@ -66,6 +66,7 @@ async function primoPiano(finestre) {
   await aspetta(0.2);
 }
 
+const PARTI_PILA = new Set(['card-togli', 'compatte', 'cue-vista', 'striscia', 'controller', 'cue-controller', 'synth', 'clip-visibili', 'beat', 'colpi', 'passaggio', 'set', 'linguette', 'proj', 'sfoglia', 'onda', 'drum']);
 export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita', 'moviola', 'serata'] }) {
   const righe = [];
   // --silenzioso: a schermo solo i fallimenti e il conteggio finale (il file di log ha tutto)
@@ -191,6 +192,11 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   // un errore dentro una prova è un fallimento, non un blocco
   const sicura = async (nome, fn) => {
     await primoPiano(finestre);
+    // ogni parte parte come la beta 4, anche se alla macchina di prova è collegato un nano vero: la serata (e chi vuole MANI) lo richiama
+    await chiedi(finestre.controllo, 'cutxProva.nanoVistoForza(false)').catch(() => {});
+    // le parti della beta 4 guardano la PILA delle card; la vista di partenza del LIVE ora è la griglia dei canali
+    const vista = PARTI_PILA.has(nome) ? 'pila' : 'canali';
+    await chiedi(finestre.controllo, `document.querySelector('#vista-live [data-vista="${vista}"]')?.click()`).catch(() => {});
     return fn({ finestre, scrivi }).catch((e) => (scrivi(`FALLITO ${nome}: ${e.stack ?? e}`), false));
   };
   if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
@@ -1009,7 +1015,7 @@ async function provaSerata({ finestre, scrivi }) {
 
     // 10. STOP tenuto → paracadute
     await nano(STOP, 127);
-    await aspetta(1.3);
+    await aspetta(1.8);
     await nano(STOP, 0);
     await aspetta(2);
     const fuori = await attivi();
@@ -3058,7 +3064,7 @@ async function provaCueController({ finestre, scrivi }) {
   const tasto = (i) => js(`cutxProva.controllerMidi.tab.tasti[${i - 1}]`);
   await js(`window.cutx.salvaPreferenze({ controller: null })`);
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
-  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @sezione intro\ns("sine*2").gain(.0001)\n// @sezione basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @sezione melodia\nnote("c4 e4 g4 b4").s("triangle").gain(.0001)\n';
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @sezione intro\ns("sine*2").gain(.0001)\n// @sezione basso · bass\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @sezione melodia · lead\nnote("c4 e4 g4 b4").s("triangle").gain(.0001)\n';
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}); cutxProva.cue.cambiaModo('brano')`);
   await aspetta(1.5);
   await js(`cutxProva.cue.attiva(null)`); // nessuna sezione scelta (un fuoco dell'editor potrebbe averne scelta una)
@@ -3140,7 +3146,7 @@ async function provaClipVisibili({ finestre, scrivi }) {
   };
   const js = (codice) => chiedi(finestre.controllo, codice);
   const file = path.join(stash.cartellaProj(), 'libreria', 'brano_1.cutx');
-  const testo = existsSync(file) ? await readFile(file, 'utf8') : '// @brano b\n// @clip melodia\ns("sine").gain(.0001)\n// @clip sub\ns("sine").gain(.0001)\n// @clip reese\ns("sine").gain(.0001)\n// @clip pad\ns("sine").gain(.0001)\n';
+  const testo = '// @brano b\n// @clip melodia · lead\ns("sine").gain(.0001)\n// @clip sub · bass\ns("sine").gain(.0001)\n// @clip reese · fx\ns("sine").gain(.0001)\n// @clip pad · pad\ns("sine").gain(.0001)\n';
   await js(`cutxProva.fermaTutto(); cutxProva.motori.live.manda({ tipo: 'master', volume: 0 })`);
   try {
     await js(`cutxProva.cue.apriModello('brano_1.cutx', ${JSON.stringify(testo)}, 'prossimo', { fuoco: false })`);
@@ -3280,6 +3286,10 @@ async function provaGuardiano({ finestre, scrivi }) {
 }
 
 // --- passa al prossimo brano col set di prova (brano 1 a 170 → 2 a 174: rampa; 2 → 3 a 140: salto), tasto 3 tenuto, CUFFIA + ◀ ▶ (npx electron . --prova=passaggio) ---
+// Le clip di prova copiate dallo stash di prova possono essere senza tipo (una clip senza tipo non entra live): ogni clip senza tipo prende quello del suo nome.
+const TIPI_DI_PROVA = { melodia: 'lead', sub: 'bass', reese: 'bass', wobble: 'bass', basso: 'bass', stab: 'keys', pad: 'pad', drum: 'drum' };
+const tipizza = (testo) => testo.replace(/^\/\/ @clip ([^·\n]+?)\s*$/gm, (m, nome) => (TIPI_DI_PROVA[nome.trim()] ? `// @clip ${nome.trim()} · ${TIPI_DI_PROVA[nome.trim()]}` : m));
+
 async function provaPassaggio({ finestre, scrivi }) {
   let ok = true;
   const controlla = (nome, vero, dettagli = '') => {
@@ -3302,7 +3312,7 @@ async function provaPassaggio({ finestre, scrivi }) {
   // uno stash temporaneo con il set di prova esatto (i tre brani veri, copiati; i suoni collegati in sola lettura): il set vero di Valerio non si tocca
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-passaggio-'));
   await mkdir(path.join(tmp, 'libreria'), { recursive: true });
-  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), await readFile(path.join(libreriaVera, f), 'utf8'));
+  for (const f of brani3) await writeFile(path.join(tmp, 'libreria', f), tipizza(await readFile(path.join(libreriaVera, f), 'utf8')));
   await writeFile(path.join(tmp, 'set.cutx'), '// @set prova serata\n\nbrano_1.cutx · apre\nbrano_2.cutx\nbrano_3.cutx · chiude\n');
   if (existsSync(path.join(radice, 'suoni'))) await symlink(path.join(radice, 'suoni'), path.join(tmp, 'suoni'));
   const vero = stash._percorsoPerProva(tmp);
@@ -3427,10 +3437,10 @@ async function provaSet({ finestre, scrivi }) {
   const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-set-'));
   await mkdir(path.join(tmp, 'libreria'), { recursive: true });
-  const brano = (n) => `// @brano ${n}\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n`;
+  const brano = (n) => `// @brano ${n}\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso · bass\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n`;
   for (const n of ['a', 'b', 'c', 'd']) await writeFile(path.join(tmp, 'libreria', `${n}.cutx`), brano(n));
   await writeFile(path.join(tmp, 'set.cutx'), '// @set prova\n\na.cutx · apre\nb.cutx\nc.cutx · chiude\n');
-  await writeFile(path.join(tmp, 'kit.cutx'), '// @clip colpo\ns("sine*4").gain(.0001)\n// @clip tappeto\nnote("c2").s("sine").gain(.0001)\n');
+  await writeFile(path.join(tmp, 'kit.cutx'), '// @clip colpo · perc\ns("sine*4").gain(.0001)\n// @clip tappeto · pad\nnote("c2").s("sine").gain(.0001)\n');
   const vero = stash._percorsoPerProva(tmp);
   try {
     await js(`cutxProva.fermaTutto(); cutxProva.cue.slot.attivo = null; cutxProva.cue.slot.prossimo = null; cutxProva.cue.mostraBrano(true)`);
@@ -4757,7 +4767,7 @@ async function provaSynth({ finestre, scrivi }) {
   await js(`cutxProva.synth.categoriaEl.value = ''; cutxProva.synth.categoriaEl.dispatchEvent(new Event('change'))`);
 
   // → CUE: la clip finisce in fondo al brano (attivo o prossimo) o al kit, con la riga @synth; «synth» sulla card la riapre esatta
-  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip drum\ns("sine*2").gain(.0001)\n';
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip drum · drum\ns("sine*2").gain(.0001)\n';
   await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), forma: 'sine', gain: 0.02, cutoff: 777, anteprima: 'tenuta', categoria: 'bass' }, B: null, lato: 'A', nome: 'bass test' })`);
   const destinazioni = await js(`JSON.stringify([...document.querySelectorAll('.synth-barra select')].at(-1).options.length ? [...[...document.querySelectorAll('.synth-barra select')].at(-1).options].map((o) => [o.value, o.disabled]) : [])`);
   controlla('senza il brano attivo, «attivo» è spento', /\["attivo",true\]/.test(destinazioni), destinazioni);
@@ -4787,10 +4797,10 @@ async function provaSynth({ finestre, scrivi }) {
   await aspetta(0.6);
   const bottoni = await js(`JSON.stringify([...document.querySelectorAll('#carte .card.sezione')].map((c) => [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)))`);
   controlla('«synth» c\'è su ogni card con del codice, anche su quella scritta a mano', bottoni === '[false,true,true,true]', bottoni);
-  controlla('le clip sono raggruppate per tipo con i loro titoli (BASS, altre)', (await js(`[...document.querySelectorAll('#carte .gruppo-clip')].map((e) => e.textContent).join('|')`)) === 'BASS|altre');
-  controlla('lo scorrimento del controller segue i gruppi (le bass prima, poi le senza tipo)', (await js(`cutxProva.cue.sezioniNav().join('|')`)) === 'bass test|bass test 2|drum', String(await js(`cutxProva.cue.sezioniNav().join('|')`)));
+  controlla('le clip sono raggruppate per tipo con i loro titoli (CH1 THUMP, CH3 GROWL)', (await js(`[...document.querySelectorAll('#carte .gruppo-clip')].map((e) => e.textContent).join('|')`)) === 'CH1 THUMP|CH3 GROWL', await js(`[...document.querySelectorAll('#carte .gruppo-clip')].map((e) => e.textContent).join('|')`));
+  controlla('lo scorrimento del controller segue i gruppi (come i canali: la batteria (CH1), poi le bass (CH3))', (await js(`cutxProva.cue.sezioniNav().join('|')`)) === 'drum|bass test|bass test 2', String(await js(`cutxProva.cue.sezioniNav().join('|')`)));
   await js(`cutxProva.synth.cambia('cutoff', 3000)`);
-  await js(`[...document.querySelectorAll('#carte .card.sezione')].find((c) => c.textContent.includes('bass test') && [...c.querySelectorAll('.card-testa button')].some((b) => b.textContent.trim() === 'synth' && !b.hidden)).querySelector('.card-testa button:not([hidden])') && [...document.querySelectorAll('#carte .card-testa button')].filter((b) => b.textContent.trim() === 'synth' && !b.hidden)[0].click()`);
+  await js(`[...document.querySelectorAll('#carte .card.sezione')].find((c) => /^\\d+ bass test$/.test(c.querySelector('.nome-sezione')?.textContent ?? '')).querySelector('.card-testa button:not([hidden])') && [...[...document.querySelectorAll('#carte .card.sezione')].find((c) => /^\\d+ bass test$/.test(c.querySelector('.nome-sezione')?.textContent ?? '')).querySelectorAll('.card-testa button')].find((b) => b.textContent.trim() === 'synth' && !b.hidden).click()`);
   await aspetta(0.6);
   controlla('«synth» sulla card riapre la clip nel synth, esatta (filtro 777, note della clip)', (await js(`cutxProva.vista`)) === 'synth' && (await stato('cutoff')) === 777 && (await stato('anteprima')) === 'clip' && (await stato('note')) === 'c3' && (await js(`cutxProva.synth.nome`)) === 'bass test', `${await js(`cutxProva.vista`)} ${await stato('cutoff')} ${await stato('note')}`);
   await premi('1', 'meta');
@@ -4818,7 +4828,7 @@ async function provaSynth({ finestre, scrivi }) {
   controlla('LIVE e CUE tornano attivi', (await js(`[...document.querySelectorAll('.postazione > :not(#vista-synth)')].every((e) => !e.inert)`)) === true);
   // il volume prudente è solo della cuffia: una clip dal synth, mandata al CUE e poi live, suona a volume giusto
   await premi('2', 'meta');
-  await js(`cutxProva.synth.carica({ A: cutxProva.synthIniziale(), B: null, lato: 'A', nome: 'volume test' })`);
+  await js(`cutxProva.synth.carica({ A: { ...cutxProva.synthIniziale(), categoria: 'bass' }, B: null, lato: 'A', nome: 'volume test' })`);
   controlla('il gain parte normale: non è nel codice e vale .8', !(await codiceSynth()).includes('gain') && (await stato('gain')) === 0.8);
   await js(`cutxProva.synth.aggiornaDestinazioni(); document.querySelector('.synth-barra select:last-of-type').value = 'attivo'; document.querySelector('.synth-cue').click()`);
   await premi('1', 'meta');
@@ -4887,8 +4897,8 @@ async function provaLinguette({ finestre, scrivi }) {
   await js(`cutxProva.fermaTutto(); cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }; cutxProva.controllerMidi.cambiato()`);
   // nel giro lungo le prove prima lasciano brani nelle linguette: si parte da vuote
   await js(`cutxProva.cue.slot = { attivo: null, prossimo: null }; cutxProva.cue.cambiaLinguetta('prossimo'); cutxProva.cue.mostraLinguette()`);
-  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
-  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*4").gain(.0001)\n// @clip basso\nnote("a1 a1 c2 e2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
+  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*2").gain(.0001)\n// @clip basso · bass\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n';
+  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @beat\n// @scena intro\ns("sine*4").gain(.0001)\n// @clip basso · bass\nnote("a1 a1 c2 e2").s("sine").gain(.0001)\n// @clip pad · pad\nnote("c3").s("sine").gain(.0001)\n';
   const ling = (q) => js(`document.getElementById('ling-${q}').textContent`);
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(notte)})`);
   await aspetta(1);
@@ -4935,13 +4945,13 @@ async function provaProj({ finestre, scrivi }) {
   const js = (codice) => chiedi(finestre.controllo, codice);
   const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'cutx-proj-'));
-  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @clip pad\nnote("c3").s("sine").gain(.0001)\n';
-  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\nnote("a1 c2").s("sine").gain(.0001)\n// @clip pad\nnote("e3").s("triangle").gain(.0001)\n';
+  const notte = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso · bass\nnote("c2 c2 eb2 g2").s("sine").gain(.0001)\n// @clip pad · pad\nnote("c3").s("sine").gain(.0001)\n';
+  const alba = '// @brano alba\n// @bpm 120\nsetcpm(120/4)\n// @clip basso · bass\nnote("a1 c2").s("sine").gain(.0001)\n// @clip pad · pad\nnote("e3").s("triangle").gain(.0001)\n';
   const prima = {
     'libreria/notte.cutx': notte,
     'libreria/alba.cutx': alba,
     'set.cutx': '// @set prova\n\nnotte.cutx · apre\nalba.cutx\n',
-    'kit.cutx': '// @clip colpo\ns("sine*4").gain(.0001)\n',
+    'kit.cutx': '// @clip colpo · perc\ns("sine*4").gain(.0001)\n',
     'colpi.cutx': '// i colpi di prova\n',
   };
   await mkdir(path.join(tmp, 'libreria'), { recursive: true });
@@ -5021,7 +5031,7 @@ async function provaProj({ finestre, scrivi }) {
     await js(`[...document.querySelectorAll('.proj-clip')].find((r) => r.querySelector('.nome').textContent === 'pad').querySelector('button').click()`);
     await aspetta(0.8);
     const kit2 = await leggi(path.join(p2, 'kit.cutx'));
-    controlla('→ kit: la clip pad entra nel kit di PROJ 02, con «viene da PROJ 01 · alba»', kit2?.includes('// @clip pad\n// viene da PROJ 01 · alba\nnote("e3")') && kit2.startsWith(prima['kit.cutx'].trim()), kit2);
+    controlla('→ kit: la clip pad entra nel kit di PROJ 02, con «viene da PROJ 01 · alba»', /\/\/ @clip pad( · \w+)?\n\/\/ viene da PROJ 01 · alba\nnote\("e3"\)/.test(kit2 ?? '') && kit2.startsWith(prima['kit.cutx'].trim()), kit2);
     // → brano: nel brano aperto nel CUE
     await js(`cutxProva.cue.apri('notte.cutx')`);
     await aspetta(0.8);
@@ -5559,7 +5569,7 @@ async function provaDrum({ finestre, scrivi }) {
   controlla('un altro clic ferma la cuffia e la testina sparisce', (await js(`cutxProva.synth.opz.suonaOra()`)) === false && (await js(`document.querySelectorAll('.drum-passo.ora').length`)) === 0);
 
   // --- → CUE: la clip finisce nel brano con «· drum» e la riga // @drum ---
-  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso\ns("sine*2").gain(.0001)\n';
+  const brano = '// @brano notte\n// @bpm 120\nsetcpm(120/4)\n// @clip basso · bass\ns("sine*2").gain(.0001)\n';
   await js(`cutxProva.cue.apriModello('notte.cutx', ${JSON.stringify(brano)}, 'attivo')`);
   await aspetta(0.5);
   await js(`document.querySelector('.drum-nome').value = 'colpi'; document.querySelector('.drum-nome').dispatchEvent(new Event('input'))`);
@@ -7439,7 +7449,7 @@ async function provaCueVista({ finestre, scrivi }) {
     }
     const su = await stato();
     controlla('risalendo fino al beat: è tutta in vista', su.tutta, JSON.stringify(su));
-    controlla('risalendo fino al beat: la lista torna in cima', su.scroll === 0, JSON.stringify(su));
+    controlla('risalendo fino al beat: la lista torna in alto (sopra il beat restano solo l\'intestazione del canale e l\'apertura)', su.scroll <= 300, JSON.stringify(su));
   } catch (e) {
     controlla('prova della navigazione', false, String(e.message ?? e));
   } finally {

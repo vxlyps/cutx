@@ -2288,7 +2288,11 @@ globalThis.cutxProva = {
   nano: () => nano, // la serata finta manda i suoi messaggi come se fossero del nano vero (riceve([...]))
   statoCanali: () => statoCanali,
   righeManiCH: () => Object.fromEntries([...righeManiCH].map(([ch, m]) => [ch, Object.fromEntries(m)])),
-  nanoVistoForza: () => (nanoVisto = true),
+  // v = true: MANI come se il nano fosse stato visto; v = false: la beta 4 anche se un nano vero è collegato alla macchina di prova
+  nanoVistoForza: (v = true) => {
+    nanoBloccato = !v;
+    nanoVisto = v;
+  },
   istantaneaCh: () => (aggiornaIstantanea(), istantaneaLive?.livelli.map((l) => [l.nome, l.ch]) ?? null), // per la prova: lo snapshot del live porta il CH di ogni livello
   canaliMixer: () => statoCanali.datiMixer(),
   apriNelSynth,
@@ -2554,6 +2558,7 @@ cue.suNext = (carta) => {
   if (statoCanali.alternaId(id)) aggiornaCanali();
 };
 let trackAvvisatoA = null; // TRACK: quando ho avvisato che il PROSSIMO ha modifiche
+let nanoBloccato = false; // solo nelle prove: ignora un nano vero collegato
 let nanoVisto = false; // il nano è stato collegato in questa sessione: resta così fino alla chiusura (un cavo che balla non cambia le pagine dell'X-Touch)
 const nano = new Nano({
   fader: (ch, v) => eseguiCanali(statoCanali.fader(ch, v)), // agganciato solo quando passa dal valore vero
@@ -2591,7 +2596,7 @@ const nano = new Nano({
   rec: () => (vista === 'synth' ? synth.avviaRec() : cue.avviso(it.nano.recSoloSynth)),
   collegato: (si) => {
     $('nano-stato').hidden = !si;
-    if (si) nanoVisto = true;
+    if (si && !nanoBloccato) nanoVisto = true;
     eseguiCanali(statoCanali.lasciaTutteS()); // un S che era giù non farà più il rilascio
     statoCanali.sganciaTutti(); // un nano appena collegato ha i fader dove li ha lasciati: si riagganciano
     aggiornaCanali();
