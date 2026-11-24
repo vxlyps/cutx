@@ -1,5 +1,6 @@
 // Il passaggio da un brano al prossimo (passa al prossimo brano): cosa fa il tempo e quali clip rimaste ne risentirebbero.
 // Modulo puro: lo provano i test.
+import { perIlLive } from './transizioni.js';
 
 export const SOGLIA_RAMPA = 0.08; // fino a questa differenza (8%) il tempo sale o scende con una rampa; oltre, salta quando entra il beat nuovo
 export const CICLI_RAMPA = 8; // quanti cicli dura la rampa (a ogni ciclo un gradino, mai più di un 1% alla volta)
@@ -38,4 +39,20 @@ export function testoPassaggio({ nome, bpmAttuale, bpmNuovo, occupato, ritmiche 
   if (d.tipo === 'rampa') return `passando a «${nome}» il tempo ${d.rapporto > 0 ? 'sale' : 'scende'} con una rampa (${da}, ${per})`;
   const avviso = ritmiche.length ? ` · le clip ritmiche rimaste cambierebbero velocità: ${ritmiche.join(', ')}` : '';
   return `passando a «${nome}» il tempo salta (${da}, ${per})${avviso}`;
+}
+
+// Cosa mandare al motore quando il BEAT di un altro brano entra su un live che suona (passaggio fatto dai CANALI: THUMP con R o con PLAY).
+// Il tempo lo decide decidiTempo come in passaBrano (rampa o salto); il beat vecchio esce col filtro della transizione, e `tieni` (tutti gli altri
+// livelli) non esce da solo. `transizione` è già scelta ({ tipo, cicli }). Ritorna { tempo, rampa | null, togliTempo, dissolvenza, transizione }:
+// con la rampa il brano nuovo non entra col suo setcpm (ci arriva la rampa), con il salto sì.
+export function parametriPassaggio({ attuale, nuovo, transizione, tieni = [], rampaCicli = null }) {
+  const tempo = decidiTempo(attuale, nuovo, true);
+  const rampa = tempo.tipo === 'rampa' ? { bpm: nuovo, cicli: rampaCicli ?? (transizione.tipo === 'sweep' ? transizione.cicli : CICLI_RAMPA) } : null;
+  return {
+    tempo,
+    rampa,
+    togliTempo: rampa !== null,
+    dissolvenza: { cicli: transizione.cicli, tipo: 'filtro', filtroUscita: 'hp' },
+    transizione: perIlLive(transizione, tieni),
+  };
 }

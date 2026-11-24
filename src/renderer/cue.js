@@ -3,6 +3,8 @@
 // - brano: un file .cutx della libreria, con la mappa in alto e una card per sezione.
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
+import { conTipo, suggerisciTipo, tipiSuggeriti, tipoDi } from './categorie.js';
+import { idClip, idScena } from './canali.js';
 import it from './testi/it.json';
 import { mostraApri } from './apri-clip.js';
 import { creaEditor } from './editor.js';
@@ -61,6 +63,8 @@ export class Cue {
     this.modo = 'libero';
     this.stati = { live: [], cuffia: null }; // cosa suona: [{ nome, provenienza }]
     this.fileLibero = null; // il brano in cui è stato salvato il testo libero
+    this.cursoriCh = new Set(); // gli slider delle card che comandano un CH (cursoreCh)
+    this.vistaCanali = null;
     this.volumeScratch = 1; // il volume d'ingresso dello scratch (non si salva: lo scratch è testo libero)
     const vs = cursoreVolume(() => this.volumeScratch, (v) => (this.volumeScratch = v), 'ingresso-volume');
     $('manda-cuffia').before(vs.el);
@@ -287,6 +291,16 @@ export class Cue {
     };
   }
 
+  // Il pezzo di un'alternativa dei CANALI (scena del beat o clip del brano nel CUE), intero, senza passare dalla card scelta.
+  pezzoAlt(alt) {
+    const m = this.brano?.modello;
+    if (!m || !alt) return { errore: 'nessun brano nel CUE' };
+    if (alt.tipo === 'scena') return m.beat?.scene[alt.indice] ? { ...this.pezzoScena(m, alt.indice, 'brano'), bpmBrano: B.bpmDelBrano(m) } : { errore: `la scena «${alt.nome}» non c'è più` };
+    const sez = m.sezioni[alt.indice];
+    if (!sez) return { errore: `la clip «${alt.nome}» non c'è più` };
+    return { nome: sez.nome, provenienza: `${this.nomeBrano} §${alt.indice + 1}`, tipo: tipoDi(sez.info), volume: sez.info?.volume, drum: !!sez.info?.drum, ...B.codice(m, alt.indice, null), bpmBrano: B.bpmDelBrano(m) };
+  }
+
   // L'apertura: SOLO quello che ho scritto io (mai il fantasma), tutto o le righe scelte, come livello «apertura».
   pezzoApertura(carta) {
     const m = this.brano.modello;
@@ -321,6 +335,8 @@ export class Cue {
     return {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
+      clipDelBrano: carta.i, // chi lancia (preparaLive) sa che è una clip del brano: senza tipo non entra live
+      tipo: tipoDi(m.sezioni[carta.i].info), // il tipo decide in che CH del LIVE entra
       volume: m.sezioni[carta.i].info?.volume,
       drum: !!m.sezioni[carta.i].info?.drum, // · drum nella riga della clip: sotto la sua card c'è l'onda
       ...B.codice(m, carta.i, righe),
@@ -703,10 +719,21 @@ export class Cue {
     contenitore.append(this.cartaBeat());
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
     // le clip sono raggruppate per tipo (bass, lead, arp…) con un piccolo titolo; quelle senza tipo in fondo. Se nessuna ha un tipo, niente titoli.
-    for (const g of B.gruppiClip(m.sezioni)) {
-      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.categoria ? it.synth.categorie[g.categoria] : it.synth.msg.altre));
+    for (const g of B.gruppiClip(m.sezioni, this.ordineCh)) {
+      if (g.daAssegnare) {
+        const testa = el('div', 'lbl gruppo-clip gruppo-da-assegnare', it.canali.daAssegnare);
+        if (tipiSuggeriti(m.sezioni).length) {
+          const usa = tasto(it.canali.usaSuggeriti, '', it.canali.usaSuggeritiTitolo);
+          usa.classList.add('piccolo');
+          usa.onclick = () => this.usaSuggeriti();
+          testa.append(usa);
+        }
+        contenitore.append(testa);
+      }
+      else if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.ch !== undefined ? `CH${g.ch + 1} ${g.categoria}` : g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
       for (const i of g.indici) contenitore.append(this.carta(i));
     }
+    this.segnaNext(this.nextIds, this.liveIds); // le carte sono nuove: rimetto LIVE e NEXT
     this.cartaAttiva = aperturaAttiva ? this.carte.find((c) => c.apertura) ?? null : scenaAttivo !== undefined ? this.carte.find((c) => c.scena === scenaAttivo) ?? null : this.carte.find((c) => c.i === indiceAttivo && c.scena === undefined) ?? null;
     $('riga-live').onclick = () => {
       this.mostraLive = !this.mostraLive;
@@ -773,47 +800,9 @@ export class Cue {
         this.attiva(carta);
         this.azioni.goLive();
       };
-      // il volume con cui la sezione entra: lo stesso controllo delle card del LIVE, scritto nell'intestazione @sezione
-      const volume = el('div', 'volume');
-      volume.dataset.aiuto = 'sezione-volume';
-      const pieno = el('div');
-      volume.append(pieno);
-      const mostraVolume = () => (pieno.style.width = `${Math.min(1, this.brano.modello.sezioni[i]?.info?.volume ?? 1) * 100}%`);
-      const imposta = (e) => {
-        const r = volume.getBoundingClientRect();
-        const v = Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 100) / 100;
-        const m2 = this.brano.modello;
-        const { volume: _vecchio, ...resto } = m2.sezioni[i].info ?? {};
-        this.modifica(B.conInfo(m2, i, v === 1 ? resto : { ...resto, volume: v }), false);
-        mostraVolume();
-      };
-      let prima = null; // il modello com'era all'inizio del trascinamento: un trascinamento è un passo solo di ⌘Z
-      volume.onpointerdown = (e) => {
-        volume.setPointerCapture(e.pointerId);
-        prima = { modello: this.brano.modello, sporco: this.brano.sporco, versione: this.versione };
-        imposta(e);
-        volume.onpointermove = imposta;
-      };
-      volume.onpointerup = () => {
-        volume.onpointermove = null;
-        if (!prima || prima.modello === this.brano.modello) return;
-        const { modello, sporco } = prima;
-        const dopo = this.brano.modello;
-        const v = this.versione;
-        prima = null;
-        this.registra?.({
-          etichetta: `volume della clip «${dopo.sezioni[i]?.nome ?? i + 1}»`,
-          annulla: () => {
-            if (this.versione !== v) return false;
-            this.brano.modello = modello;
-            this.brano.sporco = sporco;
-            this.versione++;
-            this.mostraBrano(true);
-            this.mostraModo();
-          },
-        });
-      };
-      mostraVolume();
+      // il volume della card È il volume del CH (fader del nano, slider della griglia e questo: la stessa cosa) e non scrive niente nel file.
+      // Il volume proprio della clip resta nella sua riga (`· volume 0.8`), scritto a mano. Senza tipo (DA ASSEGNARE) non c'è: non è di nessun CH.
+      const volume = tipoDi(m.sezioni[i].info) ? this.cursoreCh(this.chDiTipo(tipoDi(m.sezioni[i].info)), 'sezione-volume') : null;
       // solo le clip fatte dal synth (// @synth) o dalla scheda DRUM (// @drum) si riaprono lì
       const apriSynth = tasto(it.synth.msg.apri, '', it.synth.msg.apriTitolo);
       mostraApri(apriSynth, righe.join('\n'));
@@ -822,10 +811,165 @@ export class Cue {
       const togliClip = tasto('×', '', 'Togli la clip dal brano');
       togliClip.dataset.aiuto = 'clip-togli';
       togliClip.onclick = () => this.togliClip(i);
-      testa.append(unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
+      const chBtn = this.tastoCh(i);
+      carta.tastoCh = chBtn;
+      carta.tastoNext = this.tastoNext(carta);
+      testa.append(chBtn, carta.tastoNext, unisci, dividi, apriSynth, ...(volume ? [volume.el] : []), cuffia, live, togliClip);
     }
     this.carte.push(carta);
     return art;
+  }
+
+  // NEXT: l'unico gesto che porta una card (o la scena scelta del beat) in NEXT del suo canale; acceso se lo è già, ricliccato toglie la scelta.
+  // Guardare, scrivere o navigare nel CUE non arma niente.
+  tastoNext(carta) {
+    const b = tasto(it.cue.next, '', it.cue.nextTitolo);
+    b.classList.add('tasto-next');
+    b.onclick = (e) => {
+      e.stopPropagation();
+      this.suNext?.(carta);
+    };
+    return b;
+  }
+
+  // «CH3 GROWL ▾»: a quale canale del LIVE appartiene la clip; il clic apre l'elenco dei canali e scrive il tipo nella riga `// @clip`.
+  tastoCh(i) {
+    const ordine = this.ordineCh;
+    const sez = this.brano.modello.sezioni[i];
+    const tipo = tipoDi(sez.info);
+    const di = ordine && tipo ? ordine.findIndex((g) => g.tipi.includes(tipo)) : -1;
+    const k = ordine ? (di >= 0 ? di : ordine.findIndex((g) => g.free)) : -1;
+    const b = tasto(ordine ? (tipo ? `CH${k + 1} ${ordine[k].nome}` : it.canali.daAssegnareBreve) : 'tipo', '▾', 'In quale canale del LIVE entra questa clip');
+    b.classList.add('tasto-ch');
+    b.onclick = (e) => {
+      e.stopPropagation();
+      this.menuCh(b, i);
+    };
+    return b;
+  }
+
+  // dopo = chi lo apre da un gesto di lancio (go live): scelto il canale, scrive il tipo e poi fa partire la clip. Senza dopo (il tasto «CHn ▾»): scrive il tipo e basta.
+  menuCh(ancora, i, dopo = null) {
+    document.querySelector('.menu-ch')?.remove();
+    const ordine = this.ordineCh;
+    const sez = this.brano.modello.sezioni[i];
+    if (!ordine) return;
+    if (this.statoSezione(this.nomeBrano, sez.nome) === 'live') return this.avviso(`«${sez.nome}» suona live: toglila dal live prima di cambiarle canale`);
+    const menu = el('div', 'menu-ch');
+    const chiudi = (e) => {
+      if (e && menu.contains(e.target)) return;
+      menu.remove();
+      document.removeEventListener('pointerdown', chiudi, true);
+    };
+    const scegli = (tipo) => {
+      chiudi();
+      this.modifica(B.conInfo(this.brano.modello, i, conTipo(sez.info, tipo)), true, `canale della clip «${sez.nome}»`);
+      if (dopo && tipo) dopo(); // le card sono state ridisegnate: chi parte rilegge la clip dalla card (la selezione di righe è rimessa da chiediCanale)
+    };
+    const voce = (testo, tipo, extra = '') => {
+      const v = el('button', `key piccolo${extra}`);
+      v.textContent = testo;
+      v.onclick = () => scegli(tipo);
+      menu.append(v);
+    };
+    const sug = suggerisciTipo(sez.nome);
+    if (sug) {
+      const ch = ordine.findIndex((g) => g.tipi.includes(sug));
+      if (ch >= 0) voce(`suggerito: CH${ch + 1} ${ordine[ch].nome} · ${sug}`, sug, ' suggerito');
+    }
+    ordine.forEach((g, ch) => {
+      if (g.free) return voce(`CH${ch + 1} ${g.nome}`, 'stray');
+      for (const t of g.tipi) voce(`CH${ch + 1} ${g.nome}${g.tipi.length > 1 ? ` · ${t}` : ''}`, t);
+    });
+    const r = ancora.getBoundingClientRect();
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, r.right - 220)}px`;
+    document.body.append(menu);
+    setTimeout(() => menu.isConnected && document.addEventListener('pointerdown', chiudi, true), 0);
+  }
+
+  // Il CH di un tipo (dall'ordine dei CH del CUE): il suo gruppo, o la FREE. Il beat sta in quello che prende `drum`.
+  chDiTipo(tipo) {
+    const ordine = this.ordineCh ?? [];
+    const i = ordine.findIndex((g) => g.tipi?.includes(tipo));
+    return i >= 0 ? i : Math.max(0, ordine.findIndex((g) => g.free));
+  }
+
+  chDelBeat() {
+    const i = (this.ordineCh ?? []).findIndex((g) => g.tipi?.includes('drum'));
+    return i >= 0 ? i : 0;
+  }
+
+  // Lo slider del volume di una card con CH: clic o trascina, comanda il CH (azioni.volumeCh) e segue il suo fader (mostraVolumiCh, a ogni giro).
+  // Sotto, la scritta «CHn» di cosa muove. Ritorna { el, mostra }.
+  cursoreCh(ch, aiuto) {
+    const volume = el('div', 'volume');
+    volume.dataset.aiuto = aiuto;
+    const pieno = el('div');
+    volume.append(pieno);
+    const scritta = el('span', 'lbl volume-ch-nome', `CH${ch + 1}`);
+    const cassetta = el('div', 'volume-ch');
+    cassetta.title = `volume del CH${ch + 1} (lo stesso del fader)`;
+    cassetta.append(volume, scritta);
+    const voce = { ch, pieno, tengo: false, el: cassetta };
+    voce.mostra = () => {
+      if (!voce.tengo) pieno.style.width = `${Math.min(1, this.vistaCanali?.[ch]?.fader.vero ?? 1) * 100}%`;
+    };
+    const imposta = (e) => {
+      const r = volume.getBoundingClientRect();
+      const v = Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 100) / 100;
+      pieno.style.width = `${v * 100}%`;
+      this.azioni.volumeCh?.(ch, v);
+    };
+    volume.onpointerdown = (e) => {
+      volume.setPointerCapture(e.pointerId);
+      voce.tengo = true;
+      imposta(e);
+      volume.onpointermove = imposta;
+    };
+    volume.onpointerup = () => {
+      volume.onpointermove = null;
+      voce.tengo = false;
+    };
+    volume.onpointercancel = volume.onpointerup;
+    this.cursoriCh.add(voce);
+    voce.mostra();
+    return voce;
+  }
+
+  // Ogni giro: gli slider delle card seguono i fader dei CH (nano, griglia). `vista` = StatoCanali.vista().
+  mostraVolumiCh(vista) {
+    this.vistaCanali = vista;
+    for (const v of this.cursoriCh) {
+      if (!v.pieno.isConnected) this.cursoriCh.delete(v);
+      else v.mostra();
+    }
+  }
+
+  // Un gesto di lancio su una clip senza tipo: si apre il menu del suo canale (e poi parte). Ritorna l'avviso.
+  chiediCanale(i, dopo) {
+    const carta = this.carte.find((c) => c.i === i && c.scena === undefined);
+    // le righe scelte (⇧⌘↵ su un frammento) sopravvivono al ridisegno delle card: la clip entra col frammento che avevo scelto
+    const sel = carta?.editor?.righeScelte?.();
+    const poi = () => {
+      const nuova = this.carte.find((c) => c.i === i && c.scena === undefined);
+      if (sel && !sel.vuota && nuova?.editor?.scegliRighe) {
+        nuova.editor.scegliRighe(sel.da, sel.a);
+        this.attiva(nuova);
+      }
+      return dopo?.();
+    };
+    if (carta?.tastoCh?.isConnected) this.menuCh(carta.tastoCh, i, poi);
+    return this.avviso(it.canali.senzaCanale.replace('{nome}', this.brano?.modello.sezioni[i]?.nome ?? ''));
+  }
+
+  // «USA I SUGGERITI»: il tipo suggerito dal nome a ogni clip senza tipo che ne ha uno, in un solo passo di ⌘Z. Non arma niente.
+  usaSuggeriti() {
+    const da = tipiSuggeriti(this.brano.modello.sezioni);
+    if (!da.length) return this.avviso(it.canali.nessunSuggerito);
+    let m = this.brano.modello;
+    for (const { i, tipo } of da) m = B.conInfo(m, i, conTipo(m.sezioni[i].info, tipo));
+    this.modifica(m, true, it.canali.usaSuggeritiEtichetta.replace('{n}', String(da.length)));
   }
 
   // La card dell'APERTURA: un editor dove scrivo io, con il codice dell'apertura come testo fantasma (grigio) da seguire; Tab completa la
@@ -917,17 +1061,16 @@ export class Cue {
     const toglie = tasto('×', '', 'Togli la scena scelta');
     const espandi = tasto(this.beatEspanso ? 'riduci' : 'espandi', '', 'Il codice della scena: compatto o per intero');
     testa.append(titolo, stato, el('div', 'spazio'));
-    // il volume con cui il beat entra partendo dalla scena scelta: scritto nell'intestazione @scena, come per le clip
-    const volume = cursoreVolume(
-      () => this.brano.modello.beat?.scene[this.scenaScelta()]?.info?.volume,
-      (v) => {
-        const k = this.scenaScelta();
-        const { volume: _vecchio, ...resto } = this.brano.modello.beat.scene[k].info ?? {};
-        this.modifica(B.conInfoScena(this.brano.modello, k, v === 1 ? resto : { ...resto, volume: v }), false);
-      },
-      'scena-volume',
-    );
-    if (scene.length) testa.append(espandi, toglie, volume.el, cuffia, live);
+    // il volume della card del BEAT è quello di THUMP (il CH del beat): non scrive niente nel file
+    const volume = this.cursoreCh(this.chDelBeat(), 'scena-volume');
+    const nextScena = scene.length ? this.tastoNext(null) : null;
+    if (nextScena) nextScena.onclick = (e) => {
+      e.stopPropagation();
+      const c = this.carte.find((x) => x.scena === this.scenaScelta());
+      if (c) this.suNext?.(c);
+    };
+    this.beatNext = nextScena;
+    if (scene.length) testa.append(espandi, toglie, volume.el, nextScena, cuffia, live);
     const pillole = el('div', 'pillole');
     const aggiungi = el('button', 'pillola nuova', '+ scena');
     aggiungi.title = 'Aggiungi una scena al beat (la base ritmica del brano)';
@@ -945,6 +1088,7 @@ export class Cue {
       const pillola = el('button', 'pillola', sc.nome);
       pillola.dataset.aiuto = 'scena';
       const carta = this.cartaScena(k, corpo, pillola);
+      carta.pillola = pillola;
       pillola.onclick = () => {
         this.scegliScena(k);
         carta.editor.focus();
@@ -1018,6 +1162,47 @@ export class Cue {
     for (const c of this.carte) c.el.classList.toggle('attiva', c === carta);
   }
 
+  // L'id della card per i CANALI (clip = brano#nome, scena = brano◆k), o null (apertura, preambolo, scratch).
+  idDiCarta(carta) {
+    if (this.modo !== 'brano' || !this.brano || !carta) return null;
+    if (carta.scena !== undefined) return idScena(this.nomeBrano, carta.scena);
+    if (carta.i >= 0) return idClip(this.nomeBrano, this.brano.modello.sezioni[carta.i]?.nome ?? '');
+    return null;
+  }
+
+  // Scritte sulle card: LIVE (suona in un canale) e NEXT (scelta, pronta a entrare). Ridisegnate a ogni giro e dopo ogni mostraBrano.
+  segnaNext(nextIds = new Set(), liveIds = new Set()) {
+    this.nextIds = nextIds;
+    this.liveIds = liveIds;
+    for (const c of this.carte) {
+      const id = this.idDiCarta(c);
+      for (const el of [c.el, c.pillola]) {
+        el?.classList.toggle('in-next', !!id && nextIds.has(id));
+        el?.classList.toggle('in-live', !!id && liveIds.has(id));
+      }
+      c.tastoNext?.classList.toggle('on', !!id && nextIds.has(id));
+    }
+    this.beatNext?.classList.toggle('on', nextIds.has(idScena(this.nomeBrano, this.scenaScelta())));
+  }
+
+  // La manopola o la griglia scelgono una clip: il CUE la porta in vista e la segna attiva, MA se sto scrivendo (un editor ha il fuoco)
+  // non mi rubano il cursore: si muove solo la scritta NEXT.
+  portaIn(id) {
+    if (this.modo !== 'brano' || !this.brano || document.activeElement?.closest?.('.cm-editor')) return;
+    const carta = this.carte.find((c) => this.idDiCarta(c) === id);
+    if (!carta || carta === this.cartaAttiva) return;
+    this.silenzioso = true;
+    try {
+      if (carta.scena !== undefined) this.scegliScena(carta.scena);
+      else {
+        this.attiva(carta);
+        carta.el.scrollIntoView?.({ block: 'nearest' });
+      }
+    } finally {
+      this.silenzioso = false;
+    }
+  }
+
   // --- muoversi nel CUE senza mouse (controller): le sezioni di quello che ho davanti, e quella scelta ---
 
   // I nomi delle sezioni (in modalità brano quelle del brano aperto, in scratch quelle scritte con // @sezione).
@@ -1025,7 +1210,7 @@ export class Cue {
   vociNav() {
     if (this.modo === 'brano') {
       const m = this.brano?.modello;
-      return m ? [...(m.beat?.scene ?? []).map((x, k) => ({ nome: x.nome, scena: k })), ...B.ordineClip(m.sezioni).map((i) => ({ nome: m.sezioni[i].nome, sezione: i }))] : [];
+      return m ? [...(m.beat?.scene ?? []).map((x, k) => ({ nome: x.nome, scena: k })), ...B.ordineClip(m.sezioni, this.ordineCh).map((i) => ({ nome: m.sezioni[i].nome, sezione: i }))] : [];
     }
     return B.blocchi(this.libero.codice).blocchi.filter((b) => b.sezione >= 0 || b.sezione === -2).map((b) => (b.sezione === -2 ? { nome: b.nome, scena: b.scena } : { nome: b.nome, sezione: b.sezione }));
   }

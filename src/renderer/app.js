@@ -23,7 +23,7 @@ import { misuraLimiter, misuraMicroEntrata } from './limiter.js';
 import { Browser, esempiHelp } from './browser.js';
 import { Aiuto } from './aiuto.js';
 import { Impostazioni } from './impostazioni.js';
-import { leggiVoce, separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
+import { leggiVoce, limitaRigaMani, separa as separaCoda, soloCoda, unisci as unisciCoda } from './coda.js';
 import { Importa } from './importa.js';
 import { Controller } from './controller.js';
 import { PaginaController } from './impostazioni-controller.js';
@@ -37,6 +37,12 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
+import { guadagnoProva, provaDaEffettoCh } from './mixer.js';
+import { ereditaRighe } from './controller-mani.js';
+import { StatoCanali, guardiaTrack, senzaCanale, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
+import { Griglia } from './griglia.js';
+import { Nano } from './nano.js';
+import { PaginaCanali } from './impostazioni-canali.js';
 import { eNomeBeat } from './nomi.js';
 import { analizza, valuta } from './analisi.js';
 import { attivi, patternDi } from './evidenzia.js';
@@ -180,6 +186,7 @@ const cue = new Cue(CODICE_INIZIALE, {
   provaInCuffia: () => provaInCuffia(),
   fermaCuffia: () => fermaCuffia(),
   goLive: () => goLive(),
+  volumeCh: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)), // lo slider della card = il volume del CH
   fermaTutto: () => fermaTutto(),
   suoniStash: () => suoni,
   haStash: () => haStash,
@@ -223,9 +230,23 @@ try {
 // --- i gesti ---
 
 // Gli errori si vedono solo qui, nel CUE: mai sull'uscita.
-async function manda(motore, codice, etichetta = {}) {
+// `prova` = { ch, volumeClip } quando è il preascolto di una clip di un CH: la cuffia lo sente a volume clip × volume del CH (dopo il fader, M escluso).
+// Tutto il resto (il SYNTH, un codice qualsiasi) suona a guadagno 1.
+let provaCorrente = null;
+// Ferma il motore cuffia e rimette il guadagno della prova a 1: quello che suonerà dopo (il SYNTH, un altro pezzo) non deve ereditare il fader di un CH.
+function fermaMotoreCuffia() {
+  provaCorrente = null;
+  cuffia.manda({ tipo: 'guadagno-prova', volume: 1 });
+  cuffia.manda({ tipo: 'ferma' });
+}
+const volumeDelCH = (ch) => gainFader(statoCanali.canali[ch]?.vero ?? 1);
+async function manda(motore, codice, etichetta = {}, prova = null) {
   if (motore === cuffia && cuffiaInPausa) pausaCuffia(false); // chi manda qualcosa in cuffia vuole sentirlo
-  if (motore === cuffia) pezzoCuffia = { codice, etichetta, da: performance.now() };
+  if (motore === cuffia) {
+    provaCorrente = prova;
+    cuffia.manda({ tipo: 'guadagno-prova', volume: prova ? guadagnoProva(prova.volumeClip, volumeDelCH(prova.ch)) : 1 });
+  }
+  if (motore === cuffia) pezzoCuffia = { codice, etichetta, prova, da: performance.now() };
   const errore = await motore.valuta(codice, etichetta);
   mostraErrore(errore, motore.ruolo);
   return errore;
@@ -240,14 +261,17 @@ function mostraErrore(errore, chi) {
 
 // Ferma quello che hai in cuffia (non il live).
 function fermaCuffia() {
+  statoCanali.cuffiaCh = null; // qualsiasi altro stop della cuffia spegne anche la luce S
+  provaCorrente = null;
   if (inTest) return;
   pezzoCuffia = null;
   dovaCuffia = null;
-  cuffia.manda({ tipo: 'ferma' });
+  fermaMotoreCuffia();
 }
 
 // Il tasto «cuffia» di una card: se si sta già sentendo quella, spegne; altrimenti la manda in cuffia.
 function provaInCuffia(pezzo = null) {
+  statoCanali.cuffiaCh = null; // mandare altro in cuffia (card, ⌘↵, kit) toglie il CUE di un CH
   if (inTest) return;
   pezzo ??= serata.pezzoScelto(); // la clip del kit scelta col controller
   const p = pezzo && typeof pezzo === 'object' && 'codice' in pezzo ? pezzo : cue.pezzo(); // un pezzo dato (le clip del kit) o quello del CUE
@@ -258,7 +282,7 @@ function provaPezzo(p) {
   if (p.errore) return cue.avviso(p.errore);
   precarica(p.codice); // quello che provo in cuffia sto per mandarlo: il live carica già i suoi campioni
   dovaCuffia = p.dove ? { ...p.dove, inizio: p.inizio } : null;
-  return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza });
+  return manda(cuffia, p.codice, { nome: p.nome, provenienza: p.provenienza }, { ch: chDelPezzo(p), volumeClip: p.volume }); // la cuffia sente il volume della clip × quello del CH
 }
 
 // Le note che suonano in cuffia, in bianco nel CUE: solo finché quelle righe non sono cambiate.
@@ -308,28 +332,68 @@ function nomeLiberoNuovo() {
   }
 }
 
+// In che CH entra un pezzo: quello deciso da chi lo manda (la griglia), il beat in THUMP, altrimenti quello del suo tipo (senza tipo: FREE).
+const chDelPezzo = (p) => p.ch ?? (p.beat ? chDellaBeat(canaliConfig) : chDelTipo(canaliConfig, p.tipo ?? ''));
+
+// X-TOUCH MANI: le righe che le manopole hanno messo a un CH sono del CH. Una clip che entra nel CH le eredita (stessa chiave: vince la manopola).
+const righeManiCH = new Map(); // ch → Map chiave → riga
+// Un CH perde le righe delle manopole: anche le manopole e gli anelli dell'X-Touch tornano al neutro (ch = null: tutti).
+function scordaRigheCH(ch) {
+  if (ch === null) righeManiCH.clear();
+  else righeManiCH.delete(ch);
+  try {
+    controllerMidi.dimenticaMani(ch);
+  } catch {} // il controller può non esserci ancora
+}
+function ereditaCoda(ch, coda, eBeat, codice = '') {
+  // vivo = suona, o sta per uscire ma non è ancora uscito (OUT e poi GO ravvicinati: la clip nuova eredita lo stesso)
+  const vivo = livelliLive.some((l) => chDelLivello(l) === ch && (l.a === null || l.a > cicloAdesso()));
+  if (!vivo) scordaRigheCH(ch); // un CH rimasto vuoto: le righe di una volta non tornano alla prossima clip
+  if (eBeat && vivo) return coda.length ? coda : undefined; // la scena cambia sul beat che suona: la sua coda resta com'è
+  const righe = righeManiCH.get(ch);
+  if (!righe?.size) return eBeat && !coda.length ? undefined : coda;
+  return ereditaRighe(coda, new Map([...righe].map(([k, r]) => [k, limitaRigaMani(r, codice)]))); // col filtro di QUESTA clip
+}
+function maniRiga(ch, chiave, riga) {
+  if (!righeManiCH.has(ch)) righeManiCH.set(ch, new Map());
+  if (riga === null) righeManiCH.get(ch).delete(chiave);
+  else righeManiCH.get(ch).set(chiave, riga);
+}
+
 // GO LIVE: entra al confine tra 1, 2, 4 o 8 cicli. Se il codice ha un errore, il live non cambia.
+// In due metà, così PLAY può preparare tutti i pezzi e mandarli insieme: preparaLive scrive il messaggio per il motore (o dice perché non parte),
+// finisciLive fa quello che segue una volta entrato.
 async function goLive(pezzo = null) {
   if (inTest) return;
+  const prep = preparaLive(pezzo);
+  if (!prep.msg) return prep.esito;
+  const r = await live.richiesta(prep.msg);
+  return finisciLive(prep, r, { azzeraEntraTra: true });
+}
+
+function preparaLive(pezzo = null) {
   pezzo ??= serata.pezzoScelto(); // la clip del kit scelta col controller
   const daCue = !(pezzo && typeof pezzo === 'object' && 'codice' in pezzo);
   const p = daCue ? cue.pezzo() : pezzo; // un pezzo dato (le clip del kit) o quello del CUE
-  if (p.errore) return cue.avviso(p.errore);
+  if (p.errore) return { esito: cue.avviso(p.errore) };
+  // una clip del brano senza tipo non è di nessun CH: non entra live finché non ne ha uno (si apre il menu, scelto parte). Scratch, jam, kit e apertura vanno in CH8.
+  if (daCue && senzaCanale(p) && cue.ordineCh) return { esito: cue.chiediCanale(p.clipDelBrano, () => goLive()) };
   // una scena o una clip vuota (solo commenti): entrerebbe come silenzio al posto di quello che suona
-  if (SL.codiceVuoto(p.codice.slice(p.inizio ?? 0))) return cue.avviso(it.cue.vuota.replace('{nome}', p.beat ? p.beat.scene[p.beat.indice]?.nome ?? p.nome : p.nome));
+  if (SL.codiceVuoto(p.codice.slice(p.inizio ?? 0))) return { esito: cue.avviso(it.cue.vuota.replace('{nome}', p.beat ? p.beat.scene[p.beat.indice]?.nome ?? p.nome : p.nome)) };
   // una scena del beat del PROSSIMO brano, mentre un altro brano suona: è il passaggio (col tempo che ci arriva)
   // (solo dalle card di un brano: una scena @beat scritta nello scratch entra come scratch)
-  if (daCue && cue.modo === 'brano' && p.beat && cue.linguetta === 'prossimo' && cue.slot.attivo && cue.slot.prossimo) return passaBrano(p.beat.indice);
+  if (daCue && cue.modo === 'brano' && p.beat && cue.linguetta === 'prossimo' && cue.slot.attivo && cue.slot.prossimo) return { esito: passaBrano(p.beat.indice) };
   // solo righe di coda (.lpf(600)…): non è un livello, si aggiunge alla coda di quello scelto con un clic sulla sua card
   const voci = soloCoda(p.codice.slice(p.inizio ?? 0));
-  if (voci) return aggiungiCoda(voci);
+  if (voci) return { esito: aggiungiCoda(voci) };
   let codice = p.codice;
   let inizio = p.inizio ?? 0;
   // Un brano a un altro BPM che entra in un live che sta già suonando NON cambia il tempo del set: si tolgono dal suo preambolo
   // le righe setcpm (un setcpm scritto dentro la sezione, o in un livello, continua a funzionare). Con il live vuoto il brano
   // porta il suo tempo, come sempre.
+  const pass = daCue ? null : passaggioDelBeat(p); // un altro brano che entra col suo beat: passaggio (tempo e transizione come passaBrano)
   const set = bpmSet();
-  const diverso = p.bpmBrano && set !== null && livelliLive.some((l) => l.a === null) && Math.abs(p.bpmBrano - set) > 0.05;
+  const diverso = !pass && p.bpmBrano && set !== null && livelliLive.some((l) => l.a === null) && Math.abs(p.bpmBrano - set) > 0.05;
   const messaggi = [];
   if (diverso) {
     const preambolo = B.senzaTempo(codice.slice(0, p.inizio));
@@ -339,15 +403,54 @@ async function goLive(pezzo = null) {
     if (B.eSezioneAudio(codice.slice(p.inizio))) messaggi.push('questa clip suona un file audio: va al suo tempo originale');
   }
   // la coda scritta in fondo alla sezione (// @coda) va al livello a parte: il codice suona com'è
+  if (pass?.togliTempo) {
+    // la rampa porta il tempo: il brano nuovo non entra col suo setcpm
+    const pre = B.senzaTempo(codice.slice(0, inizio));
+    codice = pre + codice.slice(inizio);
+    inizio = pre.length;
+  }
   const { codice: senzaCoda, coda } = separaCoda(codice);
   // una scena del beat: se il beat suona già, la coda e il volume dei suoi livelli restano com'erano (le manopole contano)
   // armare il drop: se un cambio di scena aspetta la fine della frase, il pezzo entra insieme a lui
   const alle = p.beat ? null : statoBeat().pendente?.da ?? null;
   const nomeLive = p.provenienza === 'scratch' && p.nome === 'scratch' ? nomeLiberoNuovo() : p.nome;
-  const r = await live.richiesta({ tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: p.beat && !coda.length ? undefined : coda, inizio, nome: nomeLive, provenienza: p.provenienza, drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) });
+  const msg = { tipo: 'entra', scritto: p.scritto, beat: p.beat, alle, codice: senzaCoda, coda: ereditaCoda(chDelPezzo(p), coda, !!p.beat, senzaCoda), inizio, nome: nomeLive, provenienza: p.provenienza, ch: chDelPezzo(p), unico: chDelPezzo(p) !== indiceFree(canaliConfig), drum: p.drum, cicli: entraTra, volume: p.volume, dissolvenza: dissolvenza(dissEntra) };
+  if (pass) {
+    Object.assign(msg, { rampa: pass.rampa ?? undefined, dissolvenza: pass.dissolvenza, transizione: pass.transizione });
+    messaggi.push(pass.testo);
+  }
+  return { msg, p, daCue, nomeLive, messaggi, passaggio: pass };
+}
+
+// Il BEAT di un altro brano mentre un beat suona: è un passaggio. null se non lo è (stesso brano, scratch, niente che suona).
+function passaggioDelBeat(p) {
+  const suona = statoBeat().suona;
+  if (!p.beat || p.beat.base === 'scratch' || !suona || suona.beat.base === p.beat.base) return null;
+  const slot = [cue.slot.prossimo, cue.slot.attivo].find((s) => s && nomeDelBrano(s) === p.beat.base);
+  const attuale = bpmSet();
+  const nuovo = p.bpmBrano ?? (slot ? B.bpmDelBrano(slot.modello) : null);
+  const { transizione, scartata } = T.sceglieTransizione(slot ? serata.transizioneDi(slot.file) : null, preferenze.transizione ?? T.PREDEFINITA);
+  const chBeat = chDellaBeat(canaliConfig);
+  const tieni = livelliLive.filter((l) => l.a === null && chDelLivello(l) !== chBeat && l.nome !== 'paracadute').map((l) => l.id); // gli altri CH non escono da soli
+  const par = P.parametriPassaggio({ attuale, nuovo, transizione, tieni, rampaCicli: preferenze.rampaCicli ?? null });
+  const n = (x) => Math.round(x * 10) / 10;
+  const testo = scartata
+    ? `transizione «${scartata}» non valida: uso ${T.scriviTransizione(transizione)}`
+    : par.tempo.tipo === 'rampa' ? `«${p.beat.base}»: il tempo va da ${n(attuale)} a ${n(nuovo)} bpm con una rampa`
+      : par.tempo.tipo === 'salto' ? `il tempo salta da ${n(attuale)} a ${n(nuovo)} bpm quando entra «${p.beat.base}»`
+        : `passo a «${p.beat.base}» · ${T.scriviTransizione(transizione)}`;
+  return { ...par, nome: p.beat.base, transizioneScelta: transizione, tieni, attuale, nuovo, testo };
+}
+
+function finisciLive({ p, daCue, nomeLive, messaggi, passaggio: pass }, r, { azzeraEntraTra = false } = {}) {
+  if (!r.errore && pass) {
+    // come passaBrano: il passaggio è in attesa, e quel brano diventa l'attivo quando il suo beat suona (controllaPassaggio)
+    passaggio = { nome: pass.nome, da: r.da };
+    moviola.scrivi('live', 'transizione', { brano: pass.nome, tipo: pass.transizioneScelta.tipo, cicli: pass.transizioneScelta.cicli, tieni: pass.tieni, da: r.da, tempo: pass.tempo.tipo, bpmDa: pass.attuale, bpmA: pass.nuovo });
+  }
   if (!r.errore && projAperto) projDelLivello.set(nomeLive, projAperto.numero); // per il numero verde nella schermata dei PROJ
   mostraErrore(r.errore, 'live');
-  if (!r.errore) entraTraUsato();
+  if (!r.errore && azzeraEntraTra) entraTraUsato();
   // una clip di un brano che ha un beat, e nessun beat suona né sta arrivando: la base non parte da sola, lo dico (e la card BEAT lampeggia)
   if (!r.errore && daCue && cue.modo === 'brano' && SL.mancaIlBeat({ pezzo: p, sceneDelBrano: cue.brano?.modello.beat?.scene.length ?? 0, livelli: livelliLive, ciclo: cicloAdesso() })) {
     messaggi.push(it.cue.senzaBeat.replace('{nome}', p.nome));
@@ -382,6 +485,7 @@ async function muoviScena(delta) {
   const { codice: senzaCoda, coda } = separaCoda(pre + m.codice.slice(m.inizio));
   const r = await live.richiesta({
     tipo: 'entra',
+    ch: chDellaBeat(canaliConfig),
     beat: { base, indice: k, scene },
     codice: senzaCoda,
     coda: coda.length ? coda : undefined,
@@ -448,7 +552,7 @@ async function passaBrano(k = 0) {
   const { codice: senzaCoda, coda } = separaCoda(codice);
   // col live vuoto (dopo «ferma tutto», o al primo brano) non c'è niente da cui passare: il beat entra subito, pieno, senza transizione
   const sfuma = occupato ? { dissolvenza: { cicli: transizione.cicli, tipo: 'filtro', filtroUscita: 'hp' }, transizione: T.perIlLive(transizione, tieni) } : {};
-  const r = await live.richiesta({ tipo: 'entra', beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, ...sfuma });
+  const r = await live.richiesta({ tipo: 'entra', ch: chDellaBeat(canaliConfig), beat: p.beat, rampa, codice: senzaCoda, coda, inizio, nome: 'beat', provenienza: p.provenienza, cicli: entraTra, volume: p.volume, ...sfuma });
   mostraErrore(r.errore, 'live');
   if (r.errore) return r;
   entraTraUsato();
@@ -510,6 +614,7 @@ function pulisciCoda(id) {
   const l = livelloVivo(id);
   if (inTest || !l?.coda?.length) return;
   const prima = [...l.coda];
+  scordaRigheCH(chDelLivello(l)); // le righe delle manopole di quel CH non tornano alla prossima clip
   live.manda({ tipo: 'coda', livello: id, pulisci: true });
   const rimetti = () => (livelloVivo(id) ? void live.manda({ tipo: 'coda', livello: id, pulisci: true, imposta: prima }) : false);
   cronologia.registra({
@@ -524,6 +629,7 @@ function togliRigaCoda(id, chiave) {
   const l = livelloVivo(id);
   if (inTest || !l?.coda?.length) return;
   const prima = [...l.coda];
+  maniRiga(chDelLivello(l), chiave, null);
   live.manda({ tipo: 'coda', livello: id, togli: [chiave] });
   cronologia.registra({
     etichetta: `riga .${chiave} di «${l.nome}»`,
@@ -690,7 +796,7 @@ function fermaTutto() {
   if (inTest) return fermaTest();
   pezzoCuffia = null;
   live.manda({ tipo: 'ferma' });
-  cuffia.manda({ tipo: 'ferma' });
+  fermaMotoreCuffia();
   // i riser e i «sale» del controller sono andati via con tutto il resto: senza questo il prossimo punterebbe a un livello che non c'è più
   temporanei.clear();
   passaggio = null;
@@ -802,6 +908,8 @@ let vista = 'live';
 const synth = new VistaSynth($('vista-synth'), {
   suona: async (codice, nome) => {
     if (inTest) return null;
+    provaCorrente = null; // il SYNTH non sente il fader di nessun CH
+    cuffia.manda({ tipo: 'guadagno-prova', volume: 1 });
     cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH });
     if (cuffiaInPausa) pausaCuffia(false);
     const etichetta = { nome: `synth · ${nome}`, provenienza: 'synth' };
@@ -1053,11 +1161,172 @@ async function apriStash(stato) {
   // il PROJ: riaperto da solo (impostazione, o l'interfaccia è ripartita) oppure si sceglie dalla schermata
   const avvio = haStash ? await window.cutx.proj.avvio() : { schermata: false, proj: null };
   mostraProj(avvio.proj);
+  await caricaCanali();
   await aggiornaLibreria();
   await caricaSerata(stato);
   await aggiornaElenchi();
   if (avvio.schermata && !schermataProj.visibile) await schermataProj.mostra({ ultimo: avvio.proj?.ultimo });
   else if (!haStash) schermataProj.chiudi();
+}
+
+// --- i CANALI (gli 8 CH del LIVE, canali.json nella radice dello stash: una mappa sola per tutti i PROJ) ---
+
+let canaliConfig = canaliPredefiniti();
+const statoCanali = new StatoCanali(canaliConfig); // la verità sta nel motore: lo stato si risincronizza dai livelli (sincronizza)
+let griglia = null;
+let canaliErrori = [];
+const liveAcceso = () => livelliLive.some((l) => l.a === null);
+function usaCanali(config, errori = []) {
+  scordaRigheCH(null); // un'altra mappa dei CH: le righe delle manopole erano di un altro canale
+  canaliConfig = config;
+  statoCanali.impostaCANALI(config);
+  canaliErrori = errori;
+  cue.ordineCh = ordineCue(config);
+  if (cue.modo === 'brano') cue.mostraBrano?.(false);
+  paginaCanali?.disegna();
+}
+async function caricaCanali() {
+  const testo = haStash ? await window.cutx.leggiCanali().catch(() => null) : null;
+  const { config, errori } = leggiCanali(testo);
+  usaCanali(config, errori);
+  if (errori.length) window.cutx.logEvento('avviso', 'canali', errori[0]);
+}
+async function salvaCanali(config) {
+  usaCanali(config);
+  await window.cutx.scriviCanali(JSON.stringify(config, null, 2) + '\n').catch((e) => cue.avviso(String(e.message ?? e)));
+}
+async function ripristinaCanali() {
+  await salvaCanali(canaliPredefiniti()); // scrivo le predefinite (non cancello: un canali.json vecchio di un PROJ tornerebbe come mappa iniziale)
+}
+let paginaCanali = null;
+
+// La griglia dei CANALI: legge lo stato e manda intenzioni; le «azioni» le esegue chi parla col motore.
+// Un livello live senza CH (ripristinato, partito da altre vie) conta come FREE: la griglia lo vede e il fader lo comanda. Fuori dai CH: i colpi del controller e il paracadute.
+const chDelLivello = (l) => chDelLivelloPuro(canaliConfig, l);
+const livelliDelCH = (i) => livelliLive.filter((l) => chDelLivello(l) === i && l.a === null);
+// Le intenzioni dello stato → il motore. GO e OUT di una mossa sola (R, o PLAY che ne ha molte) partono INSIEME: prima preparo tutti i pezzi,
+// poi un solo messaggio al motore con un solo ciclo d'arrivo, e «entra tra» torna a 1 una volta sola, alla fine.
+async function eseguiCanali(effetti) {
+  const entrate = [];
+  const uscite = [];
+  for (const e of effetti) {
+    if (e.tipo === 'avviso') cue.avviso(e.testo);
+    else if (e.tipo === 'ch') {
+      live.manda({ tipo: 'ch', ch: e.ch, volume: e.volume, pos: e.pos, muto: e.muto }); // volume e muto del CH al live
+      const g = provaDaEffettoCh(e, provaCorrente); // la cuffia segue solo il volume del CH (non il muto) e solo se sta provando una sua clip
+      if (g !== null) cuffia.manda({ tipo: 'guadagno-prova', volume: g });
+    }
+    else if (e.tipo === 'cuffia') {
+      const pezzo = cue.pezzoAlt(e.alt);
+      if (pezzo.errore) {
+        statoCanali.cuffiaCh = null;
+        cue.avviso(pezzo.errore);
+        continue;
+      }
+      if (!inTest) provaPezzo(pezzo); // la cuffia va a tempo col live, come il tasto «cuffia» di una card
+    } else if (e.tipo === 'cuffia-stop') {
+      fermaCuffia(); // l'S rilasciato: come ogni altro stop (il pezzo non va ridato alla cuffia se rinasce)
+    } else if (e.tipo === 'go') {
+      const pezzo = cue.pezzoAlt(e.alt);
+      if (pezzo.errore) {
+        statoCanali.canali[e.ch].attesa = null;
+        cue.avviso(pezzo.errore);
+        continue;
+      }
+      const prep = preparaLive({ ...pezzo, ch: e.ch });
+      if (!prep.msg) statoCanali.canali[e.ch].attesa = null;
+      else entrate.push({ e, prep });
+    } else if (e.tipo === 'annulla') {
+      const ciclo = cicloAdesso();
+      if (e.quale === 'out') {
+        // l'uscita in attesa: il livello che stava uscendo torna a suonare (anche senza dissolvenza)
+        for (const l of livelliLive.filter((x) => chDelLivello(x) === e.ch && x.da <= ciclo && x.a !== null && x.a > ciclo)) live.manda({ tipo: 'riprendi', livello: l.id });
+      } else {
+        for (const l of livelliDelCH(e.ch).filter((x) => x.da > ciclo)) live.manda({ tipo: 'togli', livello: l.id, dissolvenza: dissolvenza(0) });
+        if (e.ch === chDellaBeat(canaliConfig)) passaggio = null; // un passaggio annullato: nel motore se ne vanno anche la rampa e la transizione
+      }
+    } else if (e.tipo === 'out-subito') {
+      for (const l of livelliDelCH(e.ch).filter((x) => x.da <= cicloAdesso())) live.manda({ tipo: 'togli', livello: l.id, subito: true, dissolvenza: dissolvenza(0) });
+    } else if (e.tipo === 'out') {
+      // tutto quello che suona in quel CH (in FREE ce ne possono essere più d'uno)
+      for (const l of livelliDelCH(e.ch).filter((x) => x.da <= cicloAdesso())) uscite.push({ livello: l.id, dissolvenza: dissolvenza(preferenze.dissolvenzaUscita ?? 0) });
+    }
+  }
+  if (entrate.length || uscite.length) {
+    const r = await live.richiesta({ tipo: 'gruppo', cicli: entraTra, entrate: entrate.map((x) => x.prep.msg), uscite });
+    entrate.forEach(({ e, prep }, k) => {
+      const ri = r.errore ? { errore: r.errore } : r.risposte[k];
+      if (ri.errore) statoCanali.canali[e.ch].attesa = null;
+      else cue.dopoGoLive();
+      finisciLive(prep, ri);
+    });
+    entraTraUsato(); // «entra tra» vale per una sola mossa, GO e OUT uguali
+  }
+  aggiornaCanali();
+}
+// Il prossimo brano nell'ordine del set (senza quello che suona); senza set, nell'ordine della libreria. Lo apre in PROSSIMO senza rubare il fuoco.
+async function cueBranoVerso(verso) {
+  const base = cue.slot.prossimo?.file ?? cue.slot.attivo?.file ?? null;
+  let file = null;
+  if (serata.set && serata.primo()) {
+    file = serata.vicino(base, verso);
+    if (file && file === cue.slot.attivo?.file) file = serata.vicino(file, verso);
+    if (file && !libreria.some((b) => b.file === file)) file = null;
+  } else {
+    const i = libreria.findIndex((b) => b.file === base);
+    const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
+    file = j >= 0 && j < libreria.length && j !== i ? libreria[j].file : null;
+  }
+  if (!file) return null;
+  await cue.apri(file, 'prossimo', { fuoco: false, forza: true });
+  return cue.slot.prossimo?.file === file ? libreria.find((b) => b.file === file)?.nome ?? file : null;
+}
+
+// STOP breve del nano: annulla tutto quello che non è ancora cominciato (GO e OUT dei CH, da qualunque parte siano partiti, il cambio scena e il passaggio
+// in attesa, con la sua rampa di tempo). Lo decide il motore, in un colpo solo: sa da quando parte ogni entrata e ogni sfumata, e quello che è già
+// cominciato (una transizione partita) va avanti.
+async function stopNano() {
+  const avevaScelte = statoCanali.canali.some((c) => c.scelte.size > 0);
+  const avevaAttese = statoCanali.annullaTutte().length > 0 || avevaScelte || !!passaggio;
+  passaggio = null;
+  if (inTest) return;
+  const r = await live.richiesta({ tipo: 'annulla-attese' });
+  if (r.errore) cue.avviso(`stop: ${r.errore}`);
+  else cue.avviso(avevaAttese || r.annullati > 0 ? it.nano.stop : it.nano.stopNiente);
+  aggiornaCanali();
+}
+// Una scritta grande, a schermo, per un attimo (CYCLE del nano).
+let grandeTimer = null;
+function mostraGrande(testo) {
+  const e = $('grande-nano');
+  e.textContent = testo;
+  e.classList.add('visibile');
+  clearTimeout(grandeTimer);
+  grandeTimer = setTimeout(() => e.classList.remove('visibile'), 1200);
+}
+const nomeBranoCanali = (b) => (b ? B.testa(b.modello).brano || b.file.replace(/\.cutx$/, '') : null);
+function impostaBranoCanali() {
+  statoCanali.tieniBrani([nomeBranoCanali(cue.slot.attivo), nomeBranoCanali(cue.slot.prossimo)]);
+  statoCanali.impostaBrano(cue.modo === 'brano' && cue.brano ? { nome: cue.nomeBrano, bpm: B.bpmDelBrano(cue.brano.modello), beat: cue.brano.modello.beat, sezioni: cue.brano.modello.sezioni } : null);
+}
+// Il CUE e la griglia dicono la stessa cosa: sulle card compaiono LIVE e NEXT, e quello che scelgo in un posto lo ritrovo nell'altro.
+function aggiornaCanali() {
+  if (!griglia) return;
+  impostaBranoCanali();
+  statoCanali.sincronizza(livelliLive.map((l) => ({ ...l, ch: chDelLivello(l) })), cicloAdesso());
+  const vista = statoCanali.vista();
+  griglia.aggiorna(vista, mappa ? cicloAdesso() : null);
+  nano.mostra(vista, { cycle: entraTra > 1, rec: !!synth.rec, stop: paracaduteAperto });
+  cue.mostraVolumiCh(vista);
+  cue.segnaNext(new Set(vista.filter((v) => v.armato && v.next).map((v) => v.next.id)), new Set(vista.filter((v) => v.suona).map((v) => v.suona.id)));
+}
+// Una scelta fatta con la griglia o con la manopola: aggiorno e porto il CUE sulla clip scelta (se non sto scrivendo).
+function scegliCanale(ch, fa) {
+  impostaBranoCanali();
+  const prima = statoCanali.next(ch)?.id;
+  const dopo = fa()?.id;
+  if (dopo && dopo !== prima) cue.portaIn(dopo);
+  eseguiCanali(statoCanali.seguiCuffia(ch)); // con S acceso la cuffia segue NEXT
 }
 
 // --- i PROJ ---
@@ -1076,12 +1345,14 @@ function mostraProj(info) {
 // Un altro PROJ: libreria, set e kit nuovi. A live fermo il CUE si svuota; col live che suona (confermato) il CUE resta com'è.
 async function cambiatoProj(info) {
   mostraProj(info);
+  statoCanali.sganciaTutti(); // un PROJ nuovo: i fader fisici si riagganciano
   if (!pila.livelli.length && !cue.slot.attivo?.sporco && !cue.slot.prossimo?.sporco) {
     cue.slot = { attivo: null, prossimo: null };
     cue.mostraLinguette();
     cue.mostraBrano?.(true);
   }
   await aggiornaLibreria();
+  await caricaCanali();
   await caricaSerata({ percorso: percorsoStash });
   window.cutx.logEvento('info', 'proj', `aperto ${etichettaProj(projAperto)}`);
 }
@@ -1149,7 +1420,7 @@ const importa = new Importa({
   },
   ferma: () => {
     pezzoCuffia = null;
-    cuffia.manda({ tipo: 'ferma' });
+    fermaMotoreCuffia();
   },
   // finché non finisce da sola: il motore svuota il suo codice, e qui il tasto torna ▶ (1,5 s di tolleranza per la partenza)
   inAscolto: (chiave) =>
@@ -1200,7 +1471,7 @@ browser = new Browser(
     },
     ferma: () => {
       pezzoCuffia = null;
-      cuffia.manda({ tipo: 'ferma' });
+      fermaMotoreCuffia();
     },
     // finché non finisce da sola (il motore svuota il suo codice): 1,5 s di tolleranza per la partenza
     inAscolto: (chiave) =>
@@ -1362,6 +1633,7 @@ function fermaTest() {
 function riprendi() {
   if (ripreso || !live.viva || !cuffia.viva) return;
   ripreso = true;
+  statoCanali.leggiMixer(live.stato.mixer); // volume e muto dei CH come li ha tenuti il motore
   const c = cuffia.stato;
   pezzoCuffia = c.codice ? { codice: c.codice, etichetta: { nome: c.nome, provenienza: c.provenienza } } : null;
   cuffiaUdibile = c.udibile ?? true;
@@ -1411,7 +1683,7 @@ function aggiornaIstantanea() {
   if (!ripreso || !live.viva || ripristinando) return;
   const attivi = livelliLive.filter((l) => l.a === null);
   istantaneaLive = attivi.length
-    ? { bpm: bpmSet(), livelli: attivi.map((l) => ({ beat: l.beat, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
+    ? { bpm: bpmSet(), mixer: statoCanali.datiMixer(), livelli: attivi.map((l) => ({ ch: chDelLivello(l), beat: l.beat, codice: l.codice, coda: l.coda, inizio: l.inizio, nome: l.nome, provenienza: l.provenienza, volume: l.volume, muto: l.muto })) }
     : null;
 }
 
@@ -1428,9 +1700,11 @@ async function ripristinaLive() {
     if (!nuovoEPronto() || (live.stato.livelli ?? []).some((l) => l.a === null)) return;
     window.cutx.logEvento('avviso', 'live', `riavviato: rimetto ${snap.livelli.length} livelli a ${snap.bpm} bpm`);
     if (snap.bpm) live.manda({ tipo: 'tempo', bpm: snap.bpm });
+    for (const m of snap.mixer ?? []) live.manda({ tipo: 'ch', ...m }); // un CH abbassato non torna pieno
+    statoCanali.sganciaTutti(); // i fader fisici si riagganciano al valore rimesso
     for (const l of snap.livelli) {
       // il tempo è quello del set: le righe setcpm dei livelli (venivano dal brano di partenza) non devono riportarlo indietro
-      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, beat: l.beat ?? null, cicli: 1, scritto: true });
+      const r = await live.richiesta({ tipo: 'entra', codice: B.senzaTempo(l.codice), coda: l.coda, inizio: Math.min(l.inizio ?? 0, B.senzaTempo(l.codice).length), nome: l.nome, provenienza: l.provenienza, ch: l.ch ?? chDelLivello(l), beat: l.beat ?? null, cicli: 1, scritto: true });
       if (r.livello) {
         if (l.volume !== 1) live.manda({ tipo: 'livello', livello: r.livello, volume: l.volume });
         if (l.muto) live.manda({ tipo: 'livello', livello: r.livello, muto: true });
@@ -1698,6 +1972,7 @@ const pila = new Pila($('livelli'), $('jam'), {
     const prima = livello ? livelloVivo(livello.id)?.codice : null;
     const r = await live.richiesta({
       tipo: 'entra',
+      ch: livello ? chDelLivello(livello) : chDelTipo(canaliConfig, ''), // modificare un livello lo tiene nel suo CH (senza ch: STRAY, come nella pila); una jam nuova va in FREE
       codice,
       ...(coda.length ? { coda } : {}),
       nome: livello?.nome ?? 'jam',
@@ -1733,6 +2008,8 @@ function mostraLive() {
   if (!live.viva) livelliLive = [];
   else if (live.stato.livelli && live.ultimoPong > spintaLivelli) livelliLive = live.stato.livelli;
   pila.aggiorna(livelliLive);
+  paginaCanali?.disegna();
+  aggiornaCanali();
 }
 
 function mostraCue() {
@@ -1895,6 +2172,7 @@ for (const m of [live, cuffia]) {
       livelliLive = msg.livelli;
       paracaduteAperto = !!msg.paracadute;
       pila.aggiorna(livelliLive);
+      aggiornaCanali();
     }
     else if (msg.tipo === 'globali') mostraGlobali(msg.righe);
     else if (msg.tipo === 'strisce') pila.suStrisce(msg);
@@ -1938,6 +2216,10 @@ live.suCollegato = () => {
   live.manda({ tipo: 'moviola', on: moviola.acceso });
   live.manda({ tipo: 'strisce-on', on: preferenze.striscia !== false }); // un live rinato riparte con la striscia come l'ho scelta
   if (masterLive !== null) live.manda({ tipo: 'master', volume: masterLive }); // e con il volume generale di prima (altrimenti tornerebbe al massimo)
+  if (ripreso) {
+    for (const m of statoCanali.datiMixer()) live.manda({ tipo: 'ch', ...m }); // e col mixer dei CH com'era
+    statoCanali.sganciaTutti();
+  }
   if (ripreso) ripristinaLive();
 };
 // Una cuffia rinata riparte da vuota: le ridò il suo codice.
@@ -1956,7 +2238,7 @@ cuffia.suCollegato = async () => {
     cuffia.manda({ tipo: 'volume-cuffia', volume: VOLUME_CUFFIA_SYNTH }); // la cuffia rinata riparte prudente
     synth.inviaSuono();
   }
-  if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta);
+  if (pezzoCuffia) manda(cuffia, pezzoCuffia.codice, pezzoCuffia.etichetta, pezzoCuffia.prova ?? null); // la cuffia rinata riprende anche il suo guadagno di prova
 };
 
 $('wordmark').src = wordmark;
@@ -1999,6 +2281,20 @@ navigator.mediaDevices.addEventListener('devicechange', aggiornaElenchi);
 
 // Per la prova automatica di robustezza (npm run prova) e le foto della postazione.
 globalThis.cutxProva = {
+  richiestaLive: (m) => live.richiesta(m),
+  canaliFader: (ch, v) => eseguiCanali([...statoCanali.fader(ch, 1), ...statoCanali.fader(ch, v)]), // come il fader del nano: prima in cima (si aggancia), poi dove dico
+  canaliSlider: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)),
+  canaliMute: (ch, acceso) => eseguiCanali(statoCanali.mute(ch, acceso)),
+  nano: () => nano, // la serata finta manda i suoi messaggi come se fossero del nano vero (riceve([...]))
+  statoCanali: () => statoCanali,
+  righeManiCH: () => Object.fromEntries([...righeManiCH].map(([ch, m]) => [ch, Object.fromEntries(m)])),
+  // v = true: MANI come se il nano fosse stato visto; v = false: la beta 4 anche se un nano vero è collegato alla macchina di prova
+  nanoVistoForza: (v = true) => {
+    nanoBloccato = !v;
+    nanoVisto = v;
+  },
+  istantaneaCh: () => (aggiornaIstantanea(), istantaneaLive?.livelli.map((l) => [l.nome, l.ch]) ?? null), // per la prova: lo snapshot del live porta il CH di ogni livello
+  canaliMixer: () => statoCanali.datiMixer(),
   apriNelSynth,
   dispetti: () => dispetti,
   hack: () => hack,
@@ -2150,22 +2446,7 @@ const controllerMidi = new Controller({
   cueSposta: (delta) => spostaSelezione(delta),
   cuePosizione: () => posizioneSelezione(),
   // CUFFIA tenuto + ◀ ▶: il prossimo brano nell'ordine del set (senza il brano che suona); senza set, nell'ordine della libreria
-  cueBrano: async (verso) => {
-    const base = cue.slot.prossimo?.file ?? cue.slot.attivo?.file ?? null;
-    let file = null;
-    if (serata.set && serata.primo()) {
-      file = serata.vicino(base, verso);
-      if (file && file === cue.slot.attivo?.file) file = serata.vicino(file, verso);
-      if (file && !libreria.some((b) => b.file === file)) file = null;
-    } else {
-      const i = libreria.findIndex((b) => b.file === base);
-      const j = i < 0 ? (verso > 0 ? 0 : libreria.length - 1) : i + verso;
-      file = j >= 0 && j < libreria.length && j !== i ? libreria[j].file : null;
-    }
-    if (!file) return null;
-    await cue.apri(file, 'prossimo', { fuoco: false, forza: true });
-    return cue.slot.prossimo?.file === file ? libreria.find((b) => b.file === file)?.nome ?? file : null;
-  },
+  cueBrano: (verso) => cueBranoVerso(verso),
   passaBrano: () => passaBrano(),
   passaInAttesa: () => !!passaggio,
   seleziona: (id) => pila.seleziona(id),
@@ -2198,6 +2479,13 @@ const controllerMidi = new Controller({
   breakTutti: (fattore) => live.manda({ tipo: 'break', fattore }),
   riser: (r) => gestisciRiser(r),
   coda: (id, riga) => live.manda({ tipo: 'coda', livello: id, imposta: [riga], origine: 'manopola' }),
+  // X-TOUCH MANI (solo vista LIVE e solo se il nano è stato visto in questa sessione)
+  maniAttiva: () => nanoVisto && vista !== 'synth',
+  maniLivelli: (ch) => pila.attivi().filter((l) => chDelLivello(l) === ch),
+  maniNome: (ch) => `CH${ch + 1} ${canaliConfig[ch]?.nome ?? ''}`.trim(),
+  maniFocus: (ch) => mostraGrande(`FOCUS · CH${ch + 1} ${canaliConfig[ch]?.nome ?? ''}`.trim()),
+  maniRiga: (ch, chiave, riga) => maniRiga(ch, chiave, riga),
+  maniGlobale: (chiave, riga) => globaleDelController(chiave, riga),
   master: (volume) => {
     masterLive = volume;
     live.manda({ tipo: 'master', volume });
@@ -2252,6 +2540,81 @@ const controllerMidi = new Controller({
   faderScegli: (effetto) => window.cutx.salvaPreferenze({ controller: { ...preferenze.controller, fader: effetto } }),
 });
 const paginaController = new PaginaController(controllerMidi);
+griglia = new Griglia($('canali-griglia'), {
+  scegli: (ch, k) => scegliCanale(ch, () => statoCanali.scegliAlt(ch, k)),
+  premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
+  tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
+  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch, 'schermo')),
+  cuffiaSu: (ch) => eseguiCanali(statoCanali.rilasciaS(ch, 'schermo')),
+  mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
+  fader: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)), // lo slider a schermo comanda subito; il fader fisico si riaggancia
+});
+// Il tasto NEXT di una card del CUE (l'unico gesto che la porta in NEXT): sceglie quella clip per il suo CH, ricliccato toglie la scelta.
+// Guardare una card, scrivere o navigare nel CUE non arma niente.
+cue.suNext = (carta) => {
+  const id = cue.idDiCarta(carta);
+  if (!id) return;
+  impostaBranoCanali();
+  if (statoCanali.alternaId(id)) aggiornaCanali();
+};
+let trackAvvisatoA = null; // TRACK: quando ho avvisato che il PROSSIMO ha modifiche
+let nanoBloccato = false; // solo nelle prove: ignora un nano vero collegato
+let nanoVisto = false; // il nano è stato collegato in questa sessione: resta così fino alla chiusura (un cavo che balla non cambia le pagine dell'X-Touch)
+const nano = new Nano({
+  fader: (ch, v) => eseguiCanali(statoCanali.fader(ch, v)), // agganciato solo quando passa dal valore vero
+  manopola: (ch, pos) => scegliCanale(ch, () => statoCanali.scegli(ch, pos)),
+  premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
+  tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
+  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch, 'nano')),
+  cuffiaSu: (ch) => eseguiCanali(statoCanali.rilasciaS(ch, 'nano')),
+  mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
+  goAll: () => eseguiCanali(statoCanali.goAll()),
+  track: async (verso) => {
+    // il PROSSIMO ha modifiche non salvate: la prima volta avviso e non apro; ripremuto entro 2 s apre (le butta)
+    const g = guardiaTrack(!!cue.slot.prossimo?.sporco, trackAvvisatoA, performance.now());
+    trackAvvisatoA = g.avvisatoA;
+    if (g.avvisa) return void cue.avviso(it.nano.prossimoModificato);
+    const scrivo = document.activeElement?.closest?.('.cm-editor, textarea, input, [contenteditable]') ? document.activeElement : null; // un editor in cui sto scrivendo
+    const nome = await cueBranoVerso(verso);
+    if (scrivo?.isConnected && document.activeElement !== scrivo) scrivo.focus(); // il fuoco resta lì
+    cue.avviso(nome ? it.nano.prossimo.replace('{nome}', nome) : it.nano.nessunBrano);
+  },
+  set: () => cue.cambiaLinguetta(),
+  marker: (verso) => muoviScena(verso),
+  cycle: () => {
+    const n = { 1: 2, 2: 4, 4: 8 }[entraTra] ?? 1;
+    scegliEntraTra(n, true);
+    mostraGrande(it.nano.entraTra.replace('{n}', n));
+  },
+  stop: () => stopNano(),
+  tieniStop: () => lanciaParacadute(),
+  stopCarica: (on, ms) => {
+    const e = $('paracadute');
+    e.querySelector('.carica').style.transitionDuration = on ? `${ms}ms` : '';
+    e.classList.toggle('carica', on);
+  },
+  rec: () => (vista === 'synth' ? synth.avviaRec() : cue.avviso(it.nano.recSoloSynth)),
+  collegato: (si) => {
+    $('nano-stato').hidden = !si;
+    if (si && !nanoBloccato) nanoVisto = true;
+    eseguiCanali(statoCanali.lasciaTutteS()); // un S che era giù non farà più il rilascio
+    statoCanali.sganciaTutti(); // un nano appena collegato ha i fader dove li ha lasciati: si riagganciano
+    aggiornaCanali();
+  },
+  ultimo: (hex, capito) => { $('nano-stato').textContent = `nano · ${hex}${capito ? '' : ' (non capito)'}`; },
+});
+if (!inTest) nano.avvia();
+setInterval(aggiornaCanali, 250);
+setInterval(() => nano.luci(), 100); // il lampeggio delle luci del nano (veloce = 200 ms) // i conti alla rovescia e quello che il motore ha cambiato da solo
+for (const b of document.querySelectorAll('#vista-live [data-vista]')) {
+  b.onclick = () => {
+    for (const x of document.querySelectorAll('#vista-live [data-vista]')) x.classList.toggle('on', x === b);
+    $('canali-griglia').hidden = b.dataset.vista !== 'canali';
+    $('livelli').hidden = b.dataset.vista !== 'pila';
+  };
+}
+paginaCanali = new PaginaCanali({ config: () => canaliConfig, errori: () => canaliErrori, vivo: liveAcceso, salva: salvaCanali, ripristina: ripristinaCanali });
+caricaCanali();
 const specchio = new Specchio($('specchio'));
 setInterval(() => specchio.aggiorna(controllerMidi), 100);
 const specchioSynth = new Specchio(synth.specchioEl, { synth: true });

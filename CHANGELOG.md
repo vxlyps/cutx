@@ -1,5 +1,15 @@
 # Novità di CUTX
 
+## 0.6.0-beta.1 «CUTX_06 · CANALI» (24/11/2026)
+
+Il LIVE a **8 canali fissi** (CH1 THUMP … CH8 STRAY), il **nanoKONTROL2 come regia**, l'**X-Touch Mini MANI**. Come provarli: `docs/NOVITA-6.0.md`; la pagina da stampare: `docs/CANALI.md`.
+
+- **Canali fissi**, mappa unica nello stash; una clip senza tipo sta in «DA ASSEGNARE» e chiede il canale; tipo `stray` per il CH8.
+- **Nano**: manopola = NEXT, R, PLAY sullo stesso ciclo, STOP (annulla attese e scelte; tenuto 1,5 s = paracadute), S tenuto = cuffia, M, fader, TRACK, SET, MARKER, CYCLE, REC.
+- **Un volume solo** per canale (fader, griglia, card); la cuffia suona clip × canale.
+- **X-Touch MANI**: FOCUS sul canale, SWEEP (rispetta il filtro della clip), risonanza, eco, riverbero, velocità, sporco, altezza; layer B su tutto; le clip nuove ereditano le righe. SYNTH: gruppo MOD sull'X-Touch.
+- **Cambia dalla beta 4**: una clip senza tipo non entra da sola; la vista di partenza del LIVE è la griglia; senza nano tutto come prima.
+
 ## 0.5.1-beta.4 «CUTX_05_1_4» (17/11/2026)
 
 ARPEGGIO e MOD nel SYNTH, specchietto animato, **CASSE nella scheda DRUM**, pulsante **synth su ogni clip**. Come provarli: `docs/NOVITA-5.1.4.md`.

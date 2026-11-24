@@ -1,6 +1,6 @@
-# Ultimo stato - 17/11/2026
-Fatto: tasto CASSE nella scheda DRUM (stesso interruttore del SYNTH); pulsante «synth» su OGNI clip (codice libero: si apre con avviso, senza «aggiorna», solo → CUE come clip nuova); specchietto animato (onda che scorre, filtro mosso dagli LFO a tempo col live). Beta 0.5.1-beta.4 «CUTX_05_1_4» pubblicata.
-Funziona: test puri 489/490; prove synth+drum 350 ok, aggiorna 9 ok (da sole).
-Non funziona: test `controller-synth` (le manopole MOD non hanno un posto sul controller: da fare). Giro lungo: 58 falli, in gran parte ambiente (MiniFuse scollegata) e interferenza nota aggiorna→synth (c'era già prima).
-File toccati: drum-vista.js, synth-vista.js, synth-scope.js, apri-tipo.js, app.js, testi/it.json, prova.js, test (apri-tipo, synth), CHANGELOG, docs/NOVITA-5.1.4.md, package.json/lock.
-Prossimo passo: Valerio prova la beta.4; poi MOD sul controller (mappa da approvare) e tastiera MIDI.
+# CUTX · ultimo (24/11/2026) — CHIUSURA 0.6.0-beta.1 «CUTX_06 · CANALI»
+1. Fatto: A1 SWEEP rispetta il filtro della clip (limitaRigaMani, anche in eredità), A2 l'X-Touch non sceglie mai, A3 senza nano = beta 4, A4 gruppo MOD sull'X-Touch del SYNTH (tasto 6), A5 revisione logica + correzioni (cavo nano, manopole MANI al neutro, STOP riarma, ⌘Z pulito, selezione righe dopo il menu). STOP annulla anche le scelte; STOP tenuto 1,5 s con carica.
+2. Funziona: npm test 586/586; npm run prova superata; serata 30 ok ×2; giro lungo: restano solo i falli dovuti alla macchina (MiniFuse, cattura schermo) come su main. Le prove vecchie ora partono come la beta 4 (nano ignorato, vista pila).
+3. Non va / nota: il nano vero è collegato alla macchina di prova (nanoVistoForza(false) per le parti vecchie).
+4. File: controller*.js, coda.js, canali.js, nano.js, app.js, cue.js, editor.js, prova.js, docs/NOVITA-6.0.md, CHANGELOG, README, PROSSIMI.
+5. Prossimo: merge in main (B2), versione 0.6.0-beta.1, test su main, .dmg, prova app impacchettata col MIDI (B5), release pre-release (B6).

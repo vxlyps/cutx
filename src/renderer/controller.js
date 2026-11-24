@@ -6,6 +6,7 @@ import { MESSAGGIO_MC, NOME_PORTA, anelloDa, decodifica, esadecimale, messaggioA
 import { ALTEZZA_MAX, ALTEZZA_MIN, PARAMETRI, PAGINA_B, PASSI_PER_SCATTO, PASSO_VOLUME, PASSO_X, SCATTI_VELOCITA, SCATTO_NORMALE, TASTI_A, clamp01, corto, etichettaAltezza, etichettaVelocita, calcolaFader, EFFETTI_FADER, FADER_PREDEFINITO, normalizzato, rigaCoda, valoreTesto } from './controller-mappa.js';
 import { valoreDi, valoreLetterale } from './coda.js';
 import { GestoreColpi } from './controller-colpi.js';
+import { focusMani, giraMani, manopoleMani, maniAttiva, resetMani } from './controller-mani.js';
 import { COMANDI_BASSO, GRUPPI_TASTI, dopoTasto, manopoleSynth, paginePerGruppo } from './controller-synth.js';
 import { PARAMETRI as PARAMETRI_SYNTH } from './synth-modello.js';
 import { OTTAVA_MAX, OTTAVA_MIN, eventoPad, eventoPiano, eventoSequencer, luciPad, luciPiano, luciSequencer, nuovoPad, nuovoPiano, nuovoSequencer, ruoloDi } from './controller-ruoli.js';
@@ -31,6 +32,9 @@ export class Controller {
     this.modo = 'sconosciuto'; // 'MC' | 'standard' | 'sconosciuto'
     this.pagina = 'A';
     this.bersaglio = 2; // pagina B: la manopola n (2–7) del livello da scolpire, o 'globale'
+    this.focusCH = 0; // X-TOUCH MANI: il CH che le manopole scolpiscono (0 = CH1)
+    this.maniX = new Map(); // MANI: bersaglio|parametro → valore della manopola (0…1, scatto o semitono)
+    this.maniUltimo = new Map(); // MANI: l'ultimo scatto mandato (velocità, altezza)
     this.master = 1; // volume generale, 0..1
     this.push = new Map(); // n → { giu, tenuta, timer }
     this.x = new Map(); // `${id}|${parametro}` → 0..1, finché la coda non lo dice
@@ -438,6 +442,7 @@ export class Controller {
 
   // Pagina B: il livello che sto scolpendo è anche quello selezionato (bordo verde sulla card): a lui vanno i colpi.
   selezionaBersaglio() {
+    if (maniAttiva(this)) return; // MANI: il layer B è «tutto», nessun livello da selezionare
     const l = this.bersaglio === 'globale' ? null : this.livello(this.bersaglio);
     if (l) this.azioni.seleziona?.(l.id);
   }
@@ -478,6 +483,7 @@ export class Controller {
   giraManopola(n, passi) {
     if (!passi) return;
     if (this.nelSynth) return this.giraSynth(n, passi);
+    if (maniAttiva(this)) return giraMani(this, n, passi); // X-TOUCH MANI: scolpisce il CH in focus (layer A) o tutto (layer B)
     // la manopola 1 è la navigazione, in tutte e due le pagine: scorre la selezione nel CUE (beat, scene, clip, kit), in silenzio
     if (n === 1) return this.scorriCue(passi);
     if (this.pagina === 'A') {
@@ -661,6 +667,12 @@ export class Controller {
     this.azioni.scritta?.(`GLOBALE · ${p.nome} ${x.toFixed(2)}`);
   }
 
+  // MANI: un CH ha perso le sue righe (è rimasto vuoto, o sono state tolte): le manopole e gli anelli tornano al neutro. ch = null: tutti.
+  dimenticaMani(ch = null) {
+    for (const m of [this.maniX, this.maniUltimo]) for (const k of [...m.keys()]) if (ch === null ? k.startsWith('ch') : k.startsWith(`ch${ch}|`)) m.delete(k);
+    this.cambiato?.();
+  }
+
   // Le righe di coda partono al massimo ~30 volte al secondo per livello e funzione: l'ultima vince.
   mandaCoda(id, riga) {
     this.codaDa.set(`${id}|${riga.match(/^\.(\w+)/)[1]}`, { id, riga });
@@ -677,6 +689,10 @@ export class Controller {
 
   premiPush(n, giu) {
     if (this.nelSynth) return this.premiPushSynth(n, giu);
+    if (maniAttiva(this)) {
+      if (!giu && n <= 7) resetMani(this, n); // MANI: spinta = la riga esce
+      return;
+    }
     if (n === 1) {
       if (giu) this.ascoltaScelta();
       return;
@@ -722,6 +738,8 @@ export class Controller {
 
   premiTasto(n, giu) {
     if (this.nelSynth && n !== 8) return this.premiTastoSynth(n, giu); // il tasto 8 è il paracadute, sempre
+    // X-TOUCH MANI: i tasti in alto 1–8 sono il FOCUS sul CH (il paracadute sta solo sul nano: STOP tenuto); la fila in basso resta dei colpi
+    if (maniAttiva(this) && n <= 8) return void (giu && focusMani(this, n));
     // pagina B: i tasti 2–7 scelgono il livello (come le manopole: beat sul 2, clip sui 3–7); l'8 resta il paracadute (sempre raggiungibile);
     // il «globale» si sceglie premendo di nuovo il tasto layer B
     if (n <= 7 && this.pagina === 'B') {
@@ -900,14 +918,14 @@ export class Controller {
 
   premiTastoSynth(n, giu) {
     if (!giu) return;
-    if (n <= 5) {
+    if (n <= GRUPPI_TASTI.length) {
       this.sy = dopoTasto(this.sy.gruppo, this.sy.pagina, n);
       this.ultime.clear();
       this.toccaSynth(null, this.nomeGruppoSynth());
       this.cambiato();
       return;
     }
-    if (n <= 8) return; // 6 e 7 liberi (mod, arpeggio)
+    if (n <= 8) return; // il 7 libero (arpeggio)
     const comando = COMANDI_BASSO[n - 9];
     if (!comando) return;
     if (!['play', 'rec', 'ab'].includes(comando)) this.lampo(this.tab.tasti[n - 1]); // quelli con uno stato (▶, REC, A/B) si accendono da soli
@@ -975,6 +993,7 @@ export class Controller {
   manopole() {
     if (this.strumento) return this.manopoleStrumento();
     if (this.nelSynth) return this.manopoleDelSynth();
+    if (maniAttiva(this)) return [...manopoleMani(this), { stile: 'fan', valore: this.master, nome: 'generale', corto: 'gener', testo: this.master.toFixed(2) }];
     const livelli = this.posti();
     const m = [this.manopolaCue()];
     if (this.pagina === 'A') {
@@ -1038,6 +1057,8 @@ export class Controller {
       stati.set(this.tab.layer[this.pagina], true); // la pagina
     } else if (!this.strumento) stati.set(this.tab.layer.B, 'lampeggia'); // nel SYNTH (parametri) B lampeggia: il piano è un altro tocco di B
     const nota = (comando) => this.tab.tasti[TASTI_A.indexOf(comando)];
+    const mani = !sy && maniAttiva(this);
+    if (mani) stati.set(this.tab.tasti[this.focusCH], true); // MANI: il tasto del CH in focus
     if (this.strumento) {
       // strumento: i 16 tasti sono passi, pad o tasti del piano; niente paracadute. Il layer acceso dice quale ruolo.
       this.luciStrumento().forEach((x, i) => stati.set(this.tab.tasti[i], x));
@@ -1046,7 +1067,9 @@ export class Controller {
       return luci;
     }
     // il paracadute c'è in tutte e due le pagine (tasto 8, tenuto un secondo)
-    if (this.paracaduteTenuto) stati.set(nota('paracadute'), 'lampeggia');
+    if (mani) {
+      // il tasto 8 è il FOCUS: il paracadute sta sul nano
+    } else if (this.paracaduteTenuto) stati.set(nota('paracadute'), 'lampeggia');
     else if (this.azioni.paracaduteAperto?.()) stati.set(nota('paracadute'), true);
     if (sy) {
       // il gruppo acceso (lampeggia alla seconda pagina); in basso: ▶ se suona, REC mentre registra, CYCLE se è acceso B
@@ -1055,6 +1078,8 @@ export class Controller {
       if (a?.suona()) stati.set(this.tab.tasti[8 + COMANDI_BASSO.indexOf('play')], true);
       if (a?.registra()) stati.set(this.tab.tasti[8 + COMANDI_BASSO.indexOf('rec')], 'lampeggia');
       if (a?.lato() === 'B') stati.set(this.tab.tasti[8 + COMANDI_BASSO.indexOf('ab')], true);
+    } else if (mani) {
+      // MANI: nessun altro tasto in alto è acceso
     } else if (this.pagina === 'A') {
       if (this.azioni.inCuffia?.()) stati.set(nota('cuffia'), true);
       // «prossimo brano»: acceso se sto guardando il ▸ prossimo; lampeggia mentre lo tengo o aspetta la fine della frase

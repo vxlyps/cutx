@@ -1,0 +1,595 @@
+// CANALI: lo stato puro del nuovo LIVE. Nessun DOM, nessun motore audio: il NANO, l'X-TOUCH e lo schermo
+// leggono questo stato e gli mandano intenzioni; lui risponde con «effetti» (cosa deve fare chi parla col motore). Si prova con
+// test/canali.test.js. Il motore sa solo cosa suona; qui si sa cosa è in NEXT, cosa aspetta, cosa è «vecchio».
+//
+// Parole: CH = un canale (CH1…CH8, definiti nella pagina CANALI) · NEXT = la clip scelta dalla manopolina, pronta · GO/OUT/MUTE = R/S/M ·
+// GO ALL = PLAY (entra tutto quello che è in NEXT) · FREE = il CH dei senza tipo e dei «in più» · SWEEP = la manopola ACQUA/ARIA.
+
+import { TIPI } from './categorie.js';
+export { TIPI }; // lista fissa, fonte in categorie.js; i nomi dei CH sono liberi
+export const ENTRA_TRA = [1, 2, 4, 8]; // battute (cicli)
+export const N_CH = 8;
+export const ISTERESI = 0.03; // ai bordi delle zone della manopolina
+export const ZONA_MORTA = 0.04; // al centro di SWEEP
+export const AGGANCIO = 0.03; // il fader fisico comanda solo quando è entro ±3% del valore vero (o ci passa sopra)
+export const OUT_ID = 'OUT'; // la prima zona della manopola e il primo chip: «togli questo CH»
+const USCITA = { id: OUT_ID, tipo: 'out', nome: 'OUT' };
+
+// --- la pagina CANALI (le 8 definizioni) ---
+
+export const canaliPredefiniti = () => [
+  { nome: 'THUMP', tipi: ['drum'], free: false }, // qui entra anche la @beat con le sue scene
+  { nome: 'PURR', tipi: ['keys', 'arp'], free: false },
+  { nome: 'GROWL', tipi: ['bass'], free: false },
+  { nome: 'HOWL', tipi: ['lead'], free: false },
+  { nome: 'FUR', tipi: ['pad'], free: false },
+  { nome: 'CLAW', tipi: ['perc'], free: false },
+  { nome: 'HISS', tipi: ['fx'], free: false },
+  { nome: 'STRAY', tipi: ['stray'], free: true }, // scratch, jam e le clip col tipo `stray`: mai le clip senza tipo
+];
+
+// Gli errori della pagina CANALI, in italiano; lista vuota = va bene. Otto CH, una sola FREE, ogni tipo in un CH solo.
+export function validaCanali(config) {
+  const errori = [];
+  if (!Array.isArray(config) || config.length !== N_CH) return [`servono ${N_CH} CH`];
+  const visti = new Map();
+  config.forEach((c, i) => {
+    if (!String(c?.nome ?? '').trim()) errori.push(`il CH${i + 1} non ha un nome`);
+    for (const t of c?.tipi ?? []) {
+      if (!TIPI.includes(t)) errori.push(`«${t}» non è un tipo`);
+      else if (visti.has(t)) errori.push(`il tipo ${t} è in due CH (CH${visti.get(t) + 1} e CH${i + 1})`);
+      else visti.set(t, i);
+    }
+  });
+  const nFree = config.filter((c) => c?.free).length;
+  if (nFree !== 1) errori.push(nFree ? 'la FREE deve essere una sola' : 'manca la FREE');
+  return errori;
+}
+
+// Il testo di canali.json → le 8 definizioni; se manca o non va bene, le predefinite (con la lista degli errori, per dirlo a Valerio).
+export function leggiCanali(testo) {
+  if (!testo) return { config: canaliPredefiniti(), errori: [] };
+  try {
+    const grezzo = JSON.parse(testo);
+    const base = canaliPredefiniti();
+    const config = Array.isArray(grezzo) ? grezzo.map((c, i) => ({ nome: String(c?.nome ?? '').trim(), tipi: Array.isArray(c?.tipi) ? c.tipi.filter((t) => TIPI.includes(t)) : [], free: c?.free === true })) : null;
+    const errori = config ? validaCanali(config) : ['il file non è una lista'];
+    return errori.length ? { config: canaliPredefiniti(), errori } : { config, errori: [] };
+  } catch (e) {
+    return { config: canaliPredefiniti(), errori: [`file illeggibile (${e.message})`] };
+  }
+}
+
+// L'ordine dei gruppi del CUE (categorie.js, gruppiClip): quello dei CH.
+export const ordineCue = (config) => config.map(({ nome, tipi, free }) => ({ nome, tipi, free }));
+
+export const indiceFree = (config) => Math.max(0, config.findIndex((c) => c.free));
+
+// Il CH di un livello vivo. Una regola sola, per l'interfaccia e per il motore: senza ch → STRAY, tranne i livelli del controller e il paracadute (fuori dai CH).
+export const chDelLivello = (config, l) => l.ch ?? (l.provenienza === 'controller' || l.nome === 'paracadute' ? null : indiceFree(config));
+
+// TRACK con il PROSSIMO che ha modifiche non salvate: la prima volta non apre e avvisa; ripremuto entro 2 s apre (e le modifiche si perdono).
+// avvisatoA = quando ho avvisato l'ultima volta (null = mai). Ritorna cosa fare e il nuovo avvisatoA.
+export const FINESTRA_TRACK_MS = 2000;
+export function guardiaTrack(sporco, avvisatoA, ora, finestra = FINESTRA_TRACK_MS) {
+  if (!sporco) return { apri: true, avvisa: false, avvisatoA: null };
+  if (avvisatoA !== null && ora - avvisatoA <= finestra) return { apri: true, avvisa: false, avvisatoA: null };
+  return { apri: false, avvisa: true, avvisatoA: ora };
+}
+
+// Una clip di un BRANO senza tipo non è di nessun CH: non entra live finché non ne ha uno. Scratch, jam, kit, apertura e scene del beat non c'entrano (vanno in CH8 / THUMP).
+export const senzaCanale = (p) => Number.isInteger(p?.clipDelBrano) && !p.tipo && !p.beat;
+
+// La ch di un tipo ('' = senza tipo → FREE). Un tipo che nessuna ch prende va in FREE.
+export function chDelTipo(config, tipo) {
+  const i = tipo ? config.findIndex((c) => c.tipi.includes(tipo)) : -1;
+  return i >= 0 ? i : indiceFree(config);
+}
+
+// La @beat e le sue scene vanno nella ch del tipo drum.
+export const chDellaBeat = (config) => chDelTipo(config, 'drum');
+
+export const tipoDellaClip = (info) => TIPI.find((t) => info?.[t] === true) ?? '';
+
+// --- le alternative (cosa può entrare in una ch) ---
+
+// L'identità di una clip è il suo NOME dentro il brano (non il numero: unisci/dividi/sposta non la confondono); una scena è il suo posto nel beat.
+export const idClip = (brano, nome) => `${brano}#${nome}`;
+export const idScena = (brano, k) => `${brano}◆${k}`;
+
+// brano = { nome, bpm, beat: { scene: [{ nome }] } | null, sezioni: [{ nome, info }] }. NELL'ORDINE DEL FILE, mai per tipo.
+// DRUM: prima le scene della @beat, poi le sue clip. Ogni clip sta in UN CH solo: quello del suo tipo; FREE prende i tipi che nessuno prende (e `stray`); le clip senza tipo non sono in nessun CH.
+export function alternative(config, brano, ch) {
+  if (!brano) return [];
+  const di = (extra) => ({ brano: brano.nome, bpm: brano.bpm ?? null, ...extra });
+  const out = [];
+  if (ch === chDellaBeat(config)) (brano.beat?.scene ?? []).forEach((s, k) => out.push(di({ id: idScena(brano.nome, k), tipo: 'scena', indice: k, nome: s.nome, tipoClip: 'drum', provenienza: `${brano.nome} ◆${k + 1}` })));
+  (brano.sezioni ?? []).forEach((s, k) => {
+    const tc = tipoDellaClip(s.info);
+    if (tc && chDelTipo(config, tc) === ch) out.push(di({ id: idClip(brano.nome, s.nome), tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc, provenienza: `${brano.nome} §${k + 1}` }));
+  });
+  return out;
+}
+
+// --- la manopolina SCELTA ---
+
+// pos 0…1, n alternative → zona 0…n-1. Con la zona di prima si resta in quella finché non si esce di più di ISTERESI dal suo bordo.
+export function zona(pos, n, prima = null, isteresi = ISTERESI) {
+  if (!(n > 0)) return null;
+  const p = Math.min(1, Math.max(0, pos));
+  if (prima !== null && prima >= 0 && prima < n && p >= prima / n - isteresi && p <= (prima + 1) / n + isteresi) return prima;
+  return Math.min(n - 1, Math.floor(p * n));
+}
+
+// --- il fisico: fader e SWEEP ---
+
+// Curva da mixer: in cima 1 (il volume del codice, mai sopra), a metà −15 dB, in fondo silenzio.
+export function gainFader(v) {
+  if (v === null || v === undefined) return 1; // «non letto»: vale il codice
+  const x = Math.min(1, Math.max(0, v));
+  if (x <= 0.02) return 0;
+  return 10 ** ((30 * (x - 1)) / 20) * Math.min(1, (x - 0.02) / 0.08);
+}
+
+// Centro neutro (zona morta ±4%); a sinistra ACQUA = passa-basso da 20 kHz a ~200 Hz; a destra ARIA = passa-alto da 20 Hz a ~5 kHz. Scala logaritmica.
+export function sweep(pos) {
+  if (pos === null || pos === undefined) return { tipo: 'neutro' };
+  const p = Math.min(1, Math.max(0, pos));
+  if (Math.abs(p - 0.5) <= ZONA_MORTA + 1e-9) return { tipo: 'neutro' };
+  if (p < 0.5) return { tipo: 'acqua', lp: 20000 * (200 / 20000) ** ((0.5 - ZONA_MORTA - p) / (0.5 - ZONA_MORTA)) };
+  return { tipo: 'aria', hp: 20 * (5000 / 20) ** ((p - 0.5 - ZONA_MORTA) / (0.5 - ZONA_MORTA)) };
+}
+
+// --- lo stato ---
+
+const vuota = () => ({ suona: null, insieme: [], pos: null, zona: null, scelte: new Map(), fisico: null, vero: 1, agganciato: false, mutaClip: false, aa: null, mute: false, attesa: null, attesaMs: 0 });
+const ATTESA_MS = 1500; // dopo un GO/OUT il motore ci mette un attimo a dirlo: nel frattempo vale quello che ho chiesto
+
+export class StatoCanali {
+  constructor(config = canaliPredefiniti()) {
+    this.config = config;
+    this.brano = null; // il brano nel CUE
+    this.canali = Array.from({ length: N_CH }, vuota);
+    this.entraTra = 1;
+    this.bpm = null; // il tempo del set: lo porta la ch DRUM
+    this.adesso = () => Date.now();
+    this.cuffiaCh = null; // { ch, id, chiave }: il CH che sto ascoltando in cuffia (S tenuto); chiave = quale S l'ha acceso (nano3, schermo3…)
+    this.sTenuti = []; // le chiavi degli S premuti adesso, in ordine: vince l'ultimo
+  }
+
+  // I CANALI si cambiano a live fermo (lo garantisce chi chiama); cambiato, NEXT e attese si azzerano.
+  impostaCANALI(config) {
+    this.config = config;
+    for (const c of this.canali) Object.assign(c, { suona: null, insieme: [], zona: null, scelte: new Map(), attesa: null });
+    this.cuffiaCh = null;
+    this.sTenuti = [];
+  }
+
+  // Un brano nuovo nel CUE: la manopola riparte da zero (il primo tocco sceglie tra le alternative del brano nuovo). Le scelte già fatte restano:
+  // sono per brano, cambiare linguetta del CUE non le perde.
+  impostaBrano(brano) {
+    const nuovo = (brano?.nome ?? null) !== (this.brano?.nome ?? null);
+    this.brano = brano; // chi lo rilegge a ogni giro (le clip cambiano mentre le scrivo) non azzera niente
+    if (nuovo) for (const c of this.canali) c.zona = null;
+  }
+
+  // Le scelte vivono solo per i brani che stanno in una delle due linguette del CUE (attivo e prossimo): un brano che esce da tutte e due
+  // perde le sue, così tornandoci un'ora dopo non trovo niente di armato. nomi = i nomi dei brani nelle linguette.
+  tieniBrani(nomi) {
+    const vivi = new Set([...nomi, this.brano?.nome].filter(Boolean));
+    for (const c of this.canali) for (const nome of [...c.scelte.keys()]) if (!vivi.has(nome)) c.scelte.delete(nome);
+  }
+
+  // La scelta di un CH per il brano nel CUE: un id di clip o scena, OUT_ID, o null. Un id che nel brano non c'è più vale come nessuna scelta.
+  scelta(i) {
+    const id = this.brano ? this.canali[i].scelte.get(this.brano.nome) ?? null : null;
+    if (id === OUT_ID) return id;
+    return id && this.alternative(i).some((a) => a.id === id) ? id : null;
+  }
+
+  poniScelta(i, id) {
+    if (!this.brano) return;
+    const c = this.canali[i];
+    if (id === null) c.scelte.delete(this.brano.nome);
+    else c.scelte.set(this.brano.nome, id);
+  }
+
+  alternative(i) {
+    return alternative(this.config, this.brano, i);
+  }
+
+  // Cosa c'è in NEXT: quello che ho scelto io (manopola, chip della griglia, tasto NEXT di una card), altrimenti quello che suona adesso (nessun cambio:
+  // anche se nel CUE c'è un altro brano). Un CH vuoto senza scelta non ha NEXT. La scelta può essere OUT.
+  next(i) {
+    const id = this.scelta(i);
+    if (id === OUT_ID) return USCITA;
+    if (id) return this.alternative(i).find((a) => a.id === id);
+    return this.canali[i].suona ?? null;
+  }
+
+  // Cosa suona nel CH, tutto (la FREE impila più clip).
+  suonaId(i, id) {
+    const c = this.canali[i];
+    return c.suona?.id === id || c.insieme.some((a) => a.id === id);
+  }
+
+  // Armato = ho scelto io qualcosa che cambierebbe il CH: una clip che non suona già, oppure OUT con qualcosa che suona. Il CH lampeggia e parte con PLAY.
+  armato(i) {
+    const id = this.scelta(i);
+    if (!id) return false;
+    if (id === OUT_ID) return !!this.canali[i].suona;
+    return !this.suonaId(i, id);
+  }
+
+  // NEXT solo se è una clip vera del brano nel CUE (per il preascolto in cuffia): né OUT né una clip di un altro brano.
+  nextDelBrano(i) {
+    const n = this.next(i);
+    return n && n.id !== OUT_ID && this.alternative(i).some((a) => a.id === n.id) ? n : null;
+  }
+
+  // La manopola: la prima zona a sinistra è OUT, poi le alternative nell'ordine del file. La scelta cambia solo quando cambia la zona (con l'isteresi),
+  // così non «rumoreggia» sul CUE.
+  scegli(i, pos) {
+    const alt = this.alternative(i);
+    const c = this.canali[i];
+    c.pos = pos;
+    const z = zona(pos, alt.length + 1, c.zona);
+    if (z !== c.zona) {
+      c.zona = z;
+      this.poniScelta(i, z === 0 ? OUT_ID : alt[z - 1].id);
+    }
+    return this.next(i);
+  }
+
+  // Dal mouse (chip della griglia): gli stessi indici delle zone della manopola, 0 = OUT, 1… = le alternative. La manopola «segue» così non salta quando la tocco.
+  scegliAlt(i, k) {
+    const alt = this.alternative(i);
+    if (!(k >= 0 && k <= alt.length)) return null;
+    const c = this.canali[i];
+    this.poniScelta(i, k === 0 ? OUT_ID : alt[k - 1].id);
+    c.zona = k;
+    c.pos = (k + 0.5) / (alt.length + 1);
+    return this.next(i);
+  }
+
+  // Il tasto NEXT di una card del CUE (l'unico gesto che porta il CUE in NEXT): sceglie quella clip per il suo CH; ricliccato toglie la scelta
+  // (il CH torna a «quello che suona»). Ritorna { ch, k, acceso } o null se la clip non è di nessun CH.
+  alternaId(id) {
+    for (let i = 0; i < N_CH; i++) {
+      const k = this.alternative(i).findIndex((a) => a.id === id);
+      if (k < 0) continue;
+      if (this.scelta(i) === id) {
+        this.poniScelta(i, null);
+        this.canali[i].zona = null;
+        return { ch: i, k: k + 1, acceso: false };
+      }
+      this.scegliAlt(i, k + 1);
+      return { ch: i, k: k + 1, acceso: true };
+    }
+    return null;
+  }
+
+  // --- entra / esce ---
+
+  // L'attesa si annulla: lo dice anche quale era (entrare o uscire), perché chi parla col motore le annulla in modo diverso.
+  annullaAttesa(i) {
+    const c = this.canali[i];
+    const quale = c.attesa.tipo;
+    c.attesa = null;
+    return { tipo: 'annulla', ch: i, quale };
+  }
+
+  // GO: la clip in NEXT entra al prossimo «entra tra». Ripremuto mentre aspetta: annulla.
+  go(i, { annullando = true } = {}) {
+    const c = this.canali[i];
+    if (c.attesa?.tipo === 'go') return annullando ? [this.annullaAttesa(i)] : [];
+    const alt = this.next(i);
+    if (!alt || alt.id === OUT_ID) return [{ tipo: 'avviso', ch: i, testo: `niente in NEXT per CH${i + 1} ${this.config[i].nome}` }];
+    if (this.suonaId(i, alt.id)) return []; // è già quella che suona
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : []; // vince l'ultimo premuto
+    c.attesa = { tipo: 'go', alt };
+    c.attesaMs = this.adesso();
+    const bpm = i === chDellaBeat(this.config) && alt.bpm && alt.bpm !== this.bpm ? alt.bpm : undefined;
+    effetti.push({ tipo: 'go', ch: i, alt, cicli: this.entraTra, ...(bpm ? { bpm } : {}) });
+    return effetti;
+  }
+
+  // Cosa farebbe R adesso: 'ANNULLA' (qualcosa aspetta) · 'OUT' (NEXT è OUT e il CH suona) · 'GO' (NEXT è una clip che non suona) ·
+  // 'LIVE' (NEXT è già quello che suona: niente da fare) · '' (CH vuoto, niente da mandare).
+  azioneR(i) {
+    const c = this.canali[i];
+    if (c.attesa) return 'ANNULLA';
+    const n = this.next(i);
+    if (!n) return '';
+    if (n.id === OUT_ID) return c.suona ? 'OUT' : '';
+    return this.suonaId(i, n.id) ? 'LIVE' : 'GO';
+  }
+
+  // R (premuto e rilasciato in meno di 1 s): UN tasto solo, fa quello che dice la parola sul tasto (azioneR).
+  premiR(i) {
+    const c = this.canali[i];
+    if (c.attesa) return [this.annullaAttesa(i)];
+    const azione = this.azioneR(i);
+    if (azione === 'OUT') return this.out(i);
+    if (azione === 'GO') return this.go(i, { annullando: false });
+    if (azione === '') return [{ tipo: 'avviso', ch: i, testo: `CH${i + 1} ${this.config[i].nome}: gira la manopola per scegliere` }];
+    return []; // LIVE: è già in onda
+  }
+
+  // R tenuto 1 s: esce subito (micro-sfumata) e cancella ogni attesa.
+  tieniR(i) {
+    return this.outSubito(i);
+  }
+
+  // S TENUTO: preascolto in cuffia del NEXT di quel CH, finché lo tieni (come il «cue» di un mixer DJ). `fonte` dice chi preme (il nano, il tasto CUE a schermo):
+  // due S tenuti insieme → vince l'ultimo, e lasciare il primo non spegne il secondo. Lasciando, si ferma solo la cuffia che QUELL'S ha acceso.
+  premiS(i, fonte = 'nano') {
+    const chiave = `${fonte}${i}`;
+    if (this.cuffiaCh?.chiave === chiave) return []; // già tenuto (un rimbalzo del tasto)
+    const alt = this.nextDelBrano(i);
+    if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente da ascoltare per CH${i + 1} ${this.config[i].nome}` }];
+    this.sTenuti = [...this.sTenuti.filter((k) => k !== chiave), chiave];
+    this.cuffiaCh = { ch: i, id: alt.id, chiave };
+    return [{ tipo: 'cuffia', ch: i, alt }];
+  }
+
+  rilasciaS(i, fonte = 'nano') {
+    const chiave = `${fonte}${i}`;
+    this.sTenuti = this.sTenuti.filter((k) => k !== chiave);
+    if (this.cuffiaCh?.chiave !== chiave) return []; // la cuffia ora è di un altro S, o è partita dalla card: non si tocca
+    this.cuffiaCh = null;
+    return [{ tipo: 'cuffia-stop', ch: i }];
+  }
+
+  // Il nano che si stacca (o si ricollega) mentre S è giù: il rilascio non arriverà mai. Si spegne la cuffia che i suoi S avevano acceso
+  // (non quella del tasto CUE a schermo, che ha il suo rilascio).
+  lasciaTutteS(fonte = 'nano') {
+    this.sTenuti = this.sTenuti.filter((k) => !k.startsWith(fonte));
+    const c = this.cuffiaCh;
+    if (!c?.chiave?.startsWith(fonte)) return [];
+    this.cuffiaCh = null;
+    return [{ tipo: 'cuffia-stop', ch: c.ch }];
+  }
+
+  // Con S acceso, girando la manopola (o cliccando un'altra clip) la cuffia segue NEXT.
+  seguiCuffia(i) {
+    if (this.cuffiaCh?.ch !== i) return [];
+    const alt = this.nextDelBrano(i);
+    if (!alt || alt.id === this.cuffiaCh.id) return [];
+    this.cuffiaCh = { ...this.cuffiaCh, id: alt.id };
+    return [{ tipo: 'cuffia', ch: i, alt }];
+  }
+
+  // OUT: il CH esce al prossimo «entra tra». Ripremuto: annulla.
+  out(i) {
+    const c = this.canali[i];
+    if (c.attesa?.tipo === 'out') return [this.annullaAttesa(i)];
+    if (!c.suona) return [];
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : [];
+    c.attesa = { tipo: 'out' };
+    c.attesaMs = this.adesso();
+    effetti.push({ tipo: 'out', ch: i, cicli: this.entraTra });
+    return effetti;
+  }
+
+  // OUT tenuto 1 s: esce subito, con la micro-sfumata.
+  outSubito(i) {
+    const c = this.canali[i];
+    if (!c.suona) return [];
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : [];
+    c.attesa = null;
+    c.suona = null;
+    c.insieme = [];
+    effetti.push({ tipo: 'out-subito', ch: i });
+    return effetti;
+  }
+
+  // STOP breve: tutto quello che non è ancora successo si annulla: le attese (GO e OUT, da qualunque parte siano partiti) e le SCELTE armate,
+  // di tutti i brani nelle linguette. Chi esegue pulisce anche i livelli che il motore ha in attesa.
+  annullaTutte() {
+    const effetti = this.canali.flatMap((c, i) => (c.attesa ? [this.annullaAttesa(i)] : []));
+    for (const c of this.canali) {
+      c.scelte.clear();
+      c.zona = null; // la manopola dov'è adesso riarma al prossimo tocco
+    }
+    return effetti;
+  }
+
+  // GO ALL (PLAY): tutto quello che è ARMATO (scelto da me e diverso da ciò che suona, OUT compresi) parte insieme: chi esegue gli effetti li manda
+  // con un solo ciclo d'arrivo. Le attese già in corso restano.
+  goAll() {
+    return this.canali.flatMap((c, i) => (this.armato(i) && !c.attesa ? (this.scelta(i) === OUT_ID ? this.out(i) : this.go(i, { annullando: false })) : []));
+  }
+
+  // Dalla tastiera: un pezzo che entra direttamente nel CH del suo tipo (senza tipo → FREE), non passa dalla manopolina.
+  goDiretto(tipo, pezzo) {
+    const i = chDelTipo(this.config, tipo);
+    const c = this.canali[i];
+    const alt = { id: `${pezzo.brano ?? 'scratch'}#${pezzo.nome}`, tipo: 'clip', nome: pezzo.nome, brano: pezzo.brano ?? null, bpm: null, tipoClip: tipo ?? '' };
+    const effetti = c.attesa ? [this.annullaAttesa(i)] : [];
+    c.attesa = { tipo: 'go', alt };
+    effetti.push({ tipo: 'go', ch: i, alt, cicli: this.entraTra, codice: pezzo.codice });
+    return effetti;
+  }
+
+  // Il motore dice che l'attesa è scattata (o chi ascolta lo capisce dai cicli): la clip suona, o la ch è uscita.
+  scattato(i) {
+    const c = this.canali[i];
+    if (!c.attesa) return;
+    if (c.attesa.tipo === 'go') {
+      c.suona = c.attesa.alt;
+      if (i === chDellaBeat(this.config) && c.suona.bpm) this.bpm = c.suona.bpm;
+    } else {
+      c.suona = null;
+      c.insieme = [];
+      this.poniScelta(i, null); // l'OUT è fatto: il CH torna senza scelta
+    }
+    c.attesa = null;
+  }
+
+  // La verità è il motore: dai livelli del live (con il loro `ch`, `da`, `a`) si ricava cosa suona, cosa sta per entrare e cosa sta per uscire.
+  // livelli: [{ nome, provenienza, ch, da, a }] (a null = non esce) · ciclo: il ciclo di adesso. Dopo un crash lo stato si ricostruisce da qui.
+  sincronizza(livelli, ciclo) {
+    const alt = (l) => {
+      for (let i = 0; i < N_CH; i++) {
+        const t = this.alternative(i).find((a) => (a.tipo === 'scena' ? a.provenienza === l.provenienza : a.nome === l.nome && l.provenienza?.startsWith(`${a.brano} §`)));
+        if (t) return t;
+      }
+      return { id: `?#${l.provenienza ?? l.nome}`, tipo: 'clip', nome: l.nome, brano: null, bpm: null, tipoClip: '', provenienza: l.provenienza ?? null };
+    };
+    this.canali.forEach((c, i) => {
+      const mie = livelli.filter((l) => l.ch === i);
+      const suonaL = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).sort((x, y) => y.da - x.da)[0];
+      const prossimo = mie.filter((l) => l.da > ciclo && l.a === null).sort((x, y) => x.da - y.da)[0];
+      c.insieme = mie.filter((l) => l.da <= ciclo && (l.a === null || l.a > ciclo)).map(alt);
+      c.suona = suonaL ? (c.suona && c.suona.nome === suonaL.nome && c.suona.provenienza?.split(' ')[0] === alt(suonaL).provenienza?.split(' ')[0] ? c.suona : alt(suonaL)) : null;
+      c.mutaClip = !!suonaL?.muto; // la clip che suona è muta per conto suo (la spinta della manopola dell'X-Touch)
+      if (i === chDellaBeat(this.config) && c.suona?.bpm) this.bpm = c.suona.bpm;
+      // una scelta eseguita si cancella: l'OUT fatto (il CH è vuoto) e la clip che ora suona. Altrimenti un'altra clip mandata a mano nello stesso CH
+      // (⌘↵) lascerebbe il CH «armato» sulla vecchia, e PLAY la rimanderebbe indietro.
+      for (const [nome, id] of [...c.scelte]) {
+        const fatta = id === OUT_ID ? !c.suona && !c.attesa : this.suonaId(i, id);
+        if (!fatta) continue;
+        c.scelte.delete(nome);
+        if (nome === this.brano?.nome) c.zona = null;
+      }
+      if (this.adesso() - c.attesaMs < ATTESA_MS) return; // ho appena chiesto qualcosa: lo dice il motore tra poco
+      if (prossimo) c.attesa = { tipo: 'go', alt: alt(prossimo), da: prossimo.da };
+      else if (suonaL && suonaL.a !== null && suonaL.a > ciclo) c.attesa = { tipo: 'out', da: suonaL.a };
+      else c.attesa = null;
+    });
+  }
+
+  // --- il mixer: il volume vero e il muto del CH stanno nel motore live (e qui ne tengo la copia); la cuffia non li sente mai ---
+
+  // Il valore vero cambia: ritorna l'effetto per il motore. `pos` è la posizione del fader (0…1), il volume è la curva da mixer.
+  poniMixer(i, { pos, muto }) {
+    const c = this.canali[i];
+    const effetto = { tipo: 'ch', ch: i };
+    if (pos !== undefined) {
+      c.vero = Math.min(1, Math.max(0, pos));
+      effetto.pos = c.vero;
+      effetto.volume = gainFader(c.vero);
+    }
+    if (muto !== undefined) {
+      c.mute = !!muto;
+      effetto.muto = c.mute;
+    }
+    return [effetto];
+  }
+
+  // Un messaggio del fader fisico. Dopo l'avvio, lo slider a schermo, un ripristino, il nano ricollegato o un PROJ nuovo il fader non è agganciato:
+  // i suoi messaggi non contano finché non è entro ±3% del valore vero, o ci passa sopra tra due messaggi di fila.
+  fader(i, v) {
+    const c = this.canali[i];
+    const prima = c.fisico;
+    c.fisico = v;
+    if (!c.agganciato && !c.suona && !c.attesa) c.agganciato = true; // CH vuoto e senza attese: nessun volume può saltare, il fader comanda dal primo tocco
+    if (!c.agganciato) {
+      const dentro = Math.abs(v - c.vero) <= AGGANCIO;
+      const passa = prima !== null && (prima - c.vero) * (v - c.vero) < 0;
+      if (!dentro && !passa) return [];
+      c.agganciato = true;
+    }
+    return this.poniMixer(i, { pos: v });
+  }
+
+  // Lo slider a schermo comanda subito; il fader fisico dovrà riagganciarsi.
+  sliderSchermo(i, v) {
+    const c = this.canali[i];
+    c.agganciato = false;
+    c.fisico = null;
+    return this.poniMixer(i, { pos: v });
+  }
+
+  // I fader fisici si sganciano tutti (avvio, ripristino del live, nano ricollegato, PROJ nuovo).
+  sganciaTutti() {
+    for (const c of this.canali) Object.assign(c, { agganciato: false, fisico: null });
+  }
+
+  // La copia del mixer da mandare a un motore live nuovo (un live rinato non sa niente).
+  datiMixer() {
+    return this.canali.map((c, i) => ({ ch: i, pos: c.vero, volume: gainFader(c.vero), muto: c.mute }));
+  }
+
+  // Il mixer come l'ha tenuto il motore (dopo un crash dell'interfaccia): lo rimetto qui. I fader fisici si sganciano.
+  leggiMixer(dal) {
+    if (!Array.isArray(dal)) return;
+    dal.slice(0, N_CH).forEach((m, i) => {
+      if (Number.isFinite(m?.pos)) this.canali[i].vero = Math.min(1, Math.max(0, m.pos));
+      this.canali[i].mute = !!m?.muto;
+    });
+    this.sganciaTutti();
+  }
+
+  sweepPos(i, pos) {
+    this.canali[i].aa = pos;
+  }
+
+  mute(i, acceso) {
+    return this.poniMixer(i, { muto: acceso ?? !this.canali[i].mute });
+  }
+
+  piuEntraTra(delta) {
+    const k = Math.min(ENTRA_TRA.length - 1, Math.max(0, ENTRA_TRA.indexOf(this.entraTra) + delta));
+    this.entraTra = ENTRA_TRA[k];
+  }
+
+  // --- cosa far vedere ---
+
+  // Una clip di un brano diverso sia da quello del DRUM che suona sia da quello nel CUE.
+  vecchia(i) {
+    const s = this.canali[i].suona;
+    if (!s || !s.brano) return false;
+    const drum = this.canali[chDellaBeat(this.config)].suona?.brano ?? null;
+    return s.brano !== drum && s.brano !== (this.brano?.nome ?? null);
+  }
+
+  // Luce di GO: spenta = vuoto · accesa = suona e in NEXT c'è la stessa · lenta = in NEXT c'è altro · veloce = entrata in attesa.
+  luceGo(i) {
+    const c = this.canali[i];
+    if (c.attesa) return 'veloce'; // sta per entrare o per uscire (lo schermo dice quale)
+    if (this.armato(i)) return 'lenta';
+    return c.suona ? 'accesa' : 'spenta';
+  }
+
+  // S: accesa = quel CH è in cuffia.
+  luceOut(i) {
+    return this.cuffiaCh?.ch === i ? 'accesa' : 'spenta';
+  }
+
+  luceMute(i) {
+    return this.canali[i].mute ? 'accesa' : 'spenta';
+  }
+
+  // Avvisi ben visibili sul CH: suona ma non si sente (MUTE o fader a zero).
+  avvisi(i) {
+    const c = this.canali[i];
+    if (!c.suona) return [];
+    return [...(c.mute ? ['MUTE'] : []), ...(gainFader(c.vero) === 0 ? ['fader a zero'] : []), ...(c.mutaClip ? ['clip muta'] : [])];
+  }
+
+  // La foto per lo schermo.
+  vista() {
+    return this.canali.map((c, i) => ({
+      indice: i,
+      nome: this.config[i].nome,
+      tipi: this.config[i].tipi,
+      free: !!this.config[i].free,
+      alternative: this.alternative(i),
+      suona: c.suona,
+      next: this.next(i),
+      attesa: c.attesa,
+      // valore = dove sta lo slider (la mano, se il fader fisico non è agganciato; altrimenti il valore vero) · vero = la tacca
+      fader: { valore: c.agganciato || c.fisico === null ? c.vero : c.fisico, vero: c.vero, letto: c.fisico !== null, agganciato: c.agganciato, gain: gainFader(c.vero) },
+      sweep: sweep(c.aa),
+      mute: c.mute,
+      armato: this.armato(i),
+      azioneR: this.azioneR(i),
+      inCuffia: this.cuffiaCh?.ch === i,
+      vecchia: this.vecchia(i),
+      avvisi: this.avvisi(i),
+      luci: { r: this.luceGo(i), s: this.luceOut(i), m: this.luceMute(i) },
+    }));
+  }
+}

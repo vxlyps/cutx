@@ -24,6 +24,12 @@ npm install
 npm start
 ```
 
+### Controller / Controllers
+
+**IT** — CUTX usa il **Korg nanoKONTROL2** (la regia: cosa suona) e l'**Behringer X-Touch Mini** in modalità MC (come suona). Una volta sola, col nano, nell'**Editor Korg**: LED Mode = **External**, pulsanti in **Momentary**, un solo canale MIDI (**1**), tipo **CC**, poi **Write Scene Data**. Le mappe stanno in `docs/CANALI.md`.
+
+**EN** — CUTX uses the **Korg nanoKONTROL2** (the director: what plays) and the **X-Touch Mini** in MC mode (how it sounds). Once, with the Korg Editor: LED Mode = **External**, buttons **Momentary**, a single MIDI channel (**1**), assign type **CC**, then **Write Scene Data**. Maps in `docs/CANALI.md`.
+
 ## Licenza / License
 
 [AGPL-3.0-or-later](LICENSE), come Strudel / like Strudel.

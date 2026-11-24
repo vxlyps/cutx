@@ -681,7 +681,8 @@
         "filtro": "filtro",
         "amp": "amp",
         "drive": "drive",
-        "space": "space"
+        "space": "space",
+        "mod": "mod"
       },
       "comandi": {
         "cue": "→ CUE",
@@ -701,6 +702,14 @@
       },
       "generale": "master",
       "corti": {
+        "mod1dest": "lfo1",
+        "mod1forma": "lfo1 wav",
+        "mod1rate": "lfo1 rat",
+        "mod1depth": "lfo1 dep",
+        "mod2dest": "lfo2",
+        "mod2forma": "lfo2 wav",
+        "mod2rate": "lfo2 rat",
+        "mod2depth": "lfo2 dep",
         "forma": "forma",
         "voci": "voci",
         "detune": "detune",
@@ -764,11 +773,22 @@
     "spenta": "MOVIOLA spenta: accendila nelle impostazioni",
     "segno": "SEGNO"
   },
+  "nano": {
+    "stop": "attese annullate",
+    "stopNiente": "niente in attesa",
+    "prossimo": "PROSSIMO · {nome}",
+    "prossimoModificato": "PROSSIMO ha modifiche: ripremi TRACK per buttarle",
+    "nessunBrano": "nessun altro brano da aprire",
+    "entraTra": "ENTRA TRA {n}",
+    "recSoloSynth": "REC vale nel SYNTH"
+  },
   "cue": {
     "entraTra1": "entra tra 1 ciclo",
     "entraTra": "entra tra {n} cicli",
     "senzaBeat": "«{nome}» va live senza il BEAT · per la base: go live sulla card BEAT",
-    "vuota": "«{nome}» è vuota: niente da mandare live"
+    "vuota": "«{nome}» è vuota: niente da mandare live",
+    "next": "NEXT",
+    "nextTitolo": "Porta questa clip in NEXT del suo canale (ricliccato la toglie): parte con R o con PLAY"
   },
   "proj": {
     "titolo": "PROJ",
@@ -980,6 +1000,35 @@
     "hackMinuti": {
       "nome": "finale HACK · durata",
       "testo": "quanto dura il finale in cui la cimice si prende il set e lo chiude (bottone HACK o ⌥⌘⇧H due volte): da 1 a 3 minuti, di serie 2. Solo in memoria: i file del set non si toccano; il paracadute lo ferma e rimette tutto."
+    }
+  },
+  "canali": {
+    "aiuto": "Gli 8 canali del LIVE. Ognuno ha un nome (libero) e i tipi di clip che accoglie. Un tipo sta in un canale solo; la clip senza tipo non è di nessun canale (sta in DA ASSEGNARE finché non scegli il suo CH); il tipo stray manda una clip nel canale FREE. Si cambiano a live fermo e valgono per tutti i PROJ.",
+    "fermo": "Il live suona: i canali si possono solo guardare. Ferma il live per cambiarli.",
+    "ch": "CH{n}",
+    "daAssegnare": "DA ASSEGNARE",
+    "daAssegnareBreve": "da assegnare ▾",
+    "senzaCanale": "«{nome}» non ha un canale: scegli CH dal menu, poi entra",
+    "usaSuggeriti": "usa i suggeriti",
+    "usaSuggeritiTitolo": "Dà a ogni clip senza tipo il tipo suggerito dal suo nome (un solo ⌘Z li toglie). Non manda niente live.",
+    "usaSuggeritiEtichetta": "tipi suggeriti a {n} clip",
+    "nessunSuggerito": "nessuna clip ha un tipo da suggerire: scegli il CH dal menu di ogni card",
+    "nome": "nome del canale",
+    "free": "FREE",
+    "freeAiuto": "il canale dei senza tipo e dei «in più»",
+    "predefinito": "torna al predefinito",
+    "errNome": "il CH{n} non ha un nome: il cambio non è stato salvato",
+    "letto": "canali.json non va bene ({motivo}): uso quelli predefiniti",
+    "salvato": "salvato",
+    "tipi": {
+      "drum": "drum",
+      "perc": "perc",
+      "bass": "bass",
+      "lead": "lead",
+      "arp": "arp",
+      "pad": "pad",
+      "keys": "keys",
+      "fx": "fx"
     }
   }
 }

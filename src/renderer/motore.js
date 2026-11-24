@@ -6,6 +6,7 @@ import { eventiDaHap } from './striscia.js';
 import { eNomeBeat } from './nomi.js';
 import { CEILING, creaLimiter, microEntrata } from './limiter.js';
 import { CICLI_RAMPA, gradiniRampa } from './passaggio.js';
+import { scegliAttese, togliRampa } from './attese.js';
 import { applica as applicaCoda, applicaGlobali, commuta, limitaGlobali, eScorrevole, imposta as impostaVoce, leggiVoce, numeroDi, togli as togliVoce, valoreDi, valoreLetterale, valoreScivolato } from './coda.js';
 import { evalScope, getTrigger, noteToMidi, repl, setTime, signal, silence, State, TimeSpan } from '@strudel/core';
 import { transpiler } from '@strudel/transpiler';
@@ -30,6 +31,7 @@ import { suoniNuovi } from './suoni-nuovi.js';
 import { caricaSuoniStrudel } from './suoni-strudel.js';
 import { annulla, filtroEntra, filtroEsce, programma, taglia } from './dissolvenza.js';
 import { chiEsce } from './transizioni.js';
+import { N_CH_MIXER, applicaMessaggioCh, chNeutro, guadagnoLivello } from './mixer.js';
 import { guasto, sicuro } from './guasto.js';
 
 const RUOLO = new URLSearchParams(location.search).get('ruolo') === 'live' ? 'live' : 'cuffia';
@@ -59,6 +61,8 @@ let limiter = null; // { compressore, analisi, ingresso }
 let porta = null; // GainNode dopo il limiter: chiuso per un attimo durante il cambio di uscita
 let volumeCuffia = null; // cuffia: GainNode prima del limiter
 let volumeCuffiaVoluto = 1; // e dove deve arrivare (leggere .value di un parametro che sfuma non dà il valore finale)
+let guadagnoProva = null; // cuffia: GainNode a parte per il preascolto (volume della clip × volume del CH), prima del volume della cuffia
+let guadagnoProvaVoluto = 1;
 function installaLimiter() {
   if (!limiter) {
     const l = creaLimiter(ac);
@@ -66,13 +70,15 @@ function installaLimiter() {
     if (!LIVE) {
       volumeCuffia = new GainNode(ac, { gain: volumeCuffiaVoluto });
       volumeCuffia.connect(l.ingresso);
+      guadagnoProva = new GainNode(ac, { gain: guadagnoProvaVoluto });
+      guadagnoProva.connect(volumeCuffia);
     }
     // la porta: l'ultimo nodo prima delle casse. Si chiude un attimo quando l'uscita audio cambia (scheda riattaccata), così il cambio non schiocca.
     porta = new GainNode(ac, { gain: 1 });
     l.uscita.connect(porta).connect(ac.destination);
     l.uscita.connect(analisi);
     analisi.connect(new GainNode(ac, { gain: 0 })).connect(ac.destination); // senza arrivare all'uscita l'analizzatore non lavora
-    limiter = { compressore: l.compressore, analisi, ingresso: volumeCuffia ?? l.ingresso };
+    limiter = { compressore: l.compressore, analisi, ingresso: guadagnoProva ?? l.ingresso };
   }
   collegaLimiter();
 }
@@ -478,6 +484,8 @@ function cambiaCoda(m) {
 function annullaIngresso(l, tieni) {
   if (l.tempo) rip.annullaCambio(l.tempo.ciclo, l.tempo.cps);
   l.tempo = null;
+  togliRampa(rip, l.rampa, (cambi) => cambiaTempo(null, { rimetti: cambi })); // il passaggio annullato non lascia i suoi gradini: il tempo resta com'era
+  l.rampa = null;
   if (tieni) {
     for (const v of l.scambiati ?? []) {
       if (!livelli.includes(v) || v.a === Infinity || v.a <= (rip.fine ?? -Infinity)) continue; // già uscito: non si può più tenere
@@ -488,31 +496,46 @@ function annullaIngresso(l, tieni) {
   l.scambiati = null;
 }
 
-// GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome lo sostituisce lì.
+// GO LIVE: il livello entra al confine tra `cicli` cicli. Uno con lo stesso nome nello stesso CH lo sostituisce lì.
 // Un livello che ne sostituisce uno con lo stesso nome ne eredita il muto (ho solo cambiato il codice). Non il beat che cambia scena:
 // la scena nuova entra sempre sentita, anche se quella di prima era in muto.
 const mutoEreditato = (nuovo, vecchio) => (nuovo.beat && vecchio.beat && nuovo.beat.indice !== vecchio.beat.indice ? false : vecchio.muto);
 
-async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null }) {
+// Compila e controlla un pezzo (l'unica parte che aspetta): { c } o { errore }. Il guardiano: un codice che si rompe in uno dei primi cicli
+// (un errore pigro) non entra, e quello che suona continua.
+async function preparaEntra({ codice, nome }) {
   if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
   const c = await compila(codice);
   if (c.errore) return { errore: c.errore };
-  // il guardiano: un codice che si rompe in uno dei primi cicli (un errore pigro) non entra, e quello che suona continua
   const guasto = verificaPattern(c.pattern);
   if (guasto) return { errore: guasto };
   avvisaSuoniMancanti(c.pattern, nome);
+  return { c };
+}
+
+async function entra(m) {
+  const p = await preparaEntra(m);
+  return p.errore ? p : applicaEntra(m, p.c);
+}
+
+// Il confine in cui entra qualcosa «tra N cicli»: il prossimo confine più N−1 cicli.
+const confineTra = (cicli = 1) => rip.prossimoConfine() + Math.max(1, cicli) - 1;
+
+// `daFisso`: il ciclo d'arrivo deciso da chi manda un gruppo (PLAY): vale per tutti allo stesso modo.
+function applicaEntra({ codice, nome, provenienza, ch = null, drum, cicli = 1, scritto = false, volume, dissolvenza, coda, inizio, subito = false, griglia = 0, beat = null, alle = null, rampa = null, transizione = null, unico = false }, c, daFisso = null) {
   // subito (il riser del fader): entra dal primo punto non ancora programmato, senza aspettare il confine del ciclo
   // (con una griglia — i colpi — entra sul primo punto della griglia)
-  let da = subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : rip.prossimoConfine() + Math.max(1, cicli) - 1;
+  let da = daFisso ?? (subito ? (griglia ? battitoDopo(griglia) : rip.fine ?? rip.ciclo(ac.currentTime)) : confineTra(cicli));
   // armare il drop: se un cambio di scena è in attesa, la clip entra insieme a lui
-  if (Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
+  if (daFisso === null && Number.isFinite(alle) && alle > da - 1e-9 && alle <= da + 64) da = alle;
   const l = nuovoLivello(codice, c.pattern, { nome, provenienza, scritto }, da);
+  l.ch = ch ?? null; // il CH (CH1…CH8) in cui sta: l'identità del livello è CH + nome, la stessa clip in due CH = due livelli
   l.beat = beat; // il beat porta con sé le sue scene (◀ ▶ li scorrono) e quello da cui parte: { base, indice, scene }
   l.drum = !!drum; // una clip segnata «· drum»: sotto la sua card c'è l'onda (come per il beat)
   const d = dissolvenzaDi(dissolvenza);
   const scambi = [];
   for (const vecchio of livelli) {
-    if (vecchio.nome !== l.nome || vecchio.a <= da) continue;
+    if (vecchio.nome !== l.nome || (vecchio.ch ?? null) !== l.ch || vecchio.a <= da) continue;
     // un cambio già in attesa (non è ancora entrato) viene sostituito dal nuovo: non suona mai, e il nuovo prende il suo posto
     if (vecchio.da >= da) {
       vecchio.a = vecchio.da;
@@ -536,6 +559,20 @@ async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = fal
     // il preambolo (che il proiettore può nascondere) resta quello di prima finché il codice comincia uguale
     if (inizio === undefined && codice.startsWith(vecchio.codice.slice(0, vecchio.inizio))) l.inizio = vecchio.inizio;
   }
+  // un CH con un tipo suona UNA clip sola: le altre dello stesso CH (nome diverso) escono dove entra la nuova, e non le lasciano niente in eredità
+  // (il ciclo «stesso nome» qui sopra fa ereditare beat, coda e volume: qui no, sono clip diverse). La FREE invece impila (scratch, scratch 2…).
+  if (unico && l.ch !== null) {
+    for (const v of livelli) {
+      if ((v.ch ?? null) !== l.ch || v.nome === l.nome || v.a <= da) continue;
+      if (v.da >= da) {
+        v.a = v.da; // era in attesa: non suona mai
+        annullaIngresso(v, false);
+        continue;
+      }
+      v.a = Math.max(v.da, da) + d.cicli;
+      scambi.push(v);
+    }
+  }
   // la transizione: sull'1 in cui entra il nuovo, tutti gli altri livelli che suonano (tranne i tenuti) cominciano a uscire,
   // con il passa-alto che parte da `hz` (lo scambio dei bassi: la cassa del vecchio se ne va con tutto il resto)
   const tr = transizioneDi(transizione);
@@ -550,7 +587,7 @@ async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = fal
   livelli.push(l);
   l.tempo = c.cps ? { ciclo: da, cps: c.cps } : null;
   if (c.cps) cambiaTempo(c.cps, da); // il tempo del livello vale dal ciclo in cui entra
-  if (rampa && rip.mappa) rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
+  if (rampa && rip.mappa) l.rampa = rampaTempo(da, cpsDi(Number(rampa.bpm)), Number(rampa.cicli) || CICLI_RAMPA); // passando a un brano a tempo vicino: il tempo ci arriva piano
   iniziaSet(da);
   aggiornaLivelli();
   dissolvi(l, 'entra', da, d.cicli, d.entra);
@@ -563,10 +600,37 @@ async function entra({ codice, nome, provenienza, drum, cicli = 1, scritto = fal
 // La rampa del passaggio tra due brani: dal ciclo `da` (quando entra il beat nuovo) il tempo sale o scende di un gradino a ciclo fino a `cps1`.
 // Una modifica a mano del tempo ('ciclo') vince: annulla i gradini che non sono ancora arrivati.
 function rampaTempo(da, cps1, cicli) {
-  if (!(cps1 > 0)) return;
+  if (!(cps1 > 0)) return null;
   const ultimo = rip.cambiProssimi(ac.currentTime).filter((c) => c.ciclo < da).at(-1)?.cps;
   const cps0 = ultimo ?? rip.cpsAl(ac.currentTime);
-  cambiaTempo(null, { da, rampa: gradiniRampa(cps0, cps1, da, cicli) });
+  const gradini = gradiniRampa(cps0, cps1, da, cicli);
+  const tolti = rip.cambiTempo.filter((c) => c.ciclo > da - 1).map((c) => ({ ...c })); // i cambi che la rampa cancella: se la rampa si annulla tornano
+  cambiaTempo(null, { da, rampa: gradini });
+  return { gradini, tolti };
+}
+
+// STOP (e ogni «annulla le attese»): tutto quello che non è ancora cominciato si annulla in un colpo.
+// Entrate non ancora entrate (con la loro rampa e il loro setcpm; chi usciva per loro resta) e uscite la cui sfumata non è ancora partita.
+// Quello che è già cominciato (una transizione partita, una dissolvenza a metà) va avanti.
+function annullaAttese() {
+  if (!rip.mappa) return { annullati: 0 };
+  const soglia = Math.max(rip.ciclo(ac.currentTime), rip.fine ?? -Infinity);
+  const { entrate, uscite } = scegliAttese(livelli, soglia, {
+    salta: (l) => l.nome === 'paracadute' || l.provenienza === 'controller' || !!paracadute?.salvati.includes(l),
+  });
+  // prima le uscite: così chi usciva per un'entrata che si annulla non viene toccato due volte
+  for (const v of uscite) {
+    v.a = Infinity;
+    annullaDissolvi(v);
+  }
+  const tempo = entrate.some((l) => l.tempo || l.rampa);
+  for (const l of entrate) {
+    l.a = l.da; // non suona mai
+    annullaIngresso(l, true); // e quello che doveva sostituire continua a suonare
+  }
+  if (tempo) pubblicaMappa();
+  if (entrate.length || uscite.length) aggiornaLivelli();
+  return { annullati: entrate.length + uscite.length };
 }
 
 // --- paracadute "CUTX, scelgo te!" ---
@@ -614,7 +678,7 @@ function riprendiDalParacadute(dissolvenza) {
 
 // Esce alla fine del ciclo in corso.
 // Con una dissolvenza il livello continua a suonare e sfuma per tot cicli; un secondo togli (o un clic sulla card) lo salva.
-function togli(id, dissolvenza, subito = false, griglia = 0) {
+function togli(id, dissolvenza, subito = false, griglia = 0, cicli = 1, daFisso = null) {
   const l = livelli.find((x) => x.id === id);
   if (!l) return;
   if (subito && l.a === Infinity) {
@@ -624,13 +688,34 @@ function togli(id, dissolvenza, subito = false, griglia = 0) {
   if (l.sfuma?.verso === 'esce' && l.a !== Infinity) return salva(l);
   if (l.a !== Infinity) return;
   const d = dissolvenzaDi(dissolvenza);
-  const fine = Math.max(l.da, rip.prossimoConfine());
+  const fine = Math.max(l.da, daFisso ?? confineTra(cicli)); // esce a «entra tra», come entra
   const inAttesa = l.da > rip.ciclo(ac.currentTime);
   const parte = inAttesa ? 0 : d.cicli; // un livello che non è ancora entrato se ne va e basta
   l.a = fine + parte;
   if (inAttesa) annullaIngresso(l, true); // e quello che doveva sostituire continua a suonare
   aggiornaLivelli();
   dissolvi(l, 'esce', fine, parte, d.esce);
+}
+
+// Un OUT in attesa si annulla (ANNULLA su R): il livello che stava uscendo torna a suonare, con o senza dissolvenza.
+function riprendi(id) {
+  const l = livelli.find((x) => x.id === id);
+  if (!l || l.a === Infinity || l.a <= rip.ciclo(ac.currentTime)) return; // già uscito, o non sta uscendo
+  l.a = Infinity;
+  annullaDissolvi(l);
+  aggiornaLivelli();
+}
+
+// Un gruppo (PLAY): prima si preparano e compilano tutti i pezzi, poi si calcola UN solo ciclo d'arrivo e tutti entrano (o escono) lì,
+// nella stessa mossa, senza niente in mezzo che aspetti. Se un pezzo ha un errore non entra, gli altri sì.
+async function gruppo({ cicli = 1, entrate = [], uscite = [] }) {
+  if (!rip.mappa) return { errore: 'il live si sta ancora avviando: riprova tra un attimo' };
+  const pronte = [];
+  for (const m of entrate) pronte.push(await preparaEntra(m));
+  const da = confineTra(cicli);
+  const risposte = entrate.map((m, k) => (pronte[k].errore ? { errore: pronte[k].errore } : applicaEntra(m, pronte[k].c, da)));
+  for (const u of uscite) togli(u.livello, u.dissolvenza, false, 0, 1, da);
+  return { da, risposte };
 }
 
 // L'uscita si annulla: il livello torna al suo volume e resta.
@@ -679,6 +764,7 @@ const descrivi = (l) => ({
   id: l.id,
   nome: l.nome,
   provenienza: l.provenienza,
+  ch: l.ch ?? null,
   codice: l.codice,
   coda: l.coda,
   scivola: l.scivolate,
@@ -701,6 +787,9 @@ const descrivi = (l) => ({
 // agiscono subito anche sui suoni già partiti, con una sfumata breve (niente click).
 const SFUMATA_S = 0.02; // costante di tempo: a regime in circa 80 ms
 const guadagni = new Map(); // id → { orbita, gain }
+// Il mixer dei CANALI: volume e muto di ogni CH, solo qui nel live (la cuffia è pre-fader: non lo conosce). Una clip nuova di un CH lo prende da sola.
+const mixer = Array.from({ length: N_CH_MIXER }, chNeutro);
+const chDi = (l) => (Number.isInteger(l.ch) ? mixer[l.ch] ?? null : null);
 let masterVoluto = 1; // il volume generale del live, come l'ha chiesto l'ultima volta il controller
 let tagliato = false; // lo stop dei colpi è premuto: tutto è tagliato finché non torna l'1
 function guadagnoDi(l) {
@@ -708,7 +797,7 @@ function guadagnoDi(l) {
     const controller = getSuperdoughAudioController();
     const orbita = 1000 + l.id;
     const o = controller.getOrbit(orbita, [0, 1]);
-    const gain = new GainNode(ac, { gain: l.muto ? 0 : l.volume });
+    const gain = new GainNode(ac, { gain: guadagnoLivello(l, chDi(l)) });
     // orbita → passa-basso → passa-alto → volume → dissolvenza → casse (vedi dissolvenza.js): aperti, i filtri sono l'identità
     const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: ac.sampleRate / 2, Q: 0.707 });
     const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 0, Q: 0.707 });
@@ -736,7 +825,7 @@ function applicaGuadagni() {
     const g = guadagnoDi(l);
     l.orbita = g.orbita;
     const rompi = breakFattore < 1 && !eBeatVera(l) ? breakFattore : 1;
-    g.gain.gain.setTargetAtTime(l.muto ? 0 : l.volume * rompi, ac.currentTime, SFUMATA_S);
+    g.gain.gain.setTargetAtTime(guadagnoLivello(l, chDi(l), rompi), ac.currentTime, SFUMATA_S); // volume della clip × del CH × break
   }
 }
 // Lo stop come su un mixer. giù: i GainNode di taglio vanno a zero in pochi ms; su: tornano a uno al ciclo `ciclo` (o subito).
@@ -829,7 +918,7 @@ function aggiornaLivelli() {
   applicaGuadagni();
   rip.sorgenti = livelli;
   const descritti = livelli.map(descrivi);
-  const messaggio = { tipo: 'livelli', livelli: descritti, paracadute: !!paracadute };
+  const messaggio = { tipo: 'livelli', livelli: descritti, paracadute: !!paracadute, mixer: mixer.map((c) => ({ ...c })) };
   manda('controllo', messaggio);
   manda('uscita', messaggio);
   manda('cuffia', { tipo: 'livelli-live', livelli: descritti });
@@ -872,6 +961,11 @@ function pubblicaMappa() {
 // quando: 'subito' | 'ciclo' | un numero di ciclo.
 function cambiaTempo(cps, quando) {
   if (!LIVE || !rip.mappa) return;
+  if (quando?.rimetti) {
+    // una rampa annullata: i cambi che aveva cancellato tornano
+    for (const g of quando.rimetti) rip.cambiaCpsA(g.ciclo, g.cps);
+    return pubblicaMappa();
+  }
   if (quando?.rampa) {
     // la rampa del passaggio tra due brani: un gradino a ciclo a partire da quando.da (i gradini già programmati dopo si annullano)
     rip.annullaCambiDopo(quando.da - 1);
@@ -1152,12 +1246,14 @@ function stato() {
     nome: LIVE ? (ultimo?.nome ?? null) : prova.nome,
     provenienza: LIVE ? (ultimo?.provenienza ?? null) : prova.provenienza,
     livelli: LIVE ? livelli.map(descrivi) : undefined,
+    mixer: LIVE ? mixer.map((c) => ({ ...c })) : undefined, // dopo un crash dell'interfaccia lo riprende da qui
     ricostruzioni,
     globali: [...globali.values()],
     breakFattore,
     tagliato,
     master: LIVE ? masterVoluto : undefined,
     volumeCuffia: volumeCuffia ? volumeCuffiaVoluto : undefined,
+    guadagnoProva: guadagnoProva ? guadagnoProvaVoluto : undefined, // il preascolto: volume della clip × volume del CH
     limiter: limiter ? { riduzioneDb: limiter.compressore.reduction, picco: piccoUscita(), ceiling: CEILING } : null,
     paracadute: LIVE ? !!paracadute : undefined,
     guadagni: LIVE ? Object.fromEntries([...guadagni].map(([id, g]) => [id, g.gain.gain.value])) : undefined,
@@ -1327,7 +1423,15 @@ async function ricevi(da, m) {
       return manda(da, { tipo: 'risposta', ...r, id: m.id });
     }
     case 'togli':
-      return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0);
+      return togli(m.livello, m.dissolvenza, m.subito, Number(m.griglia) || 0, Number(m.cicli) || 1);
+    case 'riprendi':
+      return riprendi(m.livello);
+    case 'annulla-attese':
+      return manda(da, { tipo: 'risposta', ...(LIVE ? annullaAttese() : { annullati: 0 }), id: m.id });
+    case 'gruppo': {
+      const r = LIVE ? await gruppo(m) : { errore: 'solo il live fa entrare i livelli' };
+      return manda(da, { tipo: 'risposta', ...r, id: m.id });
+    }
     case 'globale': // una riga globale (all(x => …)) del fader o di un colpo; riga null la toglie
       // lo stop: taglia SUBITO tutto quello che suona (anche le note già partite), e al rilascio il suono torna sull'inizio della griglia (l'1)
       if (m.taglio === 'giu') tagliaTutto(true);
@@ -1349,6 +1453,12 @@ async function ricevi(da, m) {
       return applicaGuadagni();
     case 'salva-livello': // un clic sulla card che sta sfumando
       return salva(livelli.find((x) => x.id === m.livello));
+    case 'ch': {
+      // volume e muto di un CH, subito (anche per le clip che entreranno)
+      if (!LIVE || !Number.isInteger(m.ch) || !mixer[m.ch]) return;
+      applicaMessaggioCh(mixer[m.ch], m);
+      return aggiornaLivelli();
+    }
     case 'livello': {
       // volume e muto di un livello, subito
       const l = livelli.find((x) => x.id === m.livello);
@@ -1456,6 +1566,10 @@ async function ricevi(da, m) {
     case 'volume-cuffia': // il SYNTH ascolta piano (0,5); il CUE torna a 1. Con una sfumata breve, mai uno scalino
       volumeCuffiaVoluto = Math.max(0, Math.min(1, Number(m.volume)));
       volumeCuffia?.gain.setTargetAtTime(volumeCuffiaVoluto, ac.currentTime, SFUMATA_S);
+      return;
+    case 'guadagno-prova': // il preascolto di una clip: volume della clip × volume del CH (muto escluso). Una sfumata breve, mai uno scalino
+      guadagnoProvaVoluto = Math.max(0, Math.min(1.5, Number.isFinite(Number(m.volume)) ? Number(m.volume) : 1));
+      guadagnoProva?.gain.setTargetAtTime(guadagnoProvaVoluto, ac.currentTime, SFUMATA_S);
       return;
     case 'udibile': // cuffia on/off: il motore continua a girare, si spegne solo l'uscita
       getSuperdoughAudioController().output.destinationGain.gain.value = m.on ? 1 : 0;

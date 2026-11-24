@@ -149,9 +149,16 @@
         <div class="testa">
           <span class="titolo">LIVE</span>
           <span class="lbl">casse + proiettore</span>
+          <div class="spazio"></div>
+          <span id="nano-stato" class="lbl" hidden>nano</span>
+          <div class="segmenti" id="vista-live">
+            <button class="key on" data-vista="canali">canali</button>
+            <button class="key" data-vista="pila">pila</button>
+          </div>
         </div>
         <div class="corpo">
-          <div id="livelli" class="livelli"></div>
+          <div id="canali-griglia" class="canali-griglia"></div>
+          <div id="livelli" class="livelli" hidden></div>
           <pre id="globali" class="globali" data-aiuto="globali" hidden></pre>
           <article id="jam" class="card jam"></article>
         </div>
@@ -163,6 +170,7 @@
             <div></div>
             <div></div>
           </div>
+          <div id="grande-nano" class="grande-nano" aria-live="polite"></div>
           <span id="riga-controller" class="lbl riga-controller" aria-live="polite"></span>
           <span id="tempo-live" class="lbl tempo-set"></span>
           <button id="passa-brano" data-aiuto="passa-brano" class="key piccolo tenere">prossimo brano ▸<span class="riempi"></span></button>
@@ -256,6 +264,7 @@
           <button class="key" data-sez="scorciatoie">scorciatoie</button>
           <button class="key" data-sez="proiezione">proiezione</button>
           <button class="key" data-sez="controller">controller</button>
+          <button class="key" data-sez="canali">canali</button>
           <button class="key" data-sez="stash">stash</button>
           <button class="key" data-sez="suoni">suoni</button>
           <button class="key" data-sez="ableton">ableton</button>
@@ -347,6 +356,17 @@
           <h2 class="imp-sotto">scrittura del codice sul proiettore</h2>
           <p class="lbl imp-aiuto">come si scrive il codice che sta per entrare. È solo visivo: al motore arriva sempre il codice giusto. L'anteprima in alto ricomincia a scrivere ogni 12 secondi.</p>
           <div id="imp-scrittura" class="imp-gruppo"></div>
+        </section>
+
+        <section class="imp-sez" data-sez="canali" hidden>
+          <h1 class="imp-titolo">canali</h1>
+          <p class="lbl imp-aiuto" id="can-aiuto"></p>
+          <div id="can-avviso" class="imp-nota"></div>
+          <div id="can-righe" class="can-righe"></div>
+          <div class="imp-riga">
+            <div class="imp-testo"><span id="can-errore" class="imp-nota"></span></div>
+            <button id="can-predefinito" class="key"></button>
+          </div>
         </section>
 
         <section class="imp-sez" data-sez="controller" hidden>
