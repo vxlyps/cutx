@@ -103,6 +103,7 @@ Io (Claude) sono il capo progetto: decido architettura, approccio, priorità. Co
 
 ## Stato (riassunto; il dettaglio è in `docs/STATO.md`)
 - Ultima release: **0.5.1-beta.3** «CUTX_05_1_3» (`docs/NOVITA-5.1.3.md`): tasti del Mac e REC nel DRUM, synth al volo, → CUE come scena del beat, più la CIMICE sul proiettore (beta.1, `docs/CIMICE.md`). **Una sola linea: `main`.** Lavori in parallelo = `git worktree` (cartella a parte, ramo suo), mai due sessioni nella stessa cartella. L'arpeggio incompleto sta nel ramo `arpeggio-wip` (non in `main`).
+- **Schermate per il libretto**: `npm run libretto` (`--libretto=<cartella>`, codice in `src/main/libretto*.js`) rifà le 29 schermate della 0.6 in `~/Desktop/cutx-libretto/schermate-0.6/` con dati `CUTX-libretto` e uno stash pulito creato a ogni giro; `CUTX_LIBRETTO_SOLO=01,07` ne rifà solo alcune. Alla prossima versione: rilanciare, aggiornare `elenco.md`.
 - MOVIOLA (scatola nera delle prove, SEGNA, `analizza-prova`): come si usa in `docs/MOVIOLA.md`.
 - Fatti: postazione a tre colonne, CUE e LIVE a livelli, brani `.cutx`, stash, Ableton, proiettore, controller X-Touch (LIVE e SYNTH), SYNTH con pianoroll (selezione, matita, passi, velocity, griglie, scale, codice incollato). Specifica del SYNTH: `docs/SYNTH.md`.
 - Da fare, in ordine: MOD trascinabili, ARPEGGIO e CAOS, tastiera MIDI (MiniLab 3) e suoni salvati; poi SHOW (col controller sempre sul LIVE), RECOVER, SIDECHAIN/DUCK, transizioni; poi ASSIST; spostare le parole in `testi/it.json`. Elenco: `docs/PROSSIMI.md`.

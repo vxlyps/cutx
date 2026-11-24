@@ -13,6 +13,7 @@ import * as ableton from './ableton.js';
 import * as log from './log.js';
 import * as suoniStrudel from './suoni-strudel-ipc.js';
 import { Moviola } from './moviola.js';
+import { preparaStashLibretto } from './libretto-stash.js';
 
 const QUI = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(QUI, '../../dist');
@@ -23,6 +24,7 @@ const ICONA = path.resolve(QUI, '../../risorse/icona/cutx.png');
 // prova automatica: --prova (tutto), --prova=robustezza, --prova=brani; con --silenzioso solo fallimenti e conteggio
 const PROVA = process.argv.find((a) => a === '--prova' || a.startsWith('--prova='))?.split('=')[1] ?? (process.argv.includes('--prova') ? 'robustezza,brani,entrata,livelli,browser,impostazioni,ableton,neon,tempo,solidita,uscita' : null);
 const SCHERMATE = process.argv.find((a) => a.startsWith('--schermate='))?.slice('--schermate='.length); // giro di tutti i pannelli a più dimensioni
+const LIBRETTO = process.argv.find((a) => a.startsWith('--libretto='))?.slice('--libretto='.length); // giro di schermate per il libretto stampato (src/main/libretto.js)
 const FOTO = process.argv.find((a) => a.startsWith('--foto='))?.slice('--foto='.length); // foto della postazione
 const FOTO_PROJ = process.argv.find((a) => a.startsWith('--foto-proj='))?.slice('--foto-proj='.length); // foto della schermata dei PROJ
 const SALTINO = process.argv.includes('--saltino'); // misura del saltino al salvataggio
@@ -31,7 +33,7 @@ const CHIUSURA = process.argv.find((a) => a.startsWith('--chiusura='))?.slice('-
 
 // OGNI flag di prova, foto o misura gira con dati a parte (CUTX-prova, CUTX-chiusura), accanto a una CUTX eventualmente aperta e senza
 // toccarne le preferenze vere. Un flag nuovo si aggiunge QUI: se la cartella dati non è quella separata l'app non parte (guardia sotto).
-const PER_PROVE = !!(PROVA || FOTO || FOTO_PROJ || SCHERMATE || SFONDO || SALTINO || CHIUSURA);
+const PER_PROVE = !!(PROVA || FOTO || FOTO_PROJ || SCHERMATE || LIBRETTO || SFONDO || SALTINO || CHIUSURA);
 // Prova «senza rete» (scripts/prova-suoni-strudel.mjs --senza-rete): l'app di prova non risolve nessun indirizzo (solo localhost), il resto del Mac resta in rete.
 if (PER_PROVE && process.env.CUTX_PROVA_SENZA_RETE === '1') app.commandLine.appendSwitch('host-resolver-rules', 'MAP * ~NOTFOUND, EXCLUDE localhost');
 // Le mani: la prova automatica usa un video di una mano al posto della webcam (Chromium sa leggere un file come finta camera).
@@ -45,8 +47,9 @@ if (PROVA && PROVA.split(',').some((p) => p === 'mani' || p === 'mani-dump') && 
 // Due sessioni di lavoro non devono usare gli stessi dati di prova: CUTX_PROVA_NOME=altro dà dati (CUTX-prova-altro) e, se serve, CUTX_PROVA_STASH uno stash di prova a parte.
 if (PER_PROVE) {
   const nome = (process.env.CUTX_PROVA_NOME || '').replace(/[^\w-]/g, '');
-  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : `CUTX-prova${nome ? `-${nome}` : ''}`);
+  const dati = path.join(app.getPath('appData'), CHIUSURA ? 'CUTX-chiusura' : LIBRETTO ? 'CUTX-libretto' : `CUTX-prova${nome ? `-${nome}` : ''}`);
   app.setPath('userData', dati);
+  if (LIBRETTO) preparaStashLibretto(dati); // stash pulito a ogni giro: PROJ 01, pochi suoni con nomi veri, niente dei miei file
   const impostazioni = path.join(dati, 'impostazioni.json');
   if (!existsSync(impostazioni)) {
     mkdirSync(dati, { recursive: true });
@@ -93,7 +96,7 @@ if (!PER_PROVE) migraDaDaneel();
 
 // Il registro: errori e avvisi di tutti i processi, in ~/Library/Logs/CUTX (nelle prove, in una cartella a parte).
 // La guardia: una prova che non sta nella cartella dati separata si ferma prima di toccare qualsiasi cosa.
-if (PER_PROVE && !/CUTX-(prova|chiusura)$/.test(app.getPath('userData'))) {
+if (PER_PROVE && !/CUTX-(prova|chiusura|libretto)$/.test(app.getPath('userData'))) {
   console.error(`prova con la cartella dati vera (${app.getPath('userData')}): mi fermo`);
   app.exit(3);
 }
@@ -790,5 +793,6 @@ app.whenReady().then(async () => {
   if (SALTINO) import('./prova.js').then((m) => m.saltino({ finestre })).then(() => app.exit(0));
   if (SFONDO) import('./prova.js').then((m) => m.sfondo({ finestre, cartella: path.resolve(SFONDO) })).then((ok) => app.exit(ok ? 0 : 1));
   if (SCHERMATE) import('./prova.js').then((m) => m.schermate({ finestre, cartella: path.resolve(SCHERMATE) })).then((n) => app.exit(n ? 1 : 0));
+  if (LIBRETTO) import('./libretto.js').then((m) => m.libretto({ finestre, cartella: path.resolve(LIBRETTO.replace(/^~/, app.getPath('home'))) })).then((n) => app.exit(n ? 1 : 0));
   if (CHIUSURA) provaChiusura(CHIUSURA);
 });

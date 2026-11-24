@@ -15,6 +15,7 @@
     "prova:tutto": "vite build && node scripts/giro-lungo.mjs",
     "test": "node --test test/*.test.js",
     "schermate": "vite build && electron . --schermate=schermate",
+    "libretto": "vite build && electron . --libretto=~/Desktop/cutx-libretto/schermate-0.6",
     "test:app": "vite build && node --test test/app/*.test.js",
     "pacchetto": "vite build && electron-builder --mac dmg --arm64"
   },
