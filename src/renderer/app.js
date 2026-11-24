@@ -2263,6 +2263,10 @@ globalThis.cutxProva = {
   canaliFader: (ch, v) => eseguiCanali([...statoCanali.fader(ch, 1), ...statoCanali.fader(ch, v)]), // come il fader del nano: prima in cima (si aggancia), poi dove dico
   canaliSlider: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)),
   canaliMute: (ch, acceso) => eseguiCanali(statoCanali.mute(ch, acceso)),
+  nano: () => nano, // la serata finta manda i suoi messaggi come se fossero del nano vero (riceve([...]))
+  statoCanali: () => statoCanali,
+  righeManiCH: () => Object.fromEntries([...righeManiCH].map(([ch, m]) => [ch, Object.fromEntries(m)])),
+  nanoVistoForza: () => (nanoVisto = true),
   canaliMixer: () => statoCanali.datiMixer(),
   apriNelSynth,
   dispetti: () => dispetti,

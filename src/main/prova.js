@@ -66,7 +66,7 @@ async function primoPiano(finestre) {
   await aspetta(0.2);
 }
 
-export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita', 'moviola'] }) {
+export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'brani', 'entrata', 'livelli', 'browser', 'impostazioni', 'ableton', 'neon', 'tempo', 'solidita', 'uscita', 'moviola', 'serata'] }) {
   const righe = [];
   // --silenzioso: a schermo solo i fallimenti e il conteggio finale (il file di log ha tutto)
   const silenzioso = process.argv.includes('--silenzioso');
@@ -196,6 +196,7 @@ export async function prova({ finestre, cartellaLog, parti = ['robustezza', 'bra
   if (parti.includes('brani')) ok = (await sicura('brani', provaBrani)) && ok;
   if (parti.includes('entrata')) ok = (await sicura('entrata', provaEntrata)) && ok;
   if (parti.includes('livelli')) ok = (await sicura('livelli', provaLivelli)) && ok;
+  if (parti.includes('serata')) ok = (await sicura('serata', provaSerata)) && ok;
   if (parti.includes('browser')) ok = (await sicura('browser', provaBrowser)) && ok;
   if (parti.includes('impostazioni')) ok = (await sicura('impostazioni', provaImpostazioni)) && ok;
   if (parti.includes('ableton')) ok = (await sicura('ableton', provaAbleton)) && ok;
@@ -391,7 +392,7 @@ setcpm(140/4)
 s("bd*4, ~ hh").gain(.0001)
 // commento
 
-// @sezione melodia · volume 0.6
+// @sezione melodia · lead · volume 0.6
 n("0 3 7").scale("C:minor").s("triangle").gain(.0001)
 // @sezione drop · volume 0.8 · muto
 s("sine*8")
@@ -470,6 +471,11 @@ async function provaBrani({ finestre, scrivi }) {
   const modificato = await leggi(file);
   controlla('in modalità brano ⌘S salva le modifiche delle card', modificato === salvato + '\n// aggiunta', JSON.stringify(modificato));
 
+  // una clip senza tipo non entra live: do a «melodia» il suo canale (HOWL) dal menu della card, poi dalla card al live
+  await js(`cutxProva.cue.carte.find((c) => c.i === 1).tastoCh.click()`);
+  await aspetta(0.2);
+  await js(`[...document.querySelectorAll('.menu-ch button')].find((b) => b.textContent.includes('HOWL'))?.click()`);
+  await aspetta(0.5);
   // dalla card al live, col nome della sezione
   await premi('Return', 'meta', 'shift');
   await aspetta(1);
@@ -743,6 +749,7 @@ async function provaEntrata({ finestre, scrivi }) {
   await premi('.', 'meta');
 
   // 7. clip senza tipo (lavoro 1 della tirata): cuffia libera, go live apre il menu e poi entra nel CH scelto, «CHn ▾» scrive e basta, USA I SUGGERITI = un ⌘Z
+  await js(`document.querySelectorAll('.menu-ch').forEach((m) => m.remove())`); // un menu rimasto aperto da prima
   const brano7 = '// @brano senzatipo\n// @bpm 120\nsetcpm(120/4)\n// @clip melo\ns("sine*2").freq(300).gain(.0001)\n// @clip altra\ns("sine*2").freq(310).gain(.0001)\n// @clip bass uno\ns("sine*2").freq(60).gain(.0001)\n// @clip arp due\ns("sine*2").freq(80).gain(.0001)\n';
   await js(`cutxProva.cue.apriModello('senzatipo.cutx', ${JSON.stringify(brano7)}); cutxProva.cue.cambiaModo('brano')`);
   await aspetta(1);
@@ -813,6 +820,198 @@ async function provaEntrata({ finestre, scrivi }) {
   await js(`cutxProva.canaliMute(1, false); cutxProva.fermaCuffia(); cutxProva.canaliSlider(1, 1)`);
   await js(`cutxProva.fermaTutto()`);
   await premi('.', 'meta');
+  return ok;
+}
+
+
+// --- la SERATA FINTA (tirata CANALI): uno scenario da capo a fondo con gli eventi finti del nano e dell'X-Touch ---
+// A (170 bpm), B (174, rampa), C (140, salto). Tutte clip con tipo, più una senza. Tutto in silenzio (gain .0001): quello che si guarda sono
+// i cicli, i livelli, i guadagni, le righe di coda e la sentinella (nessun click perso).
+async function provaSerata({ finestre, scrivi }) {
+  let ok = true;
+  const controlla = (nome, vero, dettagli = '') => {
+    scrivi(`${vero ? 'OK   ' : 'FALLITO'} ${nome}${!vero && dettagli ? ` · ${dettagli}` : ''}`);
+    ok &&= !!vero;
+  };
+  const js = (codice) => chiedi(finestre.controllo, codice);
+  const live = () => chiedi(finestre.live, 'globalThis.cutxStato?.()');
+  const cuffiaSt = () => chiedi(finestre.cuffia, 'globalThis.cutxStato?.()');
+  const tempoSet = () => chiedi(finestre.live, 'globalThis.cutxTempoSet()');
+  const attivi = async () => ((await live())?.livelli ?? []).filter((l) => l.a === null);
+  const cartella = path.join(stash.cartellaProj(), 'libreria');
+  // le tre canzoni: ogni clip ha il suo tipo; «rumori» no
+  const clipDi = (n, f) => `// @clip basso ${n} · bass\nnote("c2 g2").s("sine").freq(${f}).gain(.0001)\n// @clip basso ${n}b · bass\nnote("d2 a2").s("sine").freq(${f + 5}).gain(.0001)\n// @clip tastiera ${n} · keys\nnote("c4 e4").s("sine").gain(.0001)\n// @clip melodia ${n} · lead\nnote("g4").s("sine").gain(.0001)\n`;
+  const CLICK = 's("sine*4").freq(1000).attack(0).decay(.02).sustain(0).gain(.3)'; // un click vero: la sentinella lo ascolta (come nella robustezza)
+  const beat = (n) => `// @beat\n// @scena intro ${n}\ns("sine*2").gain(.0001)\n// @scena drop ${n}\n${CLICK}\n`;
+  const brani = {
+    serata_a: `// @brano serata a\n// @bpm 170\nsetcpm(170/4)\n${beat('a')}${clipDi('a', 60)}// @clip rumori\ns("sine").gain(.0001)\n`,
+    serata_b: `// @brano serata b\n// @bpm 174\nsetcpm(174/4)\n${beat('b')}${clipDi('b', 62)}`,
+    serata_c: `// @brano serata c\n// @bpm 140\nsetcpm(140/4)\n${beat('c')}${clipDi('c', 64)}`,
+  };
+  for (const [nome, testo] of Object.entries(brani)) await writeFile(path.join(cartella, `${nome}.cutx`), testo);
+  const nano = (cc, v) => js(`cutxProva.nano().riceve([0xb0, ${cc}, ${v}])`);
+  const R = async (ch) => (await nano(64 + ch, 127), await nano(64 + ch, 0));
+  const manopola = (ch, pos) => nano(16 + ch, Math.round(pos * 127));
+  const tocca = async (cc) => (await nano(cc, 127), await nano(cc, 0));
+  const PLAY = 41, STOP = 42, TRACK_SU = 58, TRACK_GIU = 59, CYCLE = 46;
+  // la manopola sulla k-esima alternativa del CH (k = 0 è OUT)
+  const scegli = async (ch, k) => {
+    const n = await js(`cutxProva.statoCanali().alternative(${ch}).length`);
+    await manopola(ch, (k + 0.5) / (n + 1));
+  };
+  const alt = (ch) => js(`JSON.stringify(cutxProva.statoCanali().alternative(${ch}).map((a) => a.nome))`);
+  const prossimo = () => js(`cutxProva.cue.slot.prossimo?.file ?? null`);
+  const apriPrimo = async (file) => {
+    for (let i = 0; i < 40 && (await prossimo()) !== file; i++) {
+      await tocca(TRACK_GIU);
+      await aspetta(0.4);
+    }
+    return (await prossimo()) === file;
+  };
+  const dopoCiclo = async (c, massimo = 40) => {
+    const fine = Date.now() + massimo * 1000;
+    while (((await live())?.ciclo ?? -Infinity) < c && Date.now() < fine) await aspetta(0.2);
+    return ((await live())?.ciclo ?? -Infinity) >= c;
+  };
+  try {
+    await js(`cutxProva.fermaTutto(); cutxProva.cue.brano = null; cutxProva.cue.cambiaModo('libero'); cutxProva.nanoVistoForza(); cutxProva.serata.set = null; cutxProva.ricaricaLibreria()`); // senza set: TRACK segue la libreria
+    await js(`cutxProva.motori.live.manda({ tipo: 'eco', attivo: true })`); // la sentinella ascolta il segnale in uscita
+    await js(`cutxProva.valuta('live', 'setcpm(170/4)\\ns("sine*2").gain(.0001)')`);
+    await aspetta(2);
+    await js(`cutxProva.scegliEntraTra(1)`);
+
+    // 1. TRACK su A → manopola THUMP su una scena, R → entra
+    controlla('TRACK porta il brano A nel PROSSIMO', await apriPrimo('serata_a.cutx'), String(await prossimo()));
+    controlla('THUMP vede le scene del beat di A', (await alt(0)) === '["intro a","drop a"]', await alt(0));
+    await scegli(0, 2); // la scena «drop»
+    const c0 = (await live()).ciclo;
+    await R(0);
+    controlla('R su THUMP: il beat entra (CH1)', await js(`!!cutxProva.statoCanali().canali[0].attesa`) || (await attivi()).some((l) => l.ch === 0));
+    await dopoCiclo(c0 + 2);
+    const beatA = (await attivi()).find((l) => l.ch === 0);
+    controlla('il beat di A suona nel CH1', !!beatA, JSON.stringify((await attivi()).map((l) => [l.nome, l.ch])));
+
+    // 2. GROWL e PURR armati, PLAY → stesso ciclo
+    controlla('GROWL ha le due clip bass nell\'ordine del file', (await alt(2)) === '["basso a","basso ab"]', await alt(2));
+    await scegli(2, 1);
+    await scegli(1, 1);
+    const armati = await js(`JSON.stringify([2, 1].map((c) => cutxProva.statoCanali().armato(c)))`);
+    controlla('guardare non arma, la manopola sì: GROWL e PURR sono armati', armati === '[true,true]', armati);
+    const prima2 = (await attivi()).length;
+    await tocca(PLAY);
+    await aspetta(0.8);
+    await dopoCiclo(((await live()).ciclo ?? 0) + 2);
+    const nuovi = (await attivi()).filter((l) => l.ch === 2 || l.ch === 1);
+    controlla('PLAY: tutti e due entrano sullo stesso ciclo', nuovi.length === 2 && nuovi[0].da === nuovi[1].da, JSON.stringify(nuovi.map((l) => [l.nome, l.ch, l.da])));
+    controlla('e il live ha ora 3 livelli (beat + 2)', (await attivi()).length === prima2 + 2, String((await attivi()).length));
+
+    // la sentinella: con il beat e i due livelli in onda, per 8 secondi non deve perdere né aggiungere un click
+    await aspetta(1);
+    const sent0 = (await live())?.sentinella;
+    await aspetta(8);
+    const sent1 = (await live())?.sentinella;
+    // i click veri sono quelli del beat (4 a ciclo); le altre clip sono silenziose (gain .0001) e la sentinella non può «sentirle»: si contano solo i click del beat
+    const cpsM = (await live()).cps;
+    const attesiBeat = Math.floor(0.9 * 4 * cpsM * 8);
+    controlla('la sentinella sente tutti i click del beat (nessuno perso)', !!sent0 && !!sent1 && sent1.sentiti - sent0.sentiti >= attesiBeat, JSON.stringify([sent0?.sentiti, sent1?.sentiti, attesiBeat]));
+    controlla('e nessun click fuori tempo', !!sent0 && !!sent1 && sent1.extra - sent0.extra === 0, JSON.stringify([sent0?.extra, sent1?.extra]));
+
+    // 3. fader CH3 giù → guadagno giusto
+    await nano(2, 127);
+    await nano(2, 64); // l'aggancio: prima in cima, poi giù a metà
+    await aspetta(0.5);
+    const mix = JSON.parse(await js(`JSON.stringify(cutxProva.canaliMixer())`));
+    controlla('fader CH3 a metà: il volume del CH è quello della curva del fader', Math.abs(mix[2].pos - 64 / 127) < 0.02 && mix[2].volume > 0 && mix[2].volume < 1, JSON.stringify(mix[2]));
+
+    // 4. S tenuto su CH2 → cuffia, lasciato → zitto
+    await nano(32 + 1, 127);
+    await aspetta(1.2);
+    const cuf = await cuffiaSt();
+    controlla('S tenuto su CH2: la cuffia suona', !!cuf?.codice, JSON.stringify(cuf && Object.keys(cuf)));
+    await nano(32 + 1, 0);
+    await aspetta(0.8);
+    controlla('S lasciato: la cuffia è zitta', !(await cuffiaSt())?.codice);
+
+    // 5. FOCUS 3 + SWEEP → riga di coda; il cambio clip in CH3 eredita la riga
+    await js(`cutxProva.controllerMidi.modo = 'MC'; cutxProva.controllerMidi.pagina = 'A'; cutxProva.controllerMidi.porta.ingresso = { state: 'connected', name: 'X-TOUCH MINI' }`);
+    await js(`cutxProva.controllerMidi.riceve([0x90, cutxProva.controllerMidi.tab.tasti[2], 127]); cutxProva.controllerMidi.riceve([0x90, cutxProva.controllerMidi.tab.tasti[2], 0])`);
+    controlla('FOCUS sul CH3 (tasto 3 dell\'X-Touch)', (await js(`cutxProva.controllerMidi.focusCH`)) === 2);
+    await js(`cutxProva.controllerMidi.riceve([0xb0, 16, 0x40 | 25])`); // SWEEP a sinistra
+    await aspetta(1);
+    const growl = (await attivi()).find((l) => l.ch === 2);
+    controlla('SWEEP: una riga .lpf sulla coda del livello del CH3', growl?.coda?.some((r) => /^\.lpf\(/.test(r)), JSON.stringify(growl?.coda));
+    const altro = (await attivi()).find((l) => l.ch === 1);
+    controlla('il CH2 non è toccato', !altro?.coda?.some((r) => /^\.lpf\(/.test(r)), JSON.stringify(altro?.coda));
+    await scegli(2, 2); // «basso ab»
+    await R(2);
+    await dopoCiclo(((await live()).ciclo ?? 0) + 3);
+    const nuovoGrowl = (await attivi()).find((l) => l.ch === 2);
+    controlla('cambio clip in CH3: la clip nuova eredita la riga dello SWEEP', nuovoGrowl && nuovoGrowl.nome !== growl?.nome && nuovoGrowl.coda?.some((r) => /^\.lpf\(/.test(r)), JSON.stringify(nuovoGrowl && [nuovoGrowl.nome, nuovoGrowl.coda]));
+
+    // 6. TRACK su B: THUMP su B, GROWL su B, PURR su OUT, CYCLE a 4, PLAY → tutto sullo stesso ciclo, rampa del tempo
+    controlla('TRACK porta B nel PROSSIMO', await apriPrimo('serata_b.cutx'), String(await prossimo()));
+    const t0 = await tempoSet();
+    await scegli(0, 1); // intro di B
+    await scegli(2, 1); // basso b
+    await manopola(1, 0); // PURR su OUT
+    await tocca(CYCLE);
+    await tocca(CYCLE);
+    const entra4 = await js(`document.querySelector('[data-entra].on')?.dataset.entra`);
+    controlla('CYCLE due volte: «entra tra» 4', entra4 === '4', String(entra4));
+    await tocca(PLAY);
+    await aspetta(0.6);
+    // 7. STOP prima del confine: niente entra e niente rampa
+    await tocca(STOP);
+    await aspetta(1);
+    const dopoStop = await attivi();
+    controlla('STOP prima del confine: il beat di B non entra', !dopoStop.some((l) => /serata b/.test(l.provenienza ?? '')), JSON.stringify(dopoStop.map((l) => l.provenienza)));
+    const t1 = await tempoSet();
+    controlla('e il tempo è com\'era (niente rampa)', JSON.stringify(t1.cambi) === JSON.stringify(t0.cambi), JSON.stringify([t0.cambi, t1.cambi]));
+    // rifai e lascialo entrare
+    await scegli(0, 1);
+    await scegli(2, 1);
+    await manopola(1, 0);
+    await tocca(PLAY);
+    const cp = (await live()).ciclo;
+    await dopoCiclo(cp + 6, 60);
+    const conB = await attivi();
+    controlla('PLAY (entra tra 4): il beat di B e il basso di B entrano sullo stesso ciclo', (() => { const a = conB.find((l) => /serata b/.test(l.provenienza ?? '') && l.ch === 0); const b = conB.find((l) => /serata b/.test(l.provenienza ?? '') && l.ch === 2); return a && b && a.da === b.da; })(), JSON.stringify(conB.map((l) => [l.nome, l.ch, l.da, l.a])));
+    controlla('PURR è uscito (OUT)', !conB.some((l) => l.ch === 1), JSON.stringify(conB.map((l) => [l.nome, l.ch])));
+    const finoAl = Date.now() + 40000;
+    while (Math.abs((await live()).cps - 174 / 240) > 0.003 && Date.now() < finoAl) await aspetta(0.5);
+    controlla('il tempo è arrivato a quello di B (174 bpm), con la rampa', Math.abs((await live()).cps - 174 / 240) <= 0.003, JSON.stringify([(await live()).cps, 174 / 240, (await tempoSet()).cambi.length]));
+
+    // 8. passaggio a C con salto
+    controlla('TRACK porta C nel PROSSIMO', await apriPrimo('serata_c.cutx'), String(await prossimo()));
+    await js(`cutxProva.statoCanali().canali[0].scelte.clear()`);
+    await scegli(0, 2);
+    const cpsB = (await live()).cps;
+    await R(0);
+    const finoC = Date.now() + 60000;
+    while (Math.abs((await live()).cps - 140 / 240) > 0.003 && Date.now() < finoC) await aspetta(0.5);
+    controlla('passaggio a C: il tempo arriva a 140 bpm (da ' + Math.round(cpsB * 240) + ')', Math.abs((await live()).cps - 140 / 240) <= 0.003, JSON.stringify([cpsB, (await live()).cps]));
+
+    // 9. ⇧⌘↵ su una clip senza tipo → il menu del canale
+    await js(`cutxProva.cue.apriModello('serata_a.cutx', ${JSON.stringify(brani.serata_a)}, 'attivo'); cutxProva.cue.cambiaModo('brano')`);
+    await aspetta(1);
+    const senza = await js(`cutxProva.cue.brano.modello.sezioni.findIndex((s) => s.nome === 'rumori')`);
+    await js(`cutxProva.cue.attiva(cutxProva.cue.carte.find((c) => c.i === ${senza})); cutxProva.goLive()`);
+    await aspetta(0.5);
+    controlla('go live su una clip senza tipo: si apre il menu del canale', (await js(`document.querySelectorAll('.menu-ch').length`)) === 1);
+    await js(`document.querySelector('.menu-ch')?.remove()`);
+
+    // 10. STOP tenuto → paracadute
+    await nano(STOP, 127);
+    await aspetta(1.3);
+    await nano(STOP, 0);
+    await aspetta(2);
+    const fuori = await attivi();
+    controlla('STOP tenuto = paracadute: resta solo il codice di emergenza', fuori.length >= 1 && fuori.every((l) => l.nome === 'paracadute'), JSON.stringify(fuori.map((l) => [l.nome, l.ch])));
+
+  } finally {
+    await js(`cutxProva.fermaTutto()`).catch(() => {});
+    for (const nome of Object.keys(brani)) await rm(path.join(cartella, `${nome}.cutx`), { force: true }).catch(() => {});
+  }
   return ok;
 }
 
@@ -1925,7 +2124,7 @@ async function provaTempo({ finestre, scrivi }) {
   };
   const file = path.join(stash.cartellaProj(), 'libreria', 'prova_tempo.cutx');
   const filesLibro = path.join(stash.cartellaProj(), 'libreria', 'prova_tempo_salvato.cutx');
-  await writeFile(file, '// @brano prova tempo\n// @bpm 86\nsetcpm(86/4)\n// @sezione drum\ns("sine*2").gain(.0001)\n// @sezione loop\ns("sine").begin(.1).end(.5).gain(.0001)\n');
+  await writeFile(file, '// @brano prova tempo\n// @bpm 86\nsetcpm(86/4)\n// @sezione drum · drum\ns("sine*2").gain(.0001)\n// @sezione loop · fx\ns("sine").begin(.1).end(.5).gain(.0001)\n');
   try {
     await js('cutxProva.cue.brano = null; cutxProva.cue.cambiaModo("libero"); cutxProva.fermaTutto()');
     // a 60 BPM un ciclo dura 4 secondi: il cambio resta "in arrivo" abbastanza da vederlo
