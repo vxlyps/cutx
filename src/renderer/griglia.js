@@ -21,7 +21,7 @@ export class Griglia {
   // vista = StatoCanali.vista(); ciclo = il ciclo di adesso (per il conto alla rovescia)
   aggiorna(vista, ciclo) {
     this.ciclo = ciclo;
-    const firma = JSON.stringify(vista.map((v) => [v.nome, v.alternative.map((a) => a.id), v.suona?.id, v.next?.id, v.attesa?.tipo, v.attesa?.alt?.id, v.azioneR, v.inCuffia, v.mute, v.vecchia, v.avvisi, v.luci]));
+    const firma = JSON.stringify(vista.map((v) => [v.nome, v.tipi, v.alternative.map((a) => a.id), v.suona?.id, v.next?.id, v.attesa?.tipo, v.attesa?.alt?.id, v.azioneR, v.inCuffia, v.mute, v.vecchia, v.avvisi, v.luci]));
     const trascino = this.el.contains(document.activeElement) && document.activeElement.type === 'range';
     if (firma !== this.firma && !trascino) {
       this.firma = firma; // se sto muovendo un fader il ridisegno aspetta: non gli tolgo il fader di mano
@@ -57,7 +57,7 @@ export class Griglia {
         riga.classList.toggle('suona', !!v.suona);
         riga.classList.toggle('vecchia', v.vecchia);
         const testa = crea('div', 'ch-testa');
-        testa.append(crea('span', 'ch-nome', v.nome), crea('span', 'lbl ch-n', `CH${v.indice + 1}`));
+        testa.append(crea('span', 'ch-nome', `CH${v.indice + 1} ${v.nome}`), crea('span', 'lbl ch-n', v.tipi.join(' · ')));
         const ora = crea('div', 'ch-ora');
         const stato = crea('span', 'lbl ch-stato', v.suona ? 'SUONA' : 'VUOTO');
         const suona = crea('span', 'ch-suona', v.suona ? v.suona.nome : '');

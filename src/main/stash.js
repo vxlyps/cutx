@@ -231,7 +231,6 @@ async function leggiFileStash(nome) {
 
 export const leggiSet = () => leggiFileStash('set.cutx');
 export const leggiKit = () => leggiFileStash('kit.cutx');
-export const leggiCanali = () => leggiFileStash('canali.json'); // i CH del LIVE, nella cartella del PROJ
 
 async function scriviFileStash(nome, testo) {
   if (!cartellaProj()) throw new Error('nessun PROJ aperto');
@@ -241,8 +240,30 @@ async function scriviFileStash(nome, testo) {
 
 export const scriviSet = (testo) => scriviFileStash('set.cutx', testo);
 export const scriviKit = (testo) => scriviFileStash('kit.cutx', testo);
-export const scriviCanali = (testo) => scriviFileStash('canali.json', testo);
-export const cancellaCanali = async () => { if (cartellaProj()) await rm(path.join(cartellaProj(), 'canali.json'), { force: true }); return true; };
+// I CH del LIVE: UNA mappa sola per tutti i PROJ, `canali.json` nella radice dello stash. La prima volta, se non c'è, il canali.json del PROJ aperto
+// (quando ce l'ha) diventa la mappa iniziale. Quelli dei PROJ non si leggono più e non si cancellano.
+const fileCanali = () => (radice() ? path.join(radice(), 'canali.json') : null);
+export async function leggiCanali() {
+  const file = fileCanali();
+  if (!file) return null;
+  try {
+    return await readFile(file, 'utf8');
+  } catch {
+    // niente mappa nello stash: provo quella del PROJ aperto e, se c'è, la copio nella radice
+  }
+  const vecchia = await leggiFileStash('canali.json');
+  if (vecchia) await scriviSicuro(file, vecchia).catch(() => {});
+  return vecchia;
+}
+export async function scriviCanali(testo) {
+  if (!fileCanali()) throw new Error('nessuno stash aperto');
+  await scriviSicuro(fileCanali(), String(testo));
+  return true;
+}
+export async function cancellaCanali() {
+  if (fileCanali()) await rm(fileCanali(), { force: true });
+  return true;
+}
 
 export async function leggiBrano(nome, numero = projAperto) {
   const file = radice() && fileBrano(nome, numero);

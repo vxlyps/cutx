@@ -4,7 +4,7 @@ import { guadagnoLivello, applicaMessaggioCh, chNeutro } from '../src/renderer/m
 import { StatoCanali, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
 
 const clip = (nome, tipo) => ({ nome, info: tipo ? { [tipo]: true } : {} });
-const brano1 = { nome: 'uno', bpm: 170, beat: { scene: [{ nome: 'intro' }, { nome: 'drop' }] }, sezioni: [clip('sub', 'bass'), clip('melodia', 'lead'), clip('reese', 'bass'), clip('kick', 'drum'), clip('rumori'), clip('stab', 'keys')] };
+const brano1 = { nome: 'uno', bpm: 170, beat: { scene: [{ nome: 'intro' }, { nome: 'drop' }] }, sezioni: [clip('sub', 'bass'), clip('melodia', 'lead'), clip('reese', 'bass'), clip('kick', 'drum'), clip('rumori', 'stray'), clip('stab', 'keys')] };
 const brano2 = { nome: 'due', bpm: 140, beat: null, sezioni: [clip('wobble', 'bass'), clip('pad', 'pad')] };
 const nomi = (l) => l.map((a) => a.nome);
 
@@ -34,12 +34,12 @@ test('validazione del CANALI', () => {
   assert.equal(validaCanali(canaliPredefiniti().slice(0, 7)).length, 1);
 });
 
-test('alternative: nell\'ordine del file, mai per tipo; DRUM = scene e poi clip drum; FREE = solo le clip senza tipo (ogni clip in un CH solo)', () => {
+test('alternative: nell\'ordine del file, mai per tipo; DRUM = scene e poi clip drum; FREE = solo le clip `stray` (ogni clip in un CH solo)', () => {
   const b = canaliPredefiniti();
   assert.deepEqual(nomi(alternative(b, brano1, 0)), ['intro', 'drop', 'kick']);
   assert.deepEqual(nomi(alternative(b, brano1, 2)), ['sub', 'reese'], 'BASSO: l\'ordine del file');
   assert.deepEqual(nomi(alternative(b, brano1, 1)), ['stab']);
-  assert.deepEqual(nomi(alternative(b, brano1, 7)), ['rumori'], 'FREE: solo la clip senza tipo');
+  assert.deepEqual(nomi(alternative(b, brano1, 7)), ['rumori'], 'FREE: solo la clip stray');
   assert.deepEqual(nomi(alternative(b, brano1, 2)), ['sub', 'reese'], 'ogni clip sta nel CH del suo tipo e basta');
   assert.deepEqual(alternative(b, brano1, 5), [], 'PERC: niente per questo brano');
   assert.deepEqual(alternative(b, null, 0), []);
@@ -118,7 +118,7 @@ test('GO / annulla / niente in NEXT / stessa clip', () => {
   assert.equal(s.luceGo(5), 'spenta');
   const v = s.go(5);
   assert.equal(v[0].tipo, 'avviso');
-  assert.match(v[0].testo, /niente in NEXT per CLAW/);
+  assert.match(v[0].testo, /niente in NEXT per CH6 CLAW/);
 });
 
 test('OUT: annulla se ripremuto; tenuto 1 s esce subito; su una CH vuota niente', () => {
@@ -284,8 +284,30 @@ import { leggiCanali, ordineCue, canaliPredefiniti as predef } from '../src/rend
 test('il CUE segue l\'ordine dei CH: drum e perc nel loro gruppo, senza tipo in FREE', () => {
   const clip = [{ info: {} }, { info: { perc: true } }, { info: { bass: true } }, { info: { drum: true } }, { info: { arp: true } }, { info: { keys: true } }];
   const g = gruppiClip(clip, ordineCue(predef()));
-  assert.deepEqual(g.map((x) => [x.categoria, x.indici]), [['THUMP', [3]], ['PURR', [4, 5]], ['GROWL', [2]], ['CLAW', [1]], ['STRAY', [0]]]);
-  assert.deepEqual(ordineClip(clip, ordineCue(predef())), [3, 4, 5, 2, 1, 0]);
+  assert.deepEqual(g.map((x) => [x.categoria, x.indici]), [['', [0]], ['THUMP', [3]], ['PURR', [4, 5]], ['GROWL', [2]], ['CLAW', [1]]]);
+  assert.equal(g[0].daAssegnare, true, 'la clip senza tipo sta nel gruppo «da assegnare», in cima');
+  assert.deepEqual(ordineClip(clip, ordineCue(predef())), [0, 3, 4, 5, 2, 1]);
+  const conStray = gruppiClip([{ info: { stray: true } }, { info: {} }], ordineCue(predef()));
+  assert.deepEqual(conStray.map((x) => [x.categoria, x.indici]), [['', [1]], ['STRAY', [0]]], 'stray va nel CH8, senza tipo no');
+});
+
+test('una clip senza tipo non è in nessun CH (nemmeno nel CH8); col tipo stray sì', () => {
+  const b = canaliPredefiniti();
+  const brano = { nome: 'x', bpm: 120, beat: null, sezioni: [clip('a'), clip('b', 'stray'), clip('c', 'lead')] };
+  for (let ch = 0; ch < 8; ch++) assert.ok(!alternative(b, brano, ch).some((a) => a.nome === 'a'), `«a» non è nel CH${ch + 1}`);
+  assert.deepEqual(nomi(alternative(b, brano, 7)), ['b']);
+  assert.deepEqual(nomi(alternative(b, brano, 3)), ['c']);
+  // un canali.json vecchio (STRAY senza tipi) manda `stray` nel CH8 lo stesso
+  const vecchio = canaliPredefiniti();
+  vecchio[7].tipi = [];
+  assert.deepEqual(nomi(alternative(vecchio, brano, 7)), ['b']);
+});
+
+test('CH vuoto senza scelta: R dice cosa fare, col numero', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  const e = s.premiR(1);
+  assert.equal(e[0].testo, 'CH2 PURR: gira la manopola per scegliere');
 });
 
 test('cambia l\'ordine dei CH, cambia il CUE; un tipo senza CH va in FREE', () => {
@@ -485,7 +507,7 @@ test('STRAY impila: una clip scelta + R si aggiunge alle altre, OUT + R toglie t
   s.scegliAlt(7, 1); // «rumori»
   assert.deepEqual(s.premiR(7).map((x) => x.tipo), ['go']);
   s.scattato(7);
-  s.impostaBrano({ ...brano1, sezioni: [...brano1.sezioni, clip('fruscio')] });
+  s.impostaBrano({ ...brano1, sezioni: [...brano1.sezioni, clip('fruscio', 'stray')] });
   s.scegliAlt(7, 2); // «fruscio»
   const e = s.premiR(7);
   assert.deepEqual(e.map((x) => x.tipo), ['go'], 'si aggiunge, non sostituisce');

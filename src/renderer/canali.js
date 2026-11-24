@@ -25,7 +25,7 @@ export const canaliPredefiniti = () => [
   { nome: 'FUR', tipi: ['pad'], free: false },
   { nome: 'CLAW', tipi: ['perc'], free: false },
   { nome: 'HISS', tipi: ['fx'], free: false },
-  { nome: 'STRAY', tipi: [], free: true }, // i senza tipo, e qualsiasi clip del brano
+  { nome: 'STRAY', tipi: ['stray'], free: true }, // scratch, jam e le clip col tipo `stray`: mai le clip senza tipo
 ];
 
 // Gli errori della pagina CANALI, in italiano; lista vuota = va bene. Otto CH, una sola FREE, ogni tipo in un CH solo.
@@ -86,7 +86,7 @@ export const idClip = (brano, nome) => `${brano}#${nome}`;
 export const idScena = (brano, k) => `${brano}◆${k}`;
 
 // brano = { nome, bpm, beat: { scene: [{ nome }] } | null, sezioni: [{ nome, info }] }. NELL'ORDINE DEL FILE, mai per tipo.
-// DRUM: prima le scene della @beat, poi le sue clip. Ogni clip sta in UN CH solo: quello del suo tipo; FREE prende le senza tipo e i tipi che nessuno prende.
+// DRUM: prima le scene della @beat, poi le sue clip. Ogni clip sta in UN CH solo: quello del suo tipo; FREE prende i tipi che nessuno prende (e `stray`); le clip senza tipo non sono in nessun CH.
 export function alternative(config, brano, ch) {
   if (!brano) return [];
   const di = (extra) => ({ brano: brano.nome, bpm: brano.bpm ?? null, ...extra });
@@ -94,7 +94,7 @@ export function alternative(config, brano, ch) {
   if (ch === chDellaBeat(config)) (brano.beat?.scene ?? []).forEach((s, k) => out.push(di({ id: idScena(brano.nome, k), tipo: 'scena', indice: k, nome: s.nome, tipoClip: 'drum', provenienza: `${brano.nome} ◆${k + 1}` })));
   (brano.sezioni ?? []).forEach((s, k) => {
     const tc = tipoDellaClip(s.info);
-    if (chDelTipo(config, tc) === ch) out.push(di({ id: idClip(brano.nome, s.nome), tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc, provenienza: `${brano.nome} §${k + 1}` }));
+    if (tc && chDelTipo(config, tc) === ch) out.push(di({ id: idClip(brano.nome, s.nome), tipo: 'clip', indice: k, nome: s.nome, tipoClip: tc, provenienza: `${brano.nome} §${k + 1}` }));
   });
   return out;
 }
@@ -270,7 +270,7 @@ export class StatoCanali {
     const c = this.canali[i];
     if (c.attesa?.tipo === 'go') return annullando ? [this.annullaAttesa(i)] : [];
     const alt = this.next(i);
-    if (!alt || alt.id === OUT_ID) return [{ tipo: 'avviso', ch: i, testo: `niente in NEXT per ${this.config[i].nome}` }];
+    if (!alt || alt.id === OUT_ID) return [{ tipo: 'avviso', ch: i, testo: `niente in NEXT per CH${i + 1} ${this.config[i].nome}` }];
     if (this.suonaId(i, alt.id)) return []; // è già quella che suona
     const effetti = c.attesa ? [this.annullaAttesa(i)] : []; // vince l'ultimo premuto
     c.attesa = { tipo: 'go', alt };
@@ -298,7 +298,7 @@ export class StatoCanali {
     const azione = this.azioneR(i);
     if (azione === 'OUT') return this.out(i);
     if (azione === 'GO') return this.go(i, { annullando: false });
-    if (azione === '') return [{ tipo: 'avviso', ch: i, testo: `niente da fare per ${this.config[i].nome}` }];
+    if (azione === '') return [{ tipo: 'avviso', ch: i, testo: `CH${i + 1} ${this.config[i].nome}: gira la manopola per scegliere` }];
     return []; // LIVE: è già in onda
   }
 
@@ -314,7 +314,7 @@ export class StatoCanali {
       return [{ tipo: 'cuffia-stop', ch: i }];
     }
     const alt = this.nextDelBrano(i);
-    if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente da ascoltare per ${this.config[i].nome}` }];
+    if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente da ascoltare per CH${i + 1} ${this.config[i].nome}` }];
     this.cuffiaCh = { ch: i, id: alt.id };
     return [{ tipo: 'cuffia', ch: i, alt }];
   }
@@ -536,6 +536,7 @@ export class StatoCanali {
     return this.canali.map((c, i) => ({
       indice: i,
       nome: this.config[i].nome,
+      tipi: this.config[i].tipi,
       free: !!this.config[i].free,
       alternative: this.alternative(i),
       suona: c.suona,

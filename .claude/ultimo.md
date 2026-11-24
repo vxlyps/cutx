@@ -1,14 +1,19 @@
-# Ultimo stato - 23/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali`; main = beta 4 intatta, non si tocca)
+# Ultimo stato - 24/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali`; main = beta 4 intatta, non si tocca)
 
-## Obiettivo
-LIVE a canali (CH1…CH8) col piano approvato da Valerio in 5 passi, UNO alla volta (5 righe → ok di Valerio → scrivo, test, commit, push, cosa provare, mi fermo). Passi 1, 1.1 e 2 FATTI (commit f8cc7aa, 0afdb98, 1d68a23). Il motore lo scrivo io, mai Codex. Prove col volume al 20% poi rimesso.
+## 5 righe
+1. FATTO Passo 4.1 · canali fissi: mappa `canali.json` unica nella radice dello stash (la prima volta parte da quella del PROJ aperto; i vecchi non si toccano né si leggono); «CHn NOME» ovunque, tipi sotto il nome nella griglia; clip senza tipo = in nessun CH, gruppo ambra «DA ASSEGNARE» in cima al CUE; nuovo tipo `stray` per il CH8 (scratch e jam come prima).
+2. Funziona (test): canali 45 + stash 1 nuovo; `npm test` 549/550 (resta il MOD noto), `vite build` ok. NON provato a mano nell'app né col nano.
+3. Comportamento da confermare con Valerio: cuffia/go live/⌘↵/⇧⌘↵ su clip senza tipo → apre il menu CH con avviso; scelto il CH la clip va in NEXT di quel CH (NON parte da sola: poi R/PLAY). Se voleva che parta subito, va cambiato.
+4. File toccati: stash.js, app.js (ripristinaCanali scrive le predefinite), canali.js, categorie.js, cue.js, griglia.js, stile.css, testi/it.json, test/canali.test.js, test/canali-stash.test.js (nuovo).
+5. PROSSIMO: Passo 4.2 · un volume solo (slider card = volume del CH; cuffia dopo il fader con guadagno di prova nel motore cuffia; M non zittisce la cuffia; scritta del CH sotto ogni slider). 5 righe a Valerio e ok prima di scrivere. Poi passo 5 X-Touch MANI.
 
 ## Il modello (non si discute)
 - NANO = la regia: gira = scegli NEXT · R = fai · PLAY = fai tutto insieme · STOP = annulla. X-TOUCH = le mani (come suona il CH in FOCUS, righe di codice visibili; SYNTH e DRUM invariati). TASTIERA = la penna. Senza nano CUTX si comporta come la beta 4.
 - Nomi: THUMP·PURR·GROWL·HOWL·FUR·CLAW·HISS·STRAY (CH1-8). Niente colori nei canali: verde marcio = suona, bianco/grigi, scritte.
 
-## STATO AL 23/11 (fine sessione) · BUG SEGNALATI DA VALERIO, da indagare PRIMA del passo 5
+## STORICO · bug del 23/11 (1 = spiegato e risolto col 4.1; 2 e 3 → passo 4.1/4.2 decisi da Valerio il 24/11)
 Provando col nano vero (passi 1-4 funzionano «live»), due problemi:
+0. INDAGINE 23/11 (sessione 2, nessun codice toccato): ipotesi (c) e (d) ESCLUSE (menu CH → modello → `alternative` giusto anche riscritto su file; `aggiornaCanali` rilegge il modello a ogni giro; `pezzoAlt` passa `ch: e.ch`). Ipotesi (b) CONFERMATA dal codice: CH2 vuoto e senza scelta → R dà solo l'avviso «niente da fare per PURR» (`premiR`/`azioneR`, canali.js ~285). Resta da spiegare «finiva in STRAY» (serve sapere COME l'ha lanciata: R del nano, tasto live della card, o jam/scratch). Proposta a Valerio: CH vuoto con UNA sola clip → quella clip è il NEXT di default.
 1. Una melodia finiva in STRAY. Cambiato il canale dal menu CH della card nel CUE (a PURR/CH2), ma col CH2 del nano non partiva niente e partiva solo col CH4 (HOWL, il tipo suggerito). Verificato: la catena pura `conTipo → alternative` è giusta (keys/arp → CH2, lead → CH4, nessun tipo → CH8). Ipotesi da controllare: (a) clip nello scratch = nessun tipo = STRAY; (b) il nano parte solo se prima giri la manopola del CH (guardare non arma, CH vuoto senza scelta mostra «—»); (c) `cue.modifica` aggiorna il modello ma la griglia/`impostaBrano` non lo rilegge, o la scelta (`scelte`) resta sul vecchio CH; (d) il tipo scritto nel menu non arriva a `pezzoBrano` (card) ma solo a `pezzoAlt`. Va riprodotto nell'app, non a occhio.
 2. Il fader di un CH cambia solo il volume nella vista LIVE, non nel CUE. È voluto (cuffia pre-fader, deciso nel passo 2): Valerio si aspetta invece che i due siano collegati. DECISIONE DA PRENDERE con lui: la cuffia resta pre-fader o segue il fader (e come, per non rompere il preascolto).
 3. Valerio vuole che CH1…CH8 del nano siano «inamovibili»: quel CH è quel CH, sempre. Capire cosa lo rende ancora mobile (tipo cambiabile, STRAY che prende «qualsiasi clip», suggerimenti).

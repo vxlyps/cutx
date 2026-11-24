@@ -3289,6 +3289,9 @@ input[type='checkbox'] {
   margin: 10px 2px 4px;
   letter-spacing: 0.16em;
 }
+.gruppo-da-assegnare {
+  color: var(--avviso, #e0a03a); /* nessun canale: «a mano», ambra */
+}
 
 /* --- la MOVIOLA (la scatola nera delle prove) --- */
 /* la spia in barra: è «a mano», quindi ambra, mai verde */

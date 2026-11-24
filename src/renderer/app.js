@@ -1120,7 +1120,7 @@ async function apriStash(stato) {
   else if (!haStash) schermataProj.chiudi();
 }
 
-// --- i CANALI (gli 8 CH del LIVE, canali.json nel PROJ) ---
+// --- i CANALI (gli 8 CH del LIVE, canali.json nella radice dello stash: una mappa sola per tutti i PROJ) ---
 
 let canaliConfig = canaliPredefiniti();
 const statoCanali = new StatoCanali(canaliConfig); // la verità sta nel motore: lo stato si risincronizza dai livelli (sincronizza)
@@ -1146,8 +1146,7 @@ async function salvaCanali(config) {
   await window.cutx.scriviCanali(JSON.stringify(config, null, 2) + '\n').catch((e) => cue.avviso(String(e.message ?? e)));
 }
 async function ripristinaCanali() {
-  usaCanali(canaliPredefiniti());
-  await window.cutx.cancellaCanali().catch(() => {});
+  await salvaCanali(canaliPredefiniti()); // scrivo le predefinite (non cancello: un canali.json vecchio di un PROJ tornerebbe come mappa iniziale)
 }
 let paginaCanali = null;
 

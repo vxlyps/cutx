@@ -1,9 +1,9 @@
 // I tipi di suono delle clip: bass, lead, arp, pad, keys, fx. Stanno nella riga della clip (`// @clip reese · bass`), così valgono per
 // qualsiasi clip, non solo per quelle del synth. Modulo puro: lo usano brano.js (gruppi nel CUE), il synth e i test.
 // Tutti i tipi che un CH può accogliere (pagina CANALI). Fonte unica.
-export const TIPI = ['drum', 'perc', 'bass', 'lead', 'arp', 'pad', 'keys', 'fx'];
-// I tipi del SYNTH: drum nasce dal DRUM e perc lo dà Valerio dal menu del CUE, quindi qui non ci sono.
-export const TIPI_SOLO_CH = ['drum', 'perc'];
+export const TIPI = ['drum', 'perc', 'bass', 'lead', 'arp', 'pad', 'keys', 'fx', 'stray'];
+// I tipi del SYNTH: drum nasce dal DRUM, perc e stray li dà Valerio dal menu del CUE, quindi qui non ci sono. `stray` = «va nel CH8»: l'unico modo di mandarci una clip.
+export const TIPI_SOLO_CH = ['drum', 'perc', 'stray'];
 export const CATEGORIE = TIPI.filter((t) => !TIPI_SOLO_CH.includes(t));
 
 export const eCategoria = (x) => CATEGORIE.includes(x);
@@ -30,7 +30,10 @@ export function gruppiClip(clip, ordine = ORDINE_PER_TIPO) {
     return i >= 0 ? i : free; // -1 = in fondo, senza gruppo
   };
   const posti = tipi.map(dove);
-  const gruppi = [...ordine.map((g) => g.nome), ''].map((nome, g) => ({ categoria: nome, ...(deiCh && g < ordine.length ? { ch: g } : {}), indici: posti.flatMap((p, i) => ((p < 0 ? ordine.length : p) === g ? [i] : [])) }));
+  // Con i CH una clip senza tipo non è di nessun canale: sta in un gruppo a parte IN CIMA («da assegnare»), mai nel CH8.
+  const senza = deiCh ? tipi.flatMap((t, i) => (t ? [] : [i])) : [];
+  if (deiCh) for (const i of senza) posti[i] = -2;
+  const gruppi = [...(senza.length ? [{ categoria: '', daAssegnare: true, indici: senza }] : []), ...[...ordine.map((g) => g.nome), ''].map((nome, g) => ({ categoria: nome, ...(deiCh && g < ordine.length ? { ch: g } : {}), indici: posti.flatMap((p, i) => (p !== -2 && (p < 0 ? ordine.length : p) === g ? [i] : [])) }))];
   return gruppi.filter((g) => g.indici.length);
 }
 

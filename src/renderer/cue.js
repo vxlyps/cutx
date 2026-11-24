@@ -328,6 +328,11 @@ export class Cue {
     }
     if (carta.i < 0) return { errore: 'il preambolo suona con ogni clip: scegline una' };
     const m = this.brano.modello;
+    // una clip senza tipo non è di nessun CH: né cuffia né live, finché non scegli il canale (si apre il menu)
+    if (this.ordineCh && !tipoDi(m.sezioni[carta.i].info)) {
+      if (carta.tastoCh?.isConnected) this.menuCh(carta.tastoCh, carta.i);
+      return { errore: it.canali.senzaCanale.replace('{nome}', m.sezioni[carta.i].nome) };
+    }
     const { da, a, vuota } = carta.editor.righeScelte();
     const righe = vuota ? null : m.sezioni[carta.i].corpo.slice(da, a + 1);
     return {
@@ -717,7 +722,8 @@ export class Cue {
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
     // le clip sono raggruppate per tipo (bass, lead, arp…) con un piccolo titolo; quelle senza tipo in fondo. Se nessuna ha un tipo, niente titoli.
     for (const g of B.gruppiClip(m.sezioni, this.ordineCh)) {
-      if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.ch !== undefined ? `CH${g.ch + 1} ${g.categoria}` : g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
+      if (g.daAssegnare) contenitore.append(el('div', 'lbl gruppo-clip gruppo-da-assegnare', it.canali.daAssegnare));
+      else if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.ch !== undefined ? `CH${g.ch + 1} ${g.categoria}` : g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
       for (const i of g.indici) contenitore.append(this.carta(i));
     }
     this.segnaNext(this.nextIds, this.liveIds); // le carte sono nuove: rimetto LIVE e NEXT
@@ -837,6 +843,7 @@ export class Cue {
       togliClip.dataset.aiuto = 'clip-togli';
       togliClip.onclick = () => this.togliClip(i);
       const chBtn = this.tastoCh(i);
+      carta.tastoCh = chBtn;
       carta.tastoNext = this.tastoNext(carta);
       testa.append(chBtn, carta.tastoNext, unisci, dividi, apriSynth, volume, cuffia, live, togliClip);
     }
@@ -863,7 +870,7 @@ export class Cue {
     const tipo = tipoDi(sez.info);
     const di = ordine && tipo ? ordine.findIndex((g) => g.tipi.includes(tipo)) : -1;
     const k = ordine ? (di >= 0 ? di : ordine.findIndex((g) => g.free)) : -1;
-    const b = tasto(ordine ? `CH${k + 1} ${ordine[k].nome}` : 'tipo', '▾', 'In quale canale del LIVE entra questa clip');
+    const b = tasto(ordine ? (tipo ? `CH${k + 1} ${ordine[k].nome}` : it.canali.daAssegnareBreve) : 'tipo', '▾', 'In quale canale del LIVE entra questa clip');
     b.classList.add('tasto-ch');
     b.onclick = (e) => {
       e.stopPropagation();
@@ -881,7 +888,10 @@ export class Cue {
     const menu = el('div', 'menu-ch');
     const scegli = (tipo) => {
       menu.remove();
+      const aveva = !!tipoDi(sez.info);
       this.modifica(B.conInfo(this.brano.modello, i, conTipo(sez.info, tipo)), true, `canale della clip «${sez.nome}»`);
+      // una clip che non aveva canale ora ce l'ha: va in NEXT di quel CH (poi R, o PLAY; mai suono a sorpresa)
+      if (!aveva && tipo) this.suNext?.(this.carte.find((c) => c.i === i && c.scena === undefined));
     };
     const voce = (testo, tipo, extra = '') => {
       const v = el('button', `key piccolo${extra}`);
@@ -895,7 +905,7 @@ export class Cue {
       if (ch >= 0) voce(`suggerito: CH${ch + 1} ${ordine[ch].nome} · ${sug}`, sug, ' suggerito');
     }
     ordine.forEach((g, ch) => {
-      if (g.free) return voce(`CH${ch + 1} ${g.nome} · nessun tipo`, '');
+      if (g.free) return voce(`CH${ch + 1} ${g.nome}`, 'stray');
       for (const t of g.tipi) voce(`CH${ch + 1} ${g.nome}${g.tipi.length > 1 ? ` · ${t}` : ''}`, t);
     });
     const r = ancora.getBoundingClientRect();
