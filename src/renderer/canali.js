@@ -384,9 +384,12 @@ export class StatoCanali {
     return effetti;
   }
 
-  // STOP breve: tutte le attese (GO e OUT, da qualunque parte siano partiti) si annullano. Chi esegue pulisce anche i livelli che il motore ha in attesa.
+  // STOP breve: tutto quello che non è ancora successo si annulla: le attese (GO e OUT, da qualunque parte siano partiti) e le SCELTE armate,
+  // di tutti i brani nelle linguette. Chi esegue pulisce anche i livelli che il motore ha in attesa.
   annullaTutte() {
-    return this.canali.flatMap((c, i) => (c.attesa ? [this.annullaAttesa(i)] : []));
+    const effetti = this.canali.flatMap((c, i) => (c.attesa ? [this.annullaAttesa(i)] : []));
+    for (const c of this.canali) c.scelte.clear();
+    return effetti;
   }
 
   // GO ALL (PLAY): tutto quello che è ARMATO (scelto da me e diverso da ciò che suona, OUT compresi) parte insieme: chi esegue gli effetti li manda

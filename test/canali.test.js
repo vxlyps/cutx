@@ -853,3 +853,22 @@ test('nano ricollegato con S giù: spegne solo la cuffia dei suoi S, non quella 
   assert.deepEqual(s.lasciaTutteS().map((x) => x.tipo), ['cuffia-stop']);
   assert.deepEqual(s.sTenuti, ['schermo2'], 'resta solo il tasto a schermo');
 });
+
+test('STOP breve: annulla anche le SCELTE armate di tutti i brani; PLAY dopo non fa niente e le luci non lampeggiano', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegli(2, 0.9);
+  s.scegli(3, 0.9);
+  s.impostaBrano(brano2); // un altro brano nelle linguette: la sua scelta vale lo stesso
+  s.scegli(2, 0.9);
+  assert.ok(s.armato(2));
+  s.annullaTutte();
+  assert.equal(s.armato(2), false);
+  assert.equal(s.next(2), null);
+  assert.ok(s.vista().every((v) => v.luci.r !== 'lenta'), 'R non lampeggia');
+  assert.deepEqual(s.goAll(), [], 'PLAY non lancia niente');
+  s.impostaBrano(brano1);
+  assert.equal(s.armato(2), false, 'nemmeno quelle del primo brano');
+  assert.equal(s.armato(3), false);
+  assert.deepEqual(s.goAll(), []);
+});

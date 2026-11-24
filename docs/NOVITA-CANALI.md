@@ -8,7 +8,7 @@ La pagina da stampare con le mappe di nano e X-Touch è `docs/CANALI.md`. Prove 
 3. **«usa i suggeriti»** (in testa a DA ASSEGNARE): dà a ogni clip il tipo suggerito dal nome, con un solo ⌘Z per toglierli. Il tipo `stray` manda una clip nel CH8.
 
 ## Il nano (la regia)
-4. Manopola = sceglie cosa entra. R = lo manda. PLAY = tutto insieme. STOP = annulla ciò che non è cominciato (tenuto 1 s = paracadute).
+4. Manopola = sceglie cosa entra. R = lo manda. PLAY = tutto insieme. STOP = annulla ciò che non è ancora successo, scelte armate comprese (tenuto 1,5 s = paracadute, il gatto si riempie).
 5. **S tenuto** = cuffia sul NEXT, lasciato = smette. Girando la manopola con S giù la cuffia segue. Lo stesso col tasto CUE a schermo: tieni il clic.
 6. **TRACK** con il PROSSIMO modificato: non apre e avvisa; ripremuto entro 2 secondi apre (e butta le modifiche).
 

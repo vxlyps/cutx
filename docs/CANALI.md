@@ -22,7 +22,7 @@ La mappa è una sola per tutti i PROJ (file `canali.json` nella radice dello sta
 1. **Il nano decide cosa suona, l'X-Touch decide come suona.** La tastiera è la penna.
 2. **Una clip senza tipo non entra live.** Sta in «DA ASSEGNARE» in cima al CUE: scegli il canale dal menu della card (o dal go live), oppure «usa i suggeriti».
 3. **Guardare non arma.** Solo la manopola (o il tasto NEXT di una card) sceglie cosa entra; R lo manda.
-4. **Quello che non tocchi non cambia.** Un canale resta com'è finché non lo cambi tu; STOP annulla solo ciò che non è ancora cominciato.
+4. **Quello che non tocchi non cambia.** Un canale resta com'è finché non lo cambi tu; STOP annulla solo ciò che non è ancora successo (attese e scelte armate).
 5. **Un volume solo per canale.** Fader del nano, slider della griglia e slider della card sono la stessa cosa. La cuffia sente la clip dopo il fader (il muto M non la zittisce).
 
 ## Il nano (korg nanoKONTROL2) — la regia
@@ -36,7 +36,7 @@ La mappa è una sola per tutti i PROJ (file `canali.json` nella radice dello sta
 
 **Trasporto:**
 - **PLAY**: fa partire tutto ciò che è armato, sullo stesso ciclo.
-- **STOP**: annulla ciò che non è cominciato. **Tenuto 1 secondo = paracadute.**
+- **STOP**: annulla tutto ciò che non è ancora successo: le attese e anche le scelte armate (R e PLAY smettono di lampeggiare), in tutti i brani delle linguette. **Tenuto 1,5 secondi = paracadute** (il gatto si riempie; se lasci prima è solo uno STOP breve).
 - **TRACK ◀ ▶**: brano prima / dopo nel PROSSIMO. Se il PROSSIMO ha modifiche non salvate: avvisa, ripremi entro 2 secondi per buttarle.
 - **SET**: passa da una linguetta all'altra del CUE.
 - **MARKER ◀ ▶**: scena del beat indietro / avanti.

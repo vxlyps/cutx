@@ -3,9 +3,10 @@
 // R = esegue NEXT (GO / OUT / ANNULLA; tenuto 1 s: esce subito) · S = preascolto in CUFFIA · M = MUTE · manopola = scelta di NEXT (a sinistra OUT) ·
 // fader = volume del CH (anche dei livelli già live) · PLAY = GO ALL (solo i CH armati, OUT compresi).
 // Trasporto: TRACK ◀ ▶ 58/59 = brano prima/dopo in PROSSIMO · SET 60 = il CUE passa tra brano che suona e prossimo · MARKER ◀ ▶ 61/62 = scena del beat ·
-// CYCLE 46 = «entra tra» 1→2→4→8 · STOP 42 (breve = annulla le attese, tenuto 1 s = paracadute) · REC 45 · REW 43 e FF 44 liberi.
+// CYCLE 46 = «entra tra» 1→2→4→8 · STOP 42 (breve = annulla le attese, tenuto 1,5 s = paracadute, la carica si vede) · REC 45 · REW 43 e FF 44 liberi.
 export const NOME_NANO = /nanokontrol2/i;
 export const OUT_TENUTO_MS = 1000;
+export const STOP_TENUTO_MS = 1500; // STOP tenuto = paracadute (più lungo di R: più grave)
 export const LAMPEGGIO_LENTO_MS = 700; // R: in NEXT c'è altro da lanciare
 export const LAMPEGGIO_VELOCE_MS = 200; // R / S: sta per entrare / uscire
 
@@ -118,13 +119,15 @@ export class Nano {
     else if (m.tipo === 'cycle' && m.giu) a.cycle?.();
     else if (m.tipo === 'rec' && m.giu) a.rec?.();
     else if (m.tipo === 'stop') {
-      // STOP: breve = annulla le attese (al rilascio); tenuto 1 s = paracadute (subito, il rilascio non fa altro)
+      // STOP: breve = annulla le attese (al rilascio); tenuto 1,5 s = paracadute (subito, il rilascio non fa altro); intanto la carica si vede
       if (m.giu) {
         clearTimeout(this.timerStop);
-        this.timerStop = setTimeout(() => ((this.timerStop = null), a.tieniStop?.()), OUT_TENUTO_MS);
+        a.stopCarica?.(true, STOP_TENUTO_MS);
+        this.timerStop = setTimeout(() => ((this.timerStop = null), a.stopCarica?.(false), a.tieniStop?.()), STOP_TENUTO_MS);
       } else if (this.timerStop) {
         clearTimeout(this.timerStop);
         this.timerStop = null;
+        a.stopCarica?.(false);
         a.stop?.();
       }
     }

@@ -1278,7 +1278,8 @@ async function cueBranoVerso(verso) {
 // in attesa, con la sua rampa di tempo). Lo decide il motore, in un colpo solo: sa da quando parte ogni entrata e ogni sfumata, e quello che è già
 // cominciato (una transizione partita) va avanti.
 async function stopNano() {
-  const avevaAttese = statoCanali.annullaTutte().length > 0 || !!passaggio;
+  const avevaScelte = statoCanali.canali.some((c) => c.scelte.size > 0);
+  const avevaAttese = statoCanali.annullaTutte().length > 0 || avevaScelte || !!passaggio;
   passaggio = null;
   if (inTest) return;
   const r = await live.richiesta({ tipo: 'annulla-attese' });
@@ -2574,6 +2575,11 @@ const nano = new Nano({
   },
   stop: () => stopNano(),
   tieniStop: () => lanciaParacadute(),
+  stopCarica: (on, ms) => {
+    const e = $('paracadute');
+    e.querySelector('.carica').style.transitionDuration = on ? `${ms}ms` : '';
+    e.classList.toggle('carica', on);
+  },
   rec: () => (vista === 'synth' ? synth.avviaRec() : cue.avviso(it.nano.recSoloSynth)),
   collegato: (si) => {
     $('nano-stato').hidden = !si;

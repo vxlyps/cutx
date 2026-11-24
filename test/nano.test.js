@@ -24,7 +24,7 @@ test('nano: R breve = premiR, R tenuto = tieniR; S giù = cuffia e su = smette, 
   assert.deepEqual(visti, ['R0', 'mute1', 'all', 'S1', 'su1'], 'S tenuto: giù = cuffia, su = smette');
   visti.length = 0;
   n.riceve([0xb0, 66, 127]);
-  await new Promise((r) => setTimeout(r, 1100));
+  await new Promise((r) => setTimeout(r, 1600));
   n.riceve([0xb0, 66, 0]); // R3 tenuto: esce subito, e il rilascio non fa altro
   assert.deepEqual(visti, ['tieni2']);
 });
@@ -101,6 +101,20 @@ test('nano: trasporto = azioni solo alla pressione; STOP breve annulla, STOP ten
   await new Promise((r) => setTimeout(r, 1100));
   n.riceve([0xb0, 42, 0]);
   assert.deepEqual(visti, ['paracadute'], 'tenuto: paracadute, e il rilascio non annulla niente');
+});
+
+test('nano: STOP tenuto 1,2 s non è ancora paracadute (è uno STOP breve); 1,6 s sì; la carica si vede', async () => {
+  const visti = [];
+  const n = new Nano({ stop: () => visti.push('stop'), tieniStop: () => visti.push('paracadute'), stopCarica: (on) => visti.push(on ? 'carica' : 'scarica') });
+  n.riceve([0xb0, 42, 127]);
+  await new Promise((r) => setTimeout(r, 1200));
+  n.riceve([0xb0, 42, 0]);
+  assert.deepEqual(visti, ['carica', 'scarica', 'stop'], '1,2 s: niente paracadute');
+  visti.length = 0;
+  n.riceve([0xb0, 42, 127]);
+  await new Promise((r) => setTimeout(r, 1600));
+  n.riceve([0xb0, 42, 0]);
+  assert.deepEqual(visti, ['carica', 'scarica', 'paracadute'], '1,6 s: paracadute, il rilascio non fa altro');
 });
 
 test('luci del nano: CYCLE acceso se entra tra > 1, REC mentre registra, STOP col paracadute aperto', () => {
