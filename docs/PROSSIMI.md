@@ -13,6 +13,9 @@
 4. **Dispetti della cimice.** «Intensità che arriva molto più in alto; dispetti che si sentono davvero quando arriva (non solo nel finale HACK); regolabili.»
    *Nota tecnica:* oggi i dispetti (`src/cimice/dispetti.js`) sono righe di coda con valori prudenti. Servono due cose: un tetto di intensità più alto nelle impostazioni, e una scala per cui ogni dispetto ha un effetto udibile già a metà corsa. Va regolabile con un solo cursore, non con un tetto per dispetto.
 
+
+5. **Il ragnetto che scorre il codice** (idea di Valerio, 24/11/2026). «Il ragnetto si sposta su e giù nel codice, anche su quello che sta sopra e sotto e che non si vede; solo in certi momenti, non sempre.»
+   *Nota tecnica (senza codice):* oggi la cimice cammina tra le righe visibili. Per farla andare oltre, il dispetto deve poter far scorrere l'editor della card/del proiettore (scroll del pannello) mentre lei si sposta, e fermarsi su righe fuori vista. Va nei dispetti rari, con la stessa regolazione di intensità del punto 4, e sul proiettore solo se il codice è più lungo dello schermo (vedi punto 3, «codice al pubblico»). Non deve mai spostare o toccare il testo: solo scorrere la vista.
 ---
 
 Si parte da qui quando sono finiti il blocco 1 e il blocco 2 del SYNTH (vedi `docs/SYNTH.md`).
