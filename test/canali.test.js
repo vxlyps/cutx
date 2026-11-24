@@ -1,7 +1,8 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
+import { tipiSuggeriti } from '../src/renderer/categorie.js';
 import { guadagnoLivello, applicaMessaggioCh, chNeutro } from '../src/renderer/mixer.js';
-import { StatoCanali, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
+import { StatoCanali, senzaCanale, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
 
 const clip = (nome, tipo) => ({ nome, info: tipo ? { [tipo]: true } : {} });
 const brano1 = { nome: 'uno', bpm: 170, beat: { scene: [{ nome: 'intro' }, { nome: 'drop' }] }, sezioni: [clip('sub', 'bass'), clip('melodia', 'lead'), clip('reese', 'bass'), clip('kick', 'drum'), clip('rumori', 'stray'), clip('stab', 'keys')] };
@@ -735,4 +736,27 @@ test('STOP breve: annullaTutte annulla le attese di tutti i CH (GO e OUT), nient
   assert.equal(s.canali[0].attesa, null);
   assert.equal(s.canali[3].attesa, null);
   assert.deepEqual(s.annullaTutte(), []);
+});
+
+test('senzaCanale: solo una clip di un brano senza tipo; scratch, jam, kit, apertura e scene no', () => {
+  assert.equal(senzaCanale({ clipDelBrano: 2, tipo: '' }), true);
+  assert.equal(senzaCanale({ clipDelBrano: 0, tipo: 'bass' }), false, 'con un tipo entra');
+  assert.equal(senzaCanale({ clipDelBrano: 0, tipo: 'stray' }), false);
+  assert.equal(senzaCanale({ nome: 'scratch', provenienza: 'scratch', tipo: '' }), false, 'scratch → CH8');
+  assert.equal(senzaCanale({ nome: 'jam', tipo: '' }), false);
+  assert.equal(senzaCanale({ nome: 'apertura', tipo: '' }), false);
+  assert.equal(senzaCanale({ nome: 'kick', provenienza: 'kit', tipo: '' }), false, 'kit → CH8');
+  assert.equal(senzaCanale({ clipDelBrano: 1, tipo: '', beat: { indice: 0 } }), false, 'scena del beat → THUMP');
+  assert.equal(senzaCanale(null), false);
+});
+
+test('USA I SUGGERITI: solo le clip senza tipo che hanno un suggerimento; chi ha già un tipo non si tocca', () => {
+  const sez = [clip('bass reese'), clip('lead acuto', 'pad'), clip('qwerty'), clip('arp veloce'), clip('kick drum', 'drum')];
+  const da = tipiSuggeriti(sez);
+  assert.deepEqual(da, [{ i: 0, tipo: 'bass' }, { i: 3, tipo: 'arp' }], 'né la clip col tipo, né quella senza suggerimento');
+  assert.deepEqual(tipiSuggeriti([clip('x', 'bass')]), []);
+  // applicati tutti insieme: ogni clip prende il suo tipo e il resto dell'info resta
+  const dopo = sez.map((s, i) => { const t = da.find((x) => x.i === i); return t ? { ...s, info: conTipo(s.info, t.tipo) } : s; });
+  assert.deepEqual(tipiSuggeriti(dopo), [], 'dopo non resta niente da suggerire');
+  assert.equal(dopo[1].info.pad, true, 'chi aveva un tipo lo tiene');
 });

@@ -3,7 +3,7 @@
 // - brano: un file .cutx della libreria, con la mappa in alto e una card per sezione.
 // Il codice che parte è sempre preambolo + sezione (o solo le righe selezionate).
 import * as B from './brano.js';
-import { conTipo, suggerisciTipo, tipoDi } from './categorie.js';
+import { conTipo, suggerisciTipo, tipiSuggeriti, tipoDi } from './categorie.js';
 import { idClip, idScena } from './canali.js';
 import it from './testi/it.json';
 import { mostraApri } from './apri-clip.js';
@@ -328,16 +328,12 @@ export class Cue {
     }
     if (carta.i < 0) return { errore: 'il preambolo suona con ogni clip: scegline una' };
     const m = this.brano.modello;
-    // una clip senza tipo non è di nessun CH: né cuffia né live, finché non scegli il canale (si apre il menu)
-    if (this.ordineCh && !tipoDi(m.sezioni[carta.i].info)) {
-      if (carta.tastoCh?.isConnected) this.menuCh(carta.tastoCh, carta.i);
-      return { errore: it.canali.senzaCanale.replace('{nome}', m.sezioni[carta.i].nome) };
-    }
     const { da, a, vuota } = carta.editor.righeScelte();
     const righe = vuota ? null : m.sezioni[carta.i].corpo.slice(da, a + 1);
     return {
       nome: m.sezioni[carta.i].nome,
       provenienza: `${this.nomeBrano} §${carta.i + 1}`,
+      clipDelBrano: carta.i, // chi lancia (preparaLive) sa che è una clip del brano: senza tipo non entra live
       tipo: tipoDi(m.sezioni[carta.i].info), // il tipo decide in che CH del LIVE entra
       volume: m.sezioni[carta.i].info?.volume,
       drum: !!m.sezioni[carta.i].info?.drum, // · drum nella riga della clip: sotto la sua card c'è l'onda
@@ -722,7 +718,16 @@ export class Cue {
     if (m.preambolo.some((r) => r.trim())) contenitore.append(this.carta(-1));
     // le clip sono raggruppate per tipo (bass, lead, arp…) con un piccolo titolo; quelle senza tipo in fondo. Se nessuna ha un tipo, niente titoli.
     for (const g of B.gruppiClip(m.sezioni, this.ordineCh)) {
-      if (g.daAssegnare) contenitore.append(el('div', 'lbl gruppo-clip gruppo-da-assegnare', it.canali.daAssegnare));
+      if (g.daAssegnare) {
+        const testa = el('div', 'lbl gruppo-clip gruppo-da-assegnare', it.canali.daAssegnare);
+        if (tipiSuggeriti(m.sezioni).length) {
+          const usa = tasto(it.canali.usaSuggeriti, '', it.canali.usaSuggeritiTitolo);
+          usa.classList.add('piccolo');
+          usa.onclick = () => this.usaSuggeriti();
+          testa.append(usa);
+        }
+        contenitore.append(testa);
+      }
       else if (g.categoria !== null) contenitore.append(el('div', 'lbl gruppo-clip', g.ch !== undefined ? `CH${g.ch + 1} ${g.categoria}` : g.categoria ? it.synth.categorie[g.categoria] ?? g.categoria : it.synth.msg.altre));
       for (const i of g.indici) contenitore.append(this.carta(i));
     }
@@ -879,19 +884,23 @@ export class Cue {
     return b;
   }
 
-  menuCh(ancora, i) {
+  // dopo = chi lo apre da un gesto di lancio (go live): scelto il canale, scrive il tipo e poi fa partire la clip. Senza dopo (il tasto «CHn ▾»): scrive il tipo e basta.
+  menuCh(ancora, i, dopo = null) {
     document.querySelector('.menu-ch')?.remove();
     const ordine = this.ordineCh;
     const sez = this.brano.modello.sezioni[i];
     if (!ordine) return;
     if (this.statoSezione(this.nomeBrano, sez.nome) === 'live') return this.avviso(`«${sez.nome}» suona live: toglila dal live prima di cambiarle canale`);
     const menu = el('div', 'menu-ch');
-    const scegli = (tipo) => {
+    const chiudi = (e) => {
+      if (e && menu.contains(e.target)) return;
       menu.remove();
-      const aveva = !!tipoDi(sez.info);
+      document.removeEventListener('pointerdown', chiudi, true);
+    };
+    const scegli = (tipo) => {
+      chiudi();
       this.modifica(B.conInfo(this.brano.modello, i, conTipo(sez.info, tipo)), true, `canale della clip «${sez.nome}»`);
-      // una clip che non aveva canale ora ce l'ha: va in NEXT di quel CH (poi R, o PLAY; mai suono a sorpresa)
-      if (!aveva && tipo) this.suNext?.(this.carte.find((c) => c.i === i && c.scena === undefined));
+      if (dopo && tipo) dopo(); // le card sono state ridisegnate: chi parte rilegge la clip dalla card (una selezione di righe si perde: entra tutta la clip)
     };
     const voce = (testo, tipo, extra = '') => {
       const v = el('button', `key piccolo${extra}`);
@@ -912,12 +921,23 @@ export class Cue {
     menu.style.top = `${r.bottom + 4}px`;
     menu.style.left = `${Math.max(8, r.right - 220)}px`;
     document.body.append(menu);
-    const chiudi = (e) => {
-      if (menu.contains(e.target)) return;
-      menu.remove();
-      document.removeEventListener('pointerdown', chiudi, true);
-    };
-    setTimeout(() => document.addEventListener('pointerdown', chiudi, true), 0);
+    setTimeout(() => menu.isConnected && document.addEventListener('pointerdown', chiudi, true), 0);
+  }
+
+  // Un gesto di lancio su una clip senza tipo: si apre il menu del suo canale (e poi parte). Ritorna l'avviso.
+  chiediCanale(i, dopo) {
+    const carta = this.carte.find((c) => c.i === i && c.scena === undefined);
+    if (carta?.tastoCh?.isConnected) this.menuCh(carta.tastoCh, i, dopo);
+    return this.avviso(it.canali.senzaCanale.replace('{nome}', this.brano?.modello.sezioni[i]?.nome ?? ''));
+  }
+
+  // «USA I SUGGERITI»: il tipo suggerito dal nome a ogni clip senza tipo che ne ha uno, in un solo passo di ⌘Z. Non arma niente.
+  usaSuggeriti() {
+    const da = tipiSuggeriti(this.brano.modello.sezioni);
+    if (!da.length) return this.avviso(it.canali.nessunSuggerito);
+    let m = this.brano.modello;
+    for (const { i, tipo } of da) m = B.conInfo(m, i, conTipo(m.sezioni[i].info, tipo));
+    this.modifica(m, true, it.canali.usaSuggeritiEtichetta.replace('{n}', String(da.length)));
   }
 
   // La card dell'APERTURA: un editor dove scrivo io, con il codice dell'apertura come testo fantasma (grigio) da seguire; Tab completa la

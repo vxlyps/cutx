@@ -58,3 +58,6 @@ const PAROLE = [
   ['drum', /\b(drum|drums|kick|snare|beat|break)\b/i],
 ];
 export const suggerisciTipo = (nome) => PAROLE.find(([, re]) => re.test(String(nome ?? '')))?.[0] ?? '';
+
+// Le clip senza tipo che hanno un tipo suggerito dal nome: [{ i, tipo }] (per «USA I SUGGERITI»).
+export const tipiSuggeriti = (sezioni) => sezioni.flatMap((s, i) => (tipoDi(s.info) ? [] : [{ i, tipo: suggerisciTipo(s.nome) }])).filter((x) => x.tipo);

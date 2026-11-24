@@ -1,5 +1,19 @@
 # Ultimo stato - 24/11/2026 (LAVORARE IN ~/Progetti/cutx-canali, ramo `canali`; main = beta 4 intatta, non si tocca)
 
+
+## LISTA DELLA TIRATA (mandato completo in docs/CANALI-TIRATA.md: leggerlo dopo una compattazione). Spuntare a ogni lavoro.
+- [x] 0 · bug del 4.1 corretto (pezzoBrano ora è pura; il blocco sta in preparaLive con `senzaCanale`)
+- [ ] 1 · ritocchi al 4.1 (cuffia ok, menu per chi l'apre, USA I SUGGERITI)
+- [ ] 2 · S tenuto + TRACK sicuro
+- [ ] 3 · un volume solo
+- [ ] 4 · X-Touch MANI
+- [ ] 5 · serata finta (prova.js parte «serata», 2 volte di fila)
+- [ ] 6 · revisione indipendente (subagente) + seconda sui fix
+- [ ] 7 · chiusura (npm test, prova completa, build, docs/CANALI.md, NOVITA bozza; niente merge/release)
+**ORDINE DI VALERIO (24/11, a metà tirata): ALLA FINE DI TUTTO IL VOLUME DEL MAC VA A 100** (`osascript -e 'set volume output volume 100'`), non «com'era». Durante le prove: 20%.
+Scostamenti dalla specifica da riportare a Valerio:
+- ⌘↵ nel CUE è la CUFFIA (invio() → provaInCuffia), quindi resta permesso su clip senza tipo; bloccati go live e ⇧⌘↵ (e PLAY non li riguarda: le clip dei CH hanno già un tipo). Selezione di righe persa quando il menu ridisegna le card: entra tutta la clip. (aggiungere qui)
+
 ## 5 righe
 1. FATTO Passo 4.1 · canali fissi: mappa `canali.json` unica nella radice dello stash (la prima volta parte da quella del PROJ aperto; i vecchi non si toccano né si leggono); «CHn NOME» ovunque, tipi sotto il nome nella griglia; clip senza tipo = in nessun CH, gruppo ambra «DA ASSEGNARE» in cima al CUE; nuovo tipo `stray` per il CH8 (scratch e jam come prima).
 2. Funziona (test): canali 45 + stash 1 nuovo; `npm test` 549/550 (resta il MOD noto), `vite build` ok. NON provato a mano nell'app né col nano.

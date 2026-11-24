@@ -37,7 +37,7 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
-import { StatoCanali, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
+import { StatoCanali, senzaCanale, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
 import { Griglia } from './griglia.js';
 import { Nano } from './nano.js';
 import { PaginaCanali } from './impostazioni-canali.js';
@@ -333,6 +333,8 @@ function preparaLive(pezzo = null) {
   const daCue = !(pezzo && typeof pezzo === 'object' && 'codice' in pezzo);
   const p = daCue ? cue.pezzo() : pezzo; // un pezzo dato (le clip del kit) o quello del CUE
   if (p.errore) return { esito: cue.avviso(p.errore) };
+  // una clip del brano senza tipo non è di nessun CH: non entra live finché non ne ha uno (si apre il menu, scelto parte). Scratch, jam, kit e apertura vanno in CH8.
+  if (daCue && senzaCanale(p) && cue.ordineCh) return { esito: cue.chiediCanale(p.clipDelBrano, () => goLive()) };
   // una scena o una clip vuota (solo commenti): entrerebbe come silenzio al posto di quello che suona
   if (SL.codiceVuoto(p.codice.slice(p.inizio ?? 0))) return { esito: cue.avviso(it.cue.vuota.replace('{nome}', p.beat ? p.beat.scene[p.beat.indice]?.nome ?? p.nome : p.nome)) };
   // una scena del beat del PROSSIMO brano, mentre un altro brano suona: è il passaggio (col tempo che ci arriva)

@@ -68,6 +68,9 @@ export const indiceFree = (config) => Math.max(0, config.findIndex((c) => c.free
 // Il CH di un livello vivo. Una regola sola, per l'interfaccia e per il motore: senza ch → STRAY, tranne i livelli del controller e il paracadute (fuori dai CH).
 export const chDelLivello = (config, l) => l.ch ?? (l.provenienza === 'controller' || l.nome === 'paracadute' ? null : indiceFree(config));
 
+// Una clip di un BRANO senza tipo non è di nessun CH: non entra live finché non ne ha uno. Scratch, jam, kit, apertura e scene del beat non c'entrano (vanno in CH8 / THUMP).
+export const senzaCanale = (p) => Number.isInteger(p?.clipDelBrano) && !p.tipo && !p.beat;
+
 // La ch di un tipo ('' = senza tipo → FREE). Un tipo che nessuna ch prende va in FREE.
 export function chDelTipo(config, tipo) {
   const i = tipo ? config.findIndex((c) => c.tipi.includes(tipo)) : -1;
