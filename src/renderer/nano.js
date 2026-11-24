@@ -47,7 +47,7 @@ export function leggiNano(dati) {
 }
 
 export class Nano {
-  // azioni: { fader(ch, v), manopola(ch, pos), premiR(ch), tieniR(ch), cuffia(ch), mute(ch), goAll(), collegato(si),
+  // azioni: { fader(ch, v), manopola(ch, pos), premiR(ch), tieniR(ch), cuffia(ch), cuffiaSu(ch), mute(ch), goAll(), collegato(si),
   //   track(verso), set(), marker(verso), cycle(), stop(), tieniStop(), rec() }
   constructor(azioni) {
     this.azioni = azioni;
@@ -107,7 +107,7 @@ export class Nano {
     const a = this.azioni;
     if (m.tipo === 'fader') a.fader(m.ch, m.v);
     else if (m.tipo === 'manopola') a.manopola(m.ch, m.pos);
-    else if (m.tipo === 'out' && m.giu) a.cuffia(m.ch); // S
+    else if (m.tipo === 'out') (m.giu ? a.cuffia(m.ch) : a.cuffiaSu?.(m.ch)); // S: tenuto = cuffia, rilasciato = smette
     else if (m.tipo === 'mute' && m.giu) a.mute(m.ch);
     else if (m.tipo === 'goAll' && m.giu) a.goAll();
     else if (m.tipo === 'trackSu' && m.giu) a.track?.(-1);

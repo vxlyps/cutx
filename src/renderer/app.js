@@ -37,7 +37,7 @@ import { arrotondaBpm, bpmDi, cicloDi, cpsAl, epocaDi, fraseDi, tempoInArrivo } 
 import { Pila } from './pila.js';
 import { chiediNome, conferma, dialogoAperto } from './dialogo.js';
 import * as B from './brano.js';
-import { StatoCanali, senzaCanale, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
+import { StatoCanali, guardiaTrack, senzaCanale, canaliPredefiniti, chDelTipo, chDelLivello as chDelLivelloPuro, chDellaBeat, gainFader, indiceFree, leggiCanali, ordineCue } from './canali.js';
 import { Griglia } from './griglia.js';
 import { Nano } from './nano.js';
 import { PaginaCanali } from './impostazioni-canali.js';
@@ -2473,7 +2473,8 @@ griglia = new Griglia($('canali-griglia'), {
   scegli: (ch, k) => scegliCanale(ch, () => statoCanali.scegliAlt(ch, k)),
   premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
   tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
-  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
+  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch, 'schermo')),
+  cuffiaSu: (ch) => eseguiCanali(statoCanali.rilasciaS(ch, 'schermo')),
   mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
   fader: (ch, v) => eseguiCanali(statoCanali.sliderSchermo(ch, v)), // lo slider a schermo comanda subito; il fader fisico si riaggancia
 });
@@ -2485,15 +2486,21 @@ cue.suNext = (carta) => {
   impostaBranoCanali();
   if (statoCanali.alternaId(id)) aggiornaCanali();
 };
+let trackAvvisatoA = null; // TRACK: quando ho avvisato che il PROSSIMO ha modifiche
 const nano = new Nano({
   fader: (ch, v) => eseguiCanali(statoCanali.fader(ch, v)), // agganciato solo quando passa dal valore vero
   manopola: (ch, pos) => scegliCanale(ch, () => statoCanali.scegli(ch, pos)),
   premiR: (ch) => eseguiCanali(statoCanali.premiR(ch)),
   tieniR: (ch) => eseguiCanali(statoCanali.tieniR(ch)),
-  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch)),
+  cuffia: (ch) => eseguiCanali(statoCanali.premiS(ch, 'nano')),
+  cuffiaSu: (ch) => eseguiCanali(statoCanali.rilasciaS(ch, 'nano')),
   mute: (ch) => eseguiCanali(statoCanali.mute(ch)),
   goAll: () => eseguiCanali(statoCanali.goAll()),
   track: async (verso) => {
+    // il PROSSIMO ha modifiche non salvate: la prima volta avviso e non apro; ripremuto entro 2 s apre (le butta)
+    const g = guardiaTrack(!!cue.slot.prossimo?.sporco, trackAvvisatoA, performance.now());
+    trackAvvisatoA = g.avvisatoA;
+    if (g.avvisa) return void cue.avviso(it.nano.prossimoModificato);
     const scrivo = document.activeElement?.closest?.('.cm-editor, textarea, input, [contenteditable]') ? document.activeElement : null; // un editor in cui sto scrivendo
     const nome = await cueBranoVerso(verso);
     if (scrivo?.isConnected && document.activeElement !== scrivo) scrivo.focus(); // il fuoco resta lì
@@ -2511,6 +2518,7 @@ const nano = new Nano({
   rec: () => (vista === 'synth' ? synth.avviaRec() : cue.avviso(it.nano.recSoloSynth)),
   collegato: (si) => {
     $('nano-stato').hidden = !si;
+    eseguiCanali(statoCanali.lasciaTutteS()); // un S che era giù non farà più il rilascio
     statoCanali.sganciaTutti(); // un nano appena collegato ha i fader dove li ha lasciati: si riagganciano
     aggiornaCanali();
   },

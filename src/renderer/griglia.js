@@ -10,7 +10,7 @@ const crea = (tag, classe, testo) => {
 const NOMI_LUCE = { spenta: '', accesa: 'acceso', lenta: 'lenta', veloce: 'veloce' };
 
 export class Griglia {
-  // azioni: { scegli(ch, k), premiR(ch), tieniR(ch), cuffia(ch), mute(ch), fader(ch, v) }
+  // azioni: { scegli(ch, k), premiR(ch), tieniR(ch), cuffia(ch), cuffiaSu(ch), mute(ch), fader(ch, v) }
   constructor(contenitore, azioni) {
     this.el = contenitore;
     this.azioni = azioni;
@@ -95,8 +95,16 @@ export class Griglia {
         };
         go.onpointerleave = () => clearTimeout(timer);
         const cue = crea('button', `key ch-cue ${NOMI_LUCE[v.luci.s]}`, 'CUE');
-        cue.title = 'S · ascolta in cuffia la clip in NEXT';
-        cue.onclick = () => this.azioni.cuffia(v.indice);
+        cue.title = 'S · tieni premuto per ascoltare in cuffia la clip in NEXT';
+        // tieni il clic = senti, lasci = smette (anche se il puntatore esce dal tasto: lo tengo agganciato)
+        cue.onpointerdown = (e) => {
+          if (e.button !== 0) return;
+          cue.setPointerCapture?.(e.pointerId);
+          this.azioni.cuffia(v.indice);
+        };
+        const lascia = () => this.azioni.cuffiaSu(v.indice);
+        cue.onpointerup = lascia;
+        cue.onpointercancel = lascia;
         const mute = crea('button', `key ch-mute ${NOMI_LUCE[v.luci.m]}`, 'M');
         mute.onclick = () => this.azioni.mute(v.indice);
         tasti.append(go, cue, mute);

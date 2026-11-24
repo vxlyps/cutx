@@ -68,6 +68,15 @@ export const indiceFree = (config) => Math.max(0, config.findIndex((c) => c.free
 // Il CH di un livello vivo. Una regola sola, per l'interfaccia e per il motore: senza ch → STRAY, tranne i livelli del controller e il paracadute (fuori dai CH).
 export const chDelLivello = (config, l) => l.ch ?? (l.provenienza === 'controller' || l.nome === 'paracadute' ? null : indiceFree(config));
 
+// TRACK con il PROSSIMO che ha modifiche non salvate: la prima volta non apre e avvisa; ripremuto entro 2 s apre (e le modifiche si perdono).
+// avvisatoA = quando ho avvisato l'ultima volta (null = mai). Ritorna cosa fare e il nuovo avvisatoA.
+export const FINESTRA_TRACK_MS = 2000;
+export function guardiaTrack(sporco, avvisatoA, ora, finestra = FINESTRA_TRACK_MS) {
+  if (!sporco) return { apri: true, avvisa: false, avvisatoA: null };
+  if (avvisatoA !== null && ora - avvisatoA <= finestra) return { apri: true, avvisa: false, avvisatoA: null };
+  return { apri: false, avvisa: true, avvisatoA: ora };
+}
+
 // Una clip di un BRANO senza tipo non è di nessun CH: non entra live finché non ne ha uno. Scratch, jam, kit, apertura e scene del beat non c'entrano (vanno in CH8 / THUMP).
 export const senzaCanale = (p) => Number.isInteger(p?.clipDelBrano) && !p.tipo && !p.beat;
 
@@ -144,7 +153,8 @@ export class StatoCanali {
     this.entraTra = 1;
     this.bpm = null; // il tempo del set: lo porta la ch DRUM
     this.adesso = () => Date.now();
-    this.cuffiaCh = null; // { ch, id }: il CH che sto ascoltando in cuffia (S)
+    this.cuffiaCh = null; // { ch, id, chiave }: il CH che sto ascoltando in cuffia (S tenuto); chiave = quale S l'ha acceso (nano3, schermo3…)
+    this.sTenuti = []; // le chiavi degli S premuti adesso, in ordine: vince l'ultimo
   }
 
   // I CANALI si cambiano a live fermo (lo garantisce chi chiama); cambiato, NEXT e attese si azzerano.
@@ -152,6 +162,7 @@ export class StatoCanali {
     this.config = config;
     for (const c of this.canali) Object.assign(c, { suona: null, insieme: [], zona: null, scelte: new Map(), attesa: null });
     this.cuffiaCh = null;
+    this.sTenuti = [];
   }
 
   // Un brano nuovo nel CUE: la manopola riparte da zero (il primo tocco sceglie tra le alternative del brano nuovo). Le scelte già fatte restano:
@@ -310,16 +321,33 @@ export class StatoCanali {
     return this.outSubito(i);
   }
 
-  // S: preascolto in cuffia del NEXT di quel CH (come il «cue» di un mixer DJ). Di nuovo S: smette. S su un altro CH: passa lì (la cuffia è una).
-  premiS(i) {
-    if (this.cuffiaCh?.ch === i) {
-      this.cuffiaCh = null;
-      return [{ tipo: 'cuffia-stop', ch: i }];
-    }
+  // S TENUTO: preascolto in cuffia del NEXT di quel CH, finché lo tieni (come il «cue» di un mixer DJ). `fonte` dice chi preme (il nano, il tasto CUE a schermo):
+  // due S tenuti insieme → vince l'ultimo, e lasciare il primo non spegne il secondo. Lasciando, si ferma solo la cuffia che QUELL'S ha acceso.
+  premiS(i, fonte = 'nano') {
+    const chiave = `${fonte}${i}`;
+    if (this.cuffiaCh?.chiave === chiave) return []; // già tenuto (un rimbalzo del tasto)
     const alt = this.nextDelBrano(i);
     if (!alt) return [{ tipo: 'avviso', ch: i, testo: `niente da ascoltare per CH${i + 1} ${this.config[i].nome}` }];
-    this.cuffiaCh = { ch: i, id: alt.id };
+    this.sTenuti = [...this.sTenuti.filter((k) => k !== chiave), chiave];
+    this.cuffiaCh = { ch: i, id: alt.id, chiave };
     return [{ tipo: 'cuffia', ch: i, alt }];
+  }
+
+  rilasciaS(i, fonte = 'nano') {
+    const chiave = `${fonte}${i}`;
+    this.sTenuti = this.sTenuti.filter((k) => k !== chiave);
+    if (this.cuffiaCh?.chiave !== chiave) return []; // la cuffia ora è di un altro S, o è partita dalla card: non si tocca
+    this.cuffiaCh = null;
+    return [{ tipo: 'cuffia-stop', ch: i }];
+  }
+
+  // Il nano che si stacca (o si ricollega) mentre S è giù: il rilascio non arriverà mai. Si spegne la cuffia che gli S avevano acceso.
+  lasciaTutteS() {
+    const c = this.cuffiaCh;
+    this.sTenuti = [];
+    if (!c?.chiave) return [];
+    this.cuffiaCh = null;
+    return [{ tipo: 'cuffia-stop', ch: c.ch }];
   }
 
   // Con S acceso, girando la manopola (o cliccando un'altra clip) la cuffia segue NEXT.
@@ -327,7 +355,7 @@ export class StatoCanali {
     if (this.cuffiaCh?.ch !== i) return [];
     const alt = this.nextDelBrano(i);
     if (!alt || alt.id === this.cuffiaCh.id) return [];
-    this.cuffiaCh = { ch: i, id: alt.id };
+    this.cuffiaCh = { ...this.cuffiaCh, id: alt.id };
     return [{ tipo: 'cuffia', ch: i, alt }];
   }
 

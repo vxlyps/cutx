@@ -768,6 +768,7 @@
     "stop": "attese annullate",
     "stopNiente": "niente in attesa",
     "prossimo": "PROSSIMO · {nome}",
+    "prossimoModificato": "PROSSIMO ha modifiche: ripremi TRACK per buttarle",
     "nessunBrano": "nessun altro brano da aprire",
     "entraTra": "ENTRA TRA {n}",
     "recSoloSynth": "REC vale nel SYNTH"

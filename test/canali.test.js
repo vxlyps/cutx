@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { tipiSuggeriti } from '../src/renderer/categorie.js';
 import { guadagnoLivello, applicaMessaggioCh, chNeutro } from '../src/renderer/mixer.js';
-import { StatoCanali, senzaCanale, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
+import { StatoCanali, guardiaTrack, senzaCanale, sweep, alternative, canaliPredefiniti, chDelTipo, chDelLivello, chDellaBeat, gainFader, validaCanali, zona } from '../src/renderer/canali.js';
 
 const clip = (nome, tipo) => ({ nome, info: tipo ? { [tipo]: true } : {} });
 const brano1 = { nome: 'uno', bpm: 170, beat: { scene: [{ nome: 'intro' }, { nome: 'drop' }] }, sezioni: [clip('sub', 'bass'), clip('melodia', 'lead'), clip('reese', 'bass'), clip('kick', 'drum'), clip('rumori', 'stray'), clip('stab', 'keys')] };
@@ -420,25 +420,69 @@ test('R esegue NEXT: GO se è una clip che non suona, OUT se è OUT, ANNULLA se 
   assert.equal(s.premiR(5)[0].tipo, 'avviso'); // CLAW: niente nel brano
 });
 
-test('S: preascolto in cuffia del NEXT; di nuovo S smette; un altro CH la sostituisce; la manopola la segue', () => {
+test('S tenuto: cuffia sul NEXT finché lo tieni, rilasciato smette; la manopola la segue; un altro CH la sostituisce', () => {
   const s = new StatoCanali();
   s.impostaBrano(brano1);
   assert.equal(s.premiS(2)[0].tipo, 'avviso', 'niente in NEXT: niente da ascoltare');
   s.scegliAlt(2, 1);
   const e = s.premiS(2);
   assert.deepEqual([e[0].tipo, e[0].alt.nome], ['cuffia', 'sub']);
-  assert.equal(s.luceOut(2), 'accesa');
+  assert.equal(s.luceOut(2), 'accesa', 'la luce di S è accesa finché lo tengo');
+  assert.deepEqual(s.premiS(2), [], 'un rimbalzo del tasto non rifà niente');
   s.scegliAlt(2, 2);
-  assert.deepEqual(s.seguiCuffia(2).map((x) => x.alt.nome), ['reese']);
+  assert.deepEqual(s.seguiCuffia(2).map((x) => x.alt.nome), ['reese'], 'girando la manopola la cuffia segue NEXT');
   assert.deepEqual(s.seguiCuffia(2), []); // niente di nuovo, niente di rifatto
-  s.scegliAlt(3, 1);
-  assert.deepEqual(s.premiS(3).map((x) => x.tipo), ['cuffia']); // LEAD: la cuffia passa lì
-  assert.equal(s.luceOut(2), 'spenta');
-  assert.deepEqual(s.premiS(3).map((x) => x.tipo), ['cuffia-stop']);
+  assert.equal(s.cuffiaCh.chiave, 'nano2', 'seguire non cambia chi ha acceso la cuffia');
+  assert.deepEqual(s.rilasciaS(2).map((x) => x.tipo), ['cuffia-stop'], 'rilasciato: smette');
   assert.equal(s.cuffiaCh, null);
-  assert.equal(s.premiS(5)[0].tipo, 'avviso');
+  assert.equal(s.luceOut(2), 'spenta');
+  assert.deepEqual(s.rilasciaS(2), [], 'rilasciare di nuovo non fa niente');
   s.scegliAlt(2, 0);
   assert.equal(s.premiS(2)[0].tipo, 'avviso', 'OUT non si ascolta');
+  assert.equal(s.premiS(5)[0].tipo, 'avviso');
+});
+
+test('due S tenuti: vince l\'ultimo; lasciare il primo non spegne il secondo; lasciare l\'ultimo spegne', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegliAlt(2, 1);
+  s.scegliAlt(3, 1);
+  s.premiS(2);
+  assert.deepEqual(s.premiS(3).map((x) => x.tipo), ['cuffia'], 'la cuffia passa a CH4');
+  assert.equal(s.cuffiaCh.ch, 3);
+  assert.equal(s.luceOut(2), 'spenta');
+  assert.deepEqual(s.rilasciaS(2), [], 'lasciare il primo: la cuffia di CH4 resta');
+  assert.equal(s.cuffiaCh.ch, 3);
+  assert.deepEqual(s.rilasciaS(3).map((x) => x.tipo), ['cuffia-stop']);
+  // il nano e il tasto a schermo sullo stesso CH sono due S diversi
+  s.premiS(2, 'nano');
+  s.premiS(2, 'schermo');
+  assert.deepEqual(s.rilasciaS(2, 'nano'), [], 'ora la cuffia è del clic a schermo');
+  assert.deepEqual(s.rilasciaS(2, 'schermo').map((x) => x.tipo), ['cuffia-stop']);
+});
+
+test('S: non ferma una cuffia che non ha acceso (partita dalla card), né dopo un nano staccato', () => {
+  const s = new StatoCanali();
+  s.impostaBrano(brano1);
+  s.scegliAlt(2, 1);
+  s.premiS(2);
+  s.cuffiaCh = null; // il tasto cuffia di una card (o ⌘↵) prende il posto: provaInCuffia azzera cuffiaCh
+  assert.deepEqual(s.rilasciaS(2), [], 'il rilascio di S non tocca il preascolto della card');
+  s.premiS(2);
+  assert.deepEqual(s.lasciaTutteS().map((x) => x.tipo), ['cuffia-stop'], 'nano staccato con S giù: si spegne');
+  assert.deepEqual(s.lasciaTutteS(), []);
+  assert.deepEqual(s.sTenuti, []);
+});
+
+test('TRACK con il PROSSIMO modificato: la prima volta avvisa e non apre, ripremuto entro 2 s apre', () => {
+  assert.deepEqual(guardiaTrack(false, null, 1000), { apri: true, avvisa: false, avvisatoA: null }, 'pulito: apre');
+  const a = guardiaTrack(true, null, 1000);
+  assert.deepEqual(a, { apri: false, avvisa: true, avvisatoA: 1000 });
+  assert.deepEqual(guardiaTrack(true, a.avvisatoA, 2500), { apri: true, avvisa: false, avvisatoA: null }, 'dopo 1,5 s: apre');
+  assert.deepEqual(guardiaTrack(true, a.avvisatoA, 3000), { apri: true, avvisa: false, avvisatoA: null }, 'esattamente 2 s: apre');
+  const tardi = guardiaTrack(true, a.avvisatoA, 3500);
+  assert.deepEqual(tardi, { apri: false, avvisa: true, avvisatoA: 3500 }, 'dopo più di 2 s: avvisa di nuovo');
+  assert.equal(guardiaTrack(false, 1000, 1500).apri, true, 'se nel frattempo l\'ho salvato, apre');
 });
 
 // --- il passo 1: R esegue NEXT (i buchi trovati da Opus) ---

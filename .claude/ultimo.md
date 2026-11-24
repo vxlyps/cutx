@@ -4,7 +4,7 @@
 ## LISTA DELLA TIRATA (mandato completo in docs/CANALI-TIRATA.md: leggerlo dopo una compattazione). Spuntare a ogni lavoro.
 - [x] 0 · bug del 4.1 corretto (pezzoBrano ora è pura; il blocco sta in preparaLive con `senzaCanale`)
 - [x] 1 · ritocchi al 4.1 FATTO (test puri 47 canali; prova entrata 51 ok con 11 controlli nuovi nel blocco «7. clip senza tipo»)
-- [ ] 2 · S tenuto + TRACK sicuro
+- [x] 2 · S tenuto + TRACK sicuro FATTO (chiave per fonte nano/schermo; lasciaTutteS se il nano si ricollega; guardiaTrack 2 s; test puri 58 canali+nano; nessuna prova audio dedicata)
 - [ ] 3 · un volume solo
 - [ ] 4 · X-Touch MANI
 - [ ] 5 · serata finta (prova.js parte «serata», 2 volte di fila)
